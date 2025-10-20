@@ -1,0 +1,28 @@
+[versions]
+kotlinTarget = "2.2"
+javaTarget = "17"
+
+kotlin = "2.2.20"
+
+xemanticKotlinTest = "1.14.0"
+
+# TODO put your dependencies here
+
+versionsPlugin = "0.53.0"
+dokkaPlugin = "2.1.0"
+jreleaserPlugin = "1.20.0"
+binaryCompatibilityValidatorPlugin = "0.18.1"
+xemanticConventionsPlugin = "0.4.3"
+
+[libraries]
+kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
+xemantic-kotlin-test = { module = "com.xemantic.kotlin:xemantic-kotlin-test", version.ref = "xemanticKotlinTest" }
+
+[plugins]
+kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+kotlin-plugin-power-assert = { id = "org.jetbrains.kotlin.plugin.power-assert", version.ref = "kotlin" }
+dokka = { id = "org.jetbrains.dokka", version.ref = "dokkaPlugin" }
+versions = { id = "com.github.ben-manes.versions", version.ref = "versionsPlugin" }
+kotlinx-binary-compatibility-validator = { id = "org.jetbrains.kotlinx.binary-compatibility-validator", version.ref = "binaryCompatibilityValidatorPlugin" }
+jreleaser = { id = "org.jreleaser", version.ref = "jreleaserPlugin" }
+xemantic-conventions = { id = "com.xemantic.gradle.xemantic-conventions", version.ref = "xemanticConventionsPlugin" }
