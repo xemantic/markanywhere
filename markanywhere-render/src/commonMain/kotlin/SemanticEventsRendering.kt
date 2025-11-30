@@ -14,22 +14,23 @@
  * limitations under the License.
  */
 
-package com.xemantic.markanywhere.parse
+package com.xemantic.markanywhere.render
 
 import com.xemantic.markanywhere.MarkedSemanticEvent
 import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.buildString
 import kotlinx.coroutines.flow.Flow
+import kotlin.text.iterator
 
 /**
- * Converts the flow of [SemanticEvent]s into HTML string.
+ * Converts the flow of [SemanticEvent]s into a string.
  *
  * The output is pretty-printed with 2-space indentation for block elements.
  * Inline elements are rendered on the same line as their surrounding content.
  * Content inside `<pre>` elements is not indented to preserve whitespace.
  * Custom namespaced elements (containing `:`) are treated as block elements.
  */
-public suspend fun Flow<SemanticEvent>.toHtml(): String = buildString {
+public suspend fun Flow<SemanticEvent>.render(): String = buildString {
 
     var level = 0
     val indentAtom = "  "
