@@ -21,7 +21,7 @@ import com.xemantic.markanywhere.flow.flowSemanticEvents
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 
-class SemanticEventsToHtmlTest {
+class SemanticEventsRenderingTest {
 
     // Basic structure tests
 
