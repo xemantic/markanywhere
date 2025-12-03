@@ -44,9 +44,7 @@ public class DefaultMarkanywhereParser : MarkanywhereParser {
             )
         )
         chunks.collect { chunk ->
-            for (char in chunk) {
-                state.process(char)
-            }
+            state.processChunk(chunk)
         }
         state.finalize()
     }
@@ -104,6 +102,102 @@ private class ParserState(
 
     suspend fun process(char: Char) {
         scope.process(char)
+    }
+
+    internal suspend fun processChunk(chunk: String) {
+        scope.processChunk(chunk)
+    }
+
+    // Control characters that require special handling in inline text
+    private fun isInlineControlChar(char: Char): Boolean = when (char) {
+        '*', '_', '`', '~', '^', '=', '$', '[', '!', '<', '\\', '\n' -> true
+        else -> false
+    }
+
+    private suspend fun SemanticEventScope.processChunk(chunk: String) {
+        if (chunk.isEmpty()) return
+
+        var index = 0
+        while (index < chunk.length) {
+            // Determine if we can fast-path based on current state
+            val fastPathResult = getFastPathEnd(chunk, index)
+
+            if (fastPathResult > index) {
+                // Emit the safe substring in one go
+                +chunk.substring(index, fastPathResult)
+                index = fastPathResult
+                continue
+            }
+
+            // Fall back to character-by-character processing
+            process(chunk[index])
+            index++
+        }
+    }
+
+    /**
+     * Returns the end index for fast-path text emission, or [startIndex] if no fast-path is possible.
+     *
+     * Fast-path is possible when we can emit multiple characters without state changes.
+     * This depends on the current block mode and inline formatting state.
+     */
+    private fun getFastPathEnd(chunk: String, startIndex: Int): Int {
+        if (escaped) return startIndex
+
+        // Check for fast-path based on current inline state (takes priority)
+        // These are "isolated" contexts where only specific chars are control
+        when {
+            // Inside code (single backtick) - only ` is control, chars are emitted directly
+            code && !doubleBacktickCode -> return findNextChar(chunk, startIndex, '`')
+            // Inside code (double backtick) - chars go to inlineBuffer, no fast-path
+            code && doubleBacktickCode -> return startIndex
+            // Inside math - only $ is control, chars are emitted directly
+            math -> return findNextChar(chunk, startIndex, '$')
+            // Inside link/image URL - chars go to linkUrl/imageUrl buffer, no fast-path
+            inLinkUrl -> return startIndex
+            // Inside link text - chars go to linkText buffer, no fast-path
+            inLink -> return startIndex
+            // Inside image alt - chars go to imageAlt buffer, no fast-path
+            inImage -> return startIndex
+        }
+
+        // If there's pending inline buffer content, can't fast-path (ambiguity)
+        // This includes autolinks (<...>) which need character-by-character buffering
+        if (inlineBuffer.isNotEmpty()) return startIndex
+
+        // Check block mode for fast-path eligibility
+        val canFastPath = when (blockMode) {
+            BlockMode.Paragraph -> true
+            is BlockMode.Heading -> true
+            BlockMode.UnorderedList -> inListItem
+            BlockMode.OrderedList -> inListItem
+            BlockMode.Blockquote -> inBlockquoteParagraph && !atLineStart
+            BlockMode.BlockquoteList -> inListItem
+            else -> false
+        }
+
+        if (!canFastPath) return startIndex
+
+        // In inline text (possibly with active formatting like bold/italic) - scan for any control character
+        return findNextControlChar(chunk, startIndex)
+    }
+
+    private fun findNextChar(chunk: String, startIndex: Int, target: Char): Int {
+        for (i in startIndex until chunk.length) {
+            if (chunk[i] == target) {
+                return i
+            }
+        }
+        return chunk.length
+    }
+
+    private fun findNextControlChar(chunk: String, startIndex: Int): Int {
+        for (i in startIndex until chunk.length) {
+            if (isInlineControlChar(chunk[i])) {
+                return i
+            }
+        }
+        return chunk.length
     }
 
     private suspend fun SemanticEventScope.process(char: Char) {
@@ -1175,7 +1269,7 @@ private class ParserState(
         escaped = false
     }
 
-    public suspend fun finalize() {
+    internal suspend fun finalize() {
         scope.finalize()
     }
 
