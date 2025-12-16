@@ -14,21 +14,24 @@
  * limitations under the License.
  */
 
-// TODO replace with your package
-package com.xemantic.template.kotlin.multiplatform
+package com.xemantic.markanywhere.test
 
-import com.xemantic.kotlin.test.have
-import com.xemantic.kotlin.test.should
-import kotlin.test.Test
+import com.xemantic.kotlin.test.sameAs
+import com.xemantic.markanywhere.SemanticEvent
+import com.xemantic.markanywhere.flow.toJsonLines
+import kotlinx.coroutines.flow.Flow
+import kotlin.test.fail
 
-// TODO replace with your code
-class HelloWorldTest {
+public suspend infix fun Flow<SemanticEvent>?.sameAs(
+    expected: Flow<SemanticEvent>
+) {
 
-    @Test
-    fun `should have singleton object Foo with const BAR equal to buzz`() {
-        Foo should {
-            have(BAR == "buzz")
-        }
+    if (this == null) {
+        fail(
+            "The Flow<SemanticEvent> is null, " +
+                    "but expected to be: ${expected.toJsonLines()}"
+        )
     }
 
+    toJsonLines() sameAs expected.toJsonLines()
 }
