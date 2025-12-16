@@ -17,7 +17,7 @@
 package com.xemantic.markanywhere.render
 
 import com.xemantic.kotlin.test.sameAs
-import com.xemantic.markanywhere.flow.flowSemanticEvents
+import com.xemantic.markanywhere.flow.semanticEvents
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 
@@ -28,7 +28,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should convert empty flow to empty string`() = runTest {
         // given
-        val flow = flowSemanticEvents { }
+        val flow = semanticEvents { }
 
         // when
         val html = flow.render()
@@ -40,7 +40,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should convert single text event`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             +"Hello World"
         }
 
@@ -54,7 +54,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should convert multiple consecutive text events`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             +"Hello "
             +"World"
             +"!"
@@ -70,7 +70,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should convert simple paragraph`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "p" {
                 +"Hello World"
             }
@@ -90,7 +90,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should convert heading`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "h1" {
                 +"Main Title"
             }
@@ -112,7 +112,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should convert nested inline elements`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "p" {
                 +"This is "
                 "strong" {
@@ -136,7 +136,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should convert deeply nested elements`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "p" {
                 +"This is "
                 "strong" {
@@ -162,7 +162,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should convert multiple sibling paragraphs`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "p" {
                 +"First paragraph"
             }
@@ -190,7 +190,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should convert unordered list`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "ul" {
                 "li" { +"Item 1" }
                 "li" { +"Item 2" }
@@ -220,7 +220,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should convert ordered list`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "ol" {
                 "li" { +"First" }
                 "li" { +"Second" }
@@ -246,7 +246,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should convert nested list`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "ul" {
                 "li" {
                     +"Item 1"
@@ -286,7 +286,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should convert list items with inline formatting`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "ul" {
                 "li" {
                     +"Item with "
@@ -320,7 +320,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should convert link with href attribute`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "a"("href" to "https://example.com") {
                 +"Click here"
             }
@@ -336,7 +336,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should convert link with multiple attributes`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "a"(
                 "href" to "https://example.com",
                 "target" to "_blank",
@@ -357,7 +357,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should convert image with attributes`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "img"(
                 "src" to "https://example.com/image.png",
                 "alt" to "An example image"
@@ -374,7 +374,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should convert code block with class attribute`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "pre"("class" to "code lang-kotlin") {
                 +"fun main() = println(\"Hello\")"
             }
@@ -394,7 +394,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should convert input checkbox with attributes`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "input"(
                 "type" to "checkbox",
                 "checked" to "true"
@@ -411,7 +411,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle attribute with special characters`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "a"(
                 "href" to "https://example.com?foo=1&bar=2"
             ) {
@@ -429,7 +429,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle attribute with quotes`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "div"(
                 "data-value" to """Say "Hello" """
             ) {
@@ -453,7 +453,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should convert simple table`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "table" {
                 "thead" {
                     "tr" {
@@ -505,7 +505,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should convert blockquote`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "blockquote" {
                 "p" { +"A wise quote." }
             }
@@ -527,7 +527,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should convert nested blockquote`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "blockquote" {
                 "p" { +"Outer quote" }
                 "blockquote" {
@@ -559,7 +559,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle text with HTML special characters`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "p" {
                 +"Use <div> and & for HTML"
             }
@@ -579,7 +579,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle text with newlines`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "pre" {
                 +"line 1\nline 2\nline 3"
             }
@@ -601,7 +601,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle empty element`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "p" {}
         }
 
@@ -618,7 +618,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle self-closing void elements`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "hr" { }
         }
 
@@ -633,7 +633,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle br element`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "p" {
                 +"Line 1"
                 "br" { }
@@ -657,7 +657,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should convert custom namespaced element`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "custom:element"("attr1" to "value1") {
                 +"Custom content"
             }
@@ -679,7 +679,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should convert complete document structure`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "h1" { +"Document Title" }
             "p" {
                 +"Introduction with "
@@ -730,7 +730,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should convert all heading levels`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "h1" { +"H1" }
             "h2" { +"H2" }
             "h3" { +"H3" }
@@ -768,7 +768,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should convert inline code`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "p" {
                 +"Use the "
                 "code" { +"println()" }
@@ -790,7 +790,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should convert emphasis and strong`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "p" {
                 "em" { +"italic" }
                 +" and "
@@ -814,7 +814,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle unicode content`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "p" {
                 +"Hello 世界! 🌍 Привет мир"
             }
@@ -834,7 +834,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle empty text events`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "p" {
                 +""
                 +"Hello"
@@ -856,7 +856,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle whitespace-only text`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "pre" {
                 +"   "
             }
@@ -876,7 +876,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle element with empty attributes map`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "div"(emptyMap()) {
                 +"Content"
             }
@@ -896,7 +896,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle footnote element`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "p" {
                 +"See reference"
                 "sup" {
@@ -925,7 +925,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle task list items`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "ul" {
                 "li" {
                     "input"(mapOf("type" to "checkbox")) { }
@@ -959,7 +959,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle adjacent inline elements without text between them`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "p" {
                 "strong" { +"bold" }
                 "em" { +"italic" }
@@ -980,7 +980,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle text with less than and greater than symbols`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "p" {
                 +"1 < 2 and 3 > 2"
             }
@@ -1000,7 +1000,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle attribute with empty value`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "div"("data-empty" to "") {
                 +"Content"
             }
@@ -1020,7 +1020,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle attribute with single quotes in value`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "div"(mapOf("data-value" to "It's a test")) {
                 +"Content"
             }
@@ -1040,7 +1040,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle definition list`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "dl" {
                 "dt" { +"Term 1" }
                 "dd" { +"Definition 1" }
@@ -1074,7 +1074,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle strikethrough element`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "p" {
                 +"This is "
                 "del" { +"deleted" }
@@ -1096,7 +1096,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle subscript and superscript`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "p" {
                 +"H"
                 "sub" { +"2" }
@@ -1119,7 +1119,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle table with multiple rows`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "table" {
                 "tbody" {
                     "tr" {
@@ -1177,7 +1177,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle code block with multiline content`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "pre" {
                 "code" {
                     +"fun main() {\n    println(\"Hello\")\n}"
@@ -1201,7 +1201,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle mark highlight element`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "p" {
                 +"This is "
                 "mark" { +"highlighted" }
@@ -1223,7 +1223,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle kbd keyboard input element`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "p" {
                 +"Press "
                 "kbd" { +"Ctrl" }
@@ -1247,7 +1247,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle abbr abbreviation element`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "p" {
                 +"The "
                 "abbr"(mapOf("title" to "HyperText Markup Language")) { +"HTML" }
@@ -1269,7 +1269,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle time element with datetime attribute`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "p" {
                 +"Published on "
                 "time"(mapOf("datetime" to "2025-01-15")) { +"January 15, 2025" }
@@ -1290,7 +1290,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle figure and figcaption`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "figure" {
                 "img"(mapOf("src" to "image.png", "alt" to "A figure")) { }
                 "figcaption" { +"Figure 1: An example image" }
@@ -1314,7 +1314,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle details and summary elements`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "details" {
                 "summary" { +"Click to expand" }
                 "p" { +"Hidden content revealed!" }
@@ -1340,7 +1340,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle text containing only special characters`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "p" {
                 +"<>&\"'"
             }
@@ -1361,7 +1361,7 @@ class SemanticEventsRenderingTest {
     fun `should handle very long text without breaks`() = runTest {
         // given
         val longText = "a".repeat(1000)
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "p" {
                 +longText
             }
@@ -1381,7 +1381,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle span element`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "p" {
                 +"Some "
                 "span"(mapOf("class" to "highlight")) { +"styled" }
@@ -1403,7 +1403,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle ins inserted text element`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "p" {
                 +"This is "
                 "ins" { +"inserted" }
@@ -1425,7 +1425,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle cite element`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "p" {
                 +"As stated in "
                 "cite" { +"The Art of Computer Programming" }
@@ -1446,7 +1446,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle q inline quote element`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "p" {
                 +"He said "
                 "q" { +"Hello world" }
@@ -1467,7 +1467,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle samp sample output element`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "p" {
                 +"The output was: "
                 "samp" { +"Hello, World!" }
@@ -1488,7 +1488,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle var variable element`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "p" {
                 +"The variable "
                 "var" { +"x" }
@@ -1510,7 +1510,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle empty inline element`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "p" {
                 +"Before"
                 "span" { }
@@ -1532,7 +1532,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle list item with paragraph inside`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "ul" {
                 "li" {
                     "p" { +"Paragraph inside list item" }
@@ -1558,7 +1558,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle anchor without href`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "a"(mapOf("id" to "section1")) { +"Section 1" }
         }
 
@@ -1572,7 +1572,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle data element with value`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "p" {
                 +"Price: "
                 "data"(mapOf("value" to "49.99")) { +"$49.99" }
@@ -1593,7 +1593,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle small element`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "p" {
                 +"Main text "
                 "small" { +"(fine print)" }
@@ -1614,7 +1614,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle bdi bidirectional isolation element`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "p" {
                 +"User: "
                 "bdi" { +"إيان" }
@@ -1636,7 +1636,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle bdo bidirectional override element`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "p" {
                 "bdo"("dir" to "rtl") { +"This text will be reversed" }
             }
@@ -1656,7 +1656,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle ruby annotation`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "ruby" {
                 +"漢"
                 "rp" { +"(" }
@@ -1675,7 +1675,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle wbr word break opportunity`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "p" {
                 +"super"
                 "wbr" { }
@@ -1699,7 +1699,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle deeply nested structure with mixed elements`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "div" {
                 "section" {
                     "article" {
@@ -1745,7 +1745,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle nested pre elements without adding whitespace`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "pre" {
                 +"outer\n"
                 "pre" {
@@ -1773,7 +1773,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should not indent inline element at line start inside pre`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "pre" {
                 "span" { +"code on first line" }
             }
@@ -1793,7 +1793,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle block element immediately after inline element`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "div" {
                 "span" { +"inline" }
                 "p" { +"block after inline" }
@@ -1817,7 +1817,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle attribute with less than and greater than symbols`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "div"("data-expr" to "a < b > c") {
                 +"Content"
             }
@@ -1837,7 +1837,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle custom namespaced element inside pre without adding whitespace`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "pre" {
                 +"before "
                 "my:custom"("attr" to "value") {
@@ -1863,7 +1863,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should return to normal formatting after closing pre`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "pre" {
                 +"code content"
             }
@@ -1889,7 +1889,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should handle text immediately after block element closing tag`() = runTest {
         // given
-        val flow = flowSemanticEvents {
+        val flow = semanticEvents {
             "div" {
                 "p" {
                     +"paragraph"

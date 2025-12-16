@@ -16,7 +16,6 @@
 
 package com.xemantic.markanywhere.render
 
-import com.xemantic.markanywhere.MarkedSemanticEvent
 import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.buildString
 import kotlinx.coroutines.flow.Flow
@@ -149,4 +148,4 @@ private fun String.escapeAttributeValue(): String = buildString {
     }
 }
 
-private val MarkedSemanticEvent.isBlock get() = name in BLOCK_ELEMENTS || name.contains(":")
+private val SemanticEvent.Marked.isBlock get() = name in BLOCK_ELEMENTS || name.contains(":")
