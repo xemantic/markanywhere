@@ -20,56 +20,56 @@ import kotlinx.serialization.SerializationException
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
 
-class NodeEventDeserializationOfInvalidJsonTest {
+class SemanticEventDeserializationOfInvalidJsonTest {
 
     @Test
-    fun `should fail to deserialize NodeEvent with missing type field`() {
+    fun `should fail to deserialize SemanticEvent with missing type field`() {
         // given
         val json = """
             {
-              "mark": "<div>"
+              "mark": "div"
             }
         """.trimIndent()
 
         // when/then
         assertFailsWith<SerializationException> {
-            NodeEvent.fromJson(json)
+            SemanticEvent.fromJson(json)
         }
     }
 
     @Test
-    fun `should fail to deserialize NodeEvent with unknown type`() {
+    fun `should fail to deserialize SemanticEvent with unknown type`() {
         // given
         val json = """
             {
               "type": "unknown",
-              "mark": "<div>"
+              "mark": "div"
             }
         """.trimIndent()
 
         // when/then
         assertFailsWith<SerializationException> {
-            NodeEvent.fromJson(json)
+            SemanticEvent.fromJson(json)
         }
     }
 
     @Test
-    fun `should fail to deserialize Start NodeEvent with missing mark field`() {
+    fun `should fail to deserialize Mark SemanticEvent with missing name field`() {
         // given
         val json = """
             {
-              "type": "start"
+              "type": "mark"
             }
         """.trimIndent()
 
         // when/then
         assertFailsWith<SerializationException> {
-            NodeEvent.fromJson(json)
+            SemanticEvent.fromJson(json)
         }
     }
 
     @Test
-    fun `should fail to deserialize Text NodeEvent with missing text field`() {
+    fun `should fail to deserialize Text SemanticEvent with missing text field`() {
         // given
         val json = """
             {
@@ -79,22 +79,22 @@ class NodeEventDeserializationOfInvalidJsonTest {
 
         // when/then
         assertFailsWith<SerializationException> {
-            NodeEvent.fromJson(json)
+            SemanticEvent.fromJson(json)
         }
     }
 
     @Test
-    fun `should fail to deserialize End NodeEvent with missing mark field`() {
+    fun `should fail to deserialize Unmark SemanticEvent with missing name field`() {
         // given
         val json = """
             {
-              "type": "end"
+              "type": "unmark"
             }
         """.trimIndent()
 
         // when/then
         assertFailsWith<SerializationException> {
-            NodeEvent.fromJson(json)
+            SemanticEvent.fromJson(json)
         }
     }
 
@@ -104,12 +104,12 @@ class NodeEventDeserializationOfInvalidJsonTest {
         val json = """
             {
               "type": "start",
-              "mark": "<div>"
+              "mark": "div"
         """.trimIndent()
 
         // when/then
         assertFailsWith<SerializationException> {
-            NodeEvent.fromJson(json)
+            SemanticEvent.fromJson(json)
         }
     }
 
@@ -119,13 +119,13 @@ class NodeEventDeserializationOfInvalidJsonTest {
         val json = """
             {
               "type": "start",
-              "mark": "<div>",
+              "mark": "div",
             }
         """.trimIndent()
 
         // when/then
         assertFailsWith<SerializationException> {
-            NodeEvent.fromJson(json)
+            SemanticEvent.fromJson(json)
         }
     }
 
