@@ -667,10 +667,125 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
+        // Note: text inside custom markup is not indented to preserve raw content
         html sameAs """
             <custom:element attr1="value1">
-              Custom content
+            Custom content
             </custom:element>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should not escape HTML inside custom namespaced element`() = runTest {
+        // given
+        val flow = semanticEvents(produceTags = true) {
+            "custom:html"("type" to "raw") {
+                +"<div class=\"inner\">Content with <b>bold</b> & special chars</div>"
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        // Note: text inside custom markup is not indented to preserve raw HTML
+        html sameAs """
+            <custom:html type="raw">
+            <div class="inner">Content with <b>bold</b> & special chars</div>
+            </custom:html>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should not escape HTML in nested custom namespaced elements`() = runTest {
+        // given
+        val flow = semanticEvents(produceTags = true) {
+            "outer:wrapper" {
+                +"<span>outer html</span>"
+                tag("inner:content") {
+                    +"<em>inner html</em>"
+                }
+                +"<span>more outer html</span>"
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        // Note: text inside custom markup is not indented to preserve raw HTML
+        html sameAs """
+            <outer:wrapper>
+            <span>outer html</span>
+              <inner:content>
+            <em>inner html</em>
+              </inner:content>
+            <span>more outer html</span>
+            </outer:wrapper>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should resume escaping HTML after closing custom namespaced element`() = runTest {
+        // given
+        val flow = semanticEvents(produceTags = true) {
+            "custom:raw" {
+                +"<b>not escaped</b>"
+            }
+            "p" {
+                +"<b>escaped</b>"
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        // Note: text inside custom markup is not indented to preserve raw HTML
+        html sameAs """
+            <custom:raw>
+            <b>not escaped</b>
+            </custom:raw>
+            <p>
+              &lt;b&gt;escaped&lt;/b&gt;
+            </p>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should not escape HTML in custom element with regular element sibling`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "div" {
+                "p" {
+                    +"Regular <b>escaped</b> content"
+                }
+                tag("custom:slot") {
+                    +"Raw <b>not escaped</b> content"
+                }
+                "p" {
+                    +"Back to <i>escaped</i> content"
+                }
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        // Note: text inside custom markup is not indented to preserve raw HTML
+        html sameAs """
+            <div>
+              <p>
+                Regular &lt;b&gt;escaped&lt;/b&gt; content
+              </p>
+              <custom:slot>
+            Raw <b>not escaped</b> content
+              </custom:slot>
+              <p>
+                Back to &lt;i&gt;escaped&lt;/i&gt; content
+              </p>
+            </div>
         """.trimIndent()
     }
 

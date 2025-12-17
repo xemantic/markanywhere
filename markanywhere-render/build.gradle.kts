@@ -11,12 +11,12 @@ kotlin {
             dependencies {
                 api(project(":markanywhere-api"))
                 api(project(":markanywhere-flow"))
+                implementation(libs.xemantic.kotlin.core)
             }
         }
 
         commonTest {
             dependencies {
-//                api(project(":markanywhere-test"))
                 implementation(libs.kotlinx.coroutines.test)
                 implementation(libs.kotlin.test)
                 implementation(libs.xemantic.kotlin.test)

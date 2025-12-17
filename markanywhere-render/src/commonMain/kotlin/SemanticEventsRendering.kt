@@ -16,8 +16,8 @@
 
 package com.xemantic.markanywhere.render
 
+import com.xemantic.kotlin.core.text.buildText
 import com.xemantic.markanywhere.SemanticEvent
-import com.xemantic.markanywhere.buildString
 import kotlinx.coroutines.flow.Flow
 import kotlin.text.iterator
 
@@ -29,13 +29,14 @@ import kotlin.text.iterator
  * Content inside `<pre>` elements is not indented to preserve whitespace.
  * Custom namespaced elements (containing `:`) are treated as block elements.
  */
-public suspend fun Flow<SemanticEvent>.render(): String = buildString {
+public suspend fun Flow<SemanticEvent>.render(): String = buildText {
 
     var level = 0
     val indentAtom = "  "
     var indentation = ""
     var atLineStart = true
     var preCount = 0
+    var customMarkupCount = 0
 
     fun SemanticEvent.Mark.flowAttributes() {
         attributes?.forEach { (name, value) ->
@@ -48,10 +49,14 @@ public suspend fun Flow<SemanticEvent>.render(): String = buildString {
 
             is SemanticEvent.Text -> {
                 if (event.text != "") {
-                    if (atLineStart && preCount == 0) {
+                    if (atLineStart && preCount == 0 && customMarkupCount == 0) {
                         +indentation
                     }
-                    +event.text.escapeHtml()
+                    if (customMarkupCount > 0) {
+                        +event.text  // Don't escape HTML inside custom markup
+                    } else {
+                        +event.text.escapeHtml()
+                    }
                     atLineStart = false
                 }
             }
@@ -60,6 +65,9 @@ public suspend fun Flow<SemanticEvent>.render(): String = buildString {
                 val insidePre = preCount > 0
                 if (event.name == "pre") {
                     preCount++
+                }
+                if (':' in event.name) {
+                    customMarkupCount++
                 }
                 val isBlockMark = event.isBlock && !insidePre
                 if (isBlockMark) {
@@ -87,6 +95,9 @@ public suspend fun Flow<SemanticEvent>.render(): String = buildString {
             is SemanticEvent.Unmark -> {
                 if (event.name == "pre") {
                     preCount--
+                }
+                if (':' in event.name) {
+                    customMarkupCount--
                 }
                 val insidePre = preCount > 0
                 level--
@@ -125,7 +136,7 @@ private val BLOCK_ELEMENTS = setOf(
     "footnote", "h1", "h2", "h3", "h4", "h5", "h6"
 )
 
-private fun String.escapeHtml(): String = buildString {
+private fun String.escapeHtml(): String = buildText {
     for (char in this@escapeHtml) {
         when (char) {
             '<' -> +"&lt;"
@@ -136,7 +147,7 @@ private fun String.escapeHtml(): String = buildString {
     }
 }
 
-private fun String.escapeAttributeValue(): String = buildString {
+private fun String.escapeAttributeValue(): String = buildText {
     for (char in this@escapeAttributeValue) {
         when (char) {
             '<' -> +"&lt;"
