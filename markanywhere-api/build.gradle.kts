@@ -12,7 +12,7 @@ kotlin {
             dependencies {
                 api(libs.kotlinx.serialization.core)
                 api(libs.kotlinx.serialization.json)
-                compileOnly(libs.jetbrains.annotations)
+                implementation(libs.jetbrains.annotations)
             }
         }
 
