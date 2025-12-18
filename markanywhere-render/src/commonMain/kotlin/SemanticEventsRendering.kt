@@ -49,15 +49,32 @@ public suspend fun Flow<SemanticEvent>.render(): String = buildText {
 
             is SemanticEvent.Text -> {
                 if (event.text != "") {
-                    if (atLineStart && preCount == 0 && customMarkupCount == 0) {
-                        +indentation
-                    }
-                    if (customMarkupCount > 0) {
-                        +event.text  // Don't escape HTML inside custom markup
+                    val text = if (customMarkupCount > 0) {
+                        event.text  // Don't escape HTML inside custom markup
                     } else {
-                        +event.text.escapeHtml()
+                        event.text.escapeHtml()
                     }
-                    atLineStart = false
+                    if (preCount == 0 && customMarkupCount == 0) {
+                        // Handle newlines in text by re-indenting after each newline
+                        val lines = text.split('\n')
+                        lines.forEachIndexed { index, line ->
+                            if (index > 0) {
+                                +"\n"
+                                atLineStart = true
+                            }
+                            if (line.isNotEmpty()) {
+                                if (atLineStart) {
+                                    +indentation
+                                }
+                                +line
+                                atLineStart = false
+                            }
+                        }
+                    } else {
+                        // Inside pre or custom markup - output text as-is without indentation
+                        +text
+                        atLineStart = false
+                    }
                 }
             }
 

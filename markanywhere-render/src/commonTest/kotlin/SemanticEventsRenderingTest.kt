@@ -2027,4 +2027,425 @@ class SemanticEventsRenderingTest {
         """.trimIndent()
     }
 
+    // Multi-line text indentation tests
+    // These tests verify that text containing newlines is properly re-indented on each line
+
+    @Test
+    fun `should indent each line of multi-line text in paragraph`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "p" {
+                +"First line.\nSecond line.\nThird line."
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAs """
+            <p>
+              First line.
+              Second line.
+              Third line.
+            </p>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should indent each line of multi-line text in blockquote paragraph`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "blockquote" {
+                "p" {
+                    +"This is a famous quote.\nIt spans multiple lines."
+                }
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAs """
+            <blockquote>
+              <p>
+                This is a famous quote.
+                It spans multiple lines.
+              </p>
+            </blockquote>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should indent each line of multi-line text in nested blockquotes`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "blockquote" {
+                "blockquote" {
+                    "p" {
+                        +"Deeply nested quote.\nWith multiple lines."
+                    }
+                }
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAs """
+            <blockquote>
+              <blockquote>
+                <p>
+                  Deeply nested quote.
+                  With multiple lines.
+                </p>
+              </blockquote>
+            </blockquote>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should indent each line of multi-line text in list item`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "ul" {
+                "li" {
+                    +"First line of item.\nSecond line of item."
+                }
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAs """
+            <ul>
+              <li>
+                First line of item.
+                Second line of item.
+              </li>
+            </ul>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should indent multi-line text in deeply nested structure`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "div" {
+                "section" {
+                    "article" {
+                        "p" {
+                            +"Line one.\nLine two.\nLine three."
+                        }
+                    }
+                }
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAs """
+            <div>
+              <section>
+                <article>
+                  <p>
+                    Line one.
+                    Line two.
+                    Line three.
+                  </p>
+                </article>
+              </section>
+            </div>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should handle text with multiple consecutive newlines`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "p" {
+                +"First paragraph.\n\nSecond paragraph after blank line."
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAs """
+            <p>
+              First paragraph.
+
+              Second paragraph after blank line.
+            </p>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should handle text with leading newline`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "p" {
+                +"\nText after leading newline."
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAs """
+            <p>
+
+              Text after leading newline.
+            </p>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should handle text with trailing newline`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "p" {
+                +"Text before trailing newline.\n"
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        // Trailing newline sets atLineStart=true, so closing tag appears on new line without extra blank line
+        html sameAs """
+            <p>
+              Text before trailing newline.
+            </p>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should handle multi-line text followed by inline element`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "p" {
+                +"First line.\nSecond line "
+                "strong" { +"bold" }
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAs """
+            <p>
+              First line.
+              Second line <strong>bold</strong>
+            </p>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should handle inline element followed by multi-line text`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "p" {
+                "em" { +"emphasis" }
+                +" followed by\nmulti-line text."
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAs """
+            <p>
+              <em>emphasis</em> followed by
+              multi-line text.
+            </p>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should handle multi-line text between inline elements`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "p" {
+                "strong" { +"start" }
+                +"\nmiddle line\n"
+                "em" { +"end" }
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAs """
+            <p>
+              <strong>start</strong>
+              middle line
+              <em>end</em>
+            </p>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should not re-indent multi-line text inside pre element`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "pre" {
+                +"line 1\n  indented line 2\n    more indented line 3"
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAs """
+            <pre>
+            line 1
+              indented line 2
+                more indented line 3
+            </pre>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should not re-indent multi-line text inside custom namespaced element`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "custom:raw" {
+                +"line 1\n  line 2\n    line 3"
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAs """
+            <custom:raw>
+            line 1
+              line 2
+                line 3
+            </custom:raw>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should indent multi-line text in table cells`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "table" {
+                "tbody" {
+                    "tr" {
+                        "td" {
+                            +"Cell with\nmultiple lines"
+                        }
+                    }
+                }
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAs """
+            <table>
+              <tbody>
+                <tr>
+                  <td>
+                    Cell with
+                    multiple lines
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should indent multi-line text in definition list`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "dl" {
+                "dt" { +"Term" }
+                "dd" {
+                    +"Definition that spans\nmultiple lines."
+                }
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAs """
+            <dl>
+              <dt>
+                Term
+              </dt>
+              <dd>
+                Definition that spans
+                multiple lines.
+              </dd>
+            </dl>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should handle only newlines as text content`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "p" {
+                +"\n\n\n"
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAs """
+            <p>
+
+
+
+            </p>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should handle mixed single and multi-line text events`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "p" {
+                +"Single line. "
+                +"Multi-line\ntext here. "
+                +"Another single line."
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAs """
+            <p>
+              Single line. Multi-line
+              text here. Another single line.
+            </p>
+        """.trimIndent()
+    }
+
 }
