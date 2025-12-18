@@ -16,10 +16,10 @@
 
 package com.xemantic.markanywhere.extract
 
+import com.xemantic.kotlin.core.text.lineFlow
 import com.xemantic.kotlin.test.coroutines.should
 import com.xemantic.kotlin.test.have
 import com.xemantic.kotlin.test.sameAs
-import com.xemantic.markanywhere.flow.flowLines
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.parse.DefaultMarkanywhereParser
 import com.xemantic.markanywhere.parse.parse
@@ -43,7 +43,7 @@ class SemanticEventsExtractorTest {
             </foo:bar>
             
             Some other text
-        """.trimIndent().flowLines().parse(parser)
+        """.trimIndent().lineFlow().parse(parser)
         val extractor = MarkupContentExtractor(
             tag = "foo:bar"
         )
@@ -85,7 +85,7 @@ class SemanticEventsExtractorTest {
         val parser = DefaultMarkanywhereParser()
         val events = """
             Some text without the target tag
-        """.trimIndent().flowLines().parse(parser)
+        """.trimIndent().lineFlow().parse(parser)
         val extractor = MarkupContentExtractor(
             tag = "foo:bar"
         )
@@ -117,7 +117,7 @@ class SemanticEventsExtractorTest {
             <foo:bar>
             content
             </foo:bar>
-        """.trimIndent().flowLines().parse(parser)
+        """.trimIndent().lineFlow().parse(parser)
         val extractor = MarkupContentExtractor(
             tag = "foo:bar"
         )
@@ -152,7 +152,7 @@ class SemanticEventsExtractorTest {
         val events = """
             <foo:bar>
             </foo:bar>
-        """.trimIndent().flowLines().parse(parser)
+        """.trimIndent().lineFlow().parse(parser)
         val extractor = MarkupContentExtractor(
             tag = "foo:bar"
         )
@@ -187,7 +187,7 @@ class SemanticEventsExtractorTest {
             line2
             line3
             </foo:bar>
-        """.trimIndent().flowLines().parse(parser)
+        """.trimIndent().lineFlow().parse(parser)
         val extractor = MarkupContentExtractor(tag = "foo:bar")
 
         // when
@@ -234,7 +234,7 @@ class SemanticEventsExtractorTest {
             </nested:tag>
             after
             </foo:bar>
-        """.trimIndent().flowLines().parse(parser)
+        """.trimIndent().lineFlow().parse(parser)
         val extractor = MarkupContentExtractor(
             tag = "foo:bar"
         )
@@ -288,7 +288,7 @@ class SemanticEventsExtractorTest {
             <foo:bar>
             second content
             </foo:bar>
-        """.trimIndent().flowLines().parse(parser)
+        """.trimIndent().lineFlow().parse(parser)
         val extractor = MarkupContentExtractor(
             tag = "foo:bar"
         )
