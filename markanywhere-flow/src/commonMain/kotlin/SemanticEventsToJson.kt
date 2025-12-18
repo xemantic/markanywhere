@@ -14,14 +14,24 @@
  * limitations under the License.
  */
 
-// TODO replace with your package
-package com.xemantic.template.kotlin.multiplatform
+package com.xemantic.markanywhere.flow
 
-// TODO replace with your code
-public object Foo {
-    public const val BAR: String = "buzz"
-}
+import com.xemantic.kotlin.core.text.buildText
+import com.xemantic.markanywhere.SemanticEvent
+import kotlinx.coroutines.flow.Flow
 
-public fun main() {
-    print("Hello World!")
+/**
+ * Transforms the [Flow] of [SemanticEvent]s to a multiline-string.
+ *
+ * Note: Each line represents a single event.
+ *
+ * This function is useful for testing, where produced string can be
+ * asserted against expectation string.
+ */
+public suspend fun Flow<SemanticEvent>.toJsonLines(): String = buildText {
+    collect { event ->
+        +event.toString()
+        +"\n"
+    }
+    trimLastNewLine()
 }
