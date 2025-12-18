@@ -200,9 +200,13 @@ class SemanticEventsExtractorTest {
             have(attributes == null)
             extractedEvents.asFlow() sameAs semanticEvents {
                 tag("foo:bar") {
-                    +"line1\n"
-                    +"line2\n"
-                    +"line3"
+                    +"line1"
+                    +"\n"
+                    +"l"
+                    +"ine2"
+                    +"\n"
+                    +"l"
+                    +"ine3"
                 }
             }
             content sameAs """
@@ -247,13 +251,24 @@ class SemanticEventsExtractorTest {
             have(succeeded)
             have(!isExtracting)
             have(attributes == null)
+            // NOTE: The text chunking reflects how the parser incrementally detects
+            // potential closing tags - when '<' is seen, it buffers until it can
+            // determine if it's the closing tag or not.
             extractedEvents.asFlow() sameAs semanticEvents {
                 tag("foo:bar") {
-                    +"before\n"
-                    +"<nested:tag>\n"
-                    +"inside nested\n"
-                    +"</nested:tag>\n"
-                    +"after"
+                    +"before"
+                    +"\n"
+                    +"<n"
+                    +"ested:tag>"
+                    +"\n"
+                    +"i"
+                    +"nside nested"
+                    +"\n"
+                    +"</n"
+                    +"ested:tag>"
+                    +"\n"
+                    +"a"
+                    +"fter"
                 }
             }
             content sameAs """
