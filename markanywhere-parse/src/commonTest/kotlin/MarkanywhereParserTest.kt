@@ -330,12 +330,11 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse(parser)
 
         // then
-        // Note: the parser joins blockquote lines with newlines
         parsed.render() sameAs """
             <blockquote>
               <p>
                 This is a famous quote.
-            It spans multiple lines.
+                It spans multiple lines.
               </p>
             </blockquote>
         """.trimIndent()
@@ -1049,6 +1048,354 @@ class MarkanywhereParserTest {
             }
         }
     }
+
+    // Edge case tests
+
+    // Note: The parser currently does not support nested lists via indentation.
+    // Indented list items after a parent item are treated as regular paragraphs.
+    // These tests document the current behavior.
+
+    @Test
+    fun `should treat indented list items as paragraphs - no nested list support`() = runTest {
+        // given
+        val parser = DefaultMarkanywhereParser()
+        val textFlow = """
+            - Item 1
+              - Nested item 1.1
+              - Nested item 1.2
+            - Item 2
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse(parser)
+
+        // then
+        // Note: indented items are treated as paragraphs, not nested lists
+        parsed.render() sameAs """
+            <ul>
+              <li>
+                Item 1
+              </li>
+            </ul>
+            <p>
+                - Nested item 1.1
+            </p>
+            <p>
+                - Nested item 1.2
+            </p>
+            <ul>
+              <li>
+                Item 2
+              </li>
+            </ul>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should treat indented ordered list items as paragraphs - no nested list support`() = runTest {
+        // given
+        val parser = DefaultMarkanywhereParser()
+        val textFlow = """
+            1. First item
+               1. Nested first
+               2. Nested second
+            2. Second item
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse(parser)
+
+        // then
+        // Note: indented items are treated as paragraphs, not nested lists
+        // The indentation is preserved from the original input
+        parsed.render() sameAs """
+            <ol>
+              <li>
+                First item
+              </li>
+            </ol>
+            <p>
+                 1. Nested first
+            </p>
+            <p>
+                 2. Nested second
+            </p>
+            <ol>
+              <li>
+                Second item
+              </li>
+            </ol>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should treat mixed indented list items as paragraphs - no nested list support`() = runTest {
+        // given
+        val parser = DefaultMarkanywhereParser()
+        val textFlow = """
+            - Unordered item
+              1. Ordered nested
+              2. Another ordered
+            - Another unordered
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse(parser)
+
+        // then
+        // Note: indented items are treated as paragraphs, not nested lists
+        // The indentation is preserved from the original input
+        parsed.render() sameAs """
+            <ul>
+              <li>
+                Unordered item
+              </li>
+            </ul>
+            <p>
+                1. Ordered nested
+            </p>
+            <p>
+                2. Another ordered
+            </p>
+            <ul>
+              <li>
+                Another unordered
+              </li>
+            </ul>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should handle empty bold markers as literal text`() = runTest {
+        // given
+        val parser = DefaultMarkanywhereParser()
+        val textFlow = """
+            Text with **** empty bold markers.
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse(parser)
+
+        // then
+        parsed.render() sameAs """
+            <p>
+              Text with **** empty bold markers.
+            </p>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should handle empty underscore markers as literal text`() = runTest {
+        // given
+        val parser = DefaultMarkanywhereParser()
+        val textFlow = """
+            Text with ____ empty underscore markers.
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse(parser)
+
+        // then
+        parsed.render() sameAs """
+            <p>
+              Text with ____ empty underscore markers.
+            </p>
+        """.trimIndent()
+    }
+
+    // Note: The parser auto-closes unclosed inline formatting markers at the end of the paragraph.
+
+    @Test
+    fun `should auto-close unclosed bold marker at paragraph end`() = runTest {
+        // given
+        val parser = DefaultMarkanywhereParser()
+        val textFlow = """
+            This has **unclosed bold text.
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse(parser)
+
+        // then
+        // Note: parser auto-closes unclosed bold at paragraph end
+        parsed.render() sameAs """
+            <p>
+              This has <strong>unclosed bold text.</strong>
+            </p>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should auto-close unclosed italic marker at paragraph end`() = runTest {
+        // given
+        val parser = DefaultMarkanywhereParser()
+        val textFlow = """
+            This has *unclosed italic text.
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse(parser)
+
+        // then
+        // Note: parser auto-closes unclosed italic at paragraph end
+        parsed.render() sameAs """
+            <p>
+              This has <em>unclosed italic text.</em>
+            </p>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should auto-close unclosed inline code marker at paragraph end`() = runTest {
+        // given
+        val parser = DefaultMarkanywhereParser()
+        val textFlow = """
+            This has `unclosed code text.
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse(parser)
+
+        // then
+        // Note: parser auto-closes unclosed inline code at paragraph end
+        parsed.render() sameAs """
+            <p>
+              This has <code>unclosed code text.</code>
+            </p>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should handle hash without space as regular text`() = runTest {
+        // given
+        val parser = DefaultMarkanywhereParser()
+        val textFlow = """
+            #hashtag is not a header
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse(parser)
+
+        // then
+        parsed.render() sameAs """
+            <p>
+              #hashtag is not a header
+            </p>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should handle multiple hashes without space as separate paragraphs`() = runTest {
+        // given
+        val parser = DefaultMarkanywhereParser()
+        val textFlow = """
+            ##not a header
+            ###also not a header
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse(parser)
+
+        // then
+        // Note: each line starting with hashes (no space after) becomes a separate paragraph
+        parsed.render() sameAs """
+            <p>
+              ##not a header
+            </p>
+            <p>
+              ###also not a header
+            </p>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should handle lines with only hashes as regular paragraphs`() = runTest {
+        // given
+        val parser = DefaultMarkanywhereParser()
+        val textFlow = """
+            #
+            ##
+            Content after hash lines.
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse(parser)
+
+        // then
+        // Note: single hash without space after is treated as a paragraph, not a header
+        parsed.render() sameAs """
+            <p>
+              #
+            </p>
+            <p>
+              ##
+            </p>
+            <p>
+              Content after hash lines.
+            </p>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should handle very long single line content`() = runTest {
+        // given
+        val parser = DefaultMarkanywhereParser()
+        val longText = "A".repeat(10000)
+        val textFlow = """
+            # Header
+
+            $longText
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse(parser)
+
+        // then
+        parsed.render() sameAs """
+            <h1>
+              Header
+            </h1>
+            <p>
+              $longText
+            </p>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should treat deeply indented list items as paragraphs - no nested list support`() = runTest {
+        // given
+        val parser = DefaultMarkanywhereParser()
+        val textFlow = """
+            - Level 1
+              - Level 2
+                - Level 3
+                  - Level 4
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse(parser)
+
+        // then
+        // Note: all indented items become paragraphs, not nested lists
+        parsed.render() sameAs """
+            <ul>
+              <li>
+                Level 1
+              </li>
+            </ul>
+            <p>
+                - Level 2
+            </p>
+            <p>
+                  - Level 3
+            </p>
+            <p>
+                    - Level 4
+            </p>
+        """.trimIndent()
+    }
+
+    // incremental parsing
 
     @Test
     fun `should parse incrementally`() = runTest {

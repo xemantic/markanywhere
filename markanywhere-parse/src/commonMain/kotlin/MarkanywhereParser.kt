@@ -111,7 +111,7 @@ private class ParserState(
         scope.process(char)
     }
 
-    internal suspend fun processChunk(chunk: String) {
+    suspend fun processChunk(chunk: String) {
         scope.processChunk(chunk)
     }
 
@@ -358,6 +358,7 @@ private class ParserState(
                         val (tagName, attributes) = parsed
                         mark(tagName, isTag = true, attributes = attributes)
                         customMarkupSkipFirstNewline = false  // Already consumed by line-based detection
+                        customMarkupPendingNewline = false  // Reset any stale state from previous custom markup
                         blockMode = BlockMode.CustomMarkup(tagName)
                     } else {
                         // Not a valid custom markup tag, treat as paragraph
@@ -408,7 +409,7 @@ private class ParserState(
                 // Keep buffering (could be HR or list start)
             }
             // Task list: - [ ] or - [x]  (check BEFORE simple list item)
-            line.matches(Regex("^- \\[ ] $")) -> {
+            line.matches(Regex("^- \\[ \\] $")) -> {
                 mark("ul")
                 mark("li")
                 "input"("type" to "checkbox") {}
@@ -416,7 +417,7 @@ private class ParserState(
                 inListItem = true
                 blockMode = BlockMode.UnorderedList
             }
-            line.matches(Regex("^- \\[x] $")) -> {
+            line.matches(Regex("^- \\[x\\] $")) -> {
                 mark("ul")
                 mark("li")
                 "input"("type" to "checkbox", "checked" to "true") {}
@@ -426,7 +427,7 @@ private class ParserState(
                 blockMode = BlockMode.UnorderedList
             }
             // Keep buffering for potential task list
-            line.matches(Regex("^- \\[[ x]?]?$")) || line == "- [" || line == "- " -> {
+            line.matches(Regex("^- \\[[ x]?\\]?$")) || line == "- [" || line == "- " -> {
                 // Keep buffering - could be task list
             }
             // Regular unordered list: "- X" where X is not [
@@ -479,6 +480,7 @@ private class ParserState(
                     mark(tagName, isTag = true, attributes = attributes)
                     lineBuffer.clear()
                     customMarkupSkipFirstNewline = true  // Skip newline that may follow immediately
+                    customMarkupPendingNewline = false  // Reset any stale state from previous custom markup
                     blockMode = BlockMode.CustomMarkup(tagName)
                 }
                 // If not valid custom markup, keep buffering until newline
@@ -574,21 +576,21 @@ private class ParserState(
             val line = lineBuffer.toString()
             when {
                 // Task list: - [ ] or - [x]  (check BEFORE simple list item)
-                line.matches(Regex("^- \\[ ] $")) -> {
+                line.matches(Regex("^- \\[ \\] $")) -> {
                     mark("li")
                     "input"("type" to "checkbox") {}
                     unmark("input")
                     lineBuffer.clear()
                     inListItem = true
                 }
-                line.matches(Regex("^- \\[x] $")) -> {
+                line.matches(Regex("^- \\[x\\] $")) -> {
                     mark("li")
                     "input"("type" to "checkbox", "checked" to "true") {}
                     lineBuffer.clear()
                     inListItem = true
                 }
                 // Keep buffering for potential task list
-                line.matches(Regex("^- \\[[ x]?]?$")) || line == "- [" || line == "- " || line == "-" -> {
+                line.matches(Regex("^- \\[[ x]?\\]?$")) || line == "- [" || line == "- " || line == "-" -> {
                     // Keep buffering
                 }
                 // Regular list item: "- X" where X is not [
@@ -1496,7 +1498,7 @@ private class ParserState(
         escaped = false
     }
 
-    internal suspend fun finalize() {
+    suspend fun finalize() {
         scope.finalize()
     }
 
