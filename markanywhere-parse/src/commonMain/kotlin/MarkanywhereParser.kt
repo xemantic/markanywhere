@@ -68,6 +68,7 @@ private class ParserState(
         data object MathBlock : BlockMode
         data object Table : BlockMode
         data object TableBody : BlockMode
+        data class CustomMarkup(val tagName: String) : BlockMode
     }
 
     private var blockMode: BlockMode = BlockMode.Start
@@ -100,6 +101,12 @@ private class ParserState(
     private var doubleBacktickCode = false
     private var inlineBuffer = StringBuilder()
 
+    // Custom markup state
+    private var customMarkupClosingBuffer = StringBuilder()
+    private var customMarkupInClosingTag = false
+    private var customMarkupSkipFirstNewline = false
+    private var customMarkupPendingNewline = false
+
     suspend fun process(char: Char) {
         scope.process(char)
     }
@@ -114,15 +121,81 @@ private class ParserState(
         else -> false
     }
 
+    /**
+     * Process inline content in bulk, emitting maximal text runs.
+     * This is used when replaying buffered content (e.g., from lineBuffer)
+     * after block-level ambiguity has been resolved.
+     */
+    private suspend fun SemanticEventScope.processInlineContent(content: String) {
+        if (content.isEmpty()) return
+
+        var index = 0
+        while (index < content.length) {
+            // Check if we can fast-path based on current inline state
+            val fastPathEnd = getInlineFastPathEnd(content, index)
+
+            if (fastPathEnd > index) {
+                // Emit the safe substring in one go
+                +content.substring(index, fastPathEnd)
+                index = fastPathEnd
+                continue
+            }
+
+            // Fall back to character-by-character for control characters
+            processInlineChar(content[index])
+            index++
+        }
+    }
+
+    /**
+     * Returns the end index for fast-path text emission within inline content.
+     * Similar to getFastPathEnd but specifically for inline processing context.
+     */
+    private fun getInlineFastPathEnd(content: String, startIndex: Int): Int {
+        if (escaped) return startIndex
+
+        // Check for states that require character-by-character processing
+        when {
+            code && !doubleBacktickCode -> return findNextChar(content, startIndex, '`')
+            code && doubleBacktickCode -> return startIndex
+            math -> return findNextChar(content, startIndex, '$')
+            inLinkUrl -> return startIndex
+            inLink -> return startIndex
+            inImage -> return startIndex
+        }
+
+        // If there's pending inline buffer content, can't fast-path
+        if (inlineBuffer.isNotEmpty()) return startIndex
+
+        // Scan for next control character
+        return findNextControlChar(content, startIndex)
+    }
+
     private suspend fun SemanticEventScope.processChunk(chunk: String) {
         if (chunk.isEmpty()) return
 
         var index = 0
         while (index < chunk.length) {
+            // Special handling for CustomMarkup skip-first-newline at chunk level
+            // This must be handled before fast-path to avoid splitting chunks
+            if (blockMode is BlockMode.CustomMarkup && customMarkupSkipFirstNewline) {
+                customMarkupSkipFirstNewline = false
+                if (chunk[index] == '\n') {
+                    index++
+                    continue  // Skip this newline and continue
+                }
+                // Not a newline - continue with normal processing
+            }
+
             // Determine if we can fast-path based on current state
             val fastPathResult = getFastPathEnd(chunk, index)
 
             if (fastPathResult > index) {
+                // For custom markup, emit pending newline before content
+                if (blockMode is BlockMode.CustomMarkup && customMarkupPendingNewline) {
+                    customMarkupPendingNewline = false
+                    +'\n'
+                }
                 // Emit the safe substring in one go
                 +chunk.substring(index, fastPathResult)
                 index = fastPathResult
@@ -159,6 +232,12 @@ private class ParserState(
             inLink -> return startIndex
             // Inside image alt - chars go to imageAlt buffer, no fast-path
             inImage -> return startIndex
+        }
+
+        // Custom markup mode - < and \n are control (< starts potential closing tag, \n needs buffering)
+        // Also disable fast-path when we need to skip the first newline or have pending newline
+        if (blockMode is BlockMode.CustomMarkup && !customMarkupInClosingTag && !customMarkupSkipFirstNewline && !customMarkupPendingNewline) {
+            return findNextCustomMarkupControl(chunk, startIndex)
         }
 
         // If there's pending inline buffer content, can't fast-path (ambiguity)
@@ -200,6 +279,16 @@ private class ParserState(
         return chunk.length
     }
 
+    private fun findNextCustomMarkupControl(chunk: String, startIndex: Int): Int {
+        for (i in startIndex until chunk.length) {
+            val c = chunk[i]
+            if (c == '<' || c == '\n') {
+                return i
+            }
+        }
+        return chunk.length
+    }
+
     private suspend fun SemanticEventScope.process(char: Char) {
         when (val mode = blockMode) {
             BlockMode.Start -> processStart(char)
@@ -213,6 +302,7 @@ private class ParserState(
             BlockMode.MathBlock -> processMathBlock(char)
             BlockMode.Table -> processTable(char)
             BlockMode.TableBody -> processTableBody(char)
+            is BlockMode.CustomMarkup -> processCustomMarkup(char, mode.tagName)
         }
     }
 
@@ -238,7 +328,7 @@ private class ParserState(
                     } else {
                         mapOf("class" to "code")
                     }
-                    mark("pre", attrs)
+                    mark("pre", attributes = attrs)
                     codeBlockBackticks = 3
                     blockMode = BlockMode.CodeBlock(3)
                 }
@@ -248,7 +338,7 @@ private class ParserState(
                 }
                 // Math block: $$
                 line == "$$" -> {
-                    mark("math", "display" to "block")
+                    mark("math", attributes = mapOf("display" to "block"))
                     blockMode = BlockMode.MathBlock
                 }
                 // Table row
@@ -261,12 +351,26 @@ private class ParserState(
                     tableHasBody = false
                     blockMode = BlockMode.Table
                 }
+                // Custom markup opening tag: <namespace:name ...>
+                line.startsWith("<") && line.endsWith(">") && !line.startsWith("</") -> {
+                    val parsed = parseCustomMarkupOpeningTag(line)
+                    if (parsed != null) {
+                        val (tagName, attributes) = parsed
+                        mark(tagName, isTag = true, attributes = attributes)
+                        customMarkupSkipFirstNewline = false  // Already consumed by line-based detection
+                        blockMode = BlockMode.CustomMarkup(tagName)
+                    } else {
+                        // Not a valid custom markup tag, treat as paragraph
+                        "p" {
+                            processInlineContent(line)
+                            flushInline()
+                        }
+                    }
+                }
                 // Single line paragraph
                 else -> {
                     "p" {
-                        for (c in line) {
-                            processInlineChar(c)
-                        }
+                        processInlineContent(line)
                         flushInline()
                     }
                 }
@@ -291,9 +395,7 @@ private class ParserState(
             line.matches(Regex("^#{7,}.*")) -> {
                 // Too many #, treat as paragraph
                 mark("p")
-                for (c in line) {
-                    processInlineChar(c)
-                }
+                processInlineContent(line)
                 lineBuffer.clear()
                 blockMode = BlockMode.Paragraph
             }
@@ -332,9 +434,7 @@ private class ParserState(
                 mark("ul")
                 mark("li")
                 // Emit the content after "- "
-                for (c in line.substring(2)) {
-                    processInlineChar(c)
-                }
+                processInlineContent(line.substring(2))
                 lineBuffer.clear()
                 inListItem = true
                 blockMode = BlockMode.UnorderedList
@@ -370,12 +470,26 @@ private class ParserState(
             line == "$$" || line == "$" -> {
                 // Keep buffering
             }
+            // Custom markup: detect opening tag incrementally when > is seen
+            line.startsWith("<") && line.endsWith(">") && !line.startsWith("</") -> {
+                // Try to parse as custom markup opening tag immediately
+                val parsed = parseCustomMarkupOpeningTag(line)
+                if (parsed != null) {
+                    val (tagName, attributes) = parsed
+                    mark(tagName, isTag = true, attributes = attributes)
+                    lineBuffer.clear()
+                    customMarkupSkipFirstNewline = true  // Skip newline that may follow immediately
+                    blockMode = BlockMode.CustomMarkup(tagName)
+                }
+                // If not valid custom markup, keep buffering until newline
+            }
+            line.startsWith("<") -> {
+                // Keep buffering - could become custom markup tag
+            }
             !line.first().let { it == '#' || it == '`' || it == '-' || it == '>' || it == '|' || it == '$' || it.isDigit() } -> {
                 // Not a special line start, begin paragraph
                 mark("p")
-                for (c in line) {
-                    processInlineChar(c)
-                }
+                processInlineContent(line)
                 lineBuffer.clear()
                 blockMode = BlockMode.Paragraph
             }
@@ -481,9 +595,7 @@ private class ParserState(
                 line.startsWith("- ") && line.length > 2 && line[2] != '[' -> {
                     mark("li")
                     // Emit the content after "- "
-                    for (c in line.substring(2)) {
-                        processInlineChar(c)
-                    }
+                    processInlineContent(line.substring(2))
                     lineBuffer.clear()
                     inListItem = true
                 }
@@ -601,10 +713,7 @@ private class ParserState(
                     mark("ul")
                     mark("li")
                     // Process content after "> - "
-                    val content = line.removePrefix("> - ")
-                    for (c in content) {
-                        processInlineChar(c)
-                    }
+                    processInlineContent(line.removePrefix("> - "))
                     lineBuffer.clear()
                     inListItem = true
                     blockMode = BlockMode.BlockquoteList
@@ -620,10 +729,7 @@ private class ParserState(
                         inBlockquoteParagraph = true
                     }
                     // Process content after "> "
-                    val content = line.removePrefix("> ")
-                    for (c in content) {
-                        processInlineChar(c)
-                    }
+                    processInlineContent(line.removePrefix("> "))
                     lineBuffer.clear()
                     atLineStart = false
                 }
@@ -790,13 +896,128 @@ private class ParserState(
         val cellTag = if (isHeader) "th" else "td"
         for (cell in cells) {
             cellTag {
-                val content = cell.trim()
-                for (c in content) {
-                    processInlineChar(c)
-                }
+                processInlineContent(cell.trim())
                 flushInline()
             }
         }
+    }
+
+    /**
+     * Parses a custom markup opening tag like `<foo:bar attr="value">`.
+     * Returns the tag name and attributes map, or null if not a valid custom markup tag.
+     * Custom markup tags must have a namespace (contain a colon in the tag name).
+     */
+    private fun parseCustomMarkupOpeningTag(line: String): Pair<String, Map<String, String>?>? {
+        // Remove < and >
+        val content = line.removePrefix("<").removeSuffix(">").trim()
+        if (content.isEmpty()) return null
+
+        // Split into tag name and attributes
+        val parts = content.split(Regex("\\s+"), limit = 2)
+        val tagName = parts[0]
+
+        // Must contain a colon (namespaced tag) to be custom markup
+        if (!tagName.contains(':')) return null
+
+        // Parse attributes if present
+        val attributes = if (parts.size > 1) {
+            parseAttributes(parts[1])
+        } else {
+            null
+        }
+
+        return tagName to attributes
+    }
+
+    /**
+     * Parses attribute string like `attr="value" other="val2"` into a map.
+     */
+    private fun parseAttributes(attrString: String): Map<String, String>? {
+        if (attrString.isBlank()) return null
+
+        val attributes = mutableMapOf<String, String>()
+        // Simple regex-based attribute parsing: name="value" or name='value'
+        val attrPattern = Regex("""(\w+)=["']([^"']*)["']""")
+        attrPattern.findAll(attrString).forEach { match ->
+            val (name, value) = match.destructured
+            attributes[name] = value
+        }
+
+        return if (attributes.isNotEmpty()) attributes else null
+    }
+
+    /**
+     * Process content inside a custom markup block.
+     * Content is emitted immediately as it arrives.
+     * Closing tag is detected incrementally when </tagname> pattern is seen.
+     */
+    private suspend fun SemanticEventScope.processCustomMarkup(
+        char: Char,
+        tagName: String
+    ) {
+        // Skip the first newline after opening tag (when detected incrementally)
+        if (customMarkupSkipFirstNewline) {
+            customMarkupSkipFirstNewline = false
+            if (char == '\n') {
+                return
+            }
+        }
+
+        val closingTag = "</$tagName>"
+
+        // If we're tracking a potential closing tag
+        if (customMarkupInClosingTag) {
+            customMarkupClosingBuffer.append(char)
+            val bufferStr = customMarkupClosingBuffer.toString()
+
+            when {
+                // Complete closing tag found
+                bufferStr == closingTag -> {
+                    customMarkupClosingBuffer.clear()
+                    customMarkupInClosingTag = false
+                    unmark(tagName, isTag = true)
+                    blockMode = BlockMode.Start
+                }
+                // Still a valid prefix of closing tag
+                closingTag.startsWith(bufferStr) -> {
+                    // Keep buffering
+                }
+                // Not a closing tag - emit pending newline and buffered content
+                else -> {
+                    if (customMarkupPendingNewline) {
+                        customMarkupPendingNewline = false
+                        +'\n'
+                    }
+                    +customMarkupClosingBuffer.toString()
+                    customMarkupClosingBuffer.clear()
+                    customMarkupInClosingTag = false
+                }
+            }
+            return
+        }
+
+        // Check if this character starts a potential closing tag
+        // Note: Don't emit pending newline yet - it may be part of whitespace before closing tag
+        if (char == '<') {
+            customMarkupClosingBuffer.append(char)
+            customMarkupInClosingTag = true
+            return
+        }
+
+        // Handle pending newline - emit it now before new content
+        if (customMarkupPendingNewline) {
+            customMarkupPendingNewline = false
+            +'\n'
+        }
+
+        // Handle newlines - buffer them to avoid trailing newlines
+        if (char == '\n') {
+            customMarkupPendingNewline = true
+            return
+        }
+
+        // Regular content - emit immediately
+        +char
     }
 
     private suspend fun SemanticEventScope.processInlineChar(char: Char) {
@@ -974,9 +1195,15 @@ private class ParserState(
                 +char
             }
             inlineBuffer.toString() == "***" && char != '*' -> {
-                // Three asterisks - interpret as ** then * (close bold, start italic) or vice versa
+                // Three asterisks - handle bold+italic toggling
                 inlineBuffer.clear()
-                if (bold) {
+                if (bold && italic) {
+                    // Close both - em first (inner), then strong (outer)
+                    unmark("em")
+                    unmark("strong")
+                    bold = false
+                    italic = false
+                } else if (bold) {
                     unmark("strong")
                     bold = false
                     // Now start italic
@@ -1359,14 +1586,21 @@ private class ParserState(
             BlockMode.Start -> {
                 // Check if there's pending content in lineBuffer
                 if (lineBuffer.isNotEmpty()) {
-                    val line = lineBuffer.toString()
                     "p" {
-                        for (c in line) {
-                            processInlineChar(c)
-                        }
+                        processInlineContent(lineBuffer.toString())
                         flushInline()
                     }
                 }
+            }
+            is BlockMode.CustomMarkup -> {
+                val tagName = (blockMode as BlockMode.CustomMarkup).tagName
+                // Emit any buffered content from incomplete closing tag detection
+                if (customMarkupClosingBuffer.isNotEmpty()) {
+                    +customMarkupClosingBuffer.toString()
+                    customMarkupClosingBuffer.clear()
+                    customMarkupInClosingTag = false
+                }
+                unmark(tagName, isTag = true)
             }
         }
     }
