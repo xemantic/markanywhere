@@ -1,2 +1,16 @@
-// TODO replace with your project name
-rootProject.name = "xemantic-project-template"
+rootProject.name = "markanywhere-kotlin"
+
+pluginManagement {
+    includeBuild("build-logic")
+}
+
+include(
+    "markanywhere-api",
+    "markanywhere-flow",
+    "markanywhere-render",
+    "markanywhere-parse",
+    "markanywhere-extract",
+    "markanywhere-js",
+    "markanywhere-transform",
+    "markanywhere-test"
+)
