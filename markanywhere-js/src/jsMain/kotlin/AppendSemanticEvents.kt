@@ -43,6 +43,7 @@ public suspend fun Element.appendSemanticEvents(
             }
 
             is SemanticEvent.Unmark -> {
+                path.last().normalize()
                 path.removeLast()
             }
 

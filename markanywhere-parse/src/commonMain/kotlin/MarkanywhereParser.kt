@@ -33,6 +33,26 @@ public fun Flow<String>.parse(
     parser: MarkanywhereParser
 ): Flow<SemanticEvent> = parser.parse(this)
 
+@Suppress("RegExpRedundantEscape") // it is required for JS
+private object Patterns {
+    val CODE_BLOCK_LANG = Regex("^```[a-zA-Z0-9]*$")
+    val HORIZONTAL_RULE = Regex("^-{3,}$")
+    val HEADING_WITH_SPACE = Regex("^#{1,6} $")
+    val HEADING_NO_SPACE = Regex("^#{1,6}$")
+    val TOO_MANY_HASHES = Regex("^#{7,}.*")
+    val DASHES = Regex("^-+$")
+    val TASK_UNCHECKED = Regex("^- \\[ \\] $")
+    val TASK_CHECKED = Regex("^- \\[x\\] $")
+    val TASK_PARTIAL = Regex("^- \\[[ x]?\\]?$")
+    val ORDERED_LIST_ITEM = Regex("^\\d+\\. $")
+    val ORDERED_LIST_PARTIAL = Regex("^\\d+\\.?$")
+    val BLOCKQUOTE_EMPTY = Regex("^> ?$")
+    val BLOCKQUOTE_DASH_PARTIAL = Regex("^> -?$")
+    val TABLE_SEPARATOR = Regex("^\\|[-:|\\s]+\\|$")
+    val WHITESPACE = Regex("\\s+")
+    val ATTRIBUTE = Regex("""(\w+)=["']([^"']*)["']""")
+}
+
 public class DefaultMarkanywhereParser : MarkanywhereParser {
 
     override fun parse(
@@ -107,18 +127,20 @@ private class ParserState(
     private var customMarkupSkipFirstNewline = false
     private var customMarkupPendingNewline = false
 
-    suspend fun process(char: Char) {
-        scope.process(char)
-    }
-
     suspend fun processChunk(chunk: String) {
         scope.processChunk(chunk)
     }
 
     // Control characters that require special handling in inline text
-    private fun isInlineControlChar(char: Char): Boolean = when (char) {
+    private fun Char.isInlineControl(): Boolean = when (this) {
         '*', '_', '`', '~', '^', '=', '$', '[', '!', '<', '\\', '\n' -> true
         else -> false
+    }
+
+    // Characters that start block-level elements
+    private fun Char.isBlockStart(): Boolean = when (this) {
+        '#', '`', '-', '>', '|', '$', '<' -> true
+        else -> isDigit()
     }
 
     /**
@@ -272,7 +294,7 @@ private class ParserState(
 
     private fun findNextControlChar(chunk: String, startIndex: Int): Int {
         for (i in startIndex until chunk.length) {
-            if (isInlineControlChar(chunk[i])) {
+            if (chunk[i].isInlineControl()) {
                 return i
             }
         }
@@ -321,7 +343,7 @@ private class ParserState(
 
             when {
                 // Code block opening: ```lang
-                line.matches(Regex("^```[a-zA-Z0-9]*$")) -> {
+                line matches Patterns.CODE_BLOCK_LANG -> {
                     val lang = line.removePrefix("```").trim()
                     val attrs = if (lang.isNotEmpty()) {
                         mapOf("class" to "code lang-$lang")
@@ -333,7 +355,7 @@ private class ParserState(
                     blockMode = BlockMode.CodeBlock(3)
                 }
                 // Horizontal rule: ---
-                line.matches(Regex("^-{3,}$")) -> {
+                line matches Patterns.HORIZONTAL_RULE -> {
                     "hr" {}
                 }
                 // Math block: $$
@@ -384,16 +406,16 @@ private class ParserState(
         val line = lineBuffer.toString()
         when {
             // Headings: # ## ### etc.
-            line.matches(Regex("^#{1,6} $")) -> {
+            line matches Patterns.HEADING_WITH_SPACE -> {
                 val level = line.count { it == '#' }
                 mark("h$level")
                 lineBuffer.clear()
                 blockMode = BlockMode.Heading(level)
             }
-            line.matches(Regex("^#{1,6}$")) -> {
+            line matches Patterns.HEADING_NO_SPACE -> {
                 // Keep buffering to see if space follows
             }
-            line.matches(Regex("^#{7,}.*")) -> {
+            line matches Patterns.TOO_MANY_HASHES -> {
                 // Too many #, treat as paragraph
                 mark("p")
                 processInlineContent(line)
@@ -401,15 +423,15 @@ private class ParserState(
                 blockMode = BlockMode.Paragraph
             }
             // Code block: ```
-            line == "```" || line.matches(Regex("^```[a-zA-Z0-9]*$")) -> {
+            line == "```" || line matches Patterns.CODE_BLOCK_LANG -> {
                 // Keep buffering for newline
             }
             // Horizontal rule: --- keep buffering
-            line.matches(Regex("^-{1,}$")) -> {
+            line matches Patterns.DASHES -> {
                 // Keep buffering (could be HR or list start)
             }
             // Task list: - [ ] or - [x]  (check BEFORE simple list item)
-            line.matches(Regex("^- \\[ \\] $")) -> {
+            line matches Patterns.TASK_UNCHECKED -> {
                 mark("ul")
                 mark("li")
                 "input"("type" to "checkbox") {}
@@ -417,7 +439,7 @@ private class ParserState(
                 inListItem = true
                 blockMode = BlockMode.UnorderedList
             }
-            line.matches(Regex("^- \\[x\\] $")) -> {
+            line matches Patterns.TASK_CHECKED -> {
                 mark("ul")
                 mark("li")
                 "input"("type" to "checkbox", "checked" to "true") {}
@@ -427,7 +449,7 @@ private class ParserState(
                 blockMode = BlockMode.UnorderedList
             }
             // Keep buffering for potential task list
-            line.matches(Regex("^- \\[[ x]?\\]?$")) || line == "- [" || line == "- " -> {
+            line matches Patterns.TASK_PARTIAL || line == "- [" || line == "- " -> {
                 // Keep buffering - could be task list
             }
             // Regular unordered list: "- X" where X is not [
@@ -441,14 +463,14 @@ private class ParserState(
                 blockMode = BlockMode.UnorderedList
             }
             // Ordered list: 1. item
-            line.matches(Regex("^\\d+\\. $")) -> {
+            line matches Patterns.ORDERED_LIST_ITEM -> {
                 mark("ol")
                 mark("li")
                 lineBuffer.clear()
                 inListItem = true
                 blockMode = BlockMode.OrderedList
             }
-            line.matches(Regex("^\\d+\\.?$")) -> {
+            line matches Patterns.ORDERED_LIST_PARTIAL -> {
                 // Keep buffering
             }
             // Blockquote: > text
@@ -488,7 +510,7 @@ private class ParserState(
             line.startsWith("<") -> {
                 // Keep buffering - could become custom markup tag
             }
-            !line.first().let { it == '#' || it == '`' || it == '-' || it == '>' || it == '|' || it == '$' || it.isDigit() } -> {
+            !line.first().isBlockStart() -> {
                 // Not a special line start, begin paragraph
                 mark("p")
                 processInlineContent(line)
@@ -576,21 +598,21 @@ private class ParserState(
             val line = lineBuffer.toString()
             when {
                 // Task list: - [ ] or - [x]  (check BEFORE simple list item)
-                line.matches(Regex("^- \\[ \\] $")) -> {
+                line matches Patterns.TASK_UNCHECKED -> {
                     mark("li")
                     "input"("type" to "checkbox") {}
                     unmark("input")
                     lineBuffer.clear()
                     inListItem = true
                 }
-                line.matches(Regex("^- \\[x\\] $")) -> {
+                line matches Patterns.TASK_CHECKED -> {
                     mark("li")
                     "input"("type" to "checkbox", "checked" to "true") {}
                     lineBuffer.clear()
                     inListItem = true
                 }
                 // Keep buffering for potential task list
-                line.matches(Regex("^- \\[[ x]?\\]?$")) || line == "- [" || line == "- " || line == "-" -> {
+                line matches Patterns.TASK_PARTIAL || line == "- [" || line == "- " || line == "-" -> {
                     // Keep buffering
                 }
                 // Regular list item: "- X" where X is not [
@@ -647,12 +669,12 @@ private class ParserState(
             lineBuffer.append(char)
             val line = lineBuffer.toString()
             when {
-                line.matches(Regex("^\\d+\\. $")) -> {
+                line matches Patterns.ORDERED_LIST_ITEM -> {
                     mark("li")
                     lineBuffer.clear()
                     inListItem = true
                 }
-                line.matches(Regex("^\\d+\\.?$")) -> {
+                line matches Patterns.ORDERED_LIST_PARTIAL -> {
                     // Keep buffering
                 }
                 line.isEmpty() -> {
@@ -779,7 +801,7 @@ private class ParserState(
                     lineBuffer.clear()
                     inListItem = true
                 }
-                line.matches(Regex("^> ?$")) || line.matches(Regex("^> -?$")) -> {
+                line matches Patterns.BLOCKQUOTE_EMPTY || line matches Patterns.BLOCKQUOTE_DASH_PARTIAL -> {
                     // Keep buffering
                 }
                 line.isEmpty() -> {
@@ -836,7 +858,7 @@ private class ParserState(
         lineBuffer.append(char)
         if (char == '\n') {
             val line = lineBuffer.toString().trimEnd()
-            if (line.matches(Regex("^\\|[-:|\\s]+\\|$"))) {
+            if (line matches Patterns.TABLE_SEPARATOR) {
                 // Separator row
                 unmark("thead")
                 mark("tbody")
@@ -915,7 +937,7 @@ private class ParserState(
         if (content.isEmpty()) return null
 
         // Split into tag name and attributes
-        val parts = content.split(Regex("\\s+"), limit = 2)
+        val parts = content.split(Patterns.WHITESPACE, limit = 2)
         val tagName = parts[0]
 
         // Must contain a colon (namespaced tag) to be custom markup
@@ -939,8 +961,7 @@ private class ParserState(
 
         val attributes = mutableMapOf<String, String>()
         // Simple regex-based attribute parsing: name="value" or name='value'
-        val attrPattern = Regex("""(\w+)=["']([^"']*)["']""")
-        attrPattern.findAll(attrString).forEach { match ->
+        Patterns.ATTRIBUTE.findAll(attrString).forEach { match ->
             val (name, value) = match.destructured
             attributes[name] = value
         }
