@@ -44,7 +44,7 @@ jobs:
           JRELEASER_BLUESKY_HANDLE: ${{ vars.BLUESKY_HANDLE }}
           JRELEASER_BLUESKY_PASSWORD: ${{ secrets.BLUESKY_PASSWORD }}
 
-        run: ./gradlew -Pversion=$VERSION build publishToMavenCentral jreleaserAnnounce --no-configuration-cache
+        run: ./gradlew -Pversion=$VERSION build publishToMavenCentral --no-configuration-cache
 
       - name: Get target branch for tag
         run: |

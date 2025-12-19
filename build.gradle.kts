@@ -1,12 +1,12 @@
 import com.vanniktech.maven.publish.JavadocJar
 import com.vanniktech.maven.publish.KotlinMultiplatform
 import com.vanniktech.maven.publish.MavenPublishBaseExtension
-import org.jreleaser.model.Active
+//import org.jreleaser.model.Active
 
 plugins {
     alias(libs.plugins.versions)
     alias(libs.plugins.dokka)
-    alias(libs.plugins.jreleaser)
+    //alias(libs.plugins.jreleaser)
     alias(libs.plugins.kotlin.multiplatform) apply false
     alias(libs.plugins.maven.publish) apply false
     alias(libs.plugins.xemantic.conventions)
@@ -120,7 +120,7 @@ subprojects {
 }
 
 
-
+/*
 val releaseAnnouncementSubject = """🚀 ${rootProject.name} $version has been released!"""
 val releaseAnnouncement = """
 $releaseAnnouncementSubject
@@ -153,3 +153,4 @@ jreleaser {
     }
 
 }
+*/
