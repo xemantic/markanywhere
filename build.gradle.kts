@@ -5,7 +5,6 @@ plugins {
     alias(libs.plugins.dokka)
     alias(libs.plugins.jreleaser)
     alias(libs.plugins.kotlin.multiplatform) apply false
-    alias(libs.plugins.maven.publish)
     alias(libs.plugins.xemantic.conventions)
 }
 
