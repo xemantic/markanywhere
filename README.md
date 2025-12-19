@@ -62,6 +62,6 @@ In `build.gradle.kts` add:
 
 ```kotlin
 dependencies {
-    implementation("com.xemantic.markanywhere:markanywhere:0.1-SNAPSHOT")
+    implementation("com.xemantic.markanywhere:markanywhere:0.1.3")
 }
 ```
