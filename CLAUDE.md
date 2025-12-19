@@ -4,125 +4,94 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a Kotlin Multiplatform library template project using Gradle and the Xemantic conventions plugin. The project is designed to be published to Maven Central and supports a comprehensive set of platforms including JVM, JS, WebAssembly (WASM), and native targets (macOS, iOS, Linux, Windows, Android Native, watchOS, tvOS).
+markanywhere is a Kotlin Multiplatform library for streaming Markdown and Markup document formats as interchangeable hierarchical streams of semantic events. It inverts the traditional document processing flow: rather than consuming complete documents and producing structure, it consumes streaming tokens and emits semantic events in real-time.
 
 ## Build Commands
 
-### Basic Build and Test
 ```shell
-./gradlew build
-```
-
-### Run Tests
-```shell
-./gradlew test
-```
-
-### Run Tests for Specific Platform
-```shell
-./gradlew jvmTest           # JVM only
-./gradlew jsTest            # JavaScript only
-./gradlew wasmJsTest        # WebAssembly JS only
-./gradlew macosX64Test      # macOS x64 only
-```
-
-### Check for Dependency Updates
-```shell
-./gradlew dependencyUpdates
-```
-
-### Generate Documentation
-```shell
-./gradlew dokkaGeneratePublicationHtml
-```
-
-### Update Gradle Wrapper
-```shell
-./gradlew wrapper --gradle-version <version> --distribution-type bin
-```
-
-### Publishing
-```shell
-./gradlew publishAllPublicationsToMavenLocalRepository  # Local Maven repo
-./gradlew jreleaserDeploy                               # Deploy to Maven Central
+./gradlew build                                          # Build and test all modules
+./gradlew test                                           # Run tests for all platforms
+./gradlew jvmTest                                        # JVM tests only
+./gradlew jsTest                                         # JavaScript tests only
+./gradlew :markanywhere-parse:jvmTest                    # Single module, single platform
+./gradlew dependencyUpdates                              # Check for dependency updates
+./gradlew dokkaGeneratePublicationHtml                   # Generate API documentation
+./gradlew publishAllPublicationsToMavenLocalRepository   # Publish to local Maven
 ```
 
 ## Architecture
 
-### Multiplatform Configuration
+### Module Structure
 
-The project uses Kotlin Multiplatform with explicit API mode enabled, targeting:
-- **JVM** (Java 17 target)
-- **JavaScript** (browser + Node.js)
-- **WebAssembly** (wasmJs for browser/Node.js/d8, wasmWasi for Node.js)
-- **Native targets**: Comprehensive support across Tier 1-3 platforms including macOS, iOS, Linux, Windows (mingw), watchOS, tvOS, and Android Native
+```
+markanywhere-api        # Core SemanticEvent types (Text, Mark, Unmark) with JSON serialization
+markanywhere-flow       # Kotlin Flow-based DSL for building SemanticEvent streams
+markanywhere-parse      # Streaming Markdown parser (DefaultMarkanywhereParser)
+markanywhere-render     # Renders SemanticEvent flows to HTML strings
+markanywhere-transform  # Pattern-matching transformer for SemanticEvent flows
+markanywhere-extract    # Extracts content from specific markup tags during streaming
+markanywhere-js         # JavaScript DOM integration (appending events, reading elements)
+markanywhere-test       # Test utilities
+```
 
-### Compiler Settings
+### Core Abstraction
 
-- Kotlin API/Language version: 2.2
-- JVM target: 17
-- Progressive mode enabled
-- Experimental features: Context parameters and context-sensitive resolution
-- Extra warnings enabled
-- Power Assert plugin configured for enhanced test assertions
+The `SemanticEvent` sealed interface represents three event types:
+- `Text(text: String)` - textual content
+- `Mark(name: String, isTag: Boolean, attributes: Map?)` - opening tag/formatting
+- `Unmark(name: String, isTag: Boolean)` - closing tag/formatting
 
-### Source Layout
+The `isTag` flag distinguishes between events from Markdown syntax (`*text*` -> `em` with `isTag=false`) and embedded HTML (`<em>` -> `em` with `isTag=true`).
 
-- `src/commonMain/kotlin/` - Shared Kotlin code across all platforms
-- `src/commonTest/kotlin/` - Shared test code using kotlin-test and xemantic-kotlin-test
-- Platform-specific sources can be added in `src/<platform>Main/kotlin/` and `src/<platform>Test/kotlin/`
+### Key Patterns
 
-### Testing Framework
-
-Tests use `xemantic-kotlin-test` which provides an expressive DSL with Power Assert integration:
+**Building event flows** (markanywhere-flow):
 ```kotlin
-Foo should {
-    have(BAR == "buzz")
+semanticEvents {
+    "p" {                    // Opens <p>, closes after block
+        +"Hello "            // Text event
+        "strong" { +"world" } // Nested formatting
+    }
 }
 ```
 
-The Power Assert plugin is configured to work with `com.xemantic.kotlin.test.assert` and `com.xemantic.kotlin.test.have` functions.
+**Parsing streaming Markdown** (markanywhere-parse):
+```kotlin
+flow { emit("# Hello\n**world**") }
+    .parse(DefaultMarkanywhereParser())
+    .render()  // Returns HTML string
+```
 
-When testing for exceptions, always assert the full error message text:
-- For single-line messages: `assert(error.message == "expected message")`
-- For multi-line messages: use `error.message sameAs """...""".trimIndent()`
+**Transforming events** (markanywhere-transform):
+```kotlin
+val transformer = Transformer {
+    match("thinking") { event ->
+        "div"(mapOf("class" to "thinking")) { children() }
+    }
+}
+flow.transform(transformer)
+```
 
-### Dependency Management
+### Build Logic
 
-All dependencies are managed in `gradle/libs.versions.toml` using the version catalog feature. When adding new dependencies, update this file rather than inline declarations in build scripts.
+The `build-logic` module contains `MarkanywhereConventionPlugin` which configures:
+- Kotlin 2.3 with context-sensitive resolution
+- JVM 17 target
+- Power Assert for test assertions
+- Explicit API mode
+- JavaScript ES modules
 
-### Build Configuration
+### Testing Framework
 
-- `build.gradle.kts` - Main build configuration with multiplatform setup, publishing, and JReleaser configuration
-- `settings.gradle.kts` - Project name configuration
-- `gradle.properties` - Kotlin compiler flags and project metadata
+Tests use `xemantic-kotlin-test` with Power Assert:
+```kotlin
+result should {
+    have(text == "expected")
+}
+```
 
-Some tests are disabled by default because they require XCode components:
-- `tvosSimulatorArm64Test`
-- `watchosSimulatorArm64Test`
+Always assert full error message text when testing exceptions.
 
-### Publishing and Release
+### Multiplatform Targets
 
-The project uses:
-- Maven Central for artifact distribution via JReleaser
-- GitHub for releases (manual through UI)
-- Automated announcements to Discord, LinkedIn, and Bluesky
-- Dokka for API documentation generation
-- Binary compatibility validator for tracking API changes
-
-### Xemantic Conventions
-
-The project uses the `xemantic-conventions` Gradle plugin which provides:
-- Standardized POM configuration
-- License management (Apache 2.0)
-- Developer information
-- Publishing conventions
-- Release announcement templates
-
-### Library Configuration
-
-This is set up as a library project with:
-- Explicit API mode (`kotlin.explicitApi()`)
-- Binary outputs for JS and WASM targets
-- Source and javadoc JARs for Maven Central
-- Binary compatibility validation
+All modules target JVM and JS. The `markanywhere-js` module is JS-only for DOM integration.

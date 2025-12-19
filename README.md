@@ -1,21 +1,21 @@
-# markanywhere-kotlin
+# markanywhere
 
 Stream Markdown or Markup document formats as interchangeable hierarchical streams of events
 
-[<img alt="Maven Central Version" src="https://img.shields.io/maven-central/v/com.xemantic.markanywhere/markanywhere-kotlin">](https://central.sonatype.com/artifact/com.xemantic.markanywhere/markanywhere-kotlin)
-[<img alt="GitHub Release Date" src="https://img.shields.io/github/release-date/xemantic/markanywhere-kotlin">](https://github.com/xemantic/markanywhere-kotlin/releases)
-[<img alt="license" src="https://img.shields.io/github/license/xemantic/markanywhere-kotlin?color=blue">](https://github.com/xemantic/markanywhere-kotlin/blob/main/LICENSE)
+[<img alt="Maven Central Version" src="https://img.shields.io/maven-central/v/com.xemantic.markanywhere/markanywhere">](https://central.sonatype.com/artifact/com.xemantic.markanywhere/markanywhere)
+[<img alt="GitHub Release Date" src="https://img.shields.io/github/release-date/xemantic/markanywhere">](https://github.com/xemantic/markanywhere/releases)
+[<img alt="license" src="https://img.shields.io/github/license/xemantic/markanywhere?color=blue">](https://github.com/xemantic/markanywhere/blob/main/LICENSE)
 
-[<img alt="GitHub Actions Workflow Status" src="https://img.shields.io/github/actions/workflow/status/xemantic/markanywhere-kotlin/build-main.yml">](https://github.com/xemantic/markanywhere-kotlin/actions/workflows/build-main.yml)
-[<img alt="GitHub branch check runs" src="https://img.shields.io/github/check-runs/xemantic/markanywhere-kotlin/main">](https://github.com/xemantic/markanywhere-kotlin/actions/workflows/build-main.yml)
-[<img alt="GitHub commits since latest release" src="https://img.shields.io/github/commits-since/xemantic/markanywhere-kotlin/latest">](https://github.com/xemantic/markanywhere-kotlin/commits/main/)
-[<img alt="GitHub last commit" src="https://img.shields.io/github/last-commit/xemantic/markanywhere-kotlin">](https://github.com/xemantic/markanywhere-kotlin/commits/main/)
+[<img alt="GitHub Actions Workflow Status" src="https://img.shields.io/github/actions/workflow/status/xemantic/markanywhere/build-main.yml">](https://github.com/xemantic/markanywhere/actions/workflows/build-main.yml)
+[<img alt="GitHub branch check runs" src="https://img.shields.io/github/check-runs/xemantic/markanywhere/main">](https://github.com/xemantic/markanywhere/actions/workflows/build-main.yml)
+[<img alt="GitHub commits since latest release" src="https://img.shields.io/github/commits-since/xemantic/markanywhere/latest">](https://github.com/xemantic/markanywhere/commits/main/)
+[<img alt="GitHub last commit" src="https://img.shields.io/github/last-commit/xemantic/markanywhere">](https://github.com/xemantic/markanywhere/commits/main/)
 
-[<img alt="GitHub contributors" src="https://img.shields.io/github/contributors/xemantic/markanywhere-kotlin">](https://github.com/xemantic/markanywhere-kotlin/graphs/contributors)
-[<img alt="GitHub commit activity" src="https://img.shields.io/github/commit-activity/t/xemantic/markanywhere-kotlin">](https://github.com/xemantic/markanywhere-kotlin/commits/main/)
-[<img alt="GitHub code size in bytes" src="https://img.shields.io/github/languages/code-size/xemantic/markanywhere-kotlin">]()
-[<img alt="GitHub Created At" src="https://img.shields.io/github/created-at/xemantic/markanywhere-kotlin">](https://github.com/xemantic/markanywhere-kotlin/commits)
-[<img alt="kotlin version" src="https://img.shields.io/badge/dynamic/toml?url=https%3A%2F%2Fraw.githubusercontent.com%2Fxemantic%2Fmarkanywhere-kotlin%2Fmain%2Fgradle%2Flibs.versions.toml&query=versions.kotlin&label=kotlin">](https://kotlinlang.org/docs/releases.html)
+[<img alt="GitHub contributors" src="https://img.shields.io/github/contributors/xemantic/markanywhere">](https://github.com/xemantic/markanywhere/graphs/contributors)
+[<img alt="GitHub commit activity" src="https://img.shields.io/github/commit-activity/t/xemantic/markanywhere">](https://github.com/xemantic/markanywhere/commits/main/)
+[<img alt="GitHub code size in bytes" src="https://img.shields.io/github/languages/code-size/xemantic/markanywhere">]()
+[<img alt="GitHub Created At" src="https://img.shields.io/github/created-at/xemantic/markanywhere">](https://github.com/xemantic/markanywhere/commits)
+[<img alt="kotlin version" src="https://img.shields.io/badge/dynamic/toml?url=https%3A%2F%2Fraw.githubusercontent.com%2Fxemantic%2Fmarkanywhere%2Fmain%2Fgradle%2Flibs.versions.toml&query=versions.kotlin&label=kotlin">](https://kotlinlang.org/docs/releases.html)
 [<img alt="discord users online" src="https://img.shields.io/discord/811561179280965673">](https://discord.gg/vQktqqN2Vn)
 [![Bluesky](https://img.shields.io/badge/Bluesky-0285FF?logo=bluesky&logoColor=fff)](https://bsky.app/profile/xemantic.com)
 

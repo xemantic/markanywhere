@@ -1,4 +1,4 @@
-rootProject.name = "markanywhere-kotlin"
+rootProject.name = "markanywhere"
 
 pluginManagement {
     includeBuild("build-logic")
