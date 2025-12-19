@@ -19,7 +19,6 @@ import org.gradle.kotlin.dsl.withType
 import org.gradle.kotlin.dsl.findByType
 import org.gradle.kotlin.dsl.getByType
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
-import org.jetbrains.kotlin.gradle.dsl.JsModuleKind
 import org.jetbrains.kotlin.gradle.dsl.KotlinCommonCompilerOptions
 import org.jetbrains.kotlin.gradle.dsl.KotlinJvmExtension
 import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
@@ -53,6 +52,7 @@ fun Project.doApply() {
         ))
     }
 
+    plugins.apply("org.jetbrains.dokka")
     plugins.apply(MavenPublishPlugin::class.java)
 
     tasks.withType<JavaCompile> {
@@ -92,7 +92,7 @@ fun KotlinMultiplatformExtension.doConfigure(
         browser()
         binaries.library()
         compilerOptions {
-            moduleKind.set(JsModuleKind.MODULE_ES)
+//            moduleKind.set(JsModuleKind.MODULE_ES)
             freeCompilerArgs.addAll(
 //                "-Xcontext-parameters",
 //                "-Xcontext-sensitive-resolution",

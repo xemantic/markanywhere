@@ -29,6 +29,7 @@ dependencies {
     implementation(libs.kotlin.gradle.plugin)
     implementation(libs.kotlin.power.assert)
     implementation(libs.maven.publish.plugin)
+    implementation(libs.dokka.gradle.plugin)
 }
 
 gradlePlugin {
