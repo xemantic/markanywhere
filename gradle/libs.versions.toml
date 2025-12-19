@@ -30,6 +30,7 @@ xemantic-kotlin-core = { module = "com.xemantic.kotlin:xemantic-kotlin-core", ve
 # build-logic plugins
 kotlin-gradle-plugin = { group = "org.jetbrains.kotlin", name = "kotlin-gradle-plugin", version.ref = "kotlin" }
 kotlin-power-assert = { group = "org.jetbrains.kotlin", name = "kotlin-power-assert", version.ref = "kotlin" }
+maven-publish-plugin = { group = "com.vanniktech", name = "gradle-maven-publish-plugin", version.ref = "mavenPublishPlugin" }
 
 [plugins]
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }

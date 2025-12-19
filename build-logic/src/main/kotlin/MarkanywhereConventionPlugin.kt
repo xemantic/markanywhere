@@ -25,6 +25,7 @@ import org.jetbrains.kotlin.gradle.dsl.KotlinJvmExtension
 import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
 import org.jetbrains.kotlin.powerassert.gradle.PowerAssertGradleExtension
 import org.jetbrains.kotlin.powerassert.gradle.PowerAssertGradlePlugin
+import com.vanniktech.maven.publish.MavenPublishPlugin
 
 class MarkanywhereConventionPlugin : Plugin<Project> {
 
@@ -51,6 +52,8 @@ fun Project.doApply() {
             "com.xemantic.kotlin.test.have"
         ))
     }
+
+    plugins.apply(MavenPublishPlugin::class.java)
 
     tasks.withType<JavaCompile> {
         options.release.set(javaTargetVersion.toInt())
