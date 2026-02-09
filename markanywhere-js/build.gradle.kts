@@ -28,14 +28,19 @@ kotlin {
 
 }
 
-// bugfix: resolves gradle warnings which became errors in gradle 9.2, can be removed in the future
-tasks.named("jsBrowserProductionLibraryDistribution") {
-    dependsOn(
-        "jsTestTestDevelopmentExecutableCompileSync"
-    )
-}
+val jvmOnlyBuild = findProperty("jvmOnlyBuild") as? String
+val isJvmOnlyBuild: Boolean = (jvmOnlyBuild == null) || (jvmOnlyBuild.lowercase() == "true")
 
-// DOM tests require a browser environment - Node.js has no document object
-tasks.named("jsNodeTest") {
-    enabled = false
+if (!isJvmOnlyBuild) {
+    // bugfix: resolves gradle warnings which became errors in gradle 9.2, can be removed in the future
+    tasks.named("jsBrowserProductionLibraryDistribution") {
+        dependsOn(
+            "jsTestTestDevelopmentExecutableCompileSync"
+        )
+    }
+
+    // DOM tests require a browser environment - Node.js has no document object
+    tasks.named("jsNodeTest") {
+        enabled = false
+    }
 }
