@@ -97,10 +97,19 @@ fun KotlinMultiplatformExtension.doConfigure(
     isJvmOnlyBuild: Boolean
 ) {
 
+    compilerOptions {
+        extraWarnings.set(true)
+        progressiveMode.set(true)
+        languageVersion.set(kotlinVersion)
+        apiVersion.set(kotlinVersion)
+        freeCompilerArgs.addAll(
+            "-Xcontext-sensitive-resolution"
+        )
+    }
+
     jvm {
         compilerOptions {
             jvmTarget.set(jvmTargetVersion)
-            configureCommons(kotlinVersion)
         }
     }
 
@@ -201,16 +210,5 @@ fun KotlinJvmExtension.doConfigure(
 fun KotlinCommonCompilerOptions.configureCommons(
     kotlinVersion: KotlinVersion
 ) {
-    extraWarnings.set(true)
-    progressiveMode.set(true)
-    languageVersion.set(kotlinVersion)
-    apiVersion.set(kotlinVersion)
-    freeCompilerArgs.set(
-        listOf(
-            "-Xcontext-sensitive-resolution",
-        )
-    )
-    optIn.addAll(
-        "kotlin.time.ExperimentalTime"
-    )
+
 }
