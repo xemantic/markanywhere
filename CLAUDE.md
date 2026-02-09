@@ -75,11 +75,11 @@ flow.transform(transformer)
 ### Build Logic
 
 The `build-logic` module contains `MarkanywhereConventionPlugin` which configures:
-- Kotlin 2.3 with context-sensitive resolution
+- Kotlin 2.3.10 with context-sensitive resolution
 - JVM 17 target
 - Power Assert for test assertions
 - Explicit API mode
-- JavaScript ES modules
+- JavaScript and WebAssembly ES modules
 
 ### Testing Framework
 
@@ -94,4 +94,4 @@ Always assert full error message text when testing exceptions.
 
 ### Multiplatform Targets
 
-All modules target JVM and JS. The `markanywhere-js` module is JS-only for DOM integration.
+All modules target JVM, JS (browser + Node.js), WebAssembly (wasmJs, wasmWasi), and native platforms (macOS, iOS, Linux, Windows/mingw, Android Native, tvOS, watchOS). The `markanywhere-js` module is JS-only for DOM integration.

@@ -34,3 +34,8 @@ tasks.named("jsBrowserProductionLibraryDistribution") {
         "jsTestTestDevelopmentExecutableCompileSync"
     )
 }
+
+// DOM tests require a browser environment - Node.js has no document object
+tasks.named("jsNodeTest") {
+    enabled = false
+}
