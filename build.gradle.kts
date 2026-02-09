@@ -1,3 +1,4 @@
+import com.vanniktech.maven.publish.DeploymentValidation
 import com.vanniktech.maven.publish.JavadocJar
 import com.vanniktech.maven.publish.KotlinMultiplatform
 import com.vanniktech.maven.publish.MavenPublishBaseExtension
@@ -52,24 +53,10 @@ subprojects {
     plugins.withId("com.vanniktech.maven.publish.base") {
         configure<MavenPublishBaseExtension> {
 
-            configure(
-                KotlinMultiplatform(
-                    javadocJar = JavadocJar.Dokka("dokkaGenerateHtml"),
-                    sourcesJar = true
-                )
-            )
-
             signAllPublications()
 
             publishToMavenCentral(
-                automaticRelease = true,
-                validateDeployment = false // for kotlin multiplatform projects it might take a while (>900s)
-            )
-
-            coordinates(
-                groupId = group.toString(),
-                artifactId = project.name,
-                version = version.toString()
+                automaticRelease = true
             )
 
             pom {

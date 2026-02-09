@@ -25,6 +25,7 @@ import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
 import org.jetbrains.kotlin.powerassert.gradle.PowerAssertGradleExtension
 import org.jetbrains.kotlin.powerassert.gradle.PowerAssertGradlePlugin
 import com.vanniktech.maven.publish.MavenPublishPlugin
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 
 class MarkanywhereConventionPlugin : Plugin<Project> {
 
@@ -71,8 +72,12 @@ fun Project.doApply() {
         doConfigure(kotlinVersion, jvmTargetVersion)
     }
 
+    // skip tests which require XCode components to be installed
+    tasks.named("tvosSimulatorArm64Test") { enabled = false }
+    tasks.named("watchosSimulatorArm64Test") { enabled = false }
 }
 
+@OptIn(ExperimentalWasmDsl::class)
 fun KotlinMultiplatformExtension.doConfigure(
     kotlinVersion: KotlinVersion,
     jvmTargetVersion: JvmTarget
@@ -90,6 +95,7 @@ fun KotlinMultiplatformExtension.doConfigure(
     js {
 //        useEsModules()
         browser()
+        nodejs()
         binaries.library()
         compilerOptions {
 //            moduleKind.set(JsModuleKind.MODULE_ES)
@@ -108,6 +114,45 @@ fun KotlinMultiplatformExtension.doConfigure(
 //            target.set("es2015")
 //        }
     }
+
+    wasmJs {
+        browser()
+        nodejs()
+        //d8()
+        binaries.library()
+    }
+
+    wasmWasi {
+        nodejs()
+        binaries.library()
+    }
+
+    // native, see https://kotlinlang.org/docs/native-target-support.html
+    // tier 1
+    macosX64()
+    macosArm64()
+    iosSimulatorArm64()
+    iosX64()
+    iosArm64()
+
+    // tier 2
+    linuxX64()
+    linuxArm64()
+    watchosSimulatorArm64()
+    watchosX64()
+    watchosArm32()
+    watchosArm64()
+    tvosSimulatorArm64()
+    tvosX64()
+    tvosArm64()
+
+    // tier 3
+    androidNativeArm32()
+    androidNativeArm64()
+    androidNativeX86()
+    androidNativeX64()
+    mingwX64()
+    watchosDeviceArm64()
 
     targets.configureEach {
         compilations.configureEach {

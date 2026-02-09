@@ -57,7 +57,7 @@ class TransformerTest {
             }
 
             match("li") {
-                +"* "
+                +"- "
                 children(mode = "span")
                 +"\n"
             }
@@ -172,9 +172,9 @@ class TransformerTest {
         markdownEvents.render() sameAs """
             Shopping list:
 
-            * Apples
-            * Bananas
-            * Cherries
+            - Apples
+            - Bananas
+            - Cherries
 
         """.trimIndent()
     }
@@ -301,9 +301,9 @@ class TransformerTest {
 
             ## Features
 
-            * Easy to use
-            * Powerful transformations
-            * Multiplatform support
+            - Easy to use
+            - Powerful transformations
+            - Multiplatform support
 
             ## Conclusion
 
@@ -339,8 +339,8 @@ class TransformerTest {
 
         // then
         markdownEvents.render() sameAs """
-            * This is *critical*
-            * *All* emphasized
+            - This is *critical*
+            - *All* emphasized
 
         """.trimIndent()
     }
@@ -396,7 +396,7 @@ class TransformerTest {
         }
 
         match("li") {
-            +"* "
+            +"- "
             children(mode = "span")
             +"\n"
         }
