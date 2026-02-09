@@ -2448,4 +2448,37 @@ class SemanticEventsRenderingTest {
         """.trimIndent()
     }
 
+    @Test
+    fun `should render full HTML document with proper indentation`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "html" {
+                "body" {
+                    "div"("class" to "foo") {
+                        "button"("class" to "large") { +"Hello World" }
+                        "a"("class" to "link", "href" to "https://example.com") { }
+                        tag("my:component", mapOf("class" to "bar", "id" to "component-1")) {
+                        }
+                    }
+                }
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAs """
+            <html>
+              <body>
+                <div class="foo">
+                  <button class="large">Hello World</button><a class="link" href="https://example.com"></a>
+                  <my:component class="bar" id="component-1">
+                  </my:component>
+                </div>
+              </body>
+            </html>
+        """.trimIndent()
+    }
+
 }
