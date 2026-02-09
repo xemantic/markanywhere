@@ -144,6 +144,7 @@ public suspend fun Flow<SemanticEvent>.render(): String = buildText {
 
 // Block elements that expand with newlines and indentation
 private val BLOCK_ELEMENTS = setOf(
+    "html", "body",
     "div", "section", "article", "header", "footer", "nav", "aside", "main",
     "p", "pre",
     "ul", "ol", "li", "dl", "dt", "dd",
