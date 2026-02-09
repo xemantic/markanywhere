@@ -25,6 +25,7 @@ import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
 import org.jetbrains.kotlin.powerassert.gradle.PowerAssertGradleExtension
 import org.jetbrains.kotlin.powerassert.gradle.PowerAssertGradlePlugin
 import com.vanniktech.maven.publish.MavenPublishPlugin
+import org.gradle.kotlin.dsl.extra
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 
 class MarkanywhereConventionPlugin : Plugin<Project> {
@@ -47,7 +48,13 @@ fun Project.doApply() {
 
     // Read jvmOnlyBuild property - default to true if not specified
     val jvmOnlyBuild = findProperty("jvmOnlyBuild") as? String
-    val isJvmOnlyBuild: Boolean = (jvmOnlyBuild == null) || (jvmOnlyBuild.lowercase() == "true")
+    val isJvmOnlyBuild: Boolean = when (jvmOnlyBuild?.lowercase()) {
+        null, "true" -> true
+        "false" -> false
+        else -> throw IllegalArgumentException("jvmOnlyBuild must be 'true' or 'false', got: '$jvmOnlyBuild'")
+    }
+
+    extra.set("isJvmOnlyBuild", isJvmOnlyBuild)
 
     plugins.apply(PowerAssertGradlePlugin::class.java)
     extensions.configure<PowerAssertGradleExtension> {
