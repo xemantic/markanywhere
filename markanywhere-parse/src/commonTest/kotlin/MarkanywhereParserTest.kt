@@ -1970,4 +1970,46 @@ class MarkanywhereParserTest {
         }
     }
 
+    @Test
+    fun `should parse HTML`() = runTest {
+        // given
+        val parser = DefaultMarkanywhereParser()
+        val textFlow = """
+            <html>
+            <head>
+            <title>Foo<title>
+            </head>
+            <body>
+            <h1>Foo</h1>
+            <p>
+            Bar
+            </p>
+            </body>
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse(parser)
+
+        // then
+        parsed sameAs semanticEvents(
+            produceTags = true
+        ) {
+            "html" {
+                "head" {
+                    "title" {
+                        +"Foo"
+                    }
+                }
+                "body" {
+                    "h1" {
+                        +"Foo"
+                    }
+                    "p" {
+                        +"Bar"
+                    }
+                }
+            }
+        }
+    }
+
 }
