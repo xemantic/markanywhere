@@ -1,32 +1,50 @@
 /*
- * Copyright (c) 2025. Kazimierz Pogoda / Xemantic. All rights reserved.
+ * Copyright 2026 Kazimierz Pogoda / Xemantic
  *
- * This code is part of the "golem-xiv" project, a cognitive AI agent.
- * Unauthorized reproduction or distribution is prohibited.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package con.xemantic.markanywhere.buildlogic
 
+import com.vanniktech.maven.publish.MavenPublishPlugin
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.artifacts.VersionCatalogsExtension
 import org.gradle.api.tasks.compile.JavaCompile
 import org.gradle.api.tasks.testing.Test
+import org.gradle.kotlin.dsl.*
+import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
-import org.gradle.kotlin.dsl.configure
-import org.gradle.kotlin.dsl.withType
-import org.gradle.kotlin.dsl.findByType
-import org.gradle.kotlin.dsl.getByType
-import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
-import org.jetbrains.kotlin.gradle.dsl.KotlinCommonCompilerOptions
-import org.jetbrains.kotlin.gradle.dsl.KotlinJvmExtension
 import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
 import org.jetbrains.kotlin.powerassert.gradle.PowerAssertGradleExtension
 import org.jetbrains.kotlin.powerassert.gradle.PowerAssertGradlePlugin
-import com.vanniktech.maven.publish.MavenPublishPlugin
-import org.gradle.kotlin.dsl.extra
-import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
+
+enum class TargetGroup {
+    ALL,
+    JS;
+
+    companion object {
+        fun fromValue(value: String): TargetGroup = when (value.lowercase()) {
+            "all" -> ALL
+            "js" -> JS
+            else -> throw IllegalArgumentException(
+                "targetGroup must be 'all' or 'js', got: '$value'"
+            )
+        }
+    }
+}
 
 class MarkanywhereConventionPlugin : Plugin<Project> {
 
@@ -54,6 +72,9 @@ fun Project.doApply() {
         else -> throw IllegalArgumentException("jvmOnlyBuild must be 'true' or 'false', got: '$jvmOnlyBuild'")
     }
 
+    val targetGroupValue = findProperty("targetGroup") as? String ?: "all"
+    val targetGroup = TargetGroup.fromValue(targetGroupValue)
+
     extra.set("isJvmOnlyBuild", isJvmOnlyBuild)
 
     plugins.apply(PowerAssertGradlePlugin::class.java)
@@ -76,14 +97,10 @@ fun Project.doApply() {
     }
 
     extensions.findByType<KotlinMultiplatformExtension>()?.apply {
-        doConfigure(kotlinVersion, jvmTargetVersion, isJvmOnlyBuild)
+        doConfigure(kotlinVersion, jvmTargetVersion, isJvmOnlyBuild, targetGroup)
     }
 
-    extensions.findByType<KotlinJvmExtension>()?.apply {
-        doConfigure(kotlinVersion, jvmTargetVersion)
-    }
-
-    if (!isJvmOnlyBuild) {
+    if (!isJvmOnlyBuild && targetGroup == TargetGroup.ALL) {
         // skip tests which require XCode components to be installed
         tasks.named("tvosSimulatorArm64Test") { enabled = false }
         tasks.named("watchosSimulatorArm64Test") { enabled = false }
@@ -94,7 +111,8 @@ fun Project.doApply() {
 fun KotlinMultiplatformExtension.doConfigure(
     kotlinVersion: KotlinVersion,
     jvmTargetVersion: JvmTarget,
-    isJvmOnlyBuild: Boolean
+    isJvmOnlyBuild: Boolean,
+    targetGroup: TargetGroup
 ) {
 
     compilerOptions {
@@ -139,76 +157,46 @@ fun KotlinMultiplatformExtension.doConfigure(
 //        }
         }
 
-        wasmJs {
-            browser()
-            nodejs()
-            //d8()
-            binaries.library()
-        }
-
-        wasmWasi {
-            nodejs()
-            binaries.library()
-        }
-
-        // native, see https://kotlinlang.org/docs/native-target-support.html
-        // tier 1
-        macosX64()
-        macosArm64()
-        iosSimulatorArm64()
-        iosX64()
-        iosArm64()
-
-        // tier 2
-        linuxX64()
-        linuxArm64()
-        watchosSimulatorArm64()
-        watchosX64()
-        watchosArm32()
-        watchosArm64()
-        tvosSimulatorArm64()
-        tvosX64()
-        tvosArm64()
-
-        // tier 3
-        androidNativeArm32()
-        androidNativeArm64()
-        androidNativeX86()
-        androidNativeX64()
-        mingwX64()
-        watchosDeviceArm64()
-    }
-
-    targets.configureEach {
-        compilations.configureEach {
-            compileTaskProvider.configure {
-                compilerOptions {
-                    configureCommons(kotlinVersion)
-                }
+        if (targetGroup == TargetGroup.ALL) {
+            wasmJs {
+                browser()
+                nodejs()
+                //d8()
+                binaries.library()
             }
-        }
-    }
-}
 
-fun KotlinJvmExtension.doConfigure(
-    kotlinVersion: KotlinVersion,
-    jvmTargetVersion: JvmTarget
-) {
-    sourceSets.configureEach {
-        kotlin {
-            compilerOptions {
-                configureCommons(kotlinVersion)
+            wasmWasi {
+                nodejs()
+                binaries.library()
             }
+
+            // native, see https://kotlinlang.org/docs/native-target-support.html
+            // tier 1
+            macosX64()
+            macosArm64()
+            iosSimulatorArm64()
+            iosX64()
+            iosArm64()
+
+            // tier 2
+            linuxX64()
+            linuxArm64()
+            watchosSimulatorArm64()
+            watchosX64()
+            watchosArm32()
+            watchosArm64()
+            tvosSimulatorArm64()
+            tvosX64()
+            tvosArm64()
+
+            // tier 3
+            androidNativeArm32()
+            androidNativeArm64()
+            androidNativeX86()
+            androidNativeX64()
+            mingwX64()
+            watchosDeviceArm64()
         }
     }
-    compilerOptions {
-        jvmTarget.set(jvmTargetVersion)
-        configureCommons(kotlinVersion)
-    }
-}
-
-fun KotlinCommonCompilerOptions.configureCommons(
-    kotlinVersion: KotlinVersion
-) {
 
 }
