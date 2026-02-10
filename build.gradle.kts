@@ -15,14 +15,13 @@
  */
 
 import com.vanniktech.maven.publish.MavenPublishBaseExtension
-import org.jreleaser.model.Active
 
 //import org.jreleaser.model.Active
 
 plugins {
     alias(libs.plugins.versions)
     alias(libs.plugins.dokka)
-    alias(libs.plugins.jreleaser)
+    //alias(libs.plugins.jreleaser)
     alias(libs.plugins.kotlin.multiplatform) apply false
     alias(libs.plugins.maven.publish) apply false
     alias(libs.plugins.xemantic.conventions)
@@ -38,7 +37,7 @@ xemantic {
     applySignBeforePublishing()
 //    applyJarManifests()
     applyReportOnlyStableDependencyUpdates()
-    applyJReleaserConventions()
+//    applyJReleaserConventions()
 }
 
 fun MavenPomDeveloperSpec.projectDevs() {
@@ -121,35 +120,35 @@ subprojects {
 
 }
 
-val releaseAnnouncementSubject = """🚀 ${rootProject.name} $version has been released!"""
-val releaseAnnouncement = """
-$releaseAnnouncementSubject
-
-${xemantic.description}
-
-${xemantic.releasePageUrl}
-""".trim()
-
-jreleaser {
-
-    announce {
-        webhooks {
-            create("discord") {
-                active = Active.ALWAYS
-                message = releaseAnnouncement
-                messageProperty = "content"
-                structuredMessage = true
-            }
-        }
-        linkedin {
-            active = Active.ALWAYS
-            subject = releaseAnnouncementSubject
-            message = releaseAnnouncement
-        }
-        bluesky {
-            active = Active.ALWAYS
-            status = releaseAnnouncement
-        }
-    }
-
-}
+//val releaseAnnouncementSubject = """🚀 ${rootProject.name} $version has been released!"""
+//val releaseAnnouncement = """
+//$releaseAnnouncementSubject
+//
+//${xemantic.description}
+//
+//${xemantic.releasePageUrl}
+//""".trim()
+//
+//jreleaser {
+//
+//    announce {
+//        webhooks {
+//            create("discord") {
+//                active = Active.ALWAYS
+//                message = releaseAnnouncement
+//                messageProperty = "content"
+//                structuredMessage = true
+//            }
+//        }
+//        linkedin {
+//            active = Active.ALWAYS
+//            subject = releaseAnnouncementSubject
+//            message = releaseAnnouncement
+//        }
+//        bluesky {
+//            active = Active.ALWAYS
+//            status = releaseAnnouncement
+//        }
+//    }
+//
+//}
