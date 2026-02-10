@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Kazimierz Pogoda / Xemantic
+ * Copyright 2025-2026 Kazimierz Pogoda / Xemantic
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,7 +19,6 @@ package com.xemantic.markanywhere.render
 import com.xemantic.kotlin.core.text.buildText
 import com.xemantic.markanywhere.SemanticEvent
 import kotlinx.coroutines.flow.Flow
-import kotlin.text.iterator
 
 /**
  * Converts the flow of [SemanticEvent]s into a string.
@@ -28,6 +27,11 @@ import kotlin.text.iterator
  * Inline elements are rendered on the same line as their surrounding content.
  * Content inside `<pre>` elements is not indented to preserve whitespace.
  * Custom namespaced elements (containing `:`) are treated as block elements.
+ * All elements inside `<svg>` are treated as block elements for
+ * Chrome DevTools-like indentation, except for inline text elements
+ * (`tspan`, `textPath`, `a`) which remain inline to preserve text content.
+ * HTML void elements and empty SVG elements are rendered with XHTML
+ * self-closing syntax (e.g. `<br/>`, `<img src="..."/>`).
  */
 public suspend fun Flow<SemanticEvent>.render(): String = buildText {
 
@@ -36,7 +40,15 @@ public suspend fun Flow<SemanticEvent>.render(): String = buildText {
     var indentation = ""
     var atLineStart = true
     var preCount = 0
+    var svgCount = 0
     var customMarkupCount = 0
+
+    // Pending mark state for self-closing detection.
+    // When a Mark event is processed, the closing ">" is deferred until the next
+    // event arrives, so we can detect empty elements and render them as self-closing.
+    var pendingMarkName: String? = null
+    var pendingMarkIsBlock = false
+    var pendingMarkInsideSvg = false
 
     fun SemanticEvent.Mark.flowAttributes() {
         attributes?.forEach { (name, value) ->
@@ -44,7 +56,44 @@ public suspend fun Flow<SemanticEvent>.render(): String = buildText {
         }
     }
 
+    fun confirmPendingMark() {
+        if (pendingMarkName == null) return
+        pendingMarkName = null
+        +">"
+        level++
+        indentation = indentAtom.repeat(level)
+        if (pendingMarkIsBlock) {
+            +"\n"
+            atLineStart = true
+        }
+    }
+
     collect { event ->
+
+        // Check for self-closing opportunity before processing the next event
+        val pmName = pendingMarkName
+        if (pmName != null) {
+            if (
+                event is SemanticEvent.Unmark
+                && event.name == pmName
+                && (pmName in VOID_ELEMENTS || pendingMarkInsideSvg)
+            ) {
+                pendingMarkName = null
+                // Undo counter increments from Mark processing
+                if (pmName == "pre") preCount--
+                if (pmName == "svg") svgCount--
+                if (':' in pmName) customMarkupCount--
+                +"/>"
+                if (pendingMarkIsBlock) {
+                    +"\n"
+                    atLineStart = true
+                }
+                return@collect
+            } else {
+                confirmPendingMark()
+            }
+        }
+
         when (event) {
 
             is SemanticEvent.Text -> {
@@ -80,13 +129,17 @@ public suspend fun Flow<SemanticEvent>.render(): String = buildText {
 
             is SemanticEvent.Mark -> {
                 val insidePre = preCount > 0
+                val insideSvg = svgCount > 0
                 if (event.name == "pre") {
                     preCount++
+                }
+                if (event.name == "svg") {
+                    svgCount++
                 }
                 if (':' in event.name) {
                     customMarkupCount++
                 }
-                val isBlockMark = event.isBlock && !insidePre
+                val isBlockMark = (event.isBlock || (insideSvg && event.name !in SVG_INLINE_ELEMENTS)) && !insidePre
                 if (isBlockMark) {
                     if (atLineStart) {
                         +indentation
@@ -100,26 +153,28 @@ public suspend fun Flow<SemanticEvent>.render(): String = buildText {
                     }
                     atLineStart = false
                 }
-                +"<"; +event.name; event.flowAttributes(); +">"
-                level++
-                indentation = indentAtom.repeat(level)
-                if (isBlockMark) {
-                    +"\n"
-                    atLineStart = true
-                }
+                +"<"; +event.name; event.flowAttributes()
+                // Defer closing ">" for potential self-close detection
+                pendingMarkName = event.name
+                pendingMarkIsBlock = isBlockMark
+                pendingMarkInsideSvg = insideSvg
             }
 
             is SemanticEvent.Unmark -> {
                 if (event.name == "pre") {
                     preCount--
                 }
+                if (event.name == "svg") {
+                    svgCount--
+                }
                 if (':' in event.name) {
                     customMarkupCount--
                 }
                 val insidePre = preCount > 0
+                val insideSvg = svgCount > 0
                 level--
                 indentation = indentAtom.repeat(level)
-                val isBlockMark = event.isBlock && !insidePre
+                val isBlockMark = (event.isBlock || (insideSvg && event.name !in SVG_INLINE_ELEMENTS)) && !insidePre
                 if (isBlockMark) {
                     if (atLineStart) {
                         +indentation
@@ -138,20 +193,51 @@ public suspend fun Flow<SemanticEvent>.render(): String = buildText {
         }
     }
 
+    // Resolve any remaining pending mark (malformed stream with unclosed element)
+    confirmPendingMark()
+
     trimLastNewLine()
 
 }
 
 // Block elements that expand with newlines and indentation
 private val BLOCK_ELEMENTS = setOf(
+    // HTML document structure
     "html", "body",
+    // HTML sectioning
     "div", "section", "article", "header", "footer", "nav", "aside", "main",
-    "p", "pre",
-    "ul", "ol", "li", "dl", "dt", "dd",
+    // HTML headings
+    "h1", "h2", "h3", "h4", "h5", "h6", "hgroup",
+    // HTML text blocks
+    "p", "pre", "blockquote", "address",
+    // HTML lists
+    "ul", "ol", "li", "dl", "dt", "dd", "menu",
+    // HTML tables
     "table", "thead", "tbody", "tfoot", "tr", "th", "td",
-    "blockquote", "figure", "figcaption",
-    "details", "summary",
-    "footnote", "h1", "h2", "h3", "h4", "h5", "h6"
+    // HTML forms
+    "fieldset", "legend", "form",
+    // HTML interactive
+    "details", "summary", "dialog",
+    // HTML figures
+    "figure", "figcaption",
+    // HTML other block elements
+    "hr", "search",
+    // HTML custom/non-standard used in markdown
+    "footnote",
+    // SVG root element (all children are treated as block via svg context tracking)
+    "svg",
+)
+
+// SVG inline elements that remain inline even inside SVG context.
+// These elements contain text content where added whitespace would affect rendering.
+private val SVG_INLINE_ELEMENTS = setOf(
+    "tspan", "textPath", "a"
+)
+
+// HTML void elements that cannot have children and are rendered as self-closing (e.g. <br/>)
+private val VOID_ELEMENTS = setOf(
+    "area", "base", "br", "col", "embed", "hr", "img",
+    "input", "link", "meta", "param", "source", "track", "wbr"
 )
 
 private fun String.escapeHtml(): String = buildText {

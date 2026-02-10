@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Kazimierz Pogoda / Xemantic
+ * Copyright 2025-2026 Kazimierz Pogoda / Xemantic
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -368,7 +368,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """<img src="https://example.com/image.png" alt="An example image"></img>"""
+        html sameAs """<img src="https://example.com/image.png" alt="An example image"/>"""
     }
 
     @Test
@@ -405,7 +405,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """<input type="checkbox" checked="true"></input>"""
+        html sameAs """<input type="checkbox" checked="true"/>"""
     }
 
     @Test
@@ -626,8 +626,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        // For void elements, might want to output <hr> or <hr />
-        html sameAs "<hr></hr>"
+        html sameAs "<hr/>"
     }
 
     @Test
@@ -647,7 +646,7 @@ class SemanticEventsRenderingTest {
         // then
         html sameAs """
             <p>
-              Line 1<br></br>Line 2
+              Line 1<br/>Line 2
             </p>
         """.trimIndent()
     }
@@ -1060,10 +1059,10 @@ class SemanticEventsRenderingTest {
         html sameAs """
             <ul>
               <li>
-                <input type="checkbox"></input>Unchecked task
+                <input type="checkbox"/>Unchecked task
               </li>
               <li>
-                <input type="checkbox" checked="true"></input>Checked task
+                <input type="checkbox" checked="true"/>Checked task
               </li>
             </ul>
         """.trimIndent()
@@ -1418,7 +1417,7 @@ class SemanticEventsRenderingTest {
         // then
         html sameAs """
             <figure>
-              <img src="image.png" alt="A figure"></img>
+              <img src="image.png" alt="A figure"/>
               <figcaption>
                 Figure 1: An example image
               </figcaption>
@@ -1806,7 +1805,7 @@ class SemanticEventsRenderingTest {
         // then
         html sameAs """
             <p>
-              super<wbr></wbr>cali<wbr></wbr>fragilistic
+              super<wbr/>cali<wbr/>fragilistic
             </p>
         """.trimIndent()
     }
@@ -2447,6 +2446,474 @@ class SemanticEventsRenderingTest {
             </p>
         """.trimIndent()
     }
+
+    // HTML block element tests
+
+    @Test
+    fun `should convert address element`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "address" {
+                +"123 Main St, City"
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAs """
+            <address>
+              123 Main St, City
+            </address>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should convert form with fieldset and legend`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "form" {
+                "fieldset" {
+                    "legend" { +"Personal Info" }
+                    "p" { +"Name: John" }
+                }
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAs """
+            <form>
+              <fieldset>
+                <legend>
+                  Personal Info
+                </legend>
+                <p>
+                  Name: John
+                </p>
+              </fieldset>
+            </form>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should convert hgroup element`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "hgroup" {
+                "h1" { +"Main Title" }
+                "p" { +"Subtitle" }
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAs """
+            <hgroup>
+              <h1>
+                Main Title
+              </h1>
+              <p>
+                Subtitle
+              </p>
+            </hgroup>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should convert dialog element`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "dialog"("open" to "true") {
+                "p" { +"Dialog content" }
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAs """
+            <dialog open="true">
+              <p>
+                Dialog content
+              </p>
+            </dialog>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should convert menu element`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "menu" {
+                "li" { +"Option 1" }
+                "li" { +"Option 2" }
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAs """
+            <menu>
+              <li>
+                Option 1
+              </li>
+              <li>
+                Option 2
+              </li>
+            </menu>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should convert search element`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "search" {
+                "p" { +"Search form goes here" }
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAs """
+            <search>
+              <p>
+                Search form goes here
+              </p>
+            </search>
+        """.trimIndent()
+    }
+
+    // SVG rendering tests
+
+    @Test
+    fun `should render SVG with proper indentation`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "svg"(
+                "xmlns" to "http://www.w3.org/2000/svg",
+                "viewBox" to "0 0 200 200",
+                "width" to "200",
+                "height" to "200"
+            ) {
+                "defs" {
+                    "linearGradient"(
+                        "id" to "grad1",
+                        "x1" to "0%",
+                        "y1" to "0%",
+                        "x2" to "100%",
+                        "y2" to "0%"
+                    ) {
+                        "stop"("offset" to "0%", "stop-color" to "#ff0000") {}
+                        "stop"("offset" to "100%", "stop-color" to "#0000ff") {}
+                    }
+                    "clipPath"("id" to "clip1") {
+                        "rect"(
+                            "x" to "0",
+                            "y" to "0",
+                            "width" to "100",
+                            "height" to "100"
+                        ) {}
+                    }
+                    "filter"("id" to "shadow") {
+                        "feGaussianBlur"(
+                            "in" to "SourceAlpha",
+                            "stdDeviation" to "3"
+                        ) {}
+                        "feOffset"("dx" to "2", "dy" to "2") {}
+                        "feMerge" {
+                            "feMergeNode" {}
+                            "feMergeNode"("in" to "SourceGraphic") {}
+                        }
+                    }
+                    "symbol"("id" to "icon", "viewBox" to "0 0 24 24") {
+                        "path"("d" to "M12 2L2 22h20L12 2z") {}
+                    }
+                }
+                "g"(
+                    "transform" to "translate(10, 10)",
+                    "clip-path" to "url(#clip1)"
+                ) {
+                    "rect"(
+                        "x" to "0",
+                        "y" to "0",
+                        "width" to "80",
+                        "height" to "80",
+                        "fill" to "url(#grad1)"
+                    ) {}
+                    "circle"(
+                        "cx" to "40",
+                        "cy" to "40",
+                        "r" to "30",
+                        "fill" to "white",
+                        "filter" to "url(#shadow)"
+                    ) {}
+                }
+                "ellipse"(
+                    "cx" to "150",
+                    "cy" to "50",
+                    "rx" to "40",
+                    "ry" to "25",
+                    "fill" to "green"
+                ) {}
+                "line"(
+                    "x1" to "10",
+                    "y1" to "120",
+                    "x2" to "190",
+                    "y2" to "120",
+                    "stroke" to "black"
+                ) {}
+                "polygon"(
+                    "points" to "150,130 190,170 110,170",
+                    "fill" to "purple"
+                ) {}
+                "polyline"(
+                    "points" to "10,140 30,160 50,140 70,160",
+                    "fill" to "none",
+                    "stroke" to "orange"
+                ) {}
+                "path"(
+                    "d" to "M10 180 Q 95 130 180 180",
+                    "fill" to "none",
+                    "stroke" to "blue"
+                ) {}
+                "text"(
+                    "x" to "100",
+                    "y" to "105",
+                    "text-anchor" to "middle",
+                    "font-size" to "14"
+                ) {
+                    "tspan"("fill" to "blue") { +"Hello" }
+                    "tspan"("fill" to "red", "dx" to "5") { +"SVG" }
+                }
+                "use"(
+                    "href" to "#icon",
+                    "x" to "170",
+                    "y" to "5",
+                    "width" to "24",
+                    "height" to "24"
+                ) {}
+                "image"(
+                    "href" to "photo.jpg",
+                    "x" to "120",
+                    "y" to "120",
+                    "width" to "60",
+                    "height" to "60"
+                ) {}
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAs """
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+              <defs>
+                <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#ff0000"/>
+                  <stop offset="100%" stop-color="#0000ff"/>
+                </linearGradient>
+                <clipPath id="clip1">
+                  <rect x="0" y="0" width="100" height="100"/>
+                </clipPath>
+                <filter id="shadow">
+                  <feGaussianBlur in="SourceAlpha" stdDeviation="3"/>
+                  <feOffset dx="2" dy="2"/>
+                  <feMerge>
+                    <feMergeNode/>
+                    <feMergeNode in="SourceGraphic"/>
+                  </feMerge>
+                </filter>
+                <symbol id="icon" viewBox="0 0 24 24">
+                  <path d="M12 2L2 22h20L12 2z"/>
+                </symbol>
+              </defs>
+              <g transform="translate(10, 10)" clip-path="url(#clip1)">
+                <rect x="0" y="0" width="80" height="80" fill="url(#grad1)"/>
+                <circle cx="40" cy="40" r="30" fill="white" filter="url(#shadow)"/>
+              </g>
+              <ellipse cx="150" cy="50" rx="40" ry="25" fill="green"/>
+              <line x1="10" y1="120" x2="190" y2="120" stroke="black"/>
+              <polygon points="150,130 190,170 110,170" fill="purple"/>
+              <polyline points="10,140 30,160 50,140 70,160" fill="none" stroke="orange"/>
+              <path d="M10 180 Q 95 130 180 180" fill="none" stroke="blue"/>
+              <text x="100" y="105" text-anchor="middle" font-size="14">
+                <tspan fill="blue">Hello</tspan><tspan fill="red" dx="5">SVG</tspan>
+              </text>
+              <use href="#icon" x="170" y="5" width="24" height="24"/>
+              <image href="photo.jpg" x="120" y="120" width="60" height="60"/>
+            </svg>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should render SVG text with tspan inline to preserve text content`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "svg"(
+                "xmlns" to "http://www.w3.org/2000/svg",
+                "viewBox" to "0 0 200 50"
+            ) {
+                "text"("x" to "10", "y" to "30") {
+                    +"Hello "
+                    "tspan"("fill" to "red", "font-weight" to "bold") { +"World" }
+                    +"!"
+                }
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAs """
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 50">
+              <text x="10" y="30">
+                Hello <tspan fill="red" font-weight="bold">World</tspan>!
+              </text>
+            </svg>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should render SVG text with nested tspan inline`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "svg"(
+                "xmlns" to "http://www.w3.org/2000/svg",
+                "viewBox" to "0 0 300 50"
+            ) {
+                "text"("x" to "10", "y" to "30") {
+                    "tspan"("fill" to "blue") {
+                        +"outer "
+                        "tspan"("font-style" to "italic") { +"inner" }
+                        +" text"
+                    }
+                }
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAs """
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 50">
+              <text x="10" y="30">
+                <tspan fill="blue">outer <tspan font-style="italic">inner</tspan> text</tspan>
+              </text>
+            </svg>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should render SVG textPath inline to preserve text content`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "svg"(
+                "xmlns" to "http://www.w3.org/2000/svg",
+                "viewBox" to "0 0 500 200"
+            ) {
+                "defs" {
+                    "path"("id" to "curve", "d" to "M 50 100 Q 250 0 450 100") {}
+                }
+                "text" {
+                    "textPath"("href" to "#curve") { +"Text along a curve" }
+                }
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAs """
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 200">
+              <defs>
+                <path id="curve" d="M 50 100 Q 250 0 450 100"/>
+              </defs>
+              <text>
+                <textPath href="#curve">Text along a curve</textPath>
+              </text>
+            </svg>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should render SVG anchor inline to preserve text content`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "svg"(
+                "xmlns" to "http://www.w3.org/2000/svg",
+                "viewBox" to "0 0 200 50"
+            ) {
+                "text"("x" to "10", "y" to "30") {
+                    +"Click "
+                    "a"("href" to "https://example.com") {
+                        "tspan"("fill" to "blue", "text-decoration" to "underline") { +"here" }
+                    }
+                    +" for more"
+                }
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAs """
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 50">
+              <text x="10" y="30">
+                Click <a href="https://example.com"><tspan fill="blue" text-decoration="underline">here</tspan></a> for more
+              </text>
+            </svg>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should render SVG title and desc as block elements`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "svg"(
+                "xmlns" to "http://www.w3.org/2000/svg",
+                "viewBox" to "0 0 100 100"
+            ) {
+                "title" { +"My SVG" }
+                "desc" { +"A description of the SVG" }
+                "circle"("cx" to "50", "cy" to "50", "r" to "40") {}
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAs """
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+              <title>
+                My SVG
+              </title>
+              <desc>
+                A description of the SVG
+              </desc>
+              <circle cx="50" cy="50" r="40"/>
+            </svg>
+        """.trimIndent()
+    }
+
+    // Full document tests
 
     @Test
     fun `should render full HTML document with proper indentation`() = runTest {
