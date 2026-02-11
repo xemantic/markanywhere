@@ -68,133 +68,138 @@ public suspend fun Flow<SemanticEvent>.render(): String = buildText {
         }
     }
 
-    collect { event ->
+    fun SemanticEvent.Marked.isBlockMark(insideSvg: Boolean, insidePre: Boolean): Boolean =
+        (isBlock || (insideSvg && name !in SVG_INLINE_ELEMENTS)) && !insidePre
 
-        // Check for self-closing opportunity before processing the next event
-        val pmName = pendingMarkName
-        if (pmName != null) {
-            if (
-                event is SemanticEvent.Unmark
-                && event.name == pmName
-                && (pmName in VOID_ELEMENTS || pendingMarkInsideSvg)
-            ) {
-                pendingMarkName = null
-                // Undo counter increments from Mark processing
-                if (pmName == "pre") preCount--
-                if (pmName == "svg") svgCount--
-                if (':' in pmName) customMarkupCount--
-                +"/>"
-                if (pendingMarkIsBlock) {
-                    +"\n"
-                    atLineStart = true
-                }
-                return@collect
-            } else {
-                confirmPendingMark()
-            }
-        }
+    try {
+        collect { event ->
 
-        when (event) {
-
-            is SemanticEvent.Text -> {
-                if (event.text != "") {
-                    val text = if (customMarkupCount > 0) {
-                        event.text  // Don't escape HTML inside custom markup
-                    } else {
-                        event.text.escapeHtml()
+            // Check for self-closing opportunity before processing the next event
+            val pmName = pendingMarkName
+            if (pmName != null) {
+                if (
+                    event is SemanticEvent.Unmark
+                    && event.name == pmName
+                    && (pmName in VOID_ELEMENTS || pendingMarkInsideSvg)
+                ) {
+                    pendingMarkName = null
+                    // Undo counter increments from Mark processing
+                    if (pmName == "pre") preCount--
+                    if (pmName == "svg") svgCount--
+                    if (':' in pmName) customMarkupCount--
+                    +"/>"
+                    if (pendingMarkIsBlock) {
+                        +"\n"
+                        atLineStart = true
                     }
-                    if (preCount == 0 && customMarkupCount == 0) {
-                        // Handle newlines in text by re-indenting after each newline
-                        val lines = text.split('\n')
-                        lines.forEachIndexed { index, line ->
-                            if (index > 0) {
-                                +"\n"
-                                atLineStart = true
-                            }
-                            if (line.isNotEmpty()) {
-                                if (atLineStart) {
-                                    +indentation
+                    return@collect
+                } else {
+                    confirmPendingMark()
+                }
+            }
+
+            when (event) {
+
+                is SemanticEvent.Text -> {
+                    if (event.text != "") {
+                        val text = if (customMarkupCount > 0) {
+                            event.text  // Don't escape HTML inside custom markup
+                        } else {
+                            event.text.escapeHtml()
+                        }
+                        if (preCount == 0 && customMarkupCount == 0) {
+                            // Handle newlines in text by re-indenting after each newline
+                            val lines = text.split('\n')
+                            lines.forEachIndexed { index, line ->
+                                if (index > 0) {
+                                    +"\n"
+                                    atLineStart = true
                                 }
-                                +line
-                                atLineStart = false
+                                if (line.isNotEmpty()) {
+                                    if (atLineStart) {
+                                        +indentation
+                                    }
+                                    +line
+                                    atLineStart = false
+                                }
                             }
+                        } else {
+                            // Inside pre or custom markup - output text as-is without indentation
+                            +text
+                            atLineStart = false
+                        }
+                    }
+                }
+
+                is SemanticEvent.Mark -> {
+                    val insidePre = preCount > 0
+                    val insideSvg = svgCount > 0
+                    if (event.name == "pre") {
+                        preCount++
+                    }
+                    if (event.name == "svg") {
+                        svgCount++
+                    }
+                    if (':' in event.name) {
+                        customMarkupCount++
+                    }
+                    val isBlock = event.isBlockMark(insideSvg, insidePre)
+                    if (isBlock) {
+                        if (atLineStart) {
+                            +indentation
+                        } else {
+                            +"\n"
+                            +indentation
                         }
                     } else {
-                        // Inside pre or custom markup - output text as-is without indentation
-                        +text
+                        if (atLineStart && !insidePre) {
+                            +indentation
+                        }
                         atLineStart = false
                     }
+                    +"<"; +event.name; event.flowAttributes()
+                    // Defer closing ">" for potential self-close detection
+                    pendingMarkName = event.name
+                    pendingMarkIsBlock = isBlock
+                    pendingMarkInsideSvg = insideSvg
                 }
-            }
 
-            is SemanticEvent.Mark -> {
-                val insidePre = preCount > 0
-                val insideSvg = svgCount > 0
-                if (event.name == "pre") {
-                    preCount++
-                }
-                if (event.name == "svg") {
-                    svgCount++
-                }
-                if (':' in event.name) {
-                    customMarkupCount++
-                }
-                val isBlockMark = (event.isBlock || (insideSvg && event.name !in SVG_INLINE_ELEMENTS)) && !insidePre
-                if (isBlockMark) {
-                    if (atLineStart) {
-                        +indentation
-                    } else {
+                is SemanticEvent.Unmark -> {
+                    if (event.name == "pre") {
+                        preCount--
+                    }
+                    if (event.name == "svg") {
+                        svgCount--
+                    }
+                    if (':' in event.name) {
+                        customMarkupCount--
+                    }
+                    val insidePre = preCount > 0
+                    val insideSvg = svgCount > 0
+                    level--
+                    indentation = indentAtom.repeat(level)
+                    val isBlock = event.isBlockMark(insideSvg, insidePre)
+                    if (isBlock) {
+                        if (atLineStart) {
+                            +indentation
+                        } else {
+                            +"\n"
+                            +indentation
+                        }
+                    }
+                    +"</"; +event.name; +">"
+                    if (isBlock) {
                         +"\n"
-                        +indentation
+                        atLineStart = true
                     }
-                } else {
-                    if (atLineStart && !insidePre) {
-                        +indentation
-                    }
-                    atLineStart = false
                 }
-                +"<"; +event.name; event.flowAttributes()
-                // Defer closing ">" for potential self-close detection
-                pendingMarkName = event.name
-                pendingMarkIsBlock = isBlockMark
-                pendingMarkInsideSvg = insideSvg
-            }
 
-            is SemanticEvent.Unmark -> {
-                if (event.name == "pre") {
-                    preCount--
-                }
-                if (event.name == "svg") {
-                    svgCount--
-                }
-                if (':' in event.name) {
-                    customMarkupCount--
-                }
-                val insidePre = preCount > 0
-                val insideSvg = svgCount > 0
-                level--
-                indentation = indentAtom.repeat(level)
-                val isBlockMark = (event.isBlock || (insideSvg && event.name !in SVG_INLINE_ELEMENTS)) && !insidePre
-                if (isBlockMark) {
-                    if (atLineStart) {
-                        +indentation
-                    } else {
-                        +"\n"
-                        +indentation
-                    }
-                }
-                +"</"; +event.name; +">"
-                if (isBlockMark) {
-                    +"\n"
-                    atLineStart = true
-                }
             }
-
         }
+    } finally {
+        // Resolve any remaining pending mark (last childless element or malformed unclosed element)
+        confirmPendingMark()
     }
-
-    // Resolve any remaining pending mark (malformed stream with unclosed element)
-    confirmPendingMark()
 
     trimLastNewLine()
 
