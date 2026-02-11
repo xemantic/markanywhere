@@ -746,7 +746,7 @@ class MarkanywhereParserTest {
             <p>
               Some content.
             </p>
-            <hr></hr>
+            <hr/>
             <p>
               More content.
             </p>
@@ -818,10 +818,10 @@ class MarkanywhereParserTest {
         parsed.render() sameAs """
             <ul>
               <li>
-                <input type="checkbox"></input>Unchecked task
+                <input type="checkbox"/>Unchecked task
               </li>
               <li>
-                <input type="checkbox" checked="true"></input>Checked task
+                <input type="checkbox" checked="true"/>Checked task
               </li>
             </ul>
         """.trimIndent()
@@ -860,7 +860,7 @@ class MarkanywhereParserTest {
         // then
         parsed.render() sameAs """
             <p>
-              And an image: <img src="https://example.com/image.png" alt="Alt text"></img>
+              And an image: <img src="https://example.com/image.png" alt="Alt text"/>
             </p>
         """.trimIndent()
     }
