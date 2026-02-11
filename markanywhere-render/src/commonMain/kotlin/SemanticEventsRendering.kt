@@ -26,6 +26,8 @@ import kotlinx.coroutines.flow.Flow
  * The output is pretty-printed with 2-space indentation for block elements.
  * Inline elements are rendered on the same line as their surrounding content.
  * Content inside `<pre>` elements is not indented to preserve whitespace.
+ * Content inside `<style>` and `<script>` elements is not indented or HTML-escaped
+ * (HTML raw text elements).
  * Custom namespaced elements (containing `:`) are treated as block elements.
  * All elements inside `<svg>` are treated as block elements for
  * Chrome DevTools-like indentation, except for inline text elements
@@ -42,6 +44,7 @@ public suspend fun Flow<SemanticEvent>.render(): String = buildText {
     var preCount = 0
     var svgCount = 0
     var customMarkupCount = 0
+    var rawTextCount = 0
 
     // Pending mark state for self-closing detection.
     // When a Mark event is processed, the closing ">" is deferred until the next
@@ -87,6 +90,7 @@ public suspend fun Flow<SemanticEvent>.render(): String = buildText {
                     if (pmName == "pre") preCount--
                     if (pmName == "svg") svgCount--
                     if (':' in pmName) customMarkupCount--
+                    if (pmName in RAW_TEXT_ELEMENTS) rawTextCount--
                     +"/>"
                     if (pendingMarkIsBlock) {
                         +"\n"
@@ -102,12 +106,12 @@ public suspend fun Flow<SemanticEvent>.render(): String = buildText {
 
                 is SemanticEvent.Text -> {
                     if (event.text != "") {
-                        val text = if (customMarkupCount > 0) {
-                            event.text  // Don't escape HTML inside custom markup
+                        val text = if (customMarkupCount > 0 || rawTextCount > 0) {
+                            event.text  // Don't escape inside custom markup or raw text elements
                         } else {
                             event.text.escapeHtml()
                         }
-                        if (preCount == 0 && customMarkupCount == 0) {
+                        if (preCount == 0 && customMarkupCount == 0 && rawTextCount == 0) {
                             // Handle newlines in text by re-indenting after each newline
                             val lines = text.split('\n')
                             lines.forEachIndexed { index, line ->
@@ -143,6 +147,9 @@ public suspend fun Flow<SemanticEvent>.render(): String = buildText {
                     if (':' in event.name) {
                         customMarkupCount++
                     }
+                    if (event.name in RAW_TEXT_ELEMENTS) {
+                        rawTextCount++
+                    }
                     val isBlock = event.isBlockMark(insideSvg, insidePre)
                     if (isBlock) {
                         if (atLineStart) {
@@ -173,6 +180,9 @@ public suspend fun Flow<SemanticEvent>.render(): String = buildText {
                     }
                     if (':' in event.name) {
                         customMarkupCount--
+                    }
+                    if (event.name in RAW_TEXT_ELEMENTS) {
+                        rawTextCount--
                     }
                     val insidePre = preCount > 0
                     val insideSvg = svgCount > 0
@@ -208,7 +218,9 @@ public suspend fun Flow<SemanticEvent>.render(): String = buildText {
 // Block elements that expand with newlines and indentation
 private val BLOCK_ELEMENTS = setOf(
     // HTML document structure
-    "html", "body",
+    "html", "head", "body",
+    // HTML metadata
+    "base", "link", "meta", "title", "style", "script", "noscript",
     // HTML sectioning
     "div", "section", "article", "header", "footer", "nav", "aside", "main",
     // HTML headings
@@ -237,6 +249,11 @@ private val BLOCK_ELEMENTS = setOf(
 // These elements contain text content where added whitespace would affect rendering.
 private val SVG_INLINE_ELEMENTS = setOf(
     "tspan", "textPath", "a"
+)
+
+// HTML raw text elements whose content is not HTML-parsed (no escaping, no indentation)
+private val RAW_TEXT_ELEMENTS = setOf(
+    "style", "script"
 )
 
 // HTML void elements that cannot have children and are rendered as self-closing (e.g. <br/>)

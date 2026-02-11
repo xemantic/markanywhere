@@ -6,7 +6,7 @@ kotlin = "2.3.10"
 
 kotlinxSerialization = "1.10.0"
 kotlinxCoroutines = "1.10.2"
-xemanticKotlinTest = "1.17.2"
+xemanticKotlinTest = "1.17.3"
 xemanticKotlinCore = "0.6.4"
 jetbrainsAnnotations = "26.0.2-1"
 
