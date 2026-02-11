@@ -34,7 +34,7 @@ private suspend fun SemanticEventScope.flowChildren(
     element: Element
 ) {
 
-    val tagName = element.tagName.lowercase()
+    val tagName = element.localName
 
     val attributes = element.attributes.asList().associate {
         it.name to it.value
