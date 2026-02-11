@@ -17,6 +17,8 @@
 package com.xemantic.markanywhere.render
 
 import com.xemantic.kotlin.test.sameAs
+import com.xemantic.kotlin.test.sameAsHtml
+import com.xemantic.kotlin.test.sameAsXml
 import com.xemantic.markanywhere.flow.semanticEvents
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -80,7 +82,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <p>
               Hello World
             </p>
@@ -100,7 +102,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <h1>
               Main Title
             </h1>
@@ -126,7 +128,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <p>
               This is <strong>bold</strong> text
             </p>
@@ -152,7 +154,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <p>
               This is <strong><em>bold italic</em></strong> text
             </p>
@@ -175,7 +177,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <p>
               First paragraph
             </p>
@@ -202,7 +204,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <ul>
               <li>
                 Item 1
@@ -231,7 +233,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <ol>
               <li>
                 First
@@ -263,7 +265,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <ul>
               <li>
                 Item 1
@@ -303,7 +305,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <ul>
               <li>
                 Item with <strong>bold</strong>
@@ -330,7 +332,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """<a href="https://example.com">Click here</a>"""
+        html sameAsHtml """<a href="https://example.com">Click here</a>"""
     }
 
     @Test
@@ -351,7 +353,7 @@ class SemanticEventsRenderingTest {
 
         // then
         // Note: attribute order may vary
-        html sameAs """<a href="https://example.com" target="_blank" rel="noopener">External link</a>"""
+        html sameAsHtml """<a href="https://example.com" target="_blank" rel="noopener">External link</a>"""
     }
 
     @Test
@@ -368,7 +370,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """<img src="https://example.com/image.png" alt="An example image"/>"""
+        html sameAsHtml """<img src="https://example.com/image.png" alt="An example image"/>"""
     }
 
     @Test
@@ -384,7 +386,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <pre class="code lang-kotlin">
             fun main() = println("Hello")
             </pre>
@@ -405,7 +407,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """<input type="checkbox" checked="true"/>"""
+        html sameAsHtml """<input type="checkbox" checked="true"/>"""
     }
 
     @Test
@@ -423,7 +425,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """<a href="https://example.com?foo=1&amp;bar=2">Link</a>"""
+        html sameAsHtml """<a href="https://example.com?foo=1&amp;bar=2">Link</a>"""
     }
 
     @Test
@@ -441,7 +443,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <div data-value="Say &quot;Hello&quot; ">
               Content
             </div>
@@ -474,7 +476,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <table>
               <thead>
                 <tr>
@@ -515,7 +517,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <blockquote>
               <p>
                 A wise quote.
@@ -540,7 +542,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <blockquote>
               <p>
                 Outer quote
@@ -569,7 +571,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <p>
               Use &lt;div&gt; and &amp; for HTML
             </p>
@@ -589,7 +591,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <pre>
             line 1
             line 2
@@ -609,7 +611,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <p>
             </p>
         """.trimIndent()
@@ -626,7 +628,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs "<hr/>"
+        html sameAsHtml "<hr/>"
     }
 
     @Test
@@ -644,7 +646,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <p>
               Line 1<br/>Line 2
             </p>
@@ -667,7 +669,7 @@ class SemanticEventsRenderingTest {
 
         // then
         // Note: text inside custom markup is not indented to preserve raw content
-        html sameAs """
+        html sameAsHtml """
             <custom:element attr1="value1">
             Custom content
             </custom:element>
@@ -688,7 +690,7 @@ class SemanticEventsRenderingTest {
 
         // then
         // Note: text inside custom markup is not indented to preserve raw HTML
-        html sameAs """
+        html sameAsHtml """
             <custom:html type="raw">
             <div class="inner">Content with <b>bold</b> & special chars</div>
             </custom:html>
@@ -713,7 +715,7 @@ class SemanticEventsRenderingTest {
 
         // then
         // Note: text inside custom markup is not indented to preserve raw HTML
-        html sameAs """
+        html sameAsHtml """
             <outer:wrapper>
             <span>outer html</span>
               <inner:content>
@@ -741,7 +743,7 @@ class SemanticEventsRenderingTest {
 
         // then
         // Note: text inside custom markup is not indented to preserve raw HTML
-        html sameAs """
+        html sameAsHtml """
             <custom:raw>
             <b>not escaped</b>
             </custom:raw>
@@ -773,7 +775,7 @@ class SemanticEventsRenderingTest {
 
         // then
         // Note: text inside custom markup is not indented to preserve raw HTML
-        html sameAs """
+        html sameAsHtml """
             <div>
               <p>
                 Regular &lt;b&gt;escaped&lt;/b&gt; content
@@ -817,7 +819,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <h1>
               Document Title
             </h1>
@@ -857,7 +859,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <h1>
               H1
             </h1>
@@ -894,7 +896,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <p>
               Use the <code>println()</code> function
             </p>
@@ -916,7 +918,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <p>
               <em>italic</em> and <strong>bold</strong>
             </p>
@@ -938,7 +940,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <p>
               Hello 世界! 🌍 Привет мир
             </p>
@@ -960,7 +962,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <p>
               Hello
             </p>
@@ -980,7 +982,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then - whitespace-only text inside block elements is preserved
-        html sameAs """
+        html sameAsHtml """
             <pre>
                
             </pre>
@@ -1000,7 +1002,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <div>
               Content
             </div>
@@ -1026,7 +1028,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <p>
               See reference<sup><a href="#fn1">1</a></sup>
             </p>
@@ -1056,7 +1058,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <ul>
               <li>
                 <input type="checkbox"/>Unchecked task
@@ -1084,7 +1086,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <p>
               <strong>bold</strong><em>italic</em>
             </p>
@@ -1104,7 +1106,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <p>
               1 &lt; 2 and 3 &gt; 2
             </p>
@@ -1124,7 +1126,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <div data-empty="">
               Content
             </div>
@@ -1144,7 +1146,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <div data-value="It's a test">
               Content
             </div>
@@ -1167,7 +1169,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <dl>
               <dt>
                 Term 1
@@ -1200,7 +1202,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <p>
               This is <del>deleted</del> text
             </p>
@@ -1223,7 +1225,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <p>
               H<sub>2</sub>O and x<sup>2</sup>
             </p>
@@ -1256,7 +1258,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <table>
               <tbody>
                 <tr>
@@ -1303,7 +1305,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <pre>
             <code>fun main() {
                 println("Hello")
@@ -1327,7 +1329,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <p>
               This is <mark>highlighted</mark> text
             </p>
@@ -1351,7 +1353,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <p>
               Press <kbd>Ctrl</kbd>+<kbd>C</kbd> to copy
             </p>
@@ -1373,7 +1375,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <p>
               The <abbr title="HyperText Markup Language">HTML</abbr> specification
             </p>
@@ -1394,7 +1396,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <p>
               Published on <time datetime="2025-01-15">January 15, 2025</time>
             </p>
@@ -1415,7 +1417,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <figure>
               <img src="image.png" alt="A figure"/>
               <figcaption>
@@ -1439,7 +1441,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <details>
               <summary>
                 Click to expand
@@ -1464,7 +1466,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <p>
               &lt;&gt;&amp;"'
             </p>
@@ -1485,7 +1487,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <p>
               $longText
             </p>
@@ -1507,7 +1509,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <p>
               Some <span class="highlight">styled</span> text
             </p>
@@ -1529,7 +1531,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <p>
               This is <ins>inserted</ins> text
             </p>
@@ -1550,7 +1552,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <p>
               As stated in <cite>The Art of Computer Programming</cite>
             </p>
@@ -1571,7 +1573,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <p>
               He said <q>Hello world</q>
             </p>
@@ -1592,7 +1594,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <p>
               The output was: <samp>Hello, World!</samp>
             </p>
@@ -1614,7 +1616,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <p>
               The variable <var>x</var> represents the input
             </p>
@@ -1636,7 +1638,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <p>
               Before<span></span>After
             </p>
@@ -1658,7 +1660,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <ul>
               <li>
                 <p>
@@ -1680,7 +1682,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """<a id="section1">Section 1</a>"""
+        html sameAsHtml """<a id="section1">Section 1</a>"""
     }
 
     @Test
@@ -1697,7 +1699,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <p>
               Price: <data value="49.99">$49.99</data>
             </p>
@@ -1718,7 +1720,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <p>
               Main text <small>(fine print)</small>
             </p>
@@ -1740,7 +1742,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <p>
               User: <bdi>إيان</bdi> - 90 points
             </p>
@@ -1760,7 +1762,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <p>
               <bdo dir="rtl">This text will be reversed</bdo>
             </p>
@@ -1783,7 +1785,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs "<ruby>漢<rp>(</rp><rt>かん</rt><rp>)</rp></ruby>"
+        html sameAsHtml "<ruby>漢<rp>(</rp><rt>かん</rt><rp>)</rp></ruby>"
     }
 
     @Test
@@ -1803,7 +1805,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <p>
               super<wbr/>cali<wbr/>fragilistic
             </p>
@@ -1833,7 +1835,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <div>
               <section>
                 <article>
@@ -1875,7 +1877,7 @@ class SemanticEventsRenderingTest {
         // then
         // Nested elements inside pre should not add extra newlines or indentation
         // to preserve whitespace semantics when rendered in browser
-        html sameAs """
+        html sameAsHtml """
             <pre>
             outer
             <pre>inner</pre>
@@ -1897,7 +1899,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <pre>
             <span>code on first line</span>
             </pre>
@@ -1918,7 +1920,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <div>
               <span>inline</span>
               <p>
@@ -1941,7 +1943,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <div data-expr="a &lt; b &gt; c">
               Content
             </div>
@@ -1967,7 +1969,7 @@ class SemanticEventsRenderingTest {
         // then
         // Custom namespaced elements (containing :) are normally block elements,
         // but inside pre they should not add extra whitespace
-        html sameAs """
+        html sameAsHtml """
             <pre>
             before <my:custom attr="value">custom content</my:custom> after
             </pre>
@@ -1990,7 +1992,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <pre>
             code content
             </pre>
@@ -2016,7 +2018,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <div>
               <p>
                 paragraph
@@ -2042,7 +2044,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <p>
               First line.
               Second line.
@@ -2066,7 +2068,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <blockquote>
               <p>
                 This is a famous quote.
@@ -2093,7 +2095,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <blockquote>
               <blockquote>
                 <p>
@@ -2120,7 +2122,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <ul>
               <li>
                 First line of item.
@@ -2149,7 +2151,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <div>
               <section>
                 <article>
@@ -2177,7 +2179,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <p>
               First paragraph.
 
@@ -2199,7 +2201,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <p>
 
               Text after leading newline.
@@ -2221,7 +2223,7 @@ class SemanticEventsRenderingTest {
 
         // then
         // Trailing newline sets atLineStart=true, so closing tag appears on new line without extra blank line
-        html sameAs """
+        html sameAsHtml """
             <p>
               Text before trailing newline.
             </p>
@@ -2242,7 +2244,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <p>
               First line.
               Second line <strong>bold</strong>
@@ -2264,7 +2266,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <p>
               <em>emphasis</em> followed by
               multi-line text.
@@ -2287,7 +2289,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <p>
               <strong>start</strong>
               middle line
@@ -2309,7 +2311,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <pre>
             line 1
               indented line 2
@@ -2331,7 +2333,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <custom:raw>
             line 1
               line 2
@@ -2359,7 +2361,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <table>
               <tbody>
                 <tr>
@@ -2389,7 +2391,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <dl>
               <dt>
                 Term
@@ -2415,7 +2417,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <p>
 
 
@@ -2439,7 +2441,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <p>
               Single line. Multi-line
               text here. Another single line.
@@ -2462,7 +2464,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <address>
               123 Main St, City
             </address>
@@ -2485,7 +2487,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <form>
               <fieldset>
                 <legend>
@@ -2513,7 +2515,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <hgroup>
               <h1>
                 Main Title
@@ -2538,7 +2540,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <dialog open="true">
               <p>
                 Dialog content
@@ -2561,7 +2563,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <menu>
               <li>
                 Option 1
@@ -2586,7 +2588,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <search>
               <p>
                 Search form goes here
@@ -2718,7 +2720,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsXml """
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
               <defs>
                 <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -2778,7 +2780,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsXml """
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 50">
               <text x="10" y="30">
                 Hello <tspan fill="red" font-weight="bold">World</tspan>!
@@ -2809,7 +2811,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsXml """
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 50">
               <text x="10" y="30">
                 <tspan fill="blue">outer <tspan font-style="italic">inner</tspan> text</tspan>
@@ -2839,7 +2841,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsXml """
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 200">
               <defs>
                 <path id="curve" d="M 50 100 Q 250 0 450 100"/>
@@ -2873,7 +2875,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsXml """
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 50">
               <text x="10" y="30">
                 Click <a href="https://example.com"><tspan fill="blue" text-decoration="underline">here</tspan></a> for more
@@ -2900,7 +2902,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsXml """
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
               <title>
                 My SVG
@@ -2910,6 +2912,315 @@ class SemanticEventsRenderingTest {
               </desc>
               <circle cx="50" cy="50" r="40"/>
             </svg>
+        """.trimIndent()
+    }
+
+    // HTML metadata element tests
+
+    @Test
+    fun `should handle meta element as block void element`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "head" {
+                "meta"("name" to "viewport", "content" to "width=device-width") {}
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAsHtml """
+            <head>
+              <meta name="viewport" content="width=device-width"/>
+            </head>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should handle base element as block void element`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "head" {
+                "base"("href" to "https://example.com/") {}
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAsHtml """
+            <head>
+              <base href="https://example.com/"/>
+            </head>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should handle link element as block void element`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "head" {
+                "link"("rel" to "stylesheet", "href" to "style.css") {}
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAsHtml """
+            <head>
+              <link rel="stylesheet" href="style.css"/>
+            </head>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should handle multiple metadata elements in head`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "head" {
+                "base"("href" to "https://example.com/") {}
+                "meta"("charset" to "UTF-8") {}
+                "meta"("name" to "viewport", "content" to "width=device-width") {}
+                "link"("rel" to "stylesheet", "href" to "style.css") {}
+                "link"("rel" to "icon", "href" to "favicon.ico") {}
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAsHtml """
+            <head>
+              <base href="https://example.com/"/>
+              <meta charset="UTF-8"/>
+              <meta name="viewport" content="width=device-width"/>
+              <link rel="stylesheet" href="style.css"/>
+              <link rel="icon" href="favicon.ico"/>
+            </head>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should handle head with title and metadata elements`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "head" {
+                "meta"("charset" to "UTF-8") {}
+                "title" { +"My Page" }
+                "meta"("name" to "description", "content" to "A page description") {}
+                "link"("rel" to "stylesheet", "href" to "style.css") {}
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAsHtml """
+            <head>
+              <meta charset="UTF-8"/>
+              <title>
+                My Page
+              </title>
+              <meta name="description" content="A page description"/>
+              <link rel="stylesheet" href="style.css"/>
+            </head>
+        """.trimIndent()
+    }
+
+    // HTML raw text and scripting element tests
+
+    @Test
+    fun `should handle style element as block with raw content`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "style" {
+                +"body { color: red; }"
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAsHtml """
+            <style>
+            body { color: red; }
+            </style>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should not escape CSS content inside style element`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "style" {
+                +"p > span { color: red; }\n.foo + .bar { margin: 0; }"
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAsHtml """
+            <style>
+            p > span { color: red; }
+            .foo + .bar { margin: 0; }
+            </style>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should handle script element as block with raw content`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "script" {
+                +"console.log('hello')"
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAsHtml """
+            <script>
+            console.log('hello')
+            </script>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should not escape JS content inside script element`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "script" {
+                +"if (a < b && c > d) { console.log(\"ok\"); }"
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAsHtml """
+            <script>
+            if (a < b && c > d) { console.log("ok"); }
+            </script>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should handle noscript element as block with normal content`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "noscript" {
+                "p" { +"JavaScript is required." }
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAsHtml """
+            <noscript>
+              <p>
+                JavaScript is required.
+              </p>
+            </noscript>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should handle style script noscript in body`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "body" {
+                "style" { +"body { color: red; }" }
+                "script" { +"console.log('hello')" }
+                "noscript" {
+                    "p" { +"JavaScript is required." }
+                }
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAsHtml """
+            <body>
+              <style>
+            body { color: red; }
+              </style>
+              <script>
+            console.log('hello')
+              </script>
+              <noscript>
+                <p>
+                  JavaScript is required.
+                </p>
+              </noscript>
+            </body>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should handle style element in head with other metadata`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "head" {
+                "meta"("charset" to "UTF-8") {}
+                "title" { +"My Page" }
+                "style" {
+                    +"body {\n  margin: 0;\n  padding: 0;\n}"
+                }
+                "link"("rel" to "stylesheet", "href" to "style.css") {}
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAsHtml """
+            <head>
+              <meta charset="UTF-8"/>
+              <title>
+                My Page
+              </title>
+              <style>
+            body {
+              margin: 0;
+              padding: 0;
+            }
+              </style>
+              <link rel="stylesheet" href="style.css"/>
+            </head>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should handle script with attributes`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "script"("type" to "module", "src" to "app.js") {}
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAsHtml """
+            <script type="module" src="app.js">
+            </script>
         """.trimIndent()
     }
 
@@ -2935,7 +3246,7 @@ class SemanticEventsRenderingTest {
         val html = flow.render()
 
         // then
-        html sameAs """
+        html sameAsHtml """
             <html>
               <body>
                 <div class="foo">
