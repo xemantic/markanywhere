@@ -196,11 +196,15 @@ public suspend fun Flow<SemanticEvent>.render(): String = buildText {
                             +"\n"
                             +indentation
                         }
+                    } else if (atLineStart && !insidePre) {
+                        +indentation
                     }
                     +"</"; +event.name; +">"
                     if (isBlock) {
                         +"\n"
                         atLineStart = true
+                    } else {
+                        atLineStart = false
                     }
                 }
 
@@ -230,13 +234,17 @@ private val BLOCK_ELEMENTS = setOf(
     // HTML lists
     "ul", "ol", "li", "dl", "dt", "dd", "menu",
     // HTML tables
-    "table", "thead", "tbody", "tfoot", "tr", "th", "td",
+    "table", "caption", "colgroup", "thead", "tbody", "tfoot", "tr", "th", "td",
     // HTML forms
     "fieldset", "legend", "form",
     // HTML interactive
     "details", "summary", "dialog",
     // HTML figures
     "figure", "figcaption",
+    // HTML embedded content
+    "object",
+    // HTML template
+    "template",
     // HTML other block elements
     "hr", "search",
     // HTML custom/non-standard used in markdown
