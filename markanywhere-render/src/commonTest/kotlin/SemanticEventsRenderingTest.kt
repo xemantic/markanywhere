@@ -2597,6 +2597,121 @@ class SemanticEventsRenderingTest {
         """.trimIndent()
     }
 
+    @Test
+    fun `should convert template element as block`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "template"("id" to "row-template") {
+                "p" { +"Template content" }
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAsHtml """
+            <template id="row-template">
+              <p>
+                Template content
+              </p>
+            </template>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should convert caption element as block`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "table" {
+                "caption" { +"Table Title" }
+                "tbody" {
+                    "tr" {
+                        "td" { +"Cell" }
+                    }
+                }
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAsHtml """
+            <table>
+              <caption>
+                Table Title
+              </caption>
+              <tbody>
+                <tr>
+                  <td>
+                    Cell
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should convert colgroup element as block`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "table" {
+                "colgroup" {
+                    "col"("span" to "1") {}
+                    "col"("span" to "2") {}
+                }
+                "tbody" {
+                    "tr" {
+                        "td" { +"Cell" }
+                    }
+                }
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAsHtml """
+            <table>
+              <colgroup>
+                <col span="1"/><col span="2"/>
+              </colgroup>
+              <tbody>
+                <tr>
+                  <td>
+                    Cell
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should convert object element as block`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "object"("data" to "movie.swf", "type" to "application/x-shockwave-flash") {
+                "p" { +"Fallback content" }
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAsHtml """
+            <object data="movie.swf" type="application/x-shockwave-flash">
+              <p>
+                Fallback content
+              </p>
+            </object>
+        """.trimIndent()
+    }
+
     // SVG rendering tests
 
     @Test
@@ -2879,6 +2994,43 @@ class SemanticEventsRenderingTest {
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 50">
               <text x="10" y="30">
                 Click <a href="https://example.com"><tspan fill="blue" text-decoration="underline">here</tspan></a> for more
+              </text>
+            </svg>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should properly indent SVG inline element closing tag when it contains block children`() = runTest {
+        // given - SVG <a> is inline (SVG_INLINE_ELEMENTS) but wraps block <text>
+        val flow = semanticEvents {
+            "svg"(
+                "xmlns" to "http://www.w3.org/2000/svg",
+                "viewBox" to "0 0 200 100"
+            ) {
+                "a"("href" to "https://example.com") {
+                    "text"("x" to "10", "y" to "30") {
+                        "tspan"("fill" to "blue") { +"Link text" }
+                    }
+                }
+                "text"("x" to "10", "y" to "60") {
+                    +"Normal text"
+                }
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAsXml """
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100">
+              <a href="https://example.com">
+                <text x="10" y="30">
+                  <tspan fill="blue">Link text</tspan>
+                </text>
+              </a>
+              <text x="10" y="60">
+                Normal text
               </text>
             </svg>
         """.trimIndent()
