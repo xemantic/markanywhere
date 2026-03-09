@@ -7,20 +7,20 @@ alternate-en: https://gdpr-info.eu/art-1-gdpr/
 ---
 
 <nav>
-- <a href="https://dsgvo-gesetz.de/">DSGVO</a>
-- <a href="https://dsgvo-gesetz.de/erwaegungsgruende/">Erwägungsgründe</a>
-- <a href="https://dsgvo-gesetz.de/bdsg/">BDSG</a>
-- <a href="https://dsgvo-gesetz.de/ldsg/">LDSG</a>
-- <a href="https://dsgvo-gesetz.de/tdddg/">TDDDG</a>
-- <a href="https://ai-act-law.eu/de/">KI-VO</a>
-- <a href="https://data-act-law.eu/de/">Data Act</a>
+- [DSGVO](https://dsgvo-gesetz.de/)
+- [Erwägungsgründe](https://dsgvo-gesetz.de/erwaegungsgruende/)
+- [BDSG](https://dsgvo-gesetz.de/bdsg/)
+- [LDSG](https://dsgvo-gesetz.de/ldsg/)
+- [TDDDG](https://dsgvo-gesetz.de/tdddg/)
+- [KI-VO](https://ai-act-law.eu/de/)
+- [Data Act](https://data-act-law.eu/de/)
 </nav>
 
 <nav aria-label="Kapitel 1 – Allgemeine Bestimmungen (Art. 1–4)">
-- <a href="https://dsgvo-gesetz.de/art-1-dsgvo/" aria-current="page">Art. 1 – Gegenstand und Ziele</a>
-- <a href="https://dsgvo-gesetz.de/art-2-dsgvo/">Art. 2 – Sachlicher Anwendungsbereich</a>
-- <a href="https://dsgvo-gesetz.de/art-3-dsgvo/">Art. 3 – Räumlicher Anwendungsbereich</a>
-- <a href="https://dsgvo-gesetz.de/art-4-dsgvo/">Art. 4 – Begriffsbestimmungen</a>
+- [Art. 1 – Gegenstand und Ziele](https://dsgvo-gesetz.de/art-1-dsgvo/)
+- [Art. 2 – Sachlicher Anwendungsbereich](https://dsgvo-gesetz.de/art-2-dsgvo/)
+- [Art. 3 – Räumlicher Anwendungsbereich](https://dsgvo-gesetz.de/art-3-dsgvo/)
+- [Art. 4 – Begriffsbestimmungen](https://dsgvo-gesetz.de/art-4-dsgvo/)
 </nav>
 
 <main>
@@ -36,23 +36,23 @@ alternate-en: https://gdpr-info.eu/art-1-gdpr/
 
 ## Passende Erwägungsgründe
 
-- <a href="https://dsgvo-gesetz.de/erwaegungsgruende/nr-1/">(1) Datenschutz als Grundrecht</a>
-- <a href="https://dsgvo-gesetz.de/erwaegungsgruende/nr-2/">(2) Wahrung der Grundrechte</a>
-- <a href="https://dsgvo-gesetz.de/erwaegungsgruende/nr-3/">(3) Versuchte Harmonisierung der Datenschutzvorschriften durch die RL 95/46/EG</a>
-- <a href="https://dsgvo-gesetz.de/erwaegungsgruende/nr-4/">(4) Einklang mit anderen Rechten</a>
-- <a href="https://dsgvo-gesetz.de/erwaegungsgruende/nr-5/">(5) Zusammenarbeit der Mitgliedsstaaten zum Datenaustausch</a>
-- <a href="https://dsgvo-gesetz.de/erwaegungsgruende/nr-6/">(6) Gewährleistung eines hohen Datenschutzniveaus trotz Zunahme des Datenaustausches</a>
-- <a href="https://dsgvo-gesetz.de/erwaegungsgruende/nr-7/">(7) Rechtsrahmen und Vertrauensbasis durch Sicherheit und Kontrolle</a>
-- <a href="https://dsgvo-gesetz.de/erwaegungsgruende/nr-8/">(8) Übernahme in nationale Rechtsvorschriften</a>
-- <a href="https://dsgvo-gesetz.de/erwaegungsgruende/nr-9/">(9) Unterschiedliche Schutzstandards durch die RL 95/46/EG</a>
-- <a href="https://dsgvo-gesetz.de/erwaegungsgruende/nr-10/">(10) Gleichwertiges Schutzniveau trotz nationaler Spielräume</a>
-- <a href="https://dsgvo-gesetz.de/erwaegungsgruende/nr-11/">(11) Gleiche Befugnisse und Sanktionen</a>
-- <a href="https://dsgvo-gesetz.de/erwaegungsgruende/nr-12/">(12) Ermächtigung des Europäischen Parlaments und des Rates</a>
+- [(1) Datenschutz als Grundrecht](https://dsgvo-gesetz.de/erwaegungsgruende/nr-1/)
+- [(2) Wahrung der Grundrechte](https://dsgvo-gesetz.de/erwaegungsgruende/nr-2/)
+- [(3) Versuchte Harmonisierung der Datenschutzvorschriften durch die RL 95/46/EG](https://dsgvo-gesetz.de/erwaegungsgruende/nr-3/)
+- [(4) Einklang mit anderen Rechten](https://dsgvo-gesetz.de/erwaegungsgruende/nr-4/)
+- [(5) Zusammenarbeit der Mitgliedsstaaten zum Datenaustausch](https://dsgvo-gesetz.de/erwaegungsgruende/nr-5/)
+- [(6) Gewährleistung eines hohen Datenschutzniveaus trotz Zunahme des Datenaustausches](https://dsgvo-gesetz.de/erwaegungsgruende/nr-6/)
+- [(7) Rechtsrahmen und Vertrauensbasis durch Sicherheit und Kontrolle](https://dsgvo-gesetz.de/erwaegungsgruende/nr-7/)
+- [(8) Übernahme in nationale Rechtsvorschriften](https://dsgvo-gesetz.de/erwaegungsgruende/nr-8/)
+- [(9) Unterschiedliche Schutzstandards durch die RL 95/46/EG](https://dsgvo-gesetz.de/erwaegungsgruende/nr-9/)
+- [(10) Gleichwertiges Schutzniveau trotz nationaler Spielräume](https://dsgvo-gesetz.de/erwaegungsgruende/nr-10/)
+- [(11) Gleiche Befugnisse und Sanktionen](https://dsgvo-gesetz.de/erwaegungsgruende/nr-11/)
+- [(12) Ermächtigung des Europäischen Parlaments und des Rates](https://dsgvo-gesetz.de/erwaegungsgruende/nr-12/)
 
 </section>
 
 <nav aria-label="Seitennavigation">
-<a href="https://dsgvo-gesetz.de/art-2-dsgvo/">Art. 2 DSGVO – Sachlicher Anwendungsbereich →</a>
+[Art. 2 DSGVO – Sachlicher Anwendungsbereich →](https://dsgvo-gesetz.de/art-2-dsgvo/)
 </nav>
 
 </article>

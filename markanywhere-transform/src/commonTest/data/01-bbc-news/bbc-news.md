@@ -74,9 +74,9 @@ Advertisement
 
 <section>
 <section>
-<a href="https://www.bbc.com/news/live/ceqvwrydzpqt">
+[
 ![Smoke rises after an airstrike in Tehran](https://ichef.bbci.co.uk/ace/standard/480/cpsprodpb/81c6/live/d72b1b20-1a23-11f1-9120-a910fc22c6ac.jpg.webp)
-</a>
+](https://www.bbc.com/news/live/ceqvwrydzpqt)
 <a href="https://www.bbc.com/news/live/ceqvwrydzpqt">
 <svg/>LIVE
 ## Trump vows to hit Iran 'very hard' as Iranian president apologises to Gulf nations for attacks
@@ -96,34 +96,34 @@ President Masoud Pezeshkian says Iran won't attack first - but the UAE says it h
 
 Video filmed by a witness and verified by the BBC shows a drone crashing close to the airport.
 </a>
-<a href="/news/articles/c5y5lqygrn7o">
+[
 ![Men watch from a hillside as a plume of smoke rises after an explosion on 2 March 2026 in Tehran, Iran.](https://ichef.bbci.co.uk/news/480/cpsprodpb/f6b0/live/5ec6cc60-1979-11f1-9156-4356592fc9c8.jpg.webp)
 
 ## We've been speaking to Iranians during one week of war. Here's what they said
 
 Ordinary Iranians reflect on seven days of conflict and where they see their country going next.
-</a>
-<a href="/news/articles/cq6qp458zv1o">
+](/news/articles/c5y5lqygrn7o)
+[
 ![Seyed Ali Mousavi, who has short grey hair and wears glasses. He is wearing a black suit and black striped shirt](https://ichef.bbci.co.uk/news/480/cpsprodpb/faea/live/84801090-1a2a-11f1-b048-c9424b2cf5fd.jpg.webp)
 
 ## Iran will continue to defend itself against aggression, ambassador to UK says
 
 Seyed Ali Mousavi tells Laura Kuenssberg Iran's response depends on the actions of the US and Israel.
-</a>
-<a href="/news/articles/ckg8wvz427vo">
+](/news/articles/cq6qp458zv1o)
+[
 ![An image appearing to show a large explosion with a green "AI-generated" label](https://ichef.bbci.co.uk/news/480/cpsprodpb/3e3b/live/ed517120-197d-11f1-b048-c9424b2cf5fd.png.webp)
 
 ## AI-generated Iran war videos surge as creators use new tech to cash in
 
 The US-Israel war with Iran is being monetised by online creators with AI-generated misinformation.
-</a>
-<a href="/news/articles/c4geelnw7w3o">
+](/news/articles/ckg8wvz427vo)
+[
 ![Iranian military ship the Iris Dena is pictured in the Bay of Bengal.](https://ichef.bbci.co.uk/news/480/cpsprodpb/5cd8/live/9706a980-17e2-11f1-b048-c9424b2cf5fd.jpg.webp)
 
 ## The final voyage of the Iranian warship sunk by the US
 
 The sinking of an Iranian ship by the US near Sri Lanka brings the conflict uncomfortably close to India.
-</a>
+](/news/articles/c4geelnw7w3o)
 </section>
 
 <section>
@@ -133,14 +133,14 @@ The sinking of an Iranian ship by the US near Sri Lanka brings the conflict unco
 ## More top stories
 
 <section>
-<a href="https://www.bbc.co.uk/news/resources/idt-20f878f1-f4af-4022-9f62-b0515b9f4b20">
+[
 ![A ship is seen in front of a huge iceberg that stretches into the horizon](https://ichef.bbci.co.uk/ace/standard/480/cpsprodpb/2fb9/live/43078ea0-19c0-11f1-9120-a910fc22c6ac.jpg.webp)
 
 ## This iceberg was once the biggest in the world. Now it has just weeks left
 
 A23a used to be twice the size of Greater London, but it's spectacularly disintegrated over the past year.
-</a>
-<a href="/news/articles/c62662gzlp8o">
+](https://www.bbc.co.uk/news/resources/idt-20f878f1-f4af-4022-9f62-b0515b9f4b20)
+[
 ![Armed uncrewed ground vehicles (UGVs) are becoming ever more involved in the Ukraine war](https://ichef.bbci.co.uk/news/480/cpsprodpb/7b3c/live/5890fa10-18a6-11f1-801d-ed3cff6bf876.jpg.webp)
 
 ## Armed robots take to the battlefield in Ukraine war
@@ -148,24 +148,24 @@ A23a used to be twice the size of Greater London, but it's spectacularly disinte
 Ukraine has embarked on a programme to deploy armed robots on the battlefield against Russian forces.
 
 15 hrs ago · Europe
-</a>
-<a href="/news/articles/cx281xz2qjqo">
+](/news/articles/c62662gzlp8o)
+[
 
 ## Timothée Chalamet triggers backlash over ballet and opera remarks
 
 In an interview, the Oscar-nominee danced into some online controversy after claiming no one cares about ballet and opera.
 
 4 hrs ago · US & Canada
-</a>
-<a href="/sport/articles/c89k598z28po">
+](/news/articles/cx281xz2qjqo)
+[
 
 ## Skier wins Russia's first medal of Winter Paralympics
 
 Para-alpine skier Varvara Voronchikhina wins Russia's first medal of the Milan-Cortina Winter Paralympics with downhill bronze.
 
 6 hrs ago · Disability Sport
-</a>
-<a href="/news/articles/c4g0dzg6e4mo">
+](/sport/articles/c89k598z28po)
+[
 ![Jeffrey Epstein and Donald Trump pose for photo together](https://ichef.bbci.co.uk/news/480/cpsprodpb/5a7b/live/91abbb40-e003-11f0-a8dc-93c15fe68710.jpg.webp)
 
 ## Withheld Epstein files with accusations against Trump released by justice department
@@ -173,8 +173,8 @@ Para-alpine skier Varvara Voronchikhina wins Russia's first medal of the Milan-C
 The Department of Justice said the released files had been "incorrectly coded as duplicative" and inadvertently not published.
 
 22 hrs ago · US & Canada
-</a>
-<a href="/news/articles/czd87d0jq37o">
+](/news/articles/c4g0dzg6e4mo)
+[
 ![Andrew Mountbatten-Windsor wearing a dark-coloured suit with a white shirt and yellow tie](https://ichef.bbci.co.uk/news/480/cpsprodpb/1254/live/bdc36060-1a06-11f1-a429-a767b6f6663d.jpg.webp)
 
 ## Canada's PM calls for Andrew to be removed from line of succession
@@ -182,8 +182,8 @@ The Department of Justice said the released files had been "incorrectly coded as
 Andrew Mountbatten-Windsor was arrested on suspicion of misconduct in public office last month.
 
 5 hrs ago · UK
-</a>
-<a href="/news/articles/clyxze4px30o">
+](/news/articles/czd87d0jq37o)
+[
 ![Gracie McGonigal has long auburn curly hair and wearing a red dress. She is wearing a prosthetic hand which is glittery and has black coloured fingers.](https://ichef.bbci.co.uk/news/480/cpsprodpb/8016/live/b533f4b0-17d5-11f1-a08c-c1f4358a7533.jpg.webp)
 
 ## Bridgerton actor told disability could hold her back - then Netflix came calling
@@ -191,8 +191,8 @@ Andrew Mountbatten-Windsor was arrested on suspicion of misconduct in public off
 Gracie McGonigal says fans have been "unbelievable" since the release of season four.
 
 16 hrs ago · Disability
-</a>
-<a href="/news/articles/cn8zd049l08o">
+](/news/articles/clyxze4px30o)
+[
 ![Rescuers work at the site of the apartment building hit by a Russian missile strike in Kharkiv](https://ichef.bbci.co.uk/news/480/cpsprodpb/04e4/live/782b0310-19f6-11f1-bd6f-8f561353e15e.png.webp)
 
 ## Russian strike on Kharkiv apartment block kills ten
@@ -200,7 +200,7 @@ Gracie McGonigal says fans have been "unbelievable" since the release of season 
 Ukraine President Volodymyr Zelensky says other people - including children - are injured as rescuers continue to search through rubble.
 
 8 hrs ago · Europe
-</a>
+](/news/articles/cn8zd049l08o)
 </section>
 </section>
 
@@ -212,41 +212,41 @@ Advertisement
 
 ## More on Iran war
 
-<a href="/news/articles/c39w2nj1rk8o">
+[
 ![Aircraft carrier HMS Prince of Wales travelling at sea. Numerous jets are onboard.](https://ichef.bbci.co.uk/news/480/cpsprodpb/619f/live/ccf608d0-1a2e-11f1-b048-c9424b2cf5fd.jpg.webp)
 
 ## UK aircraft carrier given five days to be ready to deploy
 
 The crew of HMS Prince of Wales must be ready to set sail in five days, defence sources say.
-</a>
-<a href="/news/articles/c2k8339xn9jo">
+](/news/articles/c39w2nj1rk8o)
+[
 ![An Iranian flag is placed amid rubble and debris next to a destroyed residential building near Ferdowsi square in Tehran on March 3, 2026.](https://ichef.bbci.co.uk/news/480/cpsprodpb/65e0/live/0e20dda0-19a1-11f1-978b-fbdac352fba0.jpg.webp)
 
 ## Trump wants to pick Iran's new leader - will a hostile regime under fire agree?
 
 The president's vision of Iran's future could meet fierce opposition, writes chief international correspondent Lyse Doucet.
-</a>
-<a href="/news/articles/cwy9xlp46zgo">
+](/news/articles/c2k8339xn9jo)
+[
 ![A member of the civil defence stands at the site of overnight Israeli airstrikes in the southern suburbs of Beirut](https://ichef.bbci.co.uk/news/480/cpsprodpb/86f5/live/4c013a60-196b-11f1-8943-0f02ddbbd48f.jpg.webp)
 
 ## 'We couldn't sleep because of fear': Residents flee as Israel pounds south Beirut
 
 Communities across huge swathes of Lebanon have been told by Israel to leave their homes due to military action against Hezbollah.
-</a>
-<a href="/news/articles/cddnqd2z864o">
+](/news/articles/cwy9xlp46zgo)
+[
 ![Sir Richard Knighton, an older white man, in a military uniform.](https://ichef.bbci.co.uk/news/480/cpsprodpb/7470/live/99b883e0-1a23-11f1-9120-a910fc22c6ac.jpg.webp)
 
 ## Military chief defends UK response to Middle East conflict
 
 Sir Richard Knighton "completely rejects" criticism that the UK had been ill-prepared.
-</a>
-<a href="/news/articles/crrx1jgr4jjo">
+](/news/articles/cddnqd2z864o)
+[
 ![Close up shot of Qantas aircraft in the air overhead, silhouetted against an orange sky](https://ichef.bbci.co.uk/news/480/cpsprodpb/e387/live/766dbec0-195e-11f1-9a35-7db562c1d2fd.jpg.webp)
 
 ## Flight paths squeezed as Iran conflict closes more airspace
 
 A drone attack on Azerbaijan has narrowed choices for airlines scrambling to respond to disruption in the Gulf.
-</a>
+](/news/articles/crrx1jgr4jjo)
 </section>
 
 <section>
@@ -266,7 +266,7 @@ The three former US presidents were among dozens of high profile figures present
 
 16 hrs ago · US & Canada
 </a>
-<a href="/news/articles/c14m5mj055jo">
+[
 ![A faded mural of Che Guevara on a wall with a man standing nearby in Cuba](https://ichef.bbci.co.uk/news/480/cpsprodpb/2e19/live/086b4680-198c-11f1-a8c7-d931bb8f99d4.jpg.webp)
 
 ## Trump sets his sights on crisis-hit Cuba after Iran action
@@ -274,24 +274,24 @@ The three former US presidents were among dozens of high profile figures present
 The US president has claimed the Cuban authorities "want to make a deal so bad".
 
 20 hrs ago · World
-</a>
-<a href="/news/articles/cyv959eyjgjo">
+](/news/articles/c14m5mj055jo)
+[
 
 ## The young women who fought in Ethiopia's last civil war and don't want to see another one
 
 Female fighters recall how the conflict in the northern Tigray destroyed their lives, as fears grow that fighting could resume.
 
 2 days ago · Africa
-</a>
-<a href="/news/articles/cy8l1d221evo">
+](/news/articles/cyv959eyjgjo)
+[
 
 ## Fatbikes are wreaking havoc in Sydney's wealthy beach suburbs
 
 Teens are infuriating locals by riding over golf courses and doing wheelies on the Harbour Bridge.
 
 21 hrs ago · Australia
-</a>
-<a href="/news/articles/cn4ggqgyk51o">
+](/news/articles/cy8l1d221evo)
+[
 ![A man dressed as a sea captain next to a man wearing a green hat, posing for a photograph in front of bottles of beer](https://ichef.bbci.co.uk/news/480/cpsprodpb/0764/live/7b8193f0-0c07-11f1-b7e1-afb6d0884c18.jpg.webp)
 
 ## From a £1bn dream to a brutal collapse: How Brewdog hit the rocks
@@ -299,8 +299,8 @@ Teens are infuriating locals by riding over golf courses and doing wheelies on t
 The rise and fall of the garage start-up which set out to revolutionise the brewing industry.
 
 7 hrs ago · Scotland business
-</a>
-<a href="/news/articles/cgk22k855jjo">
+](/news/articles/cn4ggqgyk51o)
+[
 ![Dave performing with a microphone, wearing a red outfit](https://ichef.bbci.co.uk/news/480/cpsprodpb/9c61/live/e94698a0-19bc-11f1-b093-91cf43ba25b9.jpg.webp)
 
 ## Dave review: British star transcends rapper status at hometown gig
@@ -308,8 +308,8 @@ The rise and fall of the garage start-up which set out to revolutionise the brew
 The 27-year-old took fans on a memorable journey through a decade of his music at London's O2 arena.
 
 12 hrs ago · Culture
-</a>
-<a href="/news/articles/ce94mggvp9do">
+](/news/articles/cgk22k855jjo)
+[
 ![Kristi Noem is sworn in during Senate Judiciary Committee hearing](https://ichef.bbci.co.uk/news/480/cpsprodpb/afff/live/4f7b57e0-1969-11f1-8943-0f02ddbbd48f.jpg.webp)
 
 ## From killing her dog to luxury jets: Six times Kristi Noem made headlines
@@ -317,7 +317,7 @@ The 27-year-old took fans on a memorable journey through a decade of his music a
 Noem boosted deportations during her first year, but her controversies reportedly frustrated Trump.
 
 1 day ago · US & Canada
-</a>
+](/news/articles/ce94mggvp9do)
 </section>
 </section>
 
@@ -344,7 +344,7 @@ Advertisement
 ## Also in news
 
 <section>
-<a href="/news/articles/cedzep6gp07o">
+[
 ![An undated photo of Ruben Ray Martinez](https://ichef.bbci.co.uk/news/480/cpsprodpb/cda2/live/610f5b30-19d9-11f1-801d-ed3cff6bf876.jpg.webp)
 
 ## Footage shows US citizen shot by ICE agent in Texas traffic stop
@@ -352,8 +352,8 @@ Advertisement
 The Department of Homeland Security did not disclose Martinez was shot by one of its agents until almost a year later.
 
 12 hrs ago · US & Canada
-</a>
-<a href="/news/articles/cn87pl8e2l5o">
+](/news/articles/cedzep6gp07o)
+[
 ![A man looks through the wreckage of private vehicles destroyed following heavy rainfall in the Grogan area of Nairobi](https://ichef.bbci.co.uk/news/480/cpsprodpb/8558/live/78712210-1a1d-11f1-b8c2-65bc71ac8a70.png.webp)
 
 ## Heavy rains and flooding kills at least 23 in Nairobi
@@ -361,7 +361,7 @@ The Department of Homeland Security did not disclose Martinez was shot by one of
 Flights in and out of Nairobi Airport have been disrupted while some roads in the capital are submerged.
 
 3 hrs ago · World
-</a>
+](/news/articles/cn87pl8e2l5o)
 <a href="/news/videos/cx2r4wdgkzxo">
 
 <svg/>
@@ -371,15 +371,15 @@ A series of tornadoes tore through several cities, uprooting trees and destroyin
 
 8 hrs ago · US & Canada
 </a>
-<a href="/news/articles/ckg1x5yg4gvo">
+[
 
 ## Inside the 'chaotic' world of wife carrying
 
 The UK Wife Carrying Race returns in Dorking on Sunday, with about 70 people set to take part.
 
 16 hrs ago · Surrey
-</a>
-<a href="/news/articles/c80jmm00379o">
+](/news/articles/ckg1x5yg4gvo)
+[
 ![Ian Huntley stood in front of a white wall](https://ichef.bbci.co.uk/news/480/cpsprodpb/632a/live/1b65adb0-19a6-11f1-9120-a910fc22c6ac.jpg.webp)
 
 ## Soham murderer Ian Huntley dies after prison attack
@@ -387,8 +387,8 @@ The UK Wife Carrying Race returns in Dorking on Sunday, with about 70 people set
 Huntley, who murdered two schoolgirls in 2002, had his life support switched off on Friday, the BBC understands.
 
 5 hrs ago · Cambridgeshire
-</a>
-<a href="/sport/formula1/articles/c8d5l339535o">
+](/news/articles/c80jmm00379o)
+[
 ![Gravel flies up as Red Bull's Max Verstappen crashes in qualifying for the Australian Grand Prix](https://ichef.bbci.co.uk/news/480/cpsprodpb/2091/live/8366bfe0-19ff-11f1-98af-0f9210aca886.jpg.webp)
 
 ## Russell takes Melbourne pole after Verstappen crash
@@ -396,8 +396,8 @@ Huntley, who murdered two schoolgirls in 2002, had his life support switched off
 George Russell takes pole position as Mercedes dominate a qualifying session for the Australian Grand Prix in which Max Verstappen crashed.
 
 8 hrs ago · Formula 1
-</a>
-<a href="/news/articles/c4g55v24wrno">
+](/sport/formula1/articles/c8d5l339535o)
+[
 ![A Yes campaign poster showing an open mouth says 200 francs is enough but the No campaign showing a microphone says it will destroy the broadcaster](https://ichef.bbci.co.uk/news/480/cpsprodpb/810e/live/f9e9c6e0-18b9-11f1-9120-a910fc22c6ac.jpg.webp)
 
 ## Swiss to vote on right-wing push to slash licence fee for public broadcaster
@@ -405,7 +405,7 @@ George Russell takes pole position as Mercedes dominate a qualifying session for
 The move is backed by the right-wing Swiss People's Party, which says the current fee is unjustified because of the high cost of living.
 
 14 hrs ago · Europe
-</a>
+](/news/articles/c4g55v24wrno)
 </section>
 </section>
 
@@ -445,13 +445,13 @@ Advertisement
 
 Watch and listen to live coverage plus in-play clips and follow live text updates as Scotland host France at Murrayfield.
 </a>
-<a href="https://www.bbc.com/sport/football/live/c07jxvzx8lmt">
+[
 ![Lucy Bronze](https://ichef.bbci.co.uk/ace/standard/480/cpsprodpb/660a/live/b5bcc3d0-1a32-11f1-982c-cf4b6f34f92f.jpg.webp)
 
 ## Bronze & Stanway score as England see off stubborn Iceland
 
 England beat Iceland at the City Ground to make it two wins from two in World Cup qualifying.
-</a>
+](https://www.bbc.com/sport/football/live/c07jxvzx8lmt)
 <a href="https://www.bbc.com/sport/football/live/cgk22g88mrpt">
 
 <svg/>LIVE
@@ -459,22 +459,22 @@ England beat Iceland at the City Ground to make it two wins from two in World Cu
 
 Listen to Sportsound and follow live text coverage of the Scottish Premiership game between Dundee and Motherwell plus score updates from the SPFL.
 </a>
-<a href="/sport/golf/articles/ckg3xpx83lpo">
+[
 
 ## Berger extends lead as McIlroy rallies at Bay Hill
 
 Daniel Berger extends his lead to five shots at the Arnold Palmer Invitational as Rory McIlroy rallies in the second round.
 
 7 hrs ago · Golf
-</a>
-<a href="https://www.bbc.com/sport/football/live/cj98rz2ypvdt">
+](/sport/golf/articles/ckg3xpx83lpo)
+[
 ![Mansfield v Arsenal](https://ichef.bbci.co.uk/ace/standard/480/cpsprodpb/7622/live/c486cdf0-1a2f-11f1-b048-c9424b2cf5fd.jpg.webp)
 
 ## Eze scores winner as Arsenal avoid scare at Mansfield Town
 
 Eberechi Eze scores the winning goal as Arsenal are tested but overcome a spirited Mansfield Town to move into the quarter-finals of the FA Cup.
-</a>
-<a href="/sport/formula1/articles/cm2r928415jo">
+](https://www.bbc.com/sport/football/live/cj98rz2ypvdt)
+[
 ![A smiling George Russell puts his arm around Mercedes' team-mate Kimi Antonelli's shoulder after they qualify on the front row for the Australian Grand Prix](https://ichef.bbci.co.uk/news/480/cpsprodpb/807d/live/642a9990-1a08-11f1-a429-a767b6f6663d.jpg.webp)
 
 ## 'Perfect storm' for Russell but Norris unhappy with 'worst cars'
@@ -482,8 +482,8 @@ Eberechi Eze scores the winning goal as Arsenal are tested but overcome a spirit
 George Russell knew his Mercedes was fast but was surprised by just how quick. Lando Norris was not so happy after Australian Grand Prix qualifying.
 
 5 hrs ago · Formula 1
-</a>
-<a href="/sport/cricket/articles/c620j2xpwe0o">
+](/sport/formula1/articles/cm2r928415jo)
+[
 ![England head coach Brendon McCullum addressing players in training](https://ichef.bbci.co.uk/news/480/cpsprodpb/4b51/live/8a5e0a50-1a0a-11f1-a429-a767b6f6663d.jpg.webp)
 
 ## McCullum makes 'no apologies' for informal set-up
@@ -491,7 +491,7 @@ George Russell knew his Mercedes was fast but was surprised by just how quick. L
 Brendon McCullum says he makes "no apologies" for running an informal dressing room as England coach but rejects the perception it is casual.
 
 4 hrs ago · Cricket
-</a>
+](/sport/cricket/articles/c620j2xpwe0o)
 </section>
 </section>
 
@@ -631,7 +631,7 @@ Copyright 2026 BBC. All rights reserved. The BBC is not responsible for the cont
 <section>
 ## Let us know you agree to cookies
 
-We use <a href="https://www.bbc.com/usingthebbc/cookies/what-do-i-need-to-know-about-cookies/">cookies</a> to give you the best online experience.
+We use [cookies](https://www.bbc.com/usingthebbc/cookies/what-do-i-need-to-know-about-cookies/) to give you the best online experience.
 
 Please let us know if you agree to all of these cookies.
 

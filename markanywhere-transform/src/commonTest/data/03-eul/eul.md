@@ -6,11 +6,11 @@ canonical: https://eur-lex.europa.eu/collection/eu-law/treaties/treaties-force.h
 ---
 
 <nav>
-  <a href="https://eur-lex.europa.eu/collection/eu-law/treaties/treaties-force.html">Treaties currently in force</a>
-  <a href="https://eur-lex.europa.eu/collection/eu-law/treaties/treaties-founding.html">Founding Treaties</a>
-  <a href="https://eur-lex.europa.eu/collection/eu-law/treaties/treaties-accession.html">Accession Treaties</a>
-  <a href="https://eur-lex.europa.eu/collection/eu-law/treaties/treaties-other.html">Other treaties and protocols</a>
-  <a href="https://eur-lex.europa.eu/collection/eu-law/treaties/treaties-overview.html">Chronological overview</a>
+  [Treaties currently in force](https://eur-lex.europa.eu/collection/eu-law/treaties/treaties-force.html)
+  [Founding Treaties](https://eur-lex.europa.eu/collection/eu-law/treaties/treaties-founding.html)
+  [Accession Treaties](https://eur-lex.europa.eu/collection/eu-law/treaties/treaties-accession.html)
+  [Other treaties and protocols](https://eur-lex.europa.eu/collection/eu-law/treaties/treaties-other.html)
+  [Chronological overview](https://eur-lex.europa.eu/collection/eu-law/treaties/treaties-overview.html)
 </nav>
 
 <main>
@@ -26,170 +26,170 @@ EUR-Lex contains the **Founding**, **Amending**, and **Accession Treaties**, alo
 
 ## Treaty on European Union (consolidated version – 2016)
 
-<a href="https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:12016M/TXT">Full text</a> — <a href="https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=OJ:C:2016:202:TOC">OJ C 202, 7.6.2016</a>
+[Full text](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:12016M/TXT) — [OJ C 202, 7.6.2016](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=OJ:C:2016:202:TOC)
 
-- <a href="https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:12016M000">Preamble</a> — OJ C 202, 7.6.2016, p. 15–16
+- [Preamble](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:12016M000) — OJ C 202, 7.6.2016, p. 15–16
 - Articles 1–55 — OJ C 202, 7.6.2016, p. 16–45:
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M001">1</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M002">2</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M003">3</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M004">4</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M005">5</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M006">6</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M007">7</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M008">8</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M009">9</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M010">10</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M011">11</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M012">12</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M013">13</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M014">14</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M015">15</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M016">16</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M017">17</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M018">18</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M019">19</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M020">20</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M021">21</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M022">22</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M023">23</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M024">24</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M025">25</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M026">26</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M027">27</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M028">28</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M029">29</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M030">30</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M031">31</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M032">32</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M033">33</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M034">34</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M035">35</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M036">36</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M037">37</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M038">38</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M039">39</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M040">40</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M041">41</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M042">42</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M043">43</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M044">44</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M045">45</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M046">46</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M047">47</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M048">48</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M049">49</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M050">50</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M051">51</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M052">52</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M053">53</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M054">54</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M055">55</a>
+  [1](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M001)
+  [2](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M002)
+  [3](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M003)
+  [4](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M004)
+  [5](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M005)
+  [6](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M006)
+  [7](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M007)
+  [8](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M008)
+  [9](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M009)
+  [10](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M010)
+  [11](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M011)
+  [12](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M012)
+  [13](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M013)
+  [14](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M014)
+  [15](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M015)
+  [16](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M016)
+  [17](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M017)
+  [18](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M018)
+  [19](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M019)
+  [20](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M020)
+  [21](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M021)
+  [22](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M022)
+  [23](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M023)
+  [24](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M024)
+  [25](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M025)
+  [26](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M026)
+  [27](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M027)
+  [28](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M028)
+  [29](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M029)
+  [30](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M030)
+  [31](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M031)
+  [32](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M032)
+  [33](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M033)
+  [34](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M034)
+  [35](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M035)
+  [36](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M036)
+  [37](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M037)
+  [38](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M038)
+  [39](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M039)
+  [40](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M040)
+  [41](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M041)
+  [42](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M042)
+  [43](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M043)
+  [44](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M044)
+  [45](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M045)
+  [46](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M046)
+  [47](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M047)
+  [48](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M048)
+  [49](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M049)
+  [50](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M050)
+  [51](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M051)
+  [52](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M052)
+  [53](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M053)
+  [54](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M054)
+  [55](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M055)
 - Protocols 1–37 — OJ C 202, 7.6.2016, p. 201–329:
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/01">1</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/02">2</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/03">3</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/04">4</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/05">5</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/06">6</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/07">7</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/08">8</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/09">9</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/10">10</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/11">11</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/12">12</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/13">13</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/14">14</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/15">15</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/16">16</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/17">17</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/18">18</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/19">19</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/20">20</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/21">21</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/22">22</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/23">23</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/24">24</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/25">25</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/26">26</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/27">27</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/28">28</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/29">29</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/30">30</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/31">31</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/32">32</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/33">33</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/34">34</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/35">35</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/36">36</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/37">37</a>
+  [1](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/01)
+  [2](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/02)
+  [3](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/03)
+  [4](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/04)
+  [5](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/05)
+  [6](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/06)
+  [7](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/07)
+  [8](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/08)
+  [9](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/09)
+  [10](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/10)
+  [11](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/11)
+  [12](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/12)
+  [13](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/13)
+  [14](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/14)
+  [15](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/15)
+  [16](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/16)
+  [17](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/17)
+  [18](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/18)
+  [19](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/19)
+  [20](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/20)
+  [21](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/21)
+  [22](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/22)
+  [23](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/23)
+  [24](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/24)
+  [25](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/25)
+  [26](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/26)
+  [27](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/27)
+  [28](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/28)
+  [29](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/29)
+  [30](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/30)
+  [31](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/31)
+  [32](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/32)
+  [33](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/33)
+  [34](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/34)
+  [35](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/35)
+  [36](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/36)
+  [37](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016M/PRO/37)
 - Declarations 1–65 — OJ C 202, 7.6.2016, p. 337–361:
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/01">1</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/02">2</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/03">3</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/04">4</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/05">5</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/06">6</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/07">7</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/08">8</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/09">9</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/10">10</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/11">11</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/12">12</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/13">13</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/14">14</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/15">15</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/16">16</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/17">17</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/18">18</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/19">19</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/20">20</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/21">21</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/22">22</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/23">23</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/24">24</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/25">25</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/26">26</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/27">27</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/28">28</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/29">29</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/30">30</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/31">31</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/32">32</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/33">33</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/34">34</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/35">35</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/36">36</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/37">37</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/38">38</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/39">39</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/40">40</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/41">41</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/42">42</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/43">43</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/44">44</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/45">45</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/46">46</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/47">47</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/48">48</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/49">49</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/50">50</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/51">51</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/52">52</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/53">53</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/54">54</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/55">55</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/56">56</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/57">57</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/58">58</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/59">59</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/60">60</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/61">61</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/62">62</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/63">63</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/64">64</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/65">65</a>
-- <a href="https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:12016M/TBL">Tables of equivalences</a> — OJ C 202, 7.6.2016, p. 363–368
+  [1](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/01)
+  [2](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/02)
+  [3](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/03)
+  [4](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/04)
+  [5](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/05)
+  [6](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/06)
+  [7](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/07)
+  [8](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/08)
+  [9](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/09)
+  [10](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/10)
+  [11](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/11)
+  [12](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/12)
+  [13](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/13)
+  [14](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/14)
+  [15](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/15)
+  [16](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/16)
+  [17](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/17)
+  [18](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/18)
+  [19](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/19)
+  [20](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/20)
+  [21](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/21)
+  [22](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/22)
+  [23](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/23)
+  [24](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/24)
+  [25](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/25)
+  [26](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/26)
+  [27](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/27)
+  [28](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/28)
+  [29](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/29)
+  [30](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/30)
+  [31](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/31)
+  [32](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/32)
+  [33](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/33)
+  [34](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/34)
+  [35](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/35)
+  [36](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/36)
+  [37](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/37)
+  [38](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/38)
+  [39](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/39)
+  [40](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/40)
+  [41](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/41)
+  [42](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/42)
+  [43](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/43)
+  [44](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/44)
+  [45](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/45)
+  [46](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/46)
+  [47](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/47)
+  [48](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/48)
+  [49](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/49)
+  [50](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/50)
+  [51](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/51)
+  [52](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/52)
+  [53](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/53)
+  [54](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/54)
+  [55](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/55)
+  [56](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/56)
+  [57](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/57)
+  [58](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/58)
+  [59](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/59)
+  [60](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/60)
+  [61](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/61)
+  [62](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/62)
+  [63](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/63)
+  [64](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/64)
+  [65](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/65)
+- [Tables of equivalences](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:12016M/TBL) — OJ C 202, 7.6.2016, p. 363–368
 
 </section>
 
@@ -197,475 +197,475 @@ EUR-Lex contains the **Founding**, **Amending**, and **Accession Treaties**, alo
 
 ## Treaty on the Functioning of the European Union (consolidated version – 2016)
 
-<a href="https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:12016E/TXT">Full text</a> — <a href="https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=OJ:C:2016:202:TOC">OJ C 202, 7.6.2016</a>
+[Full text](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:12016E/TXT) — [OJ C 202, 7.6.2016](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=OJ:C:2016:202:TOC)
 
-- <a href="https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:12016E000">Preamble</a> — OJ C 202, 7.6.2016, p. 47
+- [Preamble](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:12016E000) — OJ C 202, 7.6.2016, p. 47
 - Articles 1–358 — OJ C 202, 7.6.2016, p. 47–199:
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E001">1</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E002">2</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E003">3</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E004">4</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E005">5</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E006">6</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E007">7</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E008">8</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E009">9</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E010">10</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E011">11</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E012">12</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E013">13</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E014">14</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E015">15</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E016">16</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E017">17</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E018">18</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E019">19</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E020">20</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E021">21</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E022">22</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E023">23</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E024">24</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E025">25</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E026">26</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E027">27</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E028">28</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E029">29</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E030">30</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E031">31</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E032">32</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E033">33</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E034">34</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E035">35</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E036">36</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E037">37</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E038">38</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E039">39</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E040">40</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E041">41</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E042">42</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E043">43</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E044">44</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E045">45</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E046">46</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E047">47</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E048">48</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E049">49</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E050">50</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E051">51</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E052">52</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E053">53</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E054">54</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E055">55</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E056">56</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E057">57</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E058">58</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E059">59</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E060">60</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E061">61</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E062">62</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E063">63</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E064">64</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E065">65</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E066">66</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E067">67</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E068">68</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E069">69</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E070">70</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E071">71</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E072">72</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E073">73</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E074">74</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E075">75</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E076">76</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E077">77</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E078">78</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E079">79</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E080">80</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E081">81</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E082">82</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E083">83</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E084">84</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E085">85</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E086">86</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E087">87</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E088">88</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E089">89</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E090">90</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E091">91</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E092">92</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E093">93</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E094">94</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E095">95</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E096">96</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E097">97</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E098">98</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E099">99</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E100">100</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E101">101</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E102">102</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E103">103</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E104">104</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E105">105</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E106">106</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E107">107</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E108">108</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E109">109</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E110">110</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E111">111</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E112">112</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E113">113</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E114">114</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E115">115</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E116">116</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E117">117</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E118">118</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E119">119</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E120">120</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E121">121</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E122">122</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E123">123</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E124">124</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E125">125</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E126">126</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E127">127</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E128">128</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E129">129</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E130">130</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E131">131</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E132">132</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E133">133</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E134">134</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E135">135</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E136">136</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E137">137</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E138">138</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E139">139</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E140">140</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E141">141</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E142">142</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E143">143</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E144">144</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E145">145</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E146">146</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E147">147</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E148">148</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E149">149</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E150">150</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E151">151</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E152">152</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E153">153</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E154">154</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E155">155</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E156">156</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E157">157</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E158">158</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E159">159</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E160">160</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E161">161</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E162">162</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E163">163</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E164">164</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E165">165</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E166">166</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E167">167</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E168">168</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E169">169</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E170">170</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E171">171</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E172">172</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E173">173</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E174">174</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E175">175</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E176">176</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E177">177</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E178">178</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E179">179</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E180">180</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E181">181</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E182">182</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E183">183</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E184">184</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E185">185</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E186">186</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E187">187</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E188">188</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E189">189</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E190">190</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E191">191</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E192">192</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E193">193</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E194">194</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E195">195</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E196">196</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E197">197</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E198">198</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E199">199</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E200">200</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E201">201</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E202">202</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E203">203</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E204">204</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E205">205</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E206">206</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E207">207</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E208">208</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E209">209</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E210">210</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E211">211</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E212">212</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E213">213</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E214">214</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E215">215</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E216">216</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E217">217</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E218">218</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E219">219</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E220">220</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E221">221</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E222">222</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E223">223</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E224">224</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E225">225</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E226">226</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E227">227</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E228">228</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E229">229</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E230">230</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E231">231</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E232">232</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E233">233</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E234">234</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E235">235</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E236">236</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E237">237</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E238">238</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E239">239</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E240">240</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E241">241</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E242">242</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E243">243</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E244">244</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E245">245</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E246">246</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E247">247</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E248">248</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E249">249</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E250">250</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E251">251</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E252">252</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E253">253</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E254">254</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E255">255</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E256">256</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E257">257</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E258">258</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E259">259</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E260">260</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E261">261</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E262">262</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E263">263</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E264">264</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E265">265</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E266">266</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E267">267</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E268">268</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E269">269</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E270">270</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E271">271</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E272">272</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E273">273</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E274">274</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E275">275</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E276">276</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E277">277</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E278">278</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E279">279</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E280">280</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E281">281</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E282">282</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E283">283</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E284">284</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E285">285</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E286">286</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E287">287</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E288">288</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E289">289</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E290">290</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E291">291</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E292">292</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E293">293</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E294">294</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E295">295</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E296">296</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E297">297</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E298">298</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E299">299</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E300">300</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E301">301</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E302">302</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E303">303</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E304">304</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E305">305</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E306">306</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E307">307</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E308">308</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E309">309</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E310">310</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E311">311</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E312">312</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E313">313</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E314">314</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E315">315</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E316">316</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E317">317</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E318">318</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E319">319</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E320">320</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E321">321</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E322">322</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E323">323</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E324">324</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E325">325</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E326">326</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E327">327</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E328">328</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E329">329</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E330">330</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E331">331</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E332">332</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E333">333</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E334">334</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E335">335</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E336">336</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E337">337</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E338">338</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E339">339</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E340">340</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E341">341</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E342">342</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E343">343</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E344">344</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E345">345</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E346">346</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E347">347</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E348">348</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E349">349</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E350">350</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E351">351</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E352">352</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E353">353</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E354">354</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E355">355</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E356">356</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E357">357</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E358">358</a>
+  [1](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E001)
+  [2](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E002)
+  [3](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E003)
+  [4](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E004)
+  [5](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E005)
+  [6](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E006)
+  [7](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E007)
+  [8](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E008)
+  [9](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E009)
+  [10](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E010)
+  [11](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E011)
+  [12](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E012)
+  [13](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E013)
+  [14](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E014)
+  [15](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E015)
+  [16](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E016)
+  [17](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E017)
+  [18](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E018)
+  [19](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E019)
+  [20](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E020)
+  [21](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E021)
+  [22](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E022)
+  [23](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E023)
+  [24](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E024)
+  [25](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E025)
+  [26](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E026)
+  [27](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E027)
+  [28](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E028)
+  [29](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E029)
+  [30](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E030)
+  [31](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E031)
+  [32](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E032)
+  [33](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E033)
+  [34](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E034)
+  [35](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E035)
+  [36](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E036)
+  [37](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E037)
+  [38](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E038)
+  [39](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E039)
+  [40](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E040)
+  [41](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E041)
+  [42](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E042)
+  [43](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E043)
+  [44](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E044)
+  [45](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E045)
+  [46](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E046)
+  [47](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E047)
+  [48](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E048)
+  [49](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E049)
+  [50](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E050)
+  [51](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E051)
+  [52](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E052)
+  [53](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E053)
+  [54](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E054)
+  [55](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E055)
+  [56](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E056)
+  [57](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E057)
+  [58](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E058)
+  [59](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E059)
+  [60](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E060)
+  [61](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E061)
+  [62](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E062)
+  [63](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E063)
+  [64](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E064)
+  [65](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E065)
+  [66](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E066)
+  [67](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E067)
+  [68](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E068)
+  [69](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E069)
+  [70](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E070)
+  [71](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E071)
+  [72](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E072)
+  [73](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E073)
+  [74](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E074)
+  [75](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E075)
+  [76](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E076)
+  [77](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E077)
+  [78](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E078)
+  [79](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E079)
+  [80](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E080)
+  [81](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E081)
+  [82](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E082)
+  [83](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E083)
+  [84](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E084)
+  [85](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E085)
+  [86](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E086)
+  [87](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E087)
+  [88](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E088)
+  [89](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E089)
+  [90](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E090)
+  [91](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E091)
+  [92](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E092)
+  [93](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E093)
+  [94](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E094)
+  [95](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E095)
+  [96](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E096)
+  [97](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E097)
+  [98](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E098)
+  [99](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E099)
+  [100](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E100)
+  [101](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E101)
+  [102](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E102)
+  [103](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E103)
+  [104](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E104)
+  [105](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E105)
+  [106](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E106)
+  [107](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E107)
+  [108](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E108)
+  [109](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E109)
+  [110](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E110)
+  [111](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E111)
+  [112](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E112)
+  [113](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E113)
+  [114](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E114)
+  [115](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E115)
+  [116](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E116)
+  [117](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E117)
+  [118](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E118)
+  [119](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E119)
+  [120](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E120)
+  [121](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E121)
+  [122](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E122)
+  [123](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E123)
+  [124](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E124)
+  [125](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E125)
+  [126](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E126)
+  [127](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E127)
+  [128](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E128)
+  [129](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E129)
+  [130](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E130)
+  [131](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E131)
+  [132](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E132)
+  [133](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E133)
+  [134](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E134)
+  [135](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E135)
+  [136](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E136)
+  [137](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E137)
+  [138](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E138)
+  [139](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E139)
+  [140](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E140)
+  [141](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E141)
+  [142](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E142)
+  [143](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E143)
+  [144](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E144)
+  [145](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E145)
+  [146](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E146)
+  [147](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E147)
+  [148](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E148)
+  [149](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E149)
+  [150](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E150)
+  [151](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E151)
+  [152](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E152)
+  [153](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E153)
+  [154](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E154)
+  [155](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E155)
+  [156](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E156)
+  [157](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E157)
+  [158](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E158)
+  [159](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E159)
+  [160](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E160)
+  [161](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E161)
+  [162](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E162)
+  [163](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E163)
+  [164](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E164)
+  [165](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E165)
+  [166](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E166)
+  [167](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E167)
+  [168](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E168)
+  [169](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E169)
+  [170](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E170)
+  [171](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E171)
+  [172](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E172)
+  [173](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E173)
+  [174](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E174)
+  [175](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E175)
+  [176](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E176)
+  [177](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E177)
+  [178](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E178)
+  [179](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E179)
+  [180](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E180)
+  [181](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E181)
+  [182](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E182)
+  [183](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E183)
+  [184](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E184)
+  [185](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E185)
+  [186](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E186)
+  [187](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E187)
+  [188](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E188)
+  [189](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E189)
+  [190](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E190)
+  [191](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E191)
+  [192](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E192)
+  [193](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E193)
+  [194](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E194)
+  [195](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E195)
+  [196](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E196)
+  [197](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E197)
+  [198](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E198)
+  [199](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E199)
+  [200](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E200)
+  [201](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E201)
+  [202](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E202)
+  [203](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E203)
+  [204](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E204)
+  [205](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E205)
+  [206](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E206)
+  [207](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E207)
+  [208](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E208)
+  [209](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E209)
+  [210](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E210)
+  [211](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E211)
+  [212](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E212)
+  [213](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E213)
+  [214](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E214)
+  [215](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E215)
+  [216](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E216)
+  [217](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E217)
+  [218](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E218)
+  [219](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E219)
+  [220](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E220)
+  [221](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E221)
+  [222](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E222)
+  [223](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E223)
+  [224](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E224)
+  [225](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E225)
+  [226](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E226)
+  [227](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E227)
+  [228](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E228)
+  [229](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E229)
+  [230](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E230)
+  [231](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E231)
+  [232](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E232)
+  [233](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E233)
+  [234](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E234)
+  [235](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E235)
+  [236](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E236)
+  [237](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E237)
+  [238](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E238)
+  [239](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E239)
+  [240](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E240)
+  [241](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E241)
+  [242](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E242)
+  [243](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E243)
+  [244](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E244)
+  [245](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E245)
+  [246](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E246)
+  [247](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E247)
+  [248](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E248)
+  [249](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E249)
+  [250](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E250)
+  [251](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E251)
+  [252](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E252)
+  [253](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E253)
+  [254](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E254)
+  [255](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E255)
+  [256](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E256)
+  [257](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E257)
+  [258](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E258)
+  [259](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E259)
+  [260](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E260)
+  [261](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E261)
+  [262](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E262)
+  [263](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E263)
+  [264](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E264)
+  [265](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E265)
+  [266](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E266)
+  [267](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E267)
+  [268](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E268)
+  [269](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E269)
+  [270](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E270)
+  [271](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E271)
+  [272](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E272)
+  [273](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E273)
+  [274](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E274)
+  [275](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E275)
+  [276](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E276)
+  [277](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E277)
+  [278](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E278)
+  [279](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E279)
+  [280](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E280)
+  [281](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E281)
+  [282](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E282)
+  [283](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E283)
+  [284](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E284)
+  [285](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E285)
+  [286](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E286)
+  [287](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E287)
+  [288](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E288)
+  [289](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E289)
+  [290](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E290)
+  [291](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E291)
+  [292](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E292)
+  [293](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E293)
+  [294](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E294)
+  [295](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E295)
+  [296](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E296)
+  [297](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E297)
+  [298](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E298)
+  [299](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E299)
+  [300](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E300)
+  [301](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E301)
+  [302](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E302)
+  [303](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E303)
+  [304](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E304)
+  [305](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E305)
+  [306](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E306)
+  [307](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E307)
+  [308](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E308)
+  [309](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E309)
+  [310](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E310)
+  [311](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E311)
+  [312](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E312)
+  [313](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E313)
+  [314](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E314)
+  [315](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E315)
+  [316](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E316)
+  [317](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E317)
+  [318](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E318)
+  [319](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E319)
+  [320](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E320)
+  [321](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E321)
+  [322](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E322)
+  [323](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E323)
+  [324](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E324)
+  [325](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E325)
+  [326](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E326)
+  [327](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E327)
+  [328](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E328)
+  [329](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E329)
+  [330](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E330)
+  [331](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E331)
+  [332](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E332)
+  [333](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E333)
+  [334](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E334)
+  [335](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E335)
+  [336](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E336)
+  [337](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E337)
+  [338](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E338)
+  [339](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E339)
+  [340](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E340)
+  [341](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E341)
+  [342](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E342)
+  [343](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E343)
+  [344](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E344)
+  [345](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E345)
+  [346](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E346)
+  [347](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E347)
+  [348](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E348)
+  [349](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E349)
+  [350](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E350)
+  [351](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E351)
+  [352](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E352)
+  [353](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E353)
+  [354](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E354)
+  [355](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E355)
+  [356](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E356)
+  [357](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E357)
+  [358](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E358)
 - Protocols 1–37 — OJ C 202, 7.6.2016, p. 201–329:
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/01">1</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/02">2</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/03">3</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/04">4</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/05">5</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/06">6</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/07">7</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/08">8</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/09">9</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/10">10</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/11">11</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/12">12</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/13">13</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/14">14</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/15">15</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/16">16</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/17">17</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/18">18</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/19">19</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/20">20</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/21">21</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/22">22</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/23">23</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/24">24</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/25">25</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/26">26</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/27">27</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/28">28</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/29">29</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/30">30</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/31">31</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/32">32</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/33">33</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/34">34</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/35">35</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/36">36</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/37">37</a>
+  [1](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/01)
+  [2](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/02)
+  [3](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/03)
+  [4](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/04)
+  [5](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/05)
+  [6](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/06)
+  [7](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/07)
+  [8](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/08)
+  [9](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/09)
+  [10](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/10)
+  [11](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/11)
+  [12](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/12)
+  [13](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/13)
+  [14](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/14)
+  [15](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/15)
+  [16](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/16)
+  [17](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/17)
+  [18](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/18)
+  [19](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/19)
+  [20](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/20)
+  [21](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/21)
+  [22](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/22)
+  [23](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/23)
+  [24](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/24)
+  [25](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/25)
+  [26](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/26)
+  [27](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/27)
+  [28](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/28)
+  [29](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/29)
+  [30](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/30)
+  [31](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/31)
+  [32](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/32)
+  [33](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/33)
+  [34](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/34)
+  [35](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/35)
+  [36](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/36)
+  [37](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016E/PRO/37)
 - Annex I — OJ C 202, 7.6.2016, p. 333–335
 - Annex II — OJ C 202, 7.6.2016, p. 336
 - Declarations 1–65 — OJ C 202, 7.6.2016, p. 337–361:
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/01">1</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/02">2</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/03">3</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/04">4</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/05">5</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/06">6</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/07">7</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/08">8</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/09">9</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/10">10</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/11">11</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/12">12</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/13">13</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/14">14</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/15">15</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/16">16</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/17">17</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/18">18</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/19">19</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/20">20</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/21">21</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/22">22</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/23">23</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/24">24</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/25">25</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/26">26</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/27">27</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/28">28</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/29">29</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/30">30</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/31">31</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/32">32</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/33">33</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/34">34</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/35">35</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/36">36</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/37">37</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/38">38</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/39">39</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/40">40</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/41">41</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/42">42</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/43">43</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/44">44</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/45">45</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/46">46</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/47">47</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/48">48</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/49">49</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/50">50</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/51">51</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/52">52</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/53">53</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/54">54</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/55">55</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/56">56</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/57">57</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/58">58</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/59">59</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/60">60</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/61">61</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/62">62</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/63">63</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/64">64</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/65">65</a>
-- <a href="https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:12016E/TBL">Tables of equivalences</a> — OJ C 202, 7.6.2016, p. 368–390
+  [1](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/01)
+  [2](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/02)
+  [3](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/03)
+  [4](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/04)
+  [5](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/05)
+  [6](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/06)
+  [7](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/07)
+  [8](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/08)
+  [9](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/09)
+  [10](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/10)
+  [11](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/11)
+  [12](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/12)
+  [13](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/13)
+  [14](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/14)
+  [15](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/15)
+  [16](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/16)
+  [17](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/17)
+  [18](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/18)
+  [19](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/19)
+  [20](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/20)
+  [21](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/21)
+  [22](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/22)
+  [23](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/23)
+  [24](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/24)
+  [25](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/25)
+  [26](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/26)
+  [27](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/27)
+  [28](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/28)
+  [29](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/29)
+  [30](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/30)
+  [31](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/31)
+  [32](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/32)
+  [33](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/33)
+  [34](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/34)
+  [35](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/35)
+  [36](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/36)
+  [37](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/37)
+  [38](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/38)
+  [39](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/39)
+  [40](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/40)
+  [41](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/41)
+  [42](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/42)
+  [43](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/43)
+  [44](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/44)
+  [45](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/45)
+  [46](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/46)
+  [47](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/47)
+  [48](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/48)
+  [49](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/49)
+  [50](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/50)
+  [51](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/51)
+  [52](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/52)
+  [53](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/53)
+  [54](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/54)
+  [55](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/55)
+  [56](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/56)
+  [57](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/57)
+  [58](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/58)
+  [59](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/59)
+  [60](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/60)
+  [61](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/61)
+  [62](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/62)
+  [63](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/63)
+  [64](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/64)
+  [65](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016L/AFI/DCL/65)
+- [Tables of equivalences](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:12016E/TBL) — OJ C 202, 7.6.2016, p. 368–390
 
 </section>
 
@@ -673,246 +673,246 @@ EUR-Lex contains the **Founding**, **Amending**, and **Accession Treaties**, alo
 
 ## Treaty establishing the European Atomic Energy Community (consolidated version – 2016)
 
-<a href="https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:12016A/TXT">Full text</a> — <a href="https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=OJ:C:2016:203:TOC">OJ C 203, 7.6.2016</a>
+[Full text](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:12016A/TXT) — [OJ C 203, 7.6.2016](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=OJ:C:2016:203:TOC)
 
-- <a href="https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:12016A000">Preamble</a> — OJ C 203, 7.6.2016, p. 5
+- [Preamble](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:12016A000) — OJ C 203, 7.6.2016, p. 5
 - Articles 1–225 — OJ C 203, 7.6.2016, p. 5–52:
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A001">1</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A002">2</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A003">3</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A004">4</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A005">5</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A006">6</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A007">7</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A008">8</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A009">9</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A010">10</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A011">11</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A012">12</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A013">13</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A014">14</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A015">15</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A016">16</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A017">17</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A018">18</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A019">19</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A020">20</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A021">21</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A022">22</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A023">23</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A024">24</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A025">25</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A026">26</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A027">27</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A028">28</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A029">29</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A030">30</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A031">31</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A032">32</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A033">33</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A034">34</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A035">35</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A036">36</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A037">37</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A038">38</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A039">39</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A040">40</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A041">41</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A042">42</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A043">43</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A044">44</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A045">45</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A046">46</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A047">47</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A048">48</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A049">49</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A050">50</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A051">51</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A052">52</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A053">53</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A054">54</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A055">55</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A056">56</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A057">57</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A058">58</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A059">59</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A060">60</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A061">61</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A062">62</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A063">63</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A064">64</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A065">65</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A066">66</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A067">67</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A068">68</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A069">69</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A070">70</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A071">71</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A072">72</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A073">73</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A074">74</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A075">75</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A076">76</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A077">77</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A078">78</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A079">79</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A080">80</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A081">81</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A082">82</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A083">83</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A084">84</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A085">85</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A086">86</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A087">87</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A088">88</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A089">89</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A090">90</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A091">91</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A092">92</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A093">93</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A094">94</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A095">95</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A096">96</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A097">97</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A098">98</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A099">99</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A100">100</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A101">101</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A102">102</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A103">103</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A104">104</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A105">105</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A106">106</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A107">107</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A108">108</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A109">109</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A110">110</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A111">111</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A112">112</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A113">113</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A114">114</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A115">115</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A116">116</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A117">117</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A118">118</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A119">119</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A120">120</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A121">121</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A122">122</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A123">123</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A124">124</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A125">125</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A126">126</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A127">127</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A128">128</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A129">129</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A130">130</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A131">131</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A132">132</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A133">133</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A134">134</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A135">135</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A136">136</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A137">137</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A138">138</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A139">139</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A140">140</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A141">141</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A142">142</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A143">143</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A144">144</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A145">145</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A146">146</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A147">147</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A148">148</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A149">149</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A150">150</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A151">151</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A152">152</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A153">153</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A154">154</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A155">155</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A156">156</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A157">157</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A158">158</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A159">159</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A160">160</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A161">161</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A162">162</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A163">163</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A164">164</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A165">165</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A166">166</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A167">167</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A168">168</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A169">169</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A170">170</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A171">171</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A172">172</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A173">173</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A174">174</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A175">175</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A176">176</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A177">177</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A178">178</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A179">179</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A180">180</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A181">181</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A182">182</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A183">183</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A184">184</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A185">185</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A186">186</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A187">187</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A188">188</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A189">189</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A190">190</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A191">191</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A192">192</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A193">193</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A194">194</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A195">195</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A196">196</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A197">197</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A198">198</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A199">199</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A200">200</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A201">201</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A202">202</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A203">203</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A204">204</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A205">205</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A206">206</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A207">207</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A208">208</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A209">209</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A210">210</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A211">211</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A212">212</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A213">213</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A214">214</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A215">215</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A216">216</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A217">217</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A218">218</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A219">219</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A220">220</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A221">221</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A222">222</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A223">223</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A224">224</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A225">225</a>
+  [1](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A001)
+  [2](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A002)
+  [3](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A003)
+  [4](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A004)
+  [5](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A005)
+  [6](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A006)
+  [7](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A007)
+  [8](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A008)
+  [9](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A009)
+  [10](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A010)
+  [11](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A011)
+  [12](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A012)
+  [13](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A013)
+  [14](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A014)
+  [15](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A015)
+  [16](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A016)
+  [17](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A017)
+  [18](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A018)
+  [19](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A019)
+  [20](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A020)
+  [21](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A021)
+  [22](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A022)
+  [23](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A023)
+  [24](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A024)
+  [25](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A025)
+  [26](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A026)
+  [27](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A027)
+  [28](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A028)
+  [29](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A029)
+  [30](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A030)
+  [31](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A031)
+  [32](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A032)
+  [33](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A033)
+  [34](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A034)
+  [35](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A035)
+  [36](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A036)
+  [37](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A037)
+  [38](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A038)
+  [39](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A039)
+  [40](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A040)
+  [41](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A041)
+  [42](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A042)
+  [43](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A043)
+  [44](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A044)
+  [45](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A045)
+  [46](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A046)
+  [47](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A047)
+  [48](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A048)
+  [49](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A049)
+  [50](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A050)
+  [51](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A051)
+  [52](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A052)
+  [53](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A053)
+  [54](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A054)
+  [55](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A055)
+  [56](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A056)
+  [57](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A057)
+  [58](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A058)
+  [59](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A059)
+  [60](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A060)
+  [61](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A061)
+  [62](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A062)
+  [63](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A063)
+  [64](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A064)
+  [65](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A065)
+  [66](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A066)
+  [67](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A067)
+  [68](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A068)
+  [69](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A069)
+  [70](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A070)
+  [71](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A071)
+  [72](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A072)
+  [73](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A073)
+  [74](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A074)
+  [75](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A075)
+  [76](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A076)
+  [77](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A077)
+  [78](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A078)
+  [79](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A079)
+  [80](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A080)
+  [81](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A081)
+  [82](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A082)
+  [83](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A083)
+  [84](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A084)
+  [85](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A085)
+  [86](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A086)
+  [87](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A087)
+  [88](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A088)
+  [89](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A089)
+  [90](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A090)
+  [91](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A091)
+  [92](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A092)
+  [93](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A093)
+  [94](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A094)
+  [95](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A095)
+  [96](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A096)
+  [97](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A097)
+  [98](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A098)
+  [99](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A099)
+  [100](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A100)
+  [101](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A101)
+  [102](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A102)
+  [103](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A103)
+  [104](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A104)
+  [105](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A105)
+  [106](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A106)
+  [107](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A107)
+  [108](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A108)
+  [109](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A109)
+  [110](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A110)
+  [111](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A111)
+  [112](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A112)
+  [113](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A113)
+  [114](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A114)
+  [115](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A115)
+  [116](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A116)
+  [117](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A117)
+  [118](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A118)
+  [119](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A119)
+  [120](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A120)
+  [121](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A121)
+  [122](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A122)
+  [123](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A123)
+  [124](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A124)
+  [125](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A125)
+  [126](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A126)
+  [127](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A127)
+  [128](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A128)
+  [129](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A129)
+  [130](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A130)
+  [131](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A131)
+  [132](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A132)
+  [133](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A133)
+  [134](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A134)
+  [135](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A135)
+  [136](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A136)
+  [137](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A137)
+  [138](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A138)
+  [139](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A139)
+  [140](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A140)
+  [141](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A141)
+  [142](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A142)
+  [143](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A143)
+  [144](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A144)
+  [145](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A145)
+  [146](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A146)
+  [147](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A147)
+  [148](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A148)
+  [149](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A149)
+  [150](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A150)
+  [151](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A151)
+  [152](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A152)
+  [153](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A153)
+  [154](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A154)
+  [155](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A155)
+  [156](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A156)
+  [157](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A157)
+  [158](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A158)
+  [159](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A159)
+  [160](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A160)
+  [161](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A161)
+  [162](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A162)
+  [163](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A163)
+  [164](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A164)
+  [165](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A165)
+  [166](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A166)
+  [167](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A167)
+  [168](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A168)
+  [169](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A169)
+  [170](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A170)
+  [171](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A171)
+  [172](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A172)
+  [173](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A173)
+  [174](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A174)
+  [175](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A175)
+  [176](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A176)
+  [177](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A177)
+  [178](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A178)
+  [179](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A179)
+  [180](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A180)
+  [181](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A181)
+  [182](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A182)
+  [183](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A183)
+  [184](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A184)
+  [185](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A185)
+  [186](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A186)
+  [187](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A187)
+  [188](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A188)
+  [189](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A189)
+  [190](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A190)
+  [191](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A191)
+  [192](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A192)
+  [193](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A193)
+  [194](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A194)
+  [195](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A195)
+  [196](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A196)
+  [197](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A197)
+  [198](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A198)
+  [199](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A199)
+  [200](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A200)
+  [201](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A201)
+  [202](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A202)
+  [203](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A203)
+  [204](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A204)
+  [205](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A205)
+  [206](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A206)
+  [207](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A207)
+  [208](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A208)
+  [209](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A209)
+  [210](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A210)
+  [211](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A211)
+  [212](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A212)
+  [213](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A213)
+  [214](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A214)
+  [215](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A215)
+  [216](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A216)
+  [217](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A217)
+  [218](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A218)
+  [219](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A219)
+  [220](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A220)
+  [221](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A221)
+  [222](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A222)
+  [223](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A223)
+  [224](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A224)
+  [225](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A225)
 - Annex I — OJ C 203, 7.6.2016, p. 54–57
 - Annex II — OJ C 203, 7.6.2016, p. 58
 - Annex III — OJ C 203, 7.6.2016, p. 59
 - Annex IV — OJ C 203, 7.6.2016, p. 60–65
 - Protocols 1–6 — OJ C 203, 7.6.2016, p. 70–107:
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A/PRO/01">1</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A/PRO/02">2</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A/PRO/03">3</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A/PRO/04">4</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A/PRO/05">5</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A/PRO/06">6</a>
+  [1](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A/PRO/01)
+  [2](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A/PRO/02)
+  [3](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A/PRO/03)
+  [4](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A/PRO/04)
+  [5](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A/PRO/05)
+  [6](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016A/PRO/06)
 
 </section>
 
@@ -920,64 +920,64 @@ EUR-Lex contains the **Founding**, **Amending**, and **Accession Treaties**, alo
 
 ## Charter of Fundamental Rights of the European Union (2016)
 
-<a href="https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:12016P/TXT">Full text</a> — <a href="https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=OJ:C:2016:202:TOC">OJ C 202, 7.6.2016, p. 391–407</a>
+[Full text](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:12016P/TXT) — [OJ C 202, 7.6.2016, p. 391–407](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=OJ:C:2016:202:TOC)
 
-- <a href="https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:12016P000">Preamble</a> — OJ C 202, 7.6.2016, p. 393
+- [Preamble](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:12016P000) — OJ C 202, 7.6.2016, p. 393
 - Articles 1–54 — OJ C 202, 7.6.2016, p. 394–404:
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P001">1</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P002">2</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P003">3</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P004">4</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P005">5</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P006">6</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P007">7</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P008">8</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P009">9</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P010">10</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P011">11</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P012">12</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P013">13</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P014">14</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P015">15</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P016">16</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P017">17</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P018">18</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P019">19</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P020">20</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P021">21</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P022">22</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P023">23</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P024">24</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P025">25</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P026">26</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P027">27</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P028">28</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P029">29</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P030">30</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P031">31</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P032">32</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P033">33</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P034">34</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P035">35</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P036">36</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P037">37</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P038">38</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P039">39</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P040">40</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P041">41</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P042">42</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P043">43</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P044">44</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P045">45</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P046">46</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P047">47</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P048">48</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P049">49</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P050">50</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P051">51</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P052">52</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P053">53</a>
-  <a href="https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P054">54</a>
+  [1](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P001)
+  [2](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P002)
+  [3](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P003)
+  [4](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P004)
+  [5](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P005)
+  [6](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P006)
+  [7](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P007)
+  [8](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P008)
+  [9](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P009)
+  [10](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P010)
+  [11](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P011)
+  [12](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P012)
+  [13](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P013)
+  [14](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P014)
+  [15](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P015)
+  [16](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P016)
+  [17](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P017)
+  [18](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P018)
+  [19](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P019)
+  [20](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P020)
+  [21](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P021)
+  [22](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P022)
+  [23](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P023)
+  [24](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P024)
+  [25](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P025)
+  [26](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P026)
+  [27](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P027)
+  [28](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P028)
+  [29](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P029)
+  [30](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P030)
+  [31](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P031)
+  [32](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P032)
+  [33](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P033)
+  [34](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P034)
+  [35](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P035)
+  [36](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P036)
+  [37](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P037)
+  [38](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P038)
+  [39](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P039)
+  [40](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P040)
+  [41](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P041)
+  [42](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P042)
+  [43](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P043)
+  [44](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P044)
+  [45](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P045)
+  [46](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P046)
+  [47](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P047)
+  [48](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P048)
+  [49](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P049)
+  [50](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P050)
+  [51](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P051)
+  [52](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P052)
+  [53](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P053)
+  [54](https://eur-lex.europa.eu/legal-content/AUTO/?uri=CELEX:12016P054)
 
 </section>
 

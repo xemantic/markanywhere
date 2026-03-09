@@ -6,14 +6,14 @@ canonical: https://eur-lex.europa.eu/homepage.html
 ---
 
 <nav>
-  <a href="https://eur-lex.europa.eu/collection/eu-law/treaties/treaties-force.html">Treaties</a>
-  <a href="https://eur-lex.europa.eu/collection/eu-law/legal-acts/recent.html">Legal acts</a>
-  <a href="https://eur-lex.europa.eu/collection/eu-law/consleg.html">Consolidated texts</a>
-  <a href="https://eur-lex.europa.eu/collection/eu-law/inter-agree.html">International agreements</a>
-  <a href="https://eur-lex.europa.eu/collection/eu-law/pre-acts.html">Preparatory documents</a>
-  <a href="https://eur-lex.europa.eu/collection/eu-law/eu-case-law.html">Case-law</a>
-  <a href="https://eur-lex.europa.eu/oj/direct-access.html">Official Journal</a>
-  <a href="https://eur-lex.europa.eu/browse/summaries.html">Summaries of EU legislation</a>
+  [Treaties](https://eur-lex.europa.eu/collection/eu-law/treaties/treaties-force.html)
+  [Legal acts](https://eur-lex.europa.eu/collection/eu-law/legal-acts/recent.html)
+  [Consolidated texts](https://eur-lex.europa.eu/collection/eu-law/consleg.html)
+  [International agreements](https://eur-lex.europa.eu/collection/eu-law/inter-agree.html)
+  [Preparatory documents](https://eur-lex.europa.eu/collection/eu-law/pre-acts.html)
+  [Case-law](https://eur-lex.europa.eu/collection/eu-law/eu-case-law.html)
+  [Official Journal](https://eur-lex.europa.eu/oj/direct-access.html)
+  [Summaries of EU legislation](https://eur-lex.europa.eu/browse/summaries.html)
 </nav>
 
 <main>
@@ -25,19 +25,19 @@ canonical: https://eur-lex.europa.eu/homepage.html
 
 ## EU Law
 
-- <a href="https://eur-lex.europa.eu/collection/eu-law/treaties/treaties-force.html">Treaties currently in force</a>
-- <a href="https://eur-lex.europa.eu/collection/eu-law/treaties/treaties-founding.html">Founding Treaties</a>
-- <a href="https://eur-lex.europa.eu/collection/eu-law/treaties/treaties-accession.html">Accession Treaties</a>
-- <a href="https://eur-lex.europa.eu/collection/eu-law/treaties/treaties-other.html">Other treaties and protocols</a>
-- <a href="https://eur-lex.europa.eu/collection/eu-law/treaties/treaties-overview.html">Chronological overview</a>
-- <a href="https://eur-lex.europa.eu/collection/eu-law/legal-acts/recent.html">Legal acts</a>
-- <a href="https://eur-lex.europa.eu/collection/eu-law/consleg.html">Consolidated texts</a>
-- <a href="https://eur-lex.europa.eu/collection/eu-law/inter-agree.html">International agreements</a>
-- <a href="https://eur-lex.europa.eu/collection/eu-law/pre-acts.html">Preparatory documents</a>
-- <a href="https://eur-lex.europa.eu/collection/eu-law/efta.html">EFTA documents</a>
-- <a href="https://eur-lex.europa.eu/collection/legislative-procedures.html">Lawmaking procedures</a>
-- <a href="https://eur-lex.europa.eu/browse/summaries.html">Summaries of EU legislation</a>
-- <a href="https://eur-lex.europa.eu/browse/eurovoc.html">Browse by EuroVoc</a>
+- [Treaties currently in force](https://eur-lex.europa.eu/collection/eu-law/treaties/treaties-force.html)
+- [Founding Treaties](https://eur-lex.europa.eu/collection/eu-law/treaties/treaties-founding.html)
+- [Accession Treaties](https://eur-lex.europa.eu/collection/eu-law/treaties/treaties-accession.html)
+- [Other treaties and protocols](https://eur-lex.europa.eu/collection/eu-law/treaties/treaties-other.html)
+- [Chronological overview](https://eur-lex.europa.eu/collection/eu-law/treaties/treaties-overview.html)
+- [Legal acts](https://eur-lex.europa.eu/collection/eu-law/legal-acts/recent.html)
+- [Consolidated texts](https://eur-lex.europa.eu/collection/eu-law/consleg.html)
+- [International agreements](https://eur-lex.europa.eu/collection/eu-law/inter-agree.html)
+- [Preparatory documents](https://eur-lex.europa.eu/collection/eu-law/pre-acts.html)
+- [EFTA documents](https://eur-lex.europa.eu/collection/eu-law/efta.html)
+- [Lawmaking procedures](https://eur-lex.europa.eu/collection/legislative-procedures.html)
+- [Summaries of EU legislation](https://eur-lex.europa.eu/browse/summaries.html)
+- [Browse by EuroVoc](https://eur-lex.europa.eu/browse/eurovoc.html)
 
 </section>
 
@@ -45,15 +45,15 @@ canonical: https://eur-lex.europa.eu/homepage.html
 
 ## Browse by EU Institution
 
-- <a href="https://eur-lex.europa.eu/browse/institutions/eu-parliament.html">European Parliament</a>
-- <a href="https://eur-lex.europa.eu/browse/institutions/eu-council.html">European Council</a>
-- <a href="https://eur-lex.europa.eu/browse/institutions/council.html">Council of the European Union</a>
-- <a href="https://eur-lex.europa.eu/browse/institutions/eu-commission.html">European Commission</a>
-- <a href="https://eur-lex.europa.eu/browse/institutions/justice.html">Court of Justice of the European Union</a>
-- <a href="https://eur-lex.europa.eu/browse/institutions/bank.html">European Central Bank</a>
-- <a href="https://eur-lex.europa.eu/browse/institutions/auditors.html">European Court of Auditors</a>
-- <a href="https://eur-lex.europa.eu/browse/institutions/eco-social.html">European Economic and Social Committee</a>
-- <a href="https://eur-lex.europa.eu/browse/institutions/regions.html">European Committee of the Regions</a>
+- [European Parliament](https://eur-lex.europa.eu/browse/institutions/eu-parliament.html)
+- [European Council](https://eur-lex.europa.eu/browse/institutions/eu-council.html)
+- [Council of the European Union](https://eur-lex.europa.eu/browse/institutions/council.html)
+- [European Commission](https://eur-lex.europa.eu/browse/institutions/eu-commission.html)
+- [Court of Justice of the European Union](https://eur-lex.europa.eu/browse/institutions/justice.html)
+- [European Central Bank](https://eur-lex.europa.eu/browse/institutions/bank.html)
+- [European Court of Auditors](https://eur-lex.europa.eu/browse/institutions/auditors.html)
+- [European Economic and Social Committee](https://eur-lex.europa.eu/browse/institutions/eco-social.html)
+- [European Committee of the Regions](https://eur-lex.europa.eu/browse/institutions/regions.html)
 
 </section>
 
@@ -61,9 +61,9 @@ canonical: https://eur-lex.europa.eu/homepage.html
 
 ## EU Case-law
 
-- <a href="https://eur-lex.europa.eu/collection/eu-law/eu-case-law.html">Case-law</a>
-- <a href="https://eur-lex.europa.eu/collection/eu-law/eu-case-law/reports.html">Reports of cases</a>
-- <a href="https://eur-lex.europa.eu/browse/directories/new-case-law.html">Directory of case-law</a>
+- [Case-law](https://eur-lex.europa.eu/collection/eu-law/eu-case-law.html)
+- [Reports of cases](https://eur-lex.europa.eu/collection/eu-law/eu-case-law/reports.html)
+- [Directory of case-law](https://eur-lex.europa.eu/browse/directories/new-case-law.html)
 
 </section>
 
@@ -71,12 +71,12 @@ canonical: https://eur-lex.europa.eu/homepage.html
 
 ## Official Journal
 
-- <a href="https://eur-lex.europa.eu/oj/direct-access.html">Access to the Official Journal</a>
-- <a href="https://eur-lex.europa.eu/oj/daily-view/L-series/default.html">Official Journal L series daily view</a>
-- <a href="https://eur-lex.europa.eu/oj/daily-view/C-series/default.html">Official Journal C series daily view</a>
-- <a href="https://eur-lex.europa.eu/oj/browse-oj.html">Browse the Official Journal</a>
-- <a href="https://eur-lex.europa.eu/oj/all/auth-direct-access.html">Legally binding printed editions</a>
-- <a href="https://eur-lex.europa.eu/eu-enlargement/special.html">Special edition</a>
+- [Access to the Official Journal](https://eur-lex.europa.eu/oj/direct-access.html)
+- [Official Journal L series daily view](https://eur-lex.europa.eu/oj/daily-view/L-series/default.html)
+- [Official Journal C series daily view](https://eur-lex.europa.eu/oj/daily-view/C-series/default.html)
+- [Browse the Official Journal](https://eur-lex.europa.eu/oj/browse-oj.html)
+- [Legally binding printed editions](https://eur-lex.europa.eu/oj/all/auth-direct-access.html)
+- [Special edition](https://eur-lex.europa.eu/eu-enlargement/special.html)
 
 </section>
 
@@ -84,9 +84,9 @@ canonical: https://eur-lex.europa.eu/homepage.html
 
 ## National Law and Case-law
 
-- <a href="https://eur-lex.europa.eu/collection/n-law/mne.html">National transposition</a>
-- <a href="https://eur-lex.europa.eu/collection/n-law/n-case-law.html">National case-law</a>
-- <a href="https://eur-lex.europa.eu/collection/n-law/jure.html">JURE case-law</a>
+- [National transposition](https://eur-lex.europa.eu/collection/n-law/mne.html)
+- [National case-law](https://eur-lex.europa.eu/collection/n-law/n-case-law.html)
+- [JURE case-law](https://eur-lex.europa.eu/collection/n-law/jure.html)
 
 </section>
 
@@ -94,10 +94,10 @@ canonical: https://eur-lex.europa.eu/homepage.html
 
 ## Information
 
-- <a href="https://eur-lex.europa.eu/content/news/index.html">Themes in focus</a>
-- <a href="https://eur-lex.europa.eu/content/development/index.html">EUR-Lex developments</a>
-- <a href="https://eur-lex.europa.eu/statistics/statistics.html">Statistics</a>
-- <a href="https://eur-lex.europa.eu/budget/www/index-en.htm">EU budget online</a>
+- [Themes in focus](https://eur-lex.europa.eu/content/news/index.html)
+- [EUR-Lex developments](https://eur-lex.europa.eu/content/development/index.html)
+- [Statistics](https://eur-lex.europa.eu/statistics/statistics.html)
+- [EU budget online](https://eur-lex.europa.eu/budget/www/index-en.htm)
 
 </section>
 
