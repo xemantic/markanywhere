@@ -6,14 +6,14 @@ canonical: https://eur-lex.europa.eu/homepage.html
 ---
 
 <nav>
-  [Treaties](https://eur-lex.europa.eu/collection/eu-law/treaties/treaties-force.html)
-  [Legal acts](https://eur-lex.europa.eu/collection/eu-law/legal-acts/recent.html)
-  [Consolidated texts](https://eur-lex.europa.eu/collection/eu-law/consleg.html)
-  [International agreements](https://eur-lex.europa.eu/collection/eu-law/inter-agree.html)
-  [Preparatory documents](https://eur-lex.europa.eu/collection/eu-law/pre-acts.html)
-  [Case-law](https://eur-lex.europa.eu/collection/eu-law/eu-case-law.html)
-  [Official Journal](https://eur-lex.europa.eu/oj/direct-access.html)
-  [Summaries of EU legislation](https://eur-lex.europa.eu/browse/summaries.html)
+- [Treaties](https://eur-lex.europa.eu/collection/eu-law/treaties/treaties-force.html)
+- [Legal acts](https://eur-lex.europa.eu/collection/eu-law/legal-acts/recent.html)
+- [Consolidated texts](https://eur-lex.europa.eu/collection/eu-law/consleg.html)
+- [International agreements](https://eur-lex.europa.eu/collection/eu-law/inter-agree.html)
+- [Preparatory documents](https://eur-lex.europa.eu/collection/eu-law/pre-acts.html)
+- [Case-law](https://eur-lex.europa.eu/collection/eu-law/eu-case-law.html)
+- [Official Journal](https://eur-lex.europa.eu/oj/direct-access.html)
+- [Summaries of EU legislation](https://eur-lex.europa.eu/browse/summaries.html)
 </nav>
 
 <main>
