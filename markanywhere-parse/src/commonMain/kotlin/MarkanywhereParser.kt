@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Kazimierz Pogoda / Xemantic
+ * Copyright 2025-2026 Kazimierz Pogoda / Xemantic
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -1480,8 +1480,31 @@ private class ParserState(
 
     private suspend fun SemanticEventScope.flushInline() {
         if (inlineBuffer.isNotEmpty()) {
-            +inlineBuffer.toString()
+            val buf = inlineBuffer.toString()
             inlineBuffer.clear()
+            // Resolve pending formatting markers instead of emitting as text
+            when {
+                (buf == "*" || buf == "_") && italic -> {
+                    unmark("em"); italic = false
+                }
+                (buf == "**" || buf == "__") && bold -> {
+                    unmark("strong"); bold = false
+                }
+                (buf == "***" || buf == "___") && bold && italic -> {
+                    unmark("em"); italic = false
+                    unmark("strong"); bold = false
+                }
+                buf == "~~" && strikethrough -> {
+                    unmark("del"); strikethrough = false
+                }
+                buf == "~" && subscript -> {
+                    unmark("sub"); subscript = false
+                }
+                buf == "==" && highlight -> {
+                    unmark("mark"); highlight = false
+                }
+                else -> +buf
+            }
         }
         if (math) {
             unmark("math")

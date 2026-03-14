@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Kazimierz Pogoda / Xemantic
+ * Copyright 2025-2026 Kazimierz Pogoda / Xemantic
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ package com.xemantic.markanywhere.parse
 
 import com.xemantic.kotlin.core.text.lineFlow
 import com.xemantic.kotlin.test.assert
-import com.xemantic.kotlin.test.sameAs
+import com.xemantic.kotlin.test.sameAsHtml
 import com.xemantic.kotlin.test.text.chunkedRandomly
 import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.flow.semanticEvents
@@ -47,7 +47,7 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse(parser)
 
         // then
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <h1>
               Hello World
             </h1>
@@ -70,7 +70,7 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse(parser)
 
         // then
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <h1>
               Hello World
             </h1>
@@ -95,7 +95,7 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse(parser)
 
         // then
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <h1>
               Shopping List
             </h1>
@@ -128,7 +128,7 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse(parser)
 
         // then
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <p>
               Here are the items:
             </p>
@@ -161,7 +161,7 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse(parser)
 
         // then
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <p>
               Follow these steps:
             </p>
@@ -194,7 +194,7 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse(parser)
 
         // then
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <p>
               Here is the code:
             </p>
@@ -219,7 +219,7 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse(parser)
 
         // then
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <h1>
               Main Title
             </h1>
@@ -248,7 +248,7 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse(parser)
 
         // then
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <p>
               As someone once said:
             </p>
@@ -273,7 +273,7 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse(parser)
 
         // then
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <blockquote>
               <p>
                 This is a famous quote.
@@ -284,6 +284,125 @@ class MarkanywhereParserTest {
     }
 
     // Inline formatting edge cases
+
+    @Test
+    fun `should parse simple italic with asterisks`() = runTest {
+        // given
+        val parser = DefaultMarkanywhereParser()
+        val textFlow = "*foo*".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse(parser)
+
+        // then
+        parsed.render() sameAsHtml """
+            <p>
+              <em>foo</em>
+            </p>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should parse simple italic with underscores`() = runTest {
+        // given
+        val parser = DefaultMarkanywhereParser()
+        val textFlow = "_foo_".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse(parser)
+
+        // then
+        parsed.render() sameAsHtml """
+            <p>
+              <em>foo</em>
+            </p>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should parse simple bold with asterisks`() = runTest {
+        // given
+        val parser = DefaultMarkanywhereParser()
+        val textFlow = "**foo**".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse(parser)
+
+        // then
+        parsed.render() sameAsHtml """
+            <p>
+              <strong>foo</strong>
+            </p>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should parse simple bold with underscores`() = runTest {
+        // given
+        val parser = DefaultMarkanywhereParser()
+        val textFlow = "__foo__".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse(parser)
+
+        // then
+        parsed.render() sameAsHtml """
+            <p>
+              <strong>foo</strong>
+            </p>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should parse simple bold italic with asterisks`() = runTest {
+        // given
+        val parser = DefaultMarkanywhereParser()
+        val textFlow = "***foo***".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse(parser)
+
+        // then
+        parsed.render() sameAsHtml """
+            <p>
+              <strong><em>foo</em></strong>
+            </p>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should parse simple strikethrough`() = runTest {
+        // given
+        val parser = DefaultMarkanywhereParser()
+        val textFlow = "~~foo~~".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse(parser)
+
+        // then
+        parsed.render() sameAsHtml """
+            <p>
+              <del>foo</del>
+            </p>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should parse simple highlight`() = runTest {
+        // given
+        val parser = DefaultMarkanywhereParser()
+        val textFlow = "==foo==".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse(parser)
+
+        // then
+        parsed.render() sameAsHtml """
+            <p>
+              <mark>foo</mark>
+            </p>
+        """.trimIndent()
+    }
 
     @Test
     fun `should parse mixed bold and italic in same text`() = runTest {
@@ -297,7 +416,7 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse(parser)
 
         // then
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <p>
               This has <strong>bold then <em>italic inside</em> bold</strong> text.
             </p>
@@ -316,7 +435,7 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse(parser)
 
         // then
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <p>
               <strong>bold</strong><em>italic</em><code>code</code>
             </p>
@@ -335,7 +454,7 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse(parser)
 
         // then
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <p>
               This has <em>italic</em> and <strong>bold</strong> and <strong><em>bold italic</em></strong> text.
             </p>
@@ -354,7 +473,7 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse(parser)
 
         // then
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <p>
               This has <strong><em>bold italic</em></strong> text.
             </p>
@@ -373,7 +492,7 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse(parser)
 
         // then
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <p>
               This has <del>strikethrough</del> text.
             </p>
@@ -392,7 +511,7 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse(parser)
 
         // then
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <p>
               This is <del>deleted <strong>bold</strong> text</del> here.
             </p>
@@ -413,7 +532,7 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse(parser)
 
         // then
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <p>
               Use &lt;div&gt; elements and &amp; ampersands and "quotes" carefully.
             </p>
@@ -436,7 +555,7 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse(parser)
 
         // then
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <pre class="code lang-html">
             &lt;div class="test"&gt;
               &lt;p&gt;Hello &amp; goodbye&lt;/p&gt;
@@ -457,7 +576,7 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse(parser)
 
         // then
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <p>
               Use <code>&lt;script&gt;alert("XSS")&lt;/script&gt;</code> carefully.
             </p>
@@ -476,7 +595,7 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse(parser)
 
         // then
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <p>
               Check if a &lt; b and c &gt; d or x &lt;= y and z &gt;= w.
             </p>
@@ -501,7 +620,7 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse(parser)
 
         // then
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <h1>
               Header
             </h1>
@@ -525,7 +644,7 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse(parser)
 
         // then
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <h1>
               你好世界
             </h1>
@@ -547,7 +666,7 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse(parser)
 
         // then
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <p>
               Check out <a href="https://example.com" title="Example Site">Example</a> for more.
             </p>
@@ -566,7 +685,7 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse(parser)
 
         // then
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <p>
               Visit <a href="https://example.com">https://example.com</a> or email <a href="mailto:user@example.com">user@example.com</a>.
             </p>
@@ -585,7 +704,7 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse(parser)
 
         // then
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <p>
               Use *asterisks* and `backticks` and [brackets] literally.
             </p>
@@ -604,7 +723,7 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse(parser)
 
         // then
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <p>
               Use <code>`backticks`</code> inside code.
             </p>
@@ -627,7 +746,7 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse(parser)
 
         // then
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <p>
               First paragraph with some content.
             </p>
@@ -652,7 +771,7 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse(parser)
 
         // then
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <p>
               Water is H<sub>2</sub>O and E=mc<sup>2</sup> is famous.
             </p>
@@ -671,7 +790,7 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse(parser)
 
         // then
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <p>
               This is <mark>highlighted</mark> text.
             </p>
@@ -690,7 +809,7 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse(parser)
 
         // then
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <p>
               The equation <math>E = mc^2</math> is famous.
             </p>
@@ -715,7 +834,7 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse(parser)
 
         // then
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <p>
               Here is an equation:
             </p>
@@ -742,7 +861,7 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse(parser)
 
         // then
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <p>
               Some content.
             </p>
@@ -768,7 +887,7 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse(parser)
 
         // then
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <table>
               <thead>
                 <tr>
@@ -815,7 +934,7 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse(parser)
 
         // then
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <ul>
               <li>
                 <input type="checkbox"/>Unchecked task
@@ -839,7 +958,7 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse(parser)
 
         // then
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <p>
               Here is a link: <a href="https://example.com">Example</a>
             </p>
@@ -858,7 +977,7 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse(parser)
 
         // then
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <p>
               And an image: <img src="https://example.com/image.png" alt="Alt text"/>
             </p>
@@ -879,7 +998,7 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse(parser)
 
         // then
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <pre class="code">
             plain text code block
             </pre>
@@ -903,7 +1022,7 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse(parser)
 
         // then
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <h1>
               Heading 1
             </h1>
@@ -940,7 +1059,7 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse(parser)
 
         // then
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <blockquote>
               <p>
                 Here are the points:
@@ -1014,7 +1133,7 @@ class MarkanywhereParserTest {
 
         // then
         // Note: indented items are treated as paragraphs, not nested lists
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <ul>
               <li>
                 Item 1
@@ -1051,7 +1170,7 @@ class MarkanywhereParserTest {
         // then
         // Note: indented items are treated as paragraphs, not nested lists
         // The indentation is preserved from the original input
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <ol>
               <li>
                 First item
@@ -1088,7 +1207,7 @@ class MarkanywhereParserTest {
         // then
         // Note: indented items are treated as paragraphs, not nested lists
         // The indentation is preserved from the original input
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <ul>
               <li>
                 Unordered item
@@ -1120,7 +1239,7 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse(parser)
 
         // then
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <p>
               Text with **** empty bold markers.
             </p>
@@ -1139,7 +1258,7 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse(parser)
 
         // then
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <p>
               Text with ____ empty underscore markers.
             </p>
@@ -1161,7 +1280,7 @@ class MarkanywhereParserTest {
 
         // then
         // Note: parser auto-closes unclosed bold at paragraph end
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <p>
               This has <strong>unclosed bold text.</strong>
             </p>
@@ -1181,7 +1300,7 @@ class MarkanywhereParserTest {
 
         // then
         // Note: parser auto-closes unclosed italic at paragraph end
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <p>
               This has <em>unclosed italic text.</em>
             </p>
@@ -1201,7 +1320,7 @@ class MarkanywhereParserTest {
 
         // then
         // Note: parser auto-closes unclosed inline code at paragraph end
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <p>
               This has <code>unclosed code text.</code>
             </p>
@@ -1220,7 +1339,7 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse(parser)
 
         // then
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <p>
               #hashtag is not a header
             </p>
@@ -1241,7 +1360,7 @@ class MarkanywhereParserTest {
 
         // then
         // Note: each line starting with hashes (no space after) becomes a separate paragraph
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <p>
               ##not a header
             </p>
@@ -1266,7 +1385,7 @@ class MarkanywhereParserTest {
 
         // then
         // Note: single hash without space after is treated as a paragraph, not a header
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <p>
               #
             </p>
@@ -1294,7 +1413,7 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse(parser)
 
         // then
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <h1>
               Header
             </h1>
@@ -1320,7 +1439,7 @@ class MarkanywhereParserTest {
 
         // then
         // Note: all indented items become paragraphs, not nested lists
-        parsed.render() sameAs """
+        parsed.render() sameAsHtml """
             <ul>
               <li>
                 Level 1
