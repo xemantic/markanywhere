@@ -405,8 +405,9 @@ class MarkanywhereParserTest {
     fun `should escape HTML special characters in text`() = runTest {
         // given
         val parser = DefaultMarkanywhereParser()
+        // Note: '<' followed by a space is NOT treated as an HTML tag (must start immediately with letter/'/')
         val textFlow = """
-            Use <div> elements and & ampersands and "quotes" carefully.
+            Use < div > elements and & ampersands and "quotes" carefully.
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
@@ -415,7 +416,7 @@ class MarkanywhereParserTest {
         // then
         parsed.render() sameAs """
             <p>
-              Use &lt;div&gt; elements and &amp; ampersands and "quotes" carefully.
+              Use &lt; div &gt; elements and &amp; ampersands and "quotes" carefully.
             </p>
         """.trimIndent()
     }
@@ -1968,6 +1969,179 @@ class MarkanywhereParserTest {
                 }
             }
         }
+    }
+
+    @Test
+    fun `should render inline HTML elements as semantic events`() = runTest {
+        // given
+        val parser = DefaultMarkanywhereParser()
+        val textFlow = """
+            This has <strong>bold</strong> and <em>italic</em> HTML.
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse(parser)
+
+        // then
+        parsed.render() sameAs """
+            <p>
+              This has <strong>bold</strong> and <em>italic</em> HTML.
+            </p>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should render inline HTML elements in table cells`() = runTest {
+        // given
+        val parser = DefaultMarkanywhereParser()
+        val textFlow = """
+            |a|b|
+            |-|-|
+            |<strong>bold</strong>|<em>italic</em>|
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse(parser)
+
+        // then
+        parsed.render() sameAs """
+            <table>
+              <thead>
+                <tr>
+                  <th>
+                    a
+                  </th>
+                  <th>
+                    b
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>
+                    <strong>bold</strong>
+                  </td>
+                  <td>
+                    <em>italic</em>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should render self-closing inline HTML elements`() = runTest {
+        // given
+        val parser = DefaultMarkanywhereParser()
+        val textFlow = """
+            Line one<br/>line two.
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse(parser)
+
+        // then
+        parsed.render() sameAs """
+            <p>
+              Line one<br/>line two.
+            </p>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should render inline HTML with attributes`() = runTest {
+        // given
+        val parser = DefaultMarkanywhereParser()
+        val textFlow = """
+            Click <a href="https://example.com">here</a> for more.
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse(parser)
+
+        // then
+        parsed.render() sameAs """
+            <p>
+              Click <a href="https://example.com">here</a> for more.
+            </p>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should close bold markers at end of line`() = runTest {
+        // given
+        val parser = DefaultMarkanywhereParser()
+        val textFlow = """
+            This is **bold**
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse(parser)
+
+        // then
+        parsed.render() sameAs """
+            <p>
+              This is <strong>bold</strong>
+            </p>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should close italic markers at end of line`() = runTest {
+        // given
+        val parser = DefaultMarkanywhereParser()
+        val textFlow = """
+            This is *italic*
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse(parser)
+
+        // then
+        parsed.render() sameAs """
+            <p>
+              This is <em>italic</em>
+            </p>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should close strikethrough markers at end of line`() = runTest {
+        // given
+        val parser = DefaultMarkanywhereParser()
+        val textFlow = """
+            This is ~~deleted~~
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse(parser)
+
+        // then
+        parsed.render() sameAs """
+            <p>
+              This is <del>deleted</del>
+            </p>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should close bold italic markers at end of line`() = runTest {
+        // given
+        val parser = DefaultMarkanywhereParser()
+        val textFlow = """
+            This is ***bold italic***
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse(parser)
+
+        // then
+        parsed.render() sameAs """
+            <p>
+              This is <strong><em>bold italic</em></strong>
+            </p>
+        """.trimIndent()
     }
 
 }

@@ -970,6 +970,54 @@ private class ParserState(
     }
 
     /**
+     * Returns true if `name` is a valid HTML tag name: starts with a letter,
+     * followed by letters, digits, or hyphens only.
+     */
+    private fun isValidHtmlTagName(name: String): Boolean =
+        name.isNotEmpty() && name[0].isLetter() && name.all { it.isLetterOrDigit() || it == '-' }
+
+    /**
+     * Tries to emit an inline HTML tag from the content inside `< >`.
+     * Handles opening tags (`<p>`), closing tags (`</p>`), and self-closing tags (`<br/>`).
+     * Returns true if the content was recognized as an HTML tag and emitted, false otherwise.
+     *
+     * Inline HTML requires the tag name to start immediately after `<` (no leading whitespace),
+     * which distinguishes `<div>` (HTML tag) from `< b >` (comparison with spaces, not HTML).
+     */
+    private suspend fun SemanticEventScope.tryEmitInlineHtmlTag(content: String): Boolean {
+        // Tag name must start immediately after '<' — reject anything with leading whitespace
+        if (content.isEmpty() || (!content[0].isLetter() && content[0] != '/')) return false
+
+        val trimmed = content.trim()
+
+        // Closing tag: /tagname
+        if (trimmed.startsWith("/")) {
+            val tagName = trimmed.substring(1).trim()
+            if (isValidHtmlTagName(tagName)) {
+                unmark(tagName, isTag = true)
+                return true
+            }
+            return false
+        }
+
+        // Self-closing tag ends with /
+        val isSelfClosing = trimmed.endsWith("/")
+        val contentWithoutSlash = if (isSelfClosing) trimmed.dropLast(1).trim() else trimmed
+
+        // Opening tag: tagname [attrs]
+        val parts = contentWithoutSlash.split(Patterns.WHITESPACE, limit = 2)
+        val tagName = parts[0]
+        if (!isValidHtmlTagName(tagName)) return false
+
+        val attrs = if (parts.size > 1) parseAttributes(parts[1]) else null
+        mark(tagName, isTag = true, attributes = attrs)
+        if (isSelfClosing) {
+            unmark(tagName, isTag = true)
+        }
+        return true
+    }
+
+    /**
      * Process content inside a custom markup block.
      * Content is emitted immediately as it arrives.
      * Closing tag is detected incrementally when </tagname> pattern is seen.
@@ -1183,21 +1231,21 @@ private class ParserState(
             return
         }
 
-        // Autolinks
+        // Autolinks and inline HTML
         if (inlineBuffer.startsWith("<")) {
             if (char == '>') {
                 val content = inlineBuffer.substring(1)
                 inlineBuffer.clear()
-                if (content.contains("@") && !content.contains("://")) {
-                    "a"("href" to "mailto:$content") {
-                        +content
-                    }
-                } else if (content.contains("://")) {
-                    "a"("href" to content) {
-                        +content
-                    }
-                } else {
-                    +"<$content>"
+                when {
+                    // Inline HTML: tag name starts immediately after '<' (no leading whitespace)
+                    tryEmitInlineHtmlTag(content) -> { /* Emitted as inline HTML mark/unmark event */ }
+                    // Email autolink
+                    content.contains("@") && !content.contains("://") ->
+                        "a"("href" to "mailto:$content") { +content }
+                    // URL autolink
+                    content.contains("://") ->
+                        "a"("href" to content) { +content }
+                    else -> +"<$content>"
                 }
                 return
             } else {
@@ -1479,6 +1527,23 @@ private class ParserState(
     }
 
     private suspend fun SemanticEventScope.flushInline() {
+        // If the inline buffer holds a closing formatting marker (e.g. the trailing "**" of
+        // "**bold**"), discard it rather than emitting as literal text. The active-state flags
+        // below will take care of emitting the corresponding Unmark events.
+        val bufStr = inlineBuffer.toString()
+        val isClosingMarker = when (bufStr) {
+            "**", "__" -> bold
+            "*", "_" -> italic && !bold
+            "***", "___" -> bold && italic
+            "~~" -> strikethrough
+            "~" -> subscript
+            "==" -> highlight
+            else -> false
+        }
+        if (isClosingMarker) {
+            inlineBuffer.clear()
+        }
+
         if (inlineBuffer.isNotEmpty()) {
             +inlineBuffer.toString()
             inlineBuffer.clear()
