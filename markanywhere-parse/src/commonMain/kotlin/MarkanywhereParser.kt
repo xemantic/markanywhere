@@ -1482,17 +1482,18 @@ private class ParserState(
         if (inlineBuffer.isNotEmpty()) {
             val buf = inlineBuffer.toString()
             inlineBuffer.clear()
-            // Resolve pending formatting markers instead of emitting as text
+            // Resolve pending formatting markers instead of emitting as text.
+            // More specific (longer) markers are checked first to avoid prefix ambiguity.
             when {
-                (buf == "*" || buf == "_") && italic -> {
+                (buf == "***" || buf == "___") && bold && italic -> {
                     unmark("em"); italic = false
+                    unmark("strong"); bold = false
                 }
                 (buf == "**" || buf == "__") && bold -> {
                     unmark("strong"); bold = false
                 }
-                (buf == "***" || buf == "___") && bold && italic -> {
+                (buf == "*" || buf == "_") && italic -> {
                     unmark("em"); italic = false
-                    unmark("strong"); bold = false
                 }
                 buf == "~~" && strikethrough -> {
                     unmark("del"); strikethrough = false

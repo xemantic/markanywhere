@@ -371,6 +371,23 @@ class MarkanywhereParserTest {
     }
 
     @Test
+    fun `should parse simple bold italic with underscores`() = runTest {
+        // given
+        val parser = DefaultMarkanywhereParser()
+        val textFlow = "___foo___".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse(parser)
+
+        // then
+        parsed.render() sameAsHtml """
+            <p>
+              <strong><em>foo</em></strong>
+            </p>
+        """.trimIndent()
+    }
+
+    @Test
     fun `should parse simple strikethrough`() = runTest {
         // given
         val parser = DefaultMarkanywhereParser()
@@ -400,6 +417,23 @@ class MarkanywhereParserTest {
         parsed.render() sameAsHtml """
             <p>
               <mark>foo</mark>
+            </p>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should parse simple subscript`() = runTest {
+        // given
+        val parser = DefaultMarkanywhereParser()
+        val textFlow = "~foo~".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse(parser)
+
+        // then
+        parsed.render() sameAsHtml """
+            <p>
+              <sub>foo</sub>
             </p>
         """.trimIndent()
     }
