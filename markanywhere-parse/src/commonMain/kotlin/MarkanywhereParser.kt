@@ -891,7 +891,15 @@ private class ParserState(
     ) {
         lineBuffer.append(char)
         if (char == '\n') {
-            val line = lineBuffer.toString().trimEnd()
+            val lineContent = lineBuffer.toString()
+            // Support multi-line HTML tables inside table cells: when the accumulated
+            // content has an unclosed <table> tag, strip the newline and keep buffering
+            // so that the HTML table is treated as a single cell value.
+            if (lineContent.htmlTableNestingDepth() > 0) {
+                lineBuffer.deleteAt(lineBuffer.length - 1)
+                return
+            }
+            val line = lineContent.trimEnd()
             if (line.startsWith("|")) {
                 "tr" {
                     emitTableRow(line, isHeader = false)
@@ -983,32 +991,40 @@ private class ParserState(
      *
      * Inline HTML requires the tag name to start immediately after `<` (no leading whitespace),
      * which distinguishes `<div>` (HTML tag) from `< b >` (comparison with spaces, not HTML).
+     * Tag names are normalised to lowercase so consumers always receive consistent event names.
      */
     private suspend fun SemanticEventScope.tryEmitInlineHtmlTag(content: String): Boolean {
-        // Tag name must start immediately after '<' — reject anything with leading whitespace
+        // Reject '<' followed by whitespace or anything other than a letter or '/'.
+        // The '/' guard handles closing tags like '</div>'; opening tags are further
+        // validated by isValidHtmlTagName which also requires the name to start with a letter.
         if (content.isEmpty() || (!content[0].isLetter() && content[0] != '/')) return false
 
         val trimmed = content.trim()
 
-        // Closing tag: /tagname
+        // Closing tag: /tagname — normalise to lowercase for consistent Unmark names
         if (trimmed.startsWith("/")) {
-            val tagName = trimmed.substring(1).trim()
-            if (isValidHtmlTagName(tagName)) {
-                unmark(tagName, isTag = true)
+            val tagNameRaw = trimmed.substring(1).trim()
+            if (isValidHtmlTagName(tagNameRaw)) {
+                unmark(tagNameRaw.lowercase(), isTag = true)
                 return true
             }
             return false
         }
 
-        // Self-closing tag ends with /
+        // Self-closing detection via endsWith("/") on the trimmed content.
+        // This is safe for the common cases: <br/>, <br />, <img src="url"/>.
+        // An attribute value ending with '/' (e.g. <img src="path/">) is safe because
+        // the content here is only the part between '<' and '>', with '>' stripped, so
+        // such values end with '"' not '/'.
         val isSelfClosing = trimmed.endsWith("/")
         val contentWithoutSlash = if (isSelfClosing) trimmed.dropLast(1).trim() else trimmed
 
-        // Opening tag: tagname [attrs]
+        // Opening tag: tagname [attrs] — normalise to lowercase for consistent Mark names
         val parts = contentWithoutSlash.split(Patterns.WHITESPACE, limit = 2)
-        val tagName = parts[0]
-        if (!isValidHtmlTagName(tagName)) return false
+        val tagNameRaw = parts[0]
+        if (!isValidHtmlTagName(tagNameRaw)) return false
 
+        val tagName = tagNameRaw.lowercase()
         val attrs = if (parts.size > 1) parseAttributes(parts[1]) else null
         mark(tagName, isTag = true, attributes = attrs)
         if (isSelfClosing) {
@@ -1532,7 +1548,11 @@ private class ParserState(
         // below will take care of emitting the corresponding Unmark events.
         val bufStr = inlineBuffer.toString()
         val isClosingMarker = when (bufStr) {
+            // bold alone is sufficient here: if "**" is buffered while both bold and
+            // italic are active, discarding it is still correct (flushInline closes both).
             "**", "__" -> bold
+            // !bold guards against discarding a lone '*' mid-bold (e.g. **bold*stray)
+            // where italic is false, so we must not treat that '*' as a closing marker.
             "*", "_" -> italic && !bold
             "***", "___" -> bold && italic
             "~~" -> strikethrough
@@ -1692,4 +1712,37 @@ private class ParserState(
             }
         }
     }
+}
+
+/**
+ * Returns the nesting depth of unclosed `<table>` elements in this string.
+ * A positive value means there is at least one `<table>` opened but not yet closed,
+ * which indicates that a Markdown table row spans multiple source lines.
+ * Self-closing `<table/>` tags are not counted as opened.
+ */
+private fun String.htmlTableNestingDepth(): Int {
+    val lower = lowercase()
+    var opens = 0
+    var pos = 0
+    while (true) {
+        val idx = lower.indexOf("<table", pos)
+        if (idx == -1) break
+        // Distinguish <table> / <table ...> (opening) from <table/> (self-closing).
+        // Valid opening: next char after "table" is '>', ' ', '\t', '\n', '\r', or end of string.
+        // Self-closing: next char is '/'.
+        val nextChar = lower.getOrElse(idx + 6) { '\u0000' }
+        if (nextChar != '/') {
+            opens++
+        }
+        pos = idx + 1
+    }
+    var closes = 0
+    pos = 0
+    while (true) {
+        val idx = lower.indexOf("</table>", pos)
+        if (idx == -1) break
+        closes++
+        pos = idx + 1
+    }
+    return opens - closes
 }

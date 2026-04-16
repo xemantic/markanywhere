@@ -405,7 +405,10 @@ class MarkanywhereParserTest {
     fun `should escape HTML special characters in text`() = runTest {
         // given
         val parser = DefaultMarkanywhereParser()
-        // Note: '<' followed by a space is NOT treated as an HTML tag (must start immediately with letter/'/')
+        // Note: '< div >' has a space after '<', so it is NOT treated as an inline HTML tag
+        // (the parser requires the tag name to start immediately after '<').
+        // Using '< div >' rather than '<div>' lets us test literal angle-bracket escaping
+        // without triggering the HTML tag path; the separate inline-HTML tests cover '<div>'.
         val textFlow = """
             Use < div > elements and & ampersands and "quotes" carefully.
         """.trimIndent().chunkedRandomly().asFlow()
@@ -2141,6 +2144,178 @@ class MarkanywhereParserTest {
             <p>
               This is <strong><em>bold italic</em></strong>
             </p>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should close underscore italic markers at end of line`() = runTest {
+        // given
+        val parser = DefaultMarkanywhereParser()
+        val textFlow = """
+            This is _italic_
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse(parser)
+
+        // then
+        parsed.render() sameAs """
+            <p>
+              This is <em>italic</em>
+            </p>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should close underscore bold markers at end of line`() = runTest {
+        // given
+        val parser = DefaultMarkanywhereParser()
+        val textFlow = """
+            This is __bold__
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse(parser)
+
+        // then
+        parsed.render() sameAs """
+            <p>
+              This is <strong>bold</strong>
+            </p>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should render br with space before slash`() = runTest {
+        // given
+        val parser = DefaultMarkanywhereParser()
+        val textFlow = """
+            Line one<br />line two.
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse(parser)
+
+        // then
+        parsed.render() sameAs """
+            <p>
+              Line one<br/>line two.
+            </p>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should normalize inline HTML tag names to lowercase`() = runTest {
+        // given
+        val parser = DefaultMarkanywhereParser()
+        val textFlow = """
+            This has <STRONG>bold</STRONG> and <Em>italic</Em> HTML.
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse(parser)
+
+        // then
+        parsed.render() sameAs """
+            <p>
+              This has <strong>bold</strong> and <em>italic</em> HTML.
+            </p>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should render HTML table inside Markdown table cell`() = runTest {
+        // This is the primary use case from issue #25: an HTML table element
+        // embedded in a Markdown table cell on a single line.
+        // given
+        val parser = DefaultMarkanywhereParser()
+        val textFlow = """
+            |a|b|
+            |-|-|
+            |<table></table>|<p>abc</p>|
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse(parser)
+
+        // then
+        parsed.render() sameAs """
+            <table>
+              <thead>
+                <tr>
+                  <th>
+                    a
+                  </th>
+                  <th>
+                    b
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>
+                    <table>
+                    </table>
+                  </td>
+                  <td>
+                    <p>
+                      abc
+                    </p>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should render multi-line HTML table inside Markdown table cell`() = runTest {
+        // A full HTML table spanning multiple lines inside a Markdown table cell.
+        // The parser buffers lines until the <table> is closed, then processes
+        // the entire cell content as a single unit.
+        // given
+        val parser = DefaultMarkanywhereParser()
+        val textFlow = """
+            |a|b|
+            |-|-|
+            |<table>
+            <tr><td>nested</td></tr>
+            </table>|text|
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse(parser)
+
+        // then
+        parsed.render() sameAs """
+            <table>
+              <thead>
+                <tr>
+                  <th>
+                    a
+                  </th>
+                  <th>
+                    b
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>
+                    <table>
+                      <tr>
+                        <td>
+                          nested
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                  <td>
+                    text
+                  </td>
+                </tr>
+              </tbody>
+            </table>
         """.trimIndent()
     }
 
