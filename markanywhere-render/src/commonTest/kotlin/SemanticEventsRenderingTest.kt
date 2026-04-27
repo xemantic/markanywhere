@@ -679,7 +679,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should not escape HTML inside custom namespaced element`() = runTest {
         // given
-        val flow = semanticEvents(produceTags = true) {
+        val flow = semanticEvents(tagged = true) {
             "custom:html"("type" to "raw") {
                 +"<div class=\"inner\">Content with <b>bold</b> & special chars</div>"
             }
@@ -700,7 +700,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should not escape HTML in nested custom namespaced elements`() = runTest {
         // given
-        val flow = semanticEvents(produceTags = true) {
+        val flow = semanticEvents(tagged = true) {
             "outer:wrapper" {
                 +"<span>outer html</span>"
                 tag("inner:content") {
@@ -729,7 +729,7 @@ class SemanticEventsRenderingTest {
     @Test
     fun `should resume escaping HTML after closing custom namespaced element`() = runTest {
         // given
-        val flow = semanticEvents(produceTags = true) {
+        val flow = semanticEvents(tagged = true) {
             "custom:raw" {
                 +"<b>not escaped</b>"
             }
@@ -807,10 +807,10 @@ class SemanticEventsRenderingTest {
                 "li" { +"Point A" }
                 "li" {
                     +"Point B with "
-                    "a"(mapOf("href" to "https://example.com")) { +"link" }
+                    "a"("href" to "https://example.com") { +"link" }
                 }
             }
-            "pre"(mapOf("class" to "code lang-kotlin")) {
+            "pre"("class" to "code lang-kotlin") {
                 +"val x = 42"
             }
         }
@@ -993,7 +993,7 @@ class SemanticEventsRenderingTest {
     fun `should handle element with empty attributes map`() = runTest {
         // given
         val flow = semanticEvents {
-            "div"(emptyMap()) {
+            "div"(attributes = emptyMap()) {
                 +"Content"
             }
         }
@@ -1044,11 +1044,11 @@ class SemanticEventsRenderingTest {
         val flow = semanticEvents {
             "ul" {
                 "li" {
-                    "input"(mapOf("type" to "checkbox")) { }
+                    "input"("type" to "checkbox") { }
                     +"Unchecked task"
                 }
                 "li" {
-                    "input"(mapOf("type" to "checkbox", "checked" to "true")) { }
+                    "input"("type" to "checkbox", "checked" to "true") { }
                     +"Checked task"
                 }
             }
@@ -1137,7 +1137,7 @@ class SemanticEventsRenderingTest {
     fun `should handle attribute with single quotes in value`() = runTest {
         // given
         val flow = semanticEvents {
-            "div"(mapOf("data-value" to "It's a test")) {
+            "div"("data-value" to "It's a test") {
                 +"Content"
             }
         }
@@ -1366,7 +1366,7 @@ class SemanticEventsRenderingTest {
         val flow = semanticEvents {
             "p" {
                 +"The "
-                "abbr"(mapOf("title" to "HyperText Markup Language")) { +"HTML" }
+                "abbr"("title" to "HyperText Markup Language") { +"HTML" }
                 +" specification"
             }
         }
@@ -1388,7 +1388,7 @@ class SemanticEventsRenderingTest {
         val flow = semanticEvents {
             "p" {
                 +"Published on "
-                "time"(mapOf("datetime" to "2025-01-15")) { +"January 15, 2025" }
+                "time"("datetime" to "2025-01-15") { +"January 15, 2025" }
             }
         }
 
@@ -1408,7 +1408,7 @@ class SemanticEventsRenderingTest {
         // given
         val flow = semanticEvents {
             "figure" {
-                "img"(mapOf("src" to "image.png", "alt" to "A figure")) { }
+                "img"("src" to "image.png", "alt" to "A figure") { }
                 "figcaption" { +"Figure 1: An example image" }
             }
         }
@@ -1500,7 +1500,7 @@ class SemanticEventsRenderingTest {
         val flow = semanticEvents {
             "p" {
                 +"Some "
-                "span"(mapOf("class" to "highlight")) { +"styled" }
+                "span"("class" to "highlight") { +"styled" }
                 +" text"
             }
         }
@@ -1675,7 +1675,7 @@ class SemanticEventsRenderingTest {
     fun `should handle anchor without href`() = runTest {
         // given
         val flow = semanticEvents {
-            "a"(mapOf("id" to "section1")) { +"Section 1" }
+            "a"("id" to "section1") { +"Section 1" }
         }
 
         // when
@@ -1691,7 +1691,7 @@ class SemanticEventsRenderingTest {
         val flow = semanticEvents {
             "p" {
                 +"Price: "
-                "data"(mapOf("value" to "49.99")) { +"$49.99" }
+                "data"("value" to "49.99") { +"$49.99" }
             }
         }
 

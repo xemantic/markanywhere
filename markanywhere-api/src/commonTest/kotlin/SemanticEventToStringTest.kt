@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Kazimierz Pogoda / Xemantic
+ * Copyright 2025-2026 Kazimierz Pogoda / Xemantic
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -177,9 +177,9 @@ class SemanticEventToStringTest {
     }
 
     @Test
-    fun `should omit isTag when false in Mark JSON output`() {
+    fun `should omit isTagged when false in Mark JSON output`() {
         // given
-        val event = SemanticEvent.Mark(name = "div", isTag = false)
+        val event = SemanticEvent.Mark(name = "div", isTagged = false)
 
         // when
         val json = event.toString()
@@ -194,9 +194,9 @@ class SemanticEventToStringTest {
     }
 
     @Test
-    fun `should include isTag when true in Mark JSON output`() {
+    fun `should include isTagged when true in Mark JSON output`() {
         // given
-        val event = SemanticEvent.Mark(name = "br", isTag = true)
+        val event = SemanticEvent.Mark(name = "br", isTagged = true)
 
         // when
         val json = event.toString()
@@ -206,17 +206,17 @@ class SemanticEventToStringTest {
             {
               "type": "mark",
               "name": "br",
-              "isTag": true
+              "isTagged": true
             }
         """.trimIndent()
     }
 
     @Test
-    fun `should include isTag and attributes in Mark JSON output`() {
+    fun `should include isTagged and attributes in Mark JSON output`() {
         // given
         val event = SemanticEvent.Mark(
             name = "img",
-            isTag = true,
+            isTagged = true,
             attributes = mapOf("src" to "image.png", "alt" to "An image")
         )
 
@@ -228,7 +228,7 @@ class SemanticEventToStringTest {
             {
               "type": "mark",
               "name": "img",
-              "isTag": true,
+              "isTagged": true,
               "attributes": {
                 "src": "image.png",
                 "alt": "An image"
@@ -238,9 +238,9 @@ class SemanticEventToStringTest {
     }
 
     @Test
-    fun `should omit isTag when false in Unmark JSON output`() {
+    fun `should omit isTagged when false in Unmark JSON output`() {
         // given
-        val event = SemanticEvent.Unmark(name = "p", isTag = false)
+        val event = SemanticEvent.Unmark(name = "p", isTagged = false)
 
         // when
         val json = event.toString()
@@ -255,9 +255,9 @@ class SemanticEventToStringTest {
     }
 
     @Test
-    fun `should include isTag when true in Unmark JSON output`() {
+    fun `should include isTagged when true in Unmark JSON output`() {
         // given
-        val event = SemanticEvent.Unmark(name = "br", isTag = true)
+        val event = SemanticEvent.Unmark(name = "br", isTagged = true)
 
         // when
         val json = event.toString()
@@ -267,7 +267,7 @@ class SemanticEventToStringTest {
             {
               "type": "unmark",
               "name": "br",
-              "isTag": true
+              "isTagged": true
             }
         """.trimIndent()
     }

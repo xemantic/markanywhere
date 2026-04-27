@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Kazimierz Pogoda / Xemantic
+ * Copyright 2025-2026 Kazimierz Pogoda / Xemantic
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -51,23 +51,19 @@ public sealed interface SemanticEvent {
     @SerialName("mark")
     public data class Mark(
         public override val name: String,
-        public override val isTag: Boolean = false,
+        public override val isTagged: Boolean = false,
         public val attributes: Map<String, String>? = null
     ) : SemanticEvent, Marked {
-
         override fun toString(): String = toJson()
-
     }
 
     @Serializable
     @SerialName("unmark")
     public data class Unmark(
         public override val name: String,
-        public override val isTag: Boolean = false
+        public override val isTagged: Boolean = false
     ) : SemanticEvent, Marked {
-
         override fun toString(): String = toJson()
-
     }
 
     /**
@@ -85,15 +81,15 @@ public sealed interface SemanticEvent {
          * rather than from Markdown syntax.
          *
          * When `false` (default), the mark was produced from Markdown syntax
-         * (e.g., `*text*` produces an `em` mark with `isTag = false`).
+         * (e.g., `*text*` produces an `em` mark with `isTagged = false`).
          *
          * When `true`, the mark was produced from an actual HTML tag in the source
-         * (e.g., `<em>text</em>` in Markdown produces an `em` mark with `isTag = true`).
+         * (e.g., `<em>text</em>` in Markdown produces an `em` mark with `isTagged = true`).
          *
          * This distinction allows downstream processors to differentiate between
          * semantic marks derived from Markdown formatting and explicit HTML markup.
          */
-        public val isTag: Boolean
+        public val isTagged: Boolean
 
     }
 

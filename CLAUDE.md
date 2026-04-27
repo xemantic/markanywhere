@@ -1,97 +1,25 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file captures only what cannot be inferred from the codebase itself.
 
-## Project Overview
+## Rules for editing this file
 
-markanywhere is a Kotlin Multiplatform library for streaming Markdown and Markup document formats as interchangeable hierarchical streams of semantic events. It inverts the traditional document processing flow: rather than consuming complete documents and producing structure, it consumes streaming tokens and emits semantic events in real-time.
+Both developers and AI agents are expected to add entries as they encounter surprises.
 
-## Build Commands
+- **Add an entry** when you encounter something unexpected: a build quirk, a non-obvious constraint, a dependency gotcha, or any behavior that would surprise the next agent or developer.
+- **Add an entry** when a developer flags an anti-pattern produced by AI — describe the anti-pattern and the preferred alternative.
+- **Do not** add codebase overviews, directory listings, or anything discoverable by reading the source.
+- Keep entries concise: one line per lesson, grouped under a heading if a theme emerges.
 
-```shell
-./gradlew build                                          # Build and test all modules
-./gradlew test                                           # Run tests for all platforms
-./gradlew jvmTest                                        # JVM tests only
-./gradlew jsTest                                         # JavaScript tests only
-./gradlew :markanywhere-parse:jvmTest                    # Single module, single platform
-./gradlew dependencyUpdates                              # Check for dependency updates
-./gradlew dokkaGeneratePublicationHtml                   # Generate API documentation
-./gradlew publishAllPublicationsToMavenLocalRepository   # Publish to local Maven
-```
+## Known gotchas
 
-## Architecture
+- Copyright year range (e.g. 2025-2026) is applied on autosave — new files should use only the current year (e.g. 2026).
 
-### Module Structure
+## Test conventions
 
-```
-markanywhere-api        # Core SemanticEvent types (Text, Mark, Unmark) with JSON serialization
-markanywhere-flow       # Kotlin Flow-based DSL for building SemanticEvent streams
-markanywhere-parse      # Streaming Markdown parser (DefaultMarkanywhereParser)
-markanywhere-render     # Renders SemanticEvent flows to HTML strings
-markanywhere-transform  # Pattern-matching transformer for SemanticEvent flows
-markanywhere-extract    # Extracts content from specific markup tags during streaming
-markanywhere-js         # JavaScript DOM integration (appending events, reading elements)
-markanywhere-test       # Test utilities
-```
+- Tests must retain `// given`, `// when`, `// then` comment structure — AI agents tend to omit these.
+- Use `sameAsHtml` (not `sameAs`) when asserting rendered HTML output — provides syntax highlighting in the IDE.
 
-### Core Abstraction
+## Anti-patterns to avoid
 
-The `SemanticEvent` sealed interface represents three event types:
-- `Text(text: String)` - textual content
-- `Mark(name: String, isTag: Boolean, attributes: Map?)` - opening tag/formatting
-- `Unmark(name: String, isTag: Boolean)` - closing tag/formatting
-
-The `isTag` flag distinguishes between events from Markdown syntax (`*text*` -> `em` with `isTag=false`) and embedded HTML (`<em>` -> `em` with `isTag=true`).
-
-### Key Patterns
-
-**Building event flows** (markanywhere-flow):
-```kotlin
-semanticEvents {
-    "p" {                    // Opens <p>, closes after block
-        +"Hello "            // Text event
-        "strong" { +"world" } // Nested formatting
-    }
-}
-```
-
-**Parsing streaming Markdown** (markanywhere-parse):
-```kotlin
-flow { emit("# Hello\n**world**") }
-    .parse(DefaultMarkanywhereParser())
-    .render()  // Returns HTML string
-```
-
-**Transforming events** (markanywhere-transform):
-```kotlin
-val transformer = Transformer {
-    match("thinking") { event ->
-        "div"(mapOf("class" to "thinking")) { children() }
-    }
-}
-flow.transform(transformer)
-```
-
-### Build Logic
-
-The `build-logic` module contains `MarkanywhereConventionPlugin` which configures:
-- Kotlin 2.3.10 with context-sensitive resolution
-- JVM 17 target
-- Power Assert for test assertions
-- Explicit API mode
-- JavaScript and WebAssembly ES modules
-
-### Testing Framework
-
-Tests use `xemantic-kotlin-test` with Power Assert:
-```kotlin
-result should {
-    have(text == "expected")
-}
-```
-
-Always assert full error message text when testing exceptions.
-
-### Multiplatform Targets
-
-All modules target JVM, JS (browser + Node.js), WebAssembly (wasmJs, wasmWasi), and native platforms (macOS, iOS, Linux, Windows/mingw, Android Native, tvOS, watchOS). The `markanywhere-js` module is JS-only for DOM integration.
+- Do not add content to this file that is already discoverable by reading the source or build scripts — that inflates context without adding signal, reducing AI agent task success rates (see [arxiv 2602.11988](https://arxiv.org/abs/2602.11988)).

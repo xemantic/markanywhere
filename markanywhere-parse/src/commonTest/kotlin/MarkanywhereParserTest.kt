@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Kazimierz Pogoda / Xemantic
+ * Copyright 2025-2026 Kazimierz Pogoda / Xemantic
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -1878,6 +1878,7 @@ class MarkanywhereParserTest {
 
     @Test
     fun `should parse incrementally with custom markup tags`() = runTest {
+        // given
         // Custom markup tags require special handling for opening and closing tags.
         val parser = DefaultMarkanywhereParser()
 
@@ -1920,6 +1921,7 @@ class MarkanywhereParserTest {
 
     @Test
     fun `should parse escape sequences incrementally`() = runTest {
+        // given
         // Escape sequences with backslash buffering
         val parser = DefaultMarkanywhereParser()
 
@@ -1946,6 +1948,7 @@ class MarkanywhereParserTest {
 
     @Test
     fun `should parse autolinks incrementally`() = runTest {
+        // given
         // Autolinks with < > buffering
         val parser = DefaultMarkanywhereParser()
 

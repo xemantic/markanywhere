@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Kazimierz Pogoda / Xemantic
+ * Copyright 2025-2026 Kazimierz Pogoda / Xemantic
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,7 +40,7 @@ class SemanticEventDeserializationTest {
         event should {
             be<SemanticEvent.Mark>()
             have(name == "html")
-            have(isTag == false)
+            have(!isTagged)
         }
     }
 
@@ -65,7 +65,7 @@ class SemanticEventDeserializationTest {
         event should {
             be<SemanticEvent.Mark>()
             have(name == "div")
-            have(isTag == false)
+            have(!isTagged)
             have(attributes == mapOf(
                 "id" to "foo",
                 "class" to "bar"
@@ -74,13 +74,13 @@ class SemanticEventDeserializationTest {
     }
 
     @Test
-    fun `should deserialize Mark SemanticEvent with isTag true from JSON`() {
+    fun `should deserialize Mark SemanticEvent with isTagged true from JSON`() {
         // given
         val json = """
             {
               "type": "mark",
               "name": "br",
-              "isTag": true
+              "isTagged": true
             }
         """.trimIndent()
 
@@ -91,18 +91,18 @@ class SemanticEventDeserializationTest {
         event should {
             be<SemanticEvent.Mark>()
             have(name == "br")
-            have(isTag == true)
+            have(isTagged)
         }
     }
 
     @Test
-    fun `should deserialize Mark SemanticEvent with isTag and attributes from JSON`() {
+    fun `should deserialize Mark SemanticEvent with isTagged and attributes from JSON`() {
         // given
         val json = """
             {
               "type": "mark",
               "name": "img",
-              "isTag": true,
+              "isTagged": true,
               "attributes": {
                 "src": "image.png",
                 "alt": "An image"
@@ -117,7 +117,7 @@ class SemanticEventDeserializationTest {
         event should {
             be<SemanticEvent.Mark>()
             have(name == "img")
-            have(isTag == true)
+            have(isTagged)
             have(attributes == mapOf(
                 "src" to "image.png",
                 "alt" to "An image"
@@ -162,18 +162,18 @@ class SemanticEventDeserializationTest {
         event should {
             be<SemanticEvent.Unmark>()
             have(name == "div")
-            have(isTag == false)
+            have(!isTagged)
         }
     }
 
     @Test
-    fun `should deserialize Unmark SemanticEvent with isTag true from JSON`() {
+    fun `should deserialize Unmark SemanticEvent with isTagged true from JSON`() {
         // given
         val json = """
             {
               "type": "unmark",
               "name": "br",
-              "isTag": true
+              "isTagged": true
             }
         """.trimIndent()
 
@@ -184,7 +184,7 @@ class SemanticEventDeserializationTest {
         event should {
             be<SemanticEvent.Unmark>()
             have(name == "br")
-            have(isTag == true)
+            have(isTagged)
         }
     }
 
