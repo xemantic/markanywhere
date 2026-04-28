@@ -279,15 +279,15 @@ class Gfm_02_02_Test {
         val parsed = textFlow.parse()
 
         // then
-        parsed sameAs semanticEvents {
+        parsed.mergeAdjacentText() sameAs semanticEvents {
             "ul" {
                 "li" {
-                    +"foo"
+                    "p" { +"foo" }
                     "ul" {
                         "li" {
-                            +"bar"
+                            "p" { +"bar" }
                             "ul" {
-                                "li" { +"baz" }
+                                "li" { "p" { +"baz" } }
                             }
                         }
                     }
@@ -308,6 +308,7 @@ class Gfm_02_02_Test {
             </li>
             </ul>
          */
+        // markanywhere always-loose policy: each item's inline content is wrapped in <p>.
     }
 
     @Test

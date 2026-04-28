@@ -54,13 +54,18 @@ class Gfm_03_01_Test {
         // then
         // Streaming-driven divergence: the parser does not buffer inline state
         // across block transitions, so the two backticks pair into a code span
-        // that visually spans two list items.
+        // that visually spans two list items. Always-loose policy still applies,
+        // so item content is wrapped in `<p>`.
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "ul" {
                 "li" {
-                    "code" { +"one" }
+                    "p" {
+                        "code" { +"one" }
+                    }
                 }
-                "li" { +"two`" }
+                "li" {
+                    "p" { +"two`" }
+                }
             }
         }
         // CommonMark expected:

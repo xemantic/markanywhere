@@ -70,6 +70,23 @@ private data class ListMarker(
 )
 
 /**
+ * One level in the streaming list stack. [markerStartCol] and [contentCol] are
+ * absolute columns (after expanding outer container offsets). The boolean flags
+ * are mutated by the streaming state machine as lines flow in.
+ */
+private class ListContext(
+    val ordered: Boolean,
+    val markerStartCol: Int,
+    val contentCol: Int,
+    /** True while a `<p>` is currently open in the active item. */
+    var paragraphOpen: Boolean = false,
+    /** True while a `<pre><code>` block is currently open in the active item. */
+    var codeBlockOpen: Boolean = false,
+    /** Pending blank lines in an open code block (emitted lazily on next code line). */
+    var codeBlankLines: Int = 0
+)
+
+/**
  * Parse a GFM list marker at the start of [line]. Allows up to 3 leading spaces
  * before the marker; rejects tabs in leading whitespace (those are handled by an
  * outer container's strip step). Returns null if [line] does not start a list item.
@@ -438,13 +455,16 @@ private class ParserState(
         /** Indented code block: started by ≥4 cols of leading whitespace at top level. */
         data object IndentedCodeBlock : BlockMode
         /**
-         * Container that buffers a multi-line list block (with potential blank lines
-         * and continuation content) until the list ends, then emits it structurally.
-         * Used for GFM list features the line-by-line state machine can't express:
-         * loose lists, indented continuations, and nested lists.
+         * Streaming list container. Holds a stack of open list contexts (one per
+         * nesting level) so `<ul>`/`<ol>`/`<li>` events can be emitted as soon as
+         * each marker line is parsed, with no whole-list buffering. List items are
+         * always rendered loose (inline content wrapped in `<p>`); see the
+         * "Lists are always rendered as loose" entry in `markanywhere-parse/README.md`.
          */
         class ListBlock(
-            val lines: MutableList<String> = mutableListOf()
+            val stack: MutableList<ListContext> = mutableListOf(),
+            /** True iff a blank line has been observed since the last non-blank list line. */
+            var blankSeen: Boolean = false
         ) : BlockMode
         data object UnorderedList : BlockMode
         data object OrderedList : BlockMode
@@ -787,9 +807,7 @@ private class ParserState(
                 // the simplest `- foo\n- bar\n` case; this branch buffers the full list
                 // block and emits it structurally on close.
                 shouldStartListBlock(line) -> {
-                    val mode = BlockMode.ListBlock()
-                    mode.lines.add(line)
-                    blockMode = mode
+                    openListBlockWithMarker(line)
                 }
                 // Code block opening: ```lang
                 line matches Patterns.CODE_BLOCK_LANG -> {
@@ -1096,13 +1114,101 @@ private class ParserState(
     }
 
     /**
-     * True if [line] should open a multi-line list block. Currently we route any
-     * line that starts a list marker (with up to 3 leading spaces) through the
-     * full ListBlock parser so loose-list, indented-continuation, and nested-list
-     * cases (GFM 2.2 examples 4, 5, 9) work correctly.
+     * True if [line] should open a multi-line list block. Any line whose first
+     * non-leading-space character begins a list marker is routed through the
+     * streaming `ListBlock` state machine.
      */
     private fun shouldStartListBlock(line: String): Boolean =
         parseListMarker(line) != null
+
+    /**
+     * Open a fresh `BlockMode.ListBlock` for [markerLine] (which already starts a
+     * list marker), emit `<ul>`/`<ol>` + `<li>` immediately, and emit the marker
+     * line's inline content (always wrapped in `<p>` per the always-loose policy).
+     */
+    private suspend fun SemanticEventScope.openListBlockWithMarker(markerLine: String) {
+        val mode = BlockMode.ListBlock()
+        blockMode = mode
+        startListItemFromMarker(mode, markerLine, parentContentCol = 0)
+    }
+
+    /**
+     * Emit the opening tags for a new list level whose marker line is [markerLine],
+     * relative to [parentContentCol] (the absolute column at which [markerLine]
+     * begins — non-zero when the line was already stripped of an outer container's
+     * indent). Pushes a new context onto [mode]'s stack and opens its first `<li>`
+     * plus a `<p>` if the marker has inline content.
+     */
+    private suspend fun SemanticEventScope.startListItemFromMarker(
+        mode: BlockMode.ListBlock,
+        markerLine: String,
+        parentContentCol: Int
+    ) {
+        val marker = parseListMarker(markerLine) ?: return
+        val ctx = ListContext(
+            ordered = marker.ordered,
+            markerStartCol = parentContentCol + marker.markerStartCol,
+            contentCol = parentContentCol + marker.contentCol
+        )
+        mode.stack.add(ctx)
+        mark(if (ctx.ordered) "ol" else "ul")
+        mark("li")
+        val firstContent = markerLine.substring(marker.markerEndIndex)
+        if (firstContent.isNotBlank()) {
+            mark("p")
+            ctx.paragraphOpen = true
+            processInlineContent(firstContent.trimEnd())
+            flushInline()
+        }
+        mode.blankSeen = false
+    }
+
+    /** Close any open `<p>` in the top context. */
+    private suspend fun SemanticEventScope.closeListParagraphIfOpen(mode: BlockMode.ListBlock) {
+        val top = mode.stack.lastOrNull() ?: return
+        if (top.paragraphOpen) {
+            flushInline()
+            unmark("p")
+            top.paragraphOpen = false
+        }
+    }
+
+    /** Close any open code block in the top context. */
+    private suspend fun SemanticEventScope.closeListCodeIfOpen(mode: BlockMode.ListBlock) {
+        val top = mode.stack.lastOrNull() ?: return
+        if (top.codeBlockOpen) {
+            unmark("code")
+            unmark("pre")
+            top.codeBlockOpen = false
+            top.codeBlankLines = 0
+        }
+    }
+
+    /**
+     * Pop list contexts down to (and including, when [includeIndex] is true) [index],
+     * emitting `</li>` and `</ul>`/`</ol>` for each. Closes any open `<p>` or code
+     * block on the topmost context as part of closing the active item.
+     */
+    private suspend fun SemanticEventScope.popListContexts(
+        mode: BlockMode.ListBlock,
+        downTo: Int
+    ) {
+        while (mode.stack.size > downTo) {
+            closeListParagraphIfOpen(mode)
+            closeListCodeIfOpen(mode)
+            unmark("li")
+            val ctx = mode.stack.removeLast()
+            unmark(if (ctx.ordered) "ol" else "ul")
+        }
+    }
+
+    /** Close the current `<li>` of the top context and open a new sibling `<li>`. */
+    private suspend fun SemanticEventScope.openSiblingItem(mode: BlockMode.ListBlock) {
+        closeListParagraphIfOpen(mode)
+        closeListCodeIfOpen(mode)
+        unmark("li")
+        mark("li")
+    }
 
     private suspend fun SemanticEventScope.processListBlock(
         char: Char,
@@ -1114,168 +1220,145 @@ private class ParserState(
         }
         val line = lineBuffer.toString()
         lineBuffer.clear()
-        // Continue if blank, indented (potential continuation), or a sibling/nested marker.
-        if (line.isBlank() ||
-            leadingIndentCols(line) >= 1 ||
-            parseListMarker(line) != null
-        ) {
-            mode.lines.add(line)
+
+        // Blank line: close any open paragraph (lazy code-block lines only emit on
+        // resumption). Mark the list as having seen a blank — used to decide whether
+        // a subsequent indented continuation opens a new paragraph.
+        if (line.isBlank()) {
+            closeListParagraphIfOpen(mode)
+            // Defer blank-line emission for an open code block until more code arrives.
+            val top = mode.stack.lastOrNull()
+            if (top != null && top.codeBlockOpen) top.codeBlankLines++
+            mode.blankSeen = true
             return
         }
-        // List ends — emit collected lines, then replay this line as its own block.
-        emitListBlock(mode.lines)
-        blockMode = BlockMode.Start
-        for (c in line) process(c)
-        process('\n')
-    }
 
-    /**
-     * Parse a buffered list block (lines with no trailing newlines) and emit it as
-     * a `<ul>`/`<ol>` element. [startCol] is the absolute column at which [lines]
-     * begin (non-zero when called recursively for nested lists inside an outer
-     * container). Implements GFM list rules sufficient for section 2.2 examples:
-     * tight vs. loose detection, paragraph and indented-code continuations, and
-     * nested lists triggered by sibling/nested markers in continuation content.
-     */
-    private suspend fun SemanticEventScope.emitListBlock(
-        lines: List<String>,
-        startCol: Int = 0
-    ) {
-        if (lines.isEmpty()) return
-        val firstMarker = parseListMarker(lines[0]) ?: return
-        val tagName = if (firstMarker.ordered) "ol" else "ul"
-        val contentColAbs = startCol + firstMarker.contentCol
+        val indent = leadingIndentCols(line)
 
-        // Group lines into items.
-        data class Item(val markerLine: String, val contentLines: MutableList<String>)
-        val items = mutableListOf<Item>()
-        var current: Item? = null
-        for (line in lines) {
-            val marker = if (line.isNotBlank()) parseListMarker(line) else null
-            if (marker != null && startCol + marker.markerStartCol < contentColAbs) {
-                current?.let { items.add(it) }
-                current = Item(line, mutableListOf())
-            } else current?.contentLines?.add(line)
+        // Find the deepest context whose contentCol is satisfied by this line's indent.
+        // If `indent < stack[0].contentCol` AND the line is not itself a marker at a
+        // sibling/outer position, the list ends.
+        val topMostMatching = (mode.stack.size - 1 downTo 0).firstOrNull { i ->
+            indent >= mode.stack[i].contentCol
         }
-        current?.let { items.add(it) }
-        if (items.isEmpty()) return
 
-        // Loose if any item has any blank line in its continuation.
-        val isLoose = items.any { it.contentLines.any { ln -> ln.isBlank() } }
+        // Try the line (after stripping the deepest container's contentCol) as a marker.
+        val markerCtxIndex = topMostMatching ?: -1
+        val containerContentCol = if (markerCtxIndex >= 0) mode.stack[markerCtxIndex].contentCol else 0
+        val stripped = if (markerCtxIndex >= 0)
+            stripIndentCols(line, containerContentCol, startCol = 0)
+        else line
+        val strippedMarker = parseListMarker(stripped)
 
-        mark(tagName)
-        for (item in items) {
-            emitListItem(item.markerLine, item.contentLines, contentColAbs, isLoose)
-        }
-        unmark(tagName)
-    }
+        if (strippedMarker != null) {
+            // Absolute marker column inside the source line.
+            val absMarkerStart = containerContentCol + strippedMarker.markerStartCol
 
-    private suspend fun SemanticEventScope.emitListItem(
-        markerLine: String,
-        contentLines: List<String>,
-        contentColAbs: Int,
-        isLoose: Boolean
-    ) {
-        mark("li")
-        val markerEndIndex = parseListMarker(markerLine)!!.markerEndIndex
-        val firstContent = markerLine.substring(markerEndIndex).trim()
+            // Decide which existing context (if any) this marker is a sibling of.
+            // A marker is a sibling of context i when its absMarkerStart sits in
+            // [stack[i].markerStartCol, stack[i].contentCol). Markers at or beyond the
+            // top context's contentCol open a new nested list.
+            val siblingIndex = mode.stack.indexOfLast { ctx ->
+                absMarkerStart >= ctx.markerStartCol && absMarkerStart < ctx.contentCol
+            }
 
-        if (isLoose) {
-            if (firstContent.isNotEmpty()) {
-                "p" {
-                    processInlineContent(firstContent)
-                    flushInline()
+            if (siblingIndex >= 0) {
+                // Close everything below the sibling, including its current item.
+                popListContexts(mode, downTo = siblingIndex + 1)
+                val ctx = mode.stack[siblingIndex]
+                // If the marker style differs (ordered vs unordered), close this list
+                // and start a new sibling list at the same indent level.
+                if (ctx.ordered != strippedMarker.ordered) {
+                    popListContexts(mode, downTo = siblingIndex)
+                    startListItemFromMarker(mode, stripped, parentContentCol = containerContentCol)
+                } else {
+                    closeListParagraphIfOpen(mode)
+                    closeListCodeIfOpen(mode)
+                    unmark("li")
+                    mark("li")
+                    val firstContent = stripped.substring(strippedMarker.markerEndIndex)
+                    if (firstContent.isNotBlank()) {
+                        mark("p")
+                        ctx.paragraphOpen = true
+                        processInlineContent(firstContent.trimEnd())
+                        flushInline()
+                    }
+                    // Update content/marker cols for the new item (in case marker width differs).
+                    // Keep markerStartCol stable; refresh contentCol for this item to allow
+                    // varying continuation columns. (Approximation: we keep original.)
                 }
-            }
-            for (block in groupItemBlocks(contentLines, contentColAbs)) {
-                emitItemBlock(block, contentColAbs)
-            }
-        } else {
-            // Tight: first content as plain inline text directly inside <li>.
-            if (firstContent.isNotEmpty()) {
-                processInlineContent(firstContent)
-                flushInline()
-            }
-            for (block in groupItemBlocks(contentLines, contentColAbs)) {
-                emitItemBlock(block, contentColAbs)
-            }
-        }
-        unmark("li")
-    }
-
-    private sealed interface ItemBlock {
-        data class Paragraph(val text: String) : ItemBlock
-        data class IndentedCode(val text: String) : ItemBlock
-        data class NestedList(val lines: List<String>) : ItemBlock
-    }
-
-    private fun groupItemBlocks(
-        lines: List<String>,
-        contentColAbs: Int
-    ): List<ItemBlock> {
-        val blocks = mutableListOf<ItemBlock>()
-        val pending = mutableListOf<String>()
-
-        fun flushPending() {
-            if (pending.isEmpty()) return
-            // Strip the container indent from each line.
-            val stripped = pending.map { ln ->
-                if (ln.isBlank()) ""
-                else stripIndentCols(ln, contentColAbs, startCol = 0)
-            }
-            // Decide block type from first non-blank stripped line.
-            val firstNonBlank = stripped.firstOrNull { it.isNotEmpty() } ?: run {
-                pending.clear()
+                mode.blankSeen = false
                 return
             }
-            val innerIndent = leadingIndentCols(firstNonBlank, startCol = contentColAbs)
-            when {
-                innerIndent >= 4 -> {
-                    val codeText = stripped
-                        .filter { it.isNotEmpty() }
-                        .joinToString("\n") { stripIndentCols(it, 4, startCol = contentColAbs) } + "\n"
-                    blocks.add(ItemBlock.IndentedCode(codeText))
-                }
-                parseListMarker(firstNonBlank) != null -> {
-                    blocks.add(ItemBlock.NestedList(stripped.filter { it.isNotEmpty() }))
-                }
-                else -> {
-                    val text = stripped
-                        .filter { it.isNotEmpty() }
-                        .joinToString(" ") { it.trimStart() }
-                    blocks.add(ItemBlock.Paragraph(text))
-                }
-            }
-            pending.clear()
+
+            // Otherwise: this is a deeper marker — push a new nested list level.
+            // First close any open paragraph/code in the parent (we're entering block
+            // content inside the parent item).
+            closeListParagraphIfOpen(mode)
+            closeListCodeIfOpen(mode)
+            startListItemFromMarker(mode, stripped, parentContentCol = containerContentCol)
+            return
         }
 
-        for (line in lines) {
-            if (line.isBlank()) {
-                flushPending()
-            } else {
-                pending.add(line)
-            }
+        // Not a marker. If no context contains this line at all, the list ends.
+        if (markerCtxIndex < 0) {
+            popListContexts(mode, downTo = 0)
+            blockMode = BlockMode.Start
+            for (c in line) process(c)
+            process('\n')
+            return
         }
-        flushPending()
-        return blocks
-    }
 
-    private suspend fun SemanticEventScope.emitItemBlock(
-        block: ItemBlock,
-        contentColAbs: Int
-    ) {
-        when (block) {
-            is ItemBlock.Paragraph -> "p" {
-                processInlineContent(block.text)
-                flushInline()
+        // The line is a continuation inside `mode.stack[markerCtxIndex]`. Pop deeper
+        // contexts (their items end where the indent dropped below their contentCol).
+        popListContexts(mode, downTo = markerCtxIndex + 1)
+        val ctx = mode.stack[markerCtxIndex]
+
+        // `stripped` is the line with the container's contentCol of leading indent
+        // removed; semantically it begins at absolute column [containerContentCol].
+        val innerIndent = leadingIndentCols(stripped, startCol = containerContentCol)
+
+        // Indented code block start/continuation: only if a blank line preceded (item
+        // is between blocks) or a code block is already open for this context.
+        if (ctx.codeBlockOpen) {
+            // Continuation of an open code block: emit any deferred blank lines, then
+            // the stripped line content (further stripped by 4 cols past container col).
+            repeat(ctx.codeBlankLines) { +"\n" }
+            ctx.codeBlankLines = 0
+            if (innerIndent >= 4) {
+                +"${stripIndentCols(stripped, 4, startCol = containerContentCol)}\n"
+                return
             }
-            is ItemBlock.IndentedCode -> "pre" {
-                "code" {
-                    +block.text
-                }
-            }
-            is ItemBlock.NestedList -> emitListBlock(block.lines, contentColAbs)
+            // Code block ends — close it and fall through to handle this line as paragraph.
+            closeListCodeIfOpen(mode)
         }
+
+        if (innerIndent >= 4 && (mode.blankSeen || !ctx.paragraphOpen)) {
+            // Open a new indented code block within the current item.
+            closeListParagraphIfOpen(mode)
+            mark("pre")
+            mark("code")
+            ctx.codeBlockOpen = true
+            +"${stripIndentCols(stripped, 4, startCol = containerContentCol)}\n"
+            mode.blankSeen = false
+            return
+        }
+
+        // Plain continuation paragraph content.
+        if (mode.blankSeen) {
+            // Blank line before — start a new paragraph.
+            closeListParagraphIfOpen(mode)
+        }
+        if (!ctx.paragraphOpen) {
+            mark("p")
+            ctx.paragraphOpen = true
+        } else {
+            // Soft-break between joined lines of the same paragraph.
+            +"\n"
+        }
+        processInlineContent(stripped.trimStart().trimEnd())
+        flushInline()
+        mode.blankSeen = false
     }
 
     /**
@@ -3036,11 +3119,16 @@ private class ParserState(
                 unmark("pre")
             }
             is ListBlock -> {
+                // Drain any partial trailing line through the streaming machine.
                 if (lineBuffer.isNotEmpty()) {
-                    mode.lines.add(lineBuffer.toString())
-                    lineBuffer.clear()
+                    process('\n')
+                    if (blockMode != mode) {
+                        // The trailing line ended the list and replayed as a new block.
+                        if (blockMode != Start) finalize()
+                        return
+                    }
                 }
-                emitListBlock(mode.lines)
+                popListContexts(mode, downTo = 0)
                 blockMode = Start
             }
             is CustomMarkup -> {

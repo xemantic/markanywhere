@@ -98,13 +98,19 @@ class MarkanywhereParserTest {
             </h1>
             <ul>
               <li>
-                Apples
+                <p>
+                  Apples
+                </p>
               </li>
               <li>
-                Bananas
+                <p>
+                  Bananas
+                </p>
               </li>
               <li>
-                Oranges
+                <p>
+                  Oranges
+                </p>
               </li>
             </ul>
         """.trimIndent()
@@ -130,13 +136,19 @@ class MarkanywhereParserTest {
             </p>
             <ul>
               <li>
-                First item
+                <p>
+                  First item
+                </p>
               </li>
               <li>
-                Second item
+                <p>
+                  Second item
+                </p>
               </li>
               <li>
-                Third item
+                <p>
+                  Third item
+                </p>
               </li>
             </ul>
         """.trimIndent()
@@ -677,8 +689,8 @@ class MarkanywhereParserTest {
     fun `should parse inline math`() = runTest {
         // given
         
-        val textFlow = """
-            The equation ${'$'}E = mc^2${'$'} is famous.
+        val textFlow = $$"""
+            The equation $E = mc^2$ is famous.
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
@@ -696,7 +708,7 @@ class MarkanywhereParserTest {
     fun `should parse display math block`() = runTest {
         // given
         
-        val textFlow = $$"""
+        val textFlow = """
             Here is an equation:
 
             $$
