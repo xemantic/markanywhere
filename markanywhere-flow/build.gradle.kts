@@ -36,7 +36,7 @@ kotlin {
                 implementation(libs.kotlinx.coroutines.test)
                 implementation(libs.kotlin.test)
                 implementation(libs.xemantic.kotlin.test)
-                api(project(":markanywhere-test"))
+                implementation(project(":markanywhere-test"))
             }
         }
 
