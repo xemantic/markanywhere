@@ -765,6 +765,32 @@ private class ParserState(
         }
     }
 
+    /**
+     * Replay [line] through the same dispatch loop as [processChunk]: honors the
+     * [pendingDeferredChar] protocol (so eager-paragraph and other buffer-resolution
+     * branches can defer a char back to the outer loop) and uses fast-path emission
+     * once the new block mode supports it. Used when a line buffered by one block
+     * mode (e.g. a list-end line) needs to be re-fed through Start mode.
+     */
+    private suspend fun SemanticEventScope.replay(line: String) {
+        if (line.isEmpty()) return
+        var index = 0
+        while (index < line.length) {
+            val fastPathResult = getFastPathEnd(line, index)
+            if (fastPathResult > index) {
+                +line.substring(index, fastPathResult)
+                index = fastPathResult
+                continue
+            }
+            process(line[index])
+            if (pendingDeferredChar != null) {
+                pendingDeferredChar = null
+            } else {
+                index++
+            }
+        }
+    }
+
     private suspend fun SemanticEventScope.processStart(
         char: Char
     ) {
@@ -1049,7 +1075,7 @@ private class ParserState(
             unmark("p")
             blockMode = BlockMode.Start
             // Replay the line through Start so it can be parsed as its own block.
-            for (c in line) process(c)
+            replay(line)
             process('\n')
             return
         }
@@ -1347,7 +1373,7 @@ private class ParserState(
         if (markerCtxIndex < 0) {
             popListContexts(mode, downTo = 0)
             blockMode = BlockMode.Start
-            for (c in line) process(c)
+            replay(line)
             process('\n')
             return
         }
@@ -1474,7 +1500,7 @@ private class ParserState(
         unmark("pre")
         blockMode = BlockMode.Start
         // Replay this line through Start so it can be parsed as its own block.
-        for (c in line) process(c)
+        replay(line)
         process('\n')
     }
 
@@ -1532,18 +1558,14 @@ private class ParserState(
                     unmark("ul")
                     lineBuffer.clear()
                     blockMode = BlockMode.Start
-                    for (c in line) {
-                        process(c)
-                    }
+                    replay(line)
                 }
                 else -> {
                     // End of list, start new block
                     unmark("ul")
                     lineBuffer.clear()
                     blockMode = BlockMode.Start
-                    for (c in line) {
-                        process(c)
-                    }
+                    replay(line)
                 }
             }
         } else {
@@ -1584,17 +1606,13 @@ private class ParserState(
                     unmark("ol")
                     lineBuffer.clear()
                     blockMode = BlockMode.Start
-                    for (c in line) {
-                        process(c)
-                    }
+                    replay(line)
                 }
                 else -> {
                     unmark("ol")
                     lineBuffer.clear()
                     blockMode = BlockMode.Start
-                    for (c in line) {
-                        process(c)
-                    }
+                    replay(line)
                 }
             }
         } else {
@@ -1667,9 +1685,7 @@ private class ParserState(
                     unmark("blockquote")
                     lineBuffer.clear()
                     blockMode = BlockMode.Start
-                    for (c in line) {
-                        process(c)
-                    }
+                    replay(line)
                 }
             }
         } else {
@@ -1720,9 +1736,7 @@ private class ParserState(
                         unmark("blockquote")
                         lineBuffer.clear()
                         blockMode = BlockMode.Start
-                        for (c in line) {
-                            process(c)
-                        }
+                        replay(line)
                     }
                 }
             }
@@ -1777,9 +1791,8 @@ private class ParserState(
                 lineBuffer.clear()
                 blockMode = BlockMode.Start
                 if (line.isNotEmpty()) {
-                    for (c in "$line\n") {
-                        process(c)
-                    }
+                    replay(line)
+                    process('\n')
                 }
             }
         }
@@ -1803,9 +1816,8 @@ private class ParserState(
                 lineBuffer.clear()
                 blockMode = BlockMode.Start
                 if (line.isNotEmpty()) {
-                    for (c in "$line\n") {
-                        process(c)
-                    }
+                    replay(line)
+                    process('\n')
                 }
             }
         }
@@ -3057,7 +3069,7 @@ private class ParserState(
                     if (lineInterruptsParagraph(line)) {
                         unmark("p")
                         blockMode = Start
-                        for (c in line) process(c)
+                        replay(line)
                         process('\n')
                         finalize()  // re-finalize after replaying
                         return

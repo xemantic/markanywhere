@@ -281,37 +281,29 @@ class IncrementalParsingTest {
             }
             "p" {
                 "strong" {
-                    +"b"
-                    +"old"
+                    +"bold"
                 }
-                +" "
-                +"text"
+                +" text"
             }
             "p" {
                 "em" {
-                    +"i"
-                    +"talic"
+                    +"italic"
                 }
-                +" "
-                +"word"
+                +" word"
             }
             "p" {
                 "strong" {
                     "em" {
-                        +"b"
-                        +"oth"
+                        +"both"
                     }
                 }
                 +"."
             }
             "p" {
                 "strong" {
-                    +"u"
-                    +"nder"
+                    +"under"
                 }
-                // After __ closes (triggered by space), space emitted separately, then rest fast-pathed
-                +" "
-                +"end"
+                +" end"
             }
             "p" {
                 "code" {
@@ -377,23 +369,18 @@ class IncrementalParsingTest {
             }
             "p" {
                 "em" {
-                    +"i"
-                    +"ta "
+                    +"ita "
                     "strong" {
-                        +"b"
-                        +"old"
+                        +"bold"
                     }
-                    // After ** closes (triggered by space), space emitted separately
-                    +" "
-                    +"more"
+                    +" more"
                 }
                 +"."
             }
             "p" {
                 "strong" {
                     "em" {
-                        +"t"
-                        +"riple"
+                        +"triple"
                     }
                 }
                 +"."
@@ -482,61 +469,50 @@ class IncrementalParsingTest {
             "ul" {
                 "li" {
                     "p" {
-                        +"i"
-                        +"tem"
-                        +" one"
+                        +"item one"
                     }
                 }
                 "li" {
                     "p" {
-                        +"i"
-                        +"tem two"
+                        +"item two"
                     }
                 }
             }
             "p" {
-                // First char triggers paragraph open, rest is fast-pathed
-                +"S"
-                +"ep"
+                +"Sep"
             }
             "ul" {
                 "li" {
                     "p" {
-                        "input"("type" to "checkbox") {}
-                        +"u"
-                        +"ndone"
+                        "input"("type" to "checkbox", "disabled" to "") {}
+                        +" undone"
                     }
                 }
                 "li" {
                     "p" {
-                        "input"("type" to "checkbox", "checked" to "true") {}
-                        +"d"
-                        +"one"
+                        "input"("type" to "checkbox", "checked" to "", "disabled" to "") {}
+                        +" done"
                     }
                 }
             }
             "p" {
-                +"S"
-                +"ep"
+                +"Sep"
             }
             "ol" {
                 "li" {
                     "p" {
-                        +"f"
-                        +"irst"
+                        +"first"
                     }
                 }
                 "li" {
                     "p" {
-                        +"s"
-                        +"econd"
+                        +"second"
                     }
                 }
             }
             "blockquote" {
                 "p" {
-                    +"q"
-                    +"uoted"
+                    +"quoted"
                     +"\n"
                     +"m"
                     +"ore"
