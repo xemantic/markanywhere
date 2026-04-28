@@ -36,7 +36,6 @@ class MarkanywhereParserTest {
     @Test
     fun `should parse simple Hello World markdown`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
         val textFlow = """
             # Hello World
 
@@ -44,7 +43,7 @@ class MarkanywhereParserTest {
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed.render() sameAs """
@@ -60,14 +59,13 @@ class MarkanywhereParserTest {
     @Test
     fun `should parse paragraph immediately after header without blank line`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
         val textFlow = """
             # Hello World
             This paragraph follows immediately.
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed.render() sameAs """
@@ -83,7 +81,6 @@ class MarkanywhereParserTest {
     @Test
     fun `should parse list immediately after header without blank line`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
         val textFlow = """
             # Shopping List
             - Apples
@@ -92,7 +89,7 @@ class MarkanywhereParserTest {
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed.render() sameAs """
@@ -116,7 +113,6 @@ class MarkanywhereParserTest {
     @Test
     fun `should parse list immediately after descriptive paragraph without blank line`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
         val textFlow = """
             Here are the items:
             - First item
@@ -125,7 +121,7 @@ class MarkanywhereParserTest {
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed.render() sameAs """
@@ -149,7 +145,6 @@ class MarkanywhereParserTest {
     @Test
     fun `should parse ordered list immediately after descriptive paragraph without blank line`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
         val textFlow = """
             Follow these steps:
             1. First step
@@ -158,7 +153,7 @@ class MarkanywhereParserTest {
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed.render() sameAs """
@@ -182,7 +177,7 @@ class MarkanywhereParserTest {
     @Test
     fun `should parse code block immediately after paragraph without blank line`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             Here is the code:
             ```kotlin
@@ -191,7 +186,7 @@ class MarkanywhereParserTest {
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed.render() sameAs """
@@ -207,7 +202,7 @@ class MarkanywhereParserTest {
     @Test
     fun `should parse multiple headers without blank lines between them`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             # Main Title
             ## Subtitle
@@ -216,7 +211,7 @@ class MarkanywhereParserTest {
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed.render() sameAs """
@@ -238,14 +233,14 @@ class MarkanywhereParserTest {
     @Test
     fun `should parse blockquote after paragraph`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             As someone once said:
             > This is a famous quote.
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed.render() sameAs """
@@ -263,14 +258,14 @@ class MarkanywhereParserTest {
     @Test
     fun `should parse multi-line blockquote`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             > This is a famous quote.
             > It spans multiple lines.
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed.render() sameAs """
@@ -288,13 +283,13 @@ class MarkanywhereParserTest {
     @Test
     fun `should parse mixed bold and italic in same text`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             This has **bold then *italic inside* bold** text.
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed.render() sameAs """
@@ -307,13 +302,13 @@ class MarkanywhereParserTest {
     @Test
     fun `should parse adjacent inline elements without space`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             **bold***italic*`code`
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed.render() sameAs """
@@ -326,13 +321,13 @@ class MarkanywhereParserTest {
     @Test
     fun `should parse underscore-style emphasis`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             This has _italic_ and __bold__ and ___bold italic___ text.
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed.render() sameAs """
@@ -345,13 +340,13 @@ class MarkanywhereParserTest {
     @Test
     fun `should parse asterisk-style bold italic`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             This has ***bold italic*** text.
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed.render() sameAs """
@@ -364,13 +359,13 @@ class MarkanywhereParserTest {
     @Test
     fun `should parse strikethrough text`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             This has ~~strikethrough~~ text.
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed.render() sameAs """
@@ -383,13 +378,13 @@ class MarkanywhereParserTest {
     @Test
     fun `should parse strikethrough with other formatting`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             This is ~~deleted **bold** text~~ here.
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed.render() sameAs """
@@ -404,13 +399,13 @@ class MarkanywhereParserTest {
     @Test
     fun `should escape HTML special characters in text`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             Use <div> elements and & ampersands and "quotes" carefully.
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed.render() sameAs """
@@ -423,7 +418,7 @@ class MarkanywhereParserTest {
     @Test
     fun `should escape HTML in code blocks`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             ```html
             <div class="test">
@@ -433,7 +428,7 @@ class MarkanywhereParserTest {
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed.render() sameAs """
@@ -448,13 +443,13 @@ class MarkanywhereParserTest {
     @Test
     fun `should escape HTML in inline code`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             Use `<script>alert("XSS")</script>` carefully.
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed.render() sameAs """
@@ -467,13 +462,13 @@ class MarkanywhereParserTest {
     @Test
     fun `should handle less than and greater than comparisons`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             Check if a < b and c > d or x <= y and z >= w.
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed.render() sameAs """
@@ -488,7 +483,7 @@ class MarkanywhereParserTest {
     @Test
     fun `should parse empty paragraph`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             # Header
 
@@ -498,7 +493,7 @@ class MarkanywhereParserTest {
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed.render() sameAs """
@@ -514,7 +509,7 @@ class MarkanywhereParserTest {
     @Test
     fun `should parse unicode content`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             # 你好世界
 
@@ -522,7 +517,7 @@ class MarkanywhereParserTest {
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed.render() sameAs """
@@ -538,13 +533,13 @@ class MarkanywhereParserTest {
     @Test
     fun `should parse link with title`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             Check out [Example](https://example.com "Example Site") for more.
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed.render() sameAs """
@@ -557,13 +552,13 @@ class MarkanywhereParserTest {
     @Test
     fun `should parse autolinks`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             Visit <https://example.com> or email <user@example.com>.
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed.render() sameAs """
@@ -576,13 +571,13 @@ class MarkanywhereParserTest {
     @Test
     fun `should parse escaped special characters`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             Use \*asterisks\* and \`backticks\` and \[brackets\] literally.
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed.render() sameAs """
@@ -595,13 +590,13 @@ class MarkanywhereParserTest {
     @Test
     fun `should parse inline code with backticks inside`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             Use `` `backticks` `` inside code.
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed.render() sameAs """
@@ -614,7 +609,7 @@ class MarkanywhereParserTest {
     @Test
     fun `should parse multiple paragraphs with blank lines`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             First paragraph with some content.
 
@@ -624,7 +619,7 @@ class MarkanywhereParserTest {
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed.render() sameAs """
@@ -643,13 +638,13 @@ class MarkanywhereParserTest {
     @Test
     fun `should parse superscript and subscript`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             Water is H~2~O and E=mc^2^ is famous.
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed.render() sameAs """
@@ -662,13 +657,13 @@ class MarkanywhereParserTest {
     @Test
     fun `should parse highlight or mark text`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             This is ==highlighted== text.
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed.render() sameAs """
@@ -681,13 +676,13 @@ class MarkanywhereParserTest {
     @Test
     fun `should parse inline math`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             The equation ${'$'}E = mc^2${'$'} is famous.
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed.render() sameAs """
@@ -700,7 +695,7 @@ class MarkanywhereParserTest {
     @Test
     fun `should parse display math block`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = $$"""
             Here is an equation:
 
@@ -712,7 +707,7 @@ class MarkanywhereParserTest {
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed.render() sameAs """
@@ -729,7 +724,7 @@ class MarkanywhereParserTest {
     @Test
     fun `should parse horizontal rule`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             Some content.
 
@@ -739,7 +734,7 @@ class MarkanywhereParserTest {
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed.render() sameAs """
@@ -756,7 +751,7 @@ class MarkanywhereParserTest {
     @Test
     fun `should parse table`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             | Column 1 | Column 2 |
             |----------|----------|
@@ -765,7 +760,7 @@ class MarkanywhereParserTest {
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed.render() sameAs """
@@ -805,14 +800,14 @@ class MarkanywhereParserTest {
     @Test
     fun `should parse task list`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             - [ ] Unchecked task
             - [x] Checked task
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed.render() sameAs """
@@ -830,13 +825,13 @@ class MarkanywhereParserTest {
     @Test
     fun `should parse inline link`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             Here is a link: [Example](https://example.com)
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed.render() sameAs """
@@ -849,13 +844,13 @@ class MarkanywhereParserTest {
     @Test
     fun `should parse inline image`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             And an image: ![Alt text](https://example.com/image.png)
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed.render() sameAs """
@@ -868,7 +863,7 @@ class MarkanywhereParserTest {
     @Test
     fun `should parse code block without language`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             ```
             plain text code block
@@ -876,7 +871,7 @@ class MarkanywhereParserTest {
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed.render() sameAs """
@@ -889,7 +884,7 @@ class MarkanywhereParserTest {
     @Test
     fun `should parse all heading levels`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             # Heading 1
             ## Heading 2
@@ -900,7 +895,7 @@ class MarkanywhereParserTest {
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed.render() sameAs """
@@ -928,7 +923,7 @@ class MarkanywhereParserTest {
     @Test
     fun `should parse blockquote with list inside`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             > Here are the points:
             > - First point
@@ -937,7 +932,7 @@ class MarkanywhereParserTest {
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed.render() sameAs """
@@ -963,7 +958,7 @@ class MarkanywhereParserTest {
     @Test
     fun `should parse custom markup in markdown`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             # Hello World
             
@@ -975,7 +970,7 @@ class MarkanywhereParserTest {
         """.trimIndent().lineFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed sameAs semanticEvents {
@@ -1001,7 +996,7 @@ class MarkanywhereParserTest {
     @Test
     fun `should treat indented list items as paragraphs - no nested list support`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             - Item 1
               - Nested item 1.1
@@ -1010,7 +1005,7 @@ class MarkanywhereParserTest {
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         // Note: indented items are treated as paragraphs, not nested lists
@@ -1037,7 +1032,7 @@ class MarkanywhereParserTest {
     @Test
     fun `should treat indented ordered list items as paragraphs - no nested list support`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             1. First item
                1. Nested first
@@ -1046,7 +1041,7 @@ class MarkanywhereParserTest {
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         // Note: indented items are treated as paragraphs, not nested lists
@@ -1074,7 +1069,7 @@ class MarkanywhereParserTest {
     @Test
     fun `should treat mixed indented list items as paragraphs - no nested list support`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             - Unordered item
               1. Ordered nested
@@ -1083,7 +1078,7 @@ class MarkanywhereParserTest {
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         // Note: indented items are treated as paragraphs, not nested lists
@@ -1111,13 +1106,13 @@ class MarkanywhereParserTest {
     @Test
     fun `should handle empty bold markers as literal text`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             Text with **** empty bold markers.
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed.render() sameAs """
@@ -1130,13 +1125,13 @@ class MarkanywhereParserTest {
     @Test
     fun `should handle empty underscore markers as literal text`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             Text with ____ empty underscore markers.
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed.render() sameAs """
@@ -1151,13 +1146,13 @@ class MarkanywhereParserTest {
     @Test
     fun `should auto-close unclosed bold marker at paragraph end`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             This has **unclosed bold text.
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         // Note: parser auto-closes unclosed bold at paragraph end
@@ -1171,13 +1166,13 @@ class MarkanywhereParserTest {
     @Test
     fun `should auto-close unclosed italic marker at paragraph end`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             This has *unclosed italic text.
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         // Note: parser auto-closes unclosed italic at paragraph end
@@ -1191,13 +1186,13 @@ class MarkanywhereParserTest {
     @Test
     fun `should auto-close unclosed inline code marker at paragraph end`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             This has `unclosed code text.
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         // Note: parser auto-closes unclosed inline code at paragraph end
@@ -1211,13 +1206,13 @@ class MarkanywhereParserTest {
     @Test
     fun `should handle hash without space as regular text`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             #hashtag is not a header
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed.render() sameAs """
@@ -1230,14 +1225,14 @@ class MarkanywhereParserTest {
     @Test
     fun `should handle multiple hashes without space as separate paragraphs`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             ##not a header
             ###also not a header
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         // Note: each line starting with hashes (no space after) becomes a separate paragraph
@@ -1254,7 +1249,7 @@ class MarkanywhereParserTest {
     @Test
     fun `should handle lines with only hashes as regular paragraphs`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             #
             ##
@@ -1262,7 +1257,7 @@ class MarkanywhereParserTest {
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         // Note: single hash without space after is treated as a paragraph, not a header
@@ -1282,7 +1277,7 @@ class MarkanywhereParserTest {
     @Test
     fun `should handle very long single line content`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val longText = "A".repeat(10000)
         val textFlow = """
             # Header
@@ -1291,7 +1286,7 @@ class MarkanywhereParserTest {
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed.render() sameAs """
@@ -1307,7 +1302,7 @@ class MarkanywhereParserTest {
     @Test
     fun `should treat deeply indented list items as paragraphs - no nested list support`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = """
             - Level 1
               - Level 2
@@ -1316,7 +1311,7 @@ class MarkanywhereParserTest {
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         // Note: all indented items become paragraphs, not nested lists
@@ -1343,7 +1338,7 @@ class MarkanywhereParserTest {
     @Test
     fun `should emit SemanticEvents incrementally without buffering`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val input = MutableSharedFlow<String>()
         val eventBuffer = mutableListOf<SemanticEvent>()
 
@@ -1355,7 +1350,7 @@ class MarkanywhereParserTest {
 
         // Start collecting events
         val collectJob = launch {
-            input.parse(parser).collect { event ->
+            input.parse().collect { event ->
                 eventBuffer += event
             }
         }
@@ -1400,7 +1395,7 @@ class MarkanywhereParserTest {
     @Test
     fun `should parse incrementally`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
+        
         val textFlow = listOf(
             "# Hello ",
             "World\n",
@@ -1414,7 +1409,7 @@ class MarkanywhereParserTest {
         ).asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed sameAs semanticEvents {
@@ -1438,7 +1433,7 @@ class MarkanywhereParserTest {
         // This test verifies that inline formatting works correctly when chunks are split
         // at key points. Opening markers are combined with the first content char so that
         // marker resolution and content emission happen in the same chunk.
-        val parser = DefaultMarkanywhereParser()
+        
 
         val textFlow = listOf(
             // Heading level detection: # buffered until space seen
@@ -1579,7 +1574,7 @@ class MarkanywhereParserTest {
         ).asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         // Note: Expected chunks reflect actual parser behavior:
@@ -1718,7 +1713,7 @@ class MarkanywhereParserTest {
         // This test verifies block-level incremental parsing.
         // Block-level patterns require certain sequences to be seen together for
         // disambiguation. Content after the marker is processed via fast-path.
-        val parser = DefaultMarkanywhereParser()
+        
 
         val textFlow = listOf(
             // Unordered list: "- " + first content char triggers list mode
@@ -1789,7 +1784,7 @@ class MarkanywhereParserTest {
         ).asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed sameAs semanticEvents {
@@ -1880,7 +1875,7 @@ class MarkanywhereParserTest {
     fun `should parse incrementally with custom markup tags`() = runTest {
         // given
         // Custom markup tags require special handling for opening and closing tags.
-        val parser = DefaultMarkanywhereParser()
+        
 
         val textFlow = listOf(
             // Custom markup tag with attributes split character by character
@@ -1908,7 +1903,7 @@ class MarkanywhereParserTest {
         ).asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed sameAs semanticEvents {
@@ -1923,7 +1918,7 @@ class MarkanywhereParserTest {
     fun `should parse escape sequences incrementally`() = runTest {
         // given
         // Escape sequences with backslash buffering
-        val parser = DefaultMarkanywhereParser()
+        
 
         val textFlow = listOf(
             "\\",         // buffered - escape
@@ -1934,7 +1929,7 @@ class MarkanywhereParserTest {
         ).asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed sameAs semanticEvents {
@@ -1950,7 +1945,7 @@ class MarkanywhereParserTest {
     fun `should parse autolinks incrementally`() = runTest {
         // given
         // Autolinks with < > buffering
-        val parser = DefaultMarkanywhereParser()
+        
 
         val textFlow = listOf(
             "<",          // buffered - could be autolink
@@ -1961,7 +1956,7 @@ class MarkanywhereParserTest {
         ).asFlow()
 
         // when
-        val parsed = textFlow.parse(parser)
+        val parsed = textFlow.parse()
 
         // then
         parsed sameAs semanticEvents {

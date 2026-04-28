@@ -14,11 +14,13 @@ Both developers and AI agents are expected to add entries as they encounter surp
 ## Known gotchas
 
 - Copyright year range (e.g. 2025-2026) is applied on autosave — new files should use only the current year (e.g. 2026).
+- Kotlin context-sensitive resolution (`-Xcontext-sensitive-resolution`, preview in 2.2 / refined in 2.3) is enabled in the convention plugin. Inside a `when` whose subject has a known sealed type (or for `is`/`as` against that type), drop the type prefix on subclass references — write `is Heading` / `Paragraph`, not `is BlockMode.Heading` / `BlockMode.Paragraph`. CSR also applies to explicit return types, declared variable types, and parameter types when an outer expected type drives resolution. It does NOT apply to functions, properties with parameters, extension properties with receivers, type-annotation positions for variables, supertype lists, or generic constraints — keep the prefix in those positions.
 
 ## Test conventions
 
 - Tests must retain `// given`, `// when`, `// then` comment structure — AI agents tend to omit these.
-- Use `sameAsHtml` (not `sameAs`) when asserting rendered HTML output — provides syntax highlighting in the IDE.
+- For semantic event flow testing, use the overloaded `sameAs` infix on `Flow<SemanticEvent>` (defined in `markanywhere-test`) against a `semanticEvents { ... }` builder — this is event-stream comparison, unrelated to HTML.
+- For asserting rendered HTML output (e.g. in `markanywhere-render` tests), use `sameAsHtml` (not the generic string `sameAs`) — provides syntax highlighting in the IDE.
 
 ## Anti-patterns to avoid
 
