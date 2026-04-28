@@ -16,19 +16,12 @@
 
 package com.xemantic.markanywhere.parse
 
-import com.xemantic.kotlin.core.text.lineFlow
-import com.xemantic.kotlin.test.assert
-import com.xemantic.kotlin.test.sameAs
 import com.xemantic.kotlin.test.text.chunkedRandomly
-import com.xemantic.markanywhere.SemanticEvent
+import com.xemantic.markanywhere.flow.mergeAdjacentText
 import com.xemantic.markanywhere.flow.semanticEvents
-import com.xemantic.markanywhere.render.render
 import com.xemantic.markanywhere.test.sameAs
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asFlow
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.yield
 import kotlin.test.Test
 
 class MarkanywhereParserTest {
@@ -46,14 +39,12 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        parsed.render() sameAs """
-            <h1>
-              Hello World
-            </h1>
-            <p>
-              This is a simple paragraph.
-            </p>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "h1" { +"Hello World" }
+            "p" {
+                +"This is a simple paragraph."
+            }
+        }
     }
 
     @Test
@@ -68,14 +59,10 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        parsed.render() sameAs """
-            <h1>
-              Hello World
-            </h1>
-            <p>
-              This paragraph follows immediately.
-            </p>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "h1" { +"Hello World" }
+            "p" { +"This paragraph follows immediately." }
+        }
     }
 
     @Test
@@ -92,28 +79,14 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        parsed.render() sameAs """
-            <h1>
-              Shopping List
-            </h1>
-            <ul>
-              <li>
-                <p>
-                  Apples
-                </p>
-              </li>
-              <li>
-                <p>
-                  Bananas
-                </p>
-              </li>
-              <li>
-                <p>
-                  Oranges
-                </p>
-              </li>
-            </ul>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "h1" { +"Shopping List" }
+            "ul" {
+                "li" { "p" { +"Apples" } }
+                "li" { "p" { +"Bananas" } }
+                "li" { "p" { +"Oranges" } }
+            }
+        }
     }
 
     @Test
@@ -130,28 +103,14 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        parsed.render() sameAs """
-            <p>
-              Here are the items:
-            </p>
-            <ul>
-              <li>
-                <p>
-                  First item
-                </p>
-              </li>
-              <li>
-                <p>
-                  Second item
-                </p>
-              </li>
-              <li>
-                <p>
-                  Third item
-                </p>
-              </li>
-            </ul>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" { +"Here are the items:" }
+            "ul" {
+                "li" { "p" { +"First item" } }
+                "li" { "p" { +"Second item" } }
+                "li" { "p" { +"Third item" } }
+            }
+        }
     }
 
     @Test
@@ -168,22 +127,14 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        parsed.render() sameAs """
-            <p>
-              Follow these steps:
-            </p>
-            <ol>
-              <li>
-                First step
-              </li>
-              <li>
-                Second step
-              </li>
-              <li>
-                Third step
-              </li>
-            </ol>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" { +"Follow these steps:" }
+            "ol" {
+                "li" { +"First step" }
+                "li" { +"Second step" }
+                "li" { +"Third step" }
+            }
+        }
     }
 
     @Test
@@ -201,14 +152,12 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        parsed.render() sameAs """
-            <p>
-              Here is the code:
-            </p>
-            <pre class="code lang-kotlin">
-            fun hello() = println("Hello")
-            </pre>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" { +"Here is the code:" }
+            "pre"("class" to "code lang-kotlin") {
+                +"""fun hello() = println("Hello")"""
+            }
+        }
     }
 
     @Test
@@ -226,20 +175,12 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        parsed.render() sameAs """
-            <h1>
-              Main Title
-            </h1>
-            <h2>
-              Subtitle
-            </h2>
-            <h3>
-              Section
-            </h3>
-            <p>
-              Content here.
-            </p>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "h1" { +"Main Title" }
+            "h2" { +"Subtitle" }
+            "h3" { +"Section" }
+            "p" { +"Content here." }
+        }
     }
 
     @Test
@@ -255,16 +196,12 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        parsed.render() sameAs """
-            <p>
-              As someone once said:
-            </p>
-            <blockquote>
-              <p>
-                This is a famous quote.
-              </p>
-            </blockquote>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" { +"As someone once said:" }
+            "blockquote" {
+                "p" { +"This is a famous quote." }
+            }
+        }
     }
 
     @Test
@@ -280,14 +217,11 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        parsed.render() sameAs """
-            <blockquote>
-              <p>
-                This is a famous quote.
-                It spans multiple lines.
-              </p>
-            </blockquote>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "blockquote" {
+                "p" { +"This is a famous quote.\nIt spans multiple lines." }
+            }
+        }
     }
 
     // Inline formatting edge cases
@@ -304,11 +238,17 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        parsed.render() sameAs """
-            <p>
-              This has <strong>bold then <em>italic inside</em> bold</strong> text.
-            </p>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                +"This has "
+                "strong" {
+                    +"bold then "
+                    "em" { +"italic inside" }
+                    +" bold"
+                }
+                +" text."
+            }
+        }
     }
 
     @Test
@@ -323,11 +263,13 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        parsed.render() sameAs """
-            <p>
-              <strong>bold</strong><em>italic</em><code>code</code>
-            </p>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "strong" { +"bold" }
+                "em" { +"italic" }
+                "code" { +"code" }
+            }
+        }
     }
 
     @Test
@@ -342,11 +284,19 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        parsed.render() sameAs """
-            <p>
-              This has <em>italic</em> and <strong>bold</strong> and <strong><em>bold italic</em></strong> text.
-            </p>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                +"This has "
+                "em" { +"italic" }
+                +" and "
+                "strong" { +"bold" }
+                +" and "
+                "strong" {
+                    "em" { +"bold italic" }
+                }
+                +" text."
+            }
+        }
     }
 
     @Test
@@ -361,11 +311,15 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        parsed.render() sameAs """
-            <p>
-              This has <strong><em>bold italic</em></strong> text.
-            </p>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                +"This has "
+                "strong" {
+                    "em" { +"bold italic" }
+                }
+                +" text."
+            }
+        }
     }
 
     @Test
@@ -380,11 +334,13 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        parsed.render() sameAs """
-            <p>
-              This has <del>strikethrough</del> text.
-            </p>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                +"This has "
+                "del" { +"strikethrough" }
+                +" text."
+            }
+        }
     }
 
     @Test
@@ -399,11 +355,17 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        parsed.render() sameAs """
-            <p>
-              This is <del>deleted <strong>bold</strong> text</del> here.
-            </p>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                +"This is "
+                "del" {
+                    +"deleted "
+                    "strong" { +"bold" }
+                    +" text"
+                }
+                +" here."
+            }
+        }
     }
 
     // HTML escaping
@@ -420,11 +382,9 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        parsed.render() sameAs """
-            <p>
-              Use &lt;div&gt; elements and &amp; ampersands and "quotes" carefully.
-            </p>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" { +"""Use <div> elements and & ampersands and "quotes" carefully.""" }
+        }
     }
 
     @Test
@@ -443,13 +403,11 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        parsed.render() sameAs """
-            <pre class="code lang-html">
-            &lt;div class="test"&gt;
-              &lt;p&gt;Hello &amp; goodbye&lt;/p&gt;
-            &lt;/div&gt;
-            </pre>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "pre"("class" to "code lang-html") {
+                +"<div class=\"test\">\n  <p>Hello & goodbye</p>\n</div>"
+            }
+        }
     }
 
     @Test
@@ -464,11 +422,13 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        parsed.render() sameAs """
-            <p>
-              Use <code>&lt;script&gt;alert("XSS")&lt;/script&gt;</code> carefully.
-            </p>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                +"Use "
+                "code" { +"""<script>alert("XSS")</script>""" }
+                +" carefully."
+            }
+        }
     }
 
     @Test
@@ -483,11 +443,9 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        parsed.render() sameAs """
-            <p>
-              Check if a &lt; b and c &gt; d or x &lt;= y and z &gt;= w.
-            </p>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" { +"Check if a < b and c > d or x <= y and z >= w." }
+        }
     }
 
     // Edge cases
@@ -508,14 +466,10 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        parsed.render() sameAs """
-            <h1>
-              Header
-            </h1>
-            <p>
-              Content after empty line.
-            </p>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "h1" { +"Header" }
+            "p" { +"Content after empty line." }
+        }
     }
 
     @Test
@@ -532,14 +486,10 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        parsed.render() sameAs """
-            <h1>
-              你好世界
-            </h1>
-            <p>
-              This has émojis 🎉 and Ümlauts and 日本語 text.
-            </p>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "h1" { +"你好世界" }
+            "p" { +"This has émojis 🎉 and Ümlauts and 日本語 text." }
+        }
     }
 
     @Test
@@ -554,11 +504,13 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        parsed.render() sameAs """
-            <p>
-              Check out <a href="https://example.com" title="Example Site">Example</a> for more.
-            </p>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                +"Check out "
+                "a"("href" to "https://example.com", "title" to "Example Site") { +"Example" }
+                +" for more."
+            }
+        }
     }
 
     @Test
@@ -573,11 +525,15 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        parsed.render() sameAs """
-            <p>
-              Visit <a href="https://example.com">https://example.com</a> or email <a href="mailto:user@example.com">user@example.com</a>.
-            </p>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                +"Visit "
+                "a"("href" to "https://example.com") { +"https://example.com" }
+                +" or email "
+                "a"("href" to "mailto:user@example.com") { +"user@example.com" }
+                +"."
+            }
+        }
     }
 
     @Test
@@ -592,11 +548,9 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        parsed.render() sameAs """
-            <p>
-              Use *asterisks* and `backticks` and [brackets] literally.
-            </p>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" { +"Use *asterisks* and `backticks` and [brackets] literally." }
+        }
     }
 
     @Test
@@ -611,11 +565,13 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        parsed.render() sameAs """
-            <p>
-              Use <code>`backticks`</code> inside code.
-            </p>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                +"Use "
+                "code" { +"`backticks`" }
+                +" inside code."
+            }
+        }
     }
 
     @Test
@@ -634,17 +590,11 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        parsed.render() sameAs """
-            <p>
-              First paragraph with some content.
-            </p>
-            <p>
-              Second paragraph with more content.
-            </p>
-            <p>
-              Third paragraph to finish.
-            </p>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" { +"First paragraph with some content." }
+            "p" { +"Second paragraph with more content." }
+            "p" { +"Third paragraph to finish." }
+        }
     }
 
     @Test
@@ -659,11 +609,15 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        parsed.render() sameAs """
-            <p>
-              Water is H<sub>2</sub>O and E=mc<sup>2</sup> is famous.
-            </p>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                +"Water is H"
+                "sub" { +"2" }
+                +"O and E=mc"
+                "sup" { +"2" }
+                +" is famous."
+            }
+        }
     }
 
     @Test
@@ -678,11 +632,13 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        parsed.render() sameAs """
-            <p>
-              This is <mark>highlighted</mark> text.
-            </p>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                +"This is "
+                "mark" { +"highlighted" }
+                +" text."
+            }
+        }
     }
 
     @Test
@@ -697,11 +653,13 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        parsed.render() sameAs """
-            <p>
-              The equation <math>E = mc^2</math> is famous.
-            </p>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                +"The equation "
+                "math" { +"E = mc^2" }
+                +" is famous."
+            }
+        }
     }
 
     @Test
@@ -722,15 +680,13 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        parsed.render() sameAs """
-            <p>
-              Here is an equation:
-            </p>
-            <math display="block">\frac{-b \pm \sqrt{b^2 - 4ac}}{2a}</math>
-            <p>
-              This is the quadratic formula.
-            </p>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" { +"Here is an equation:" }
+            "math"("display" to "block") {
+                +"\\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}"
+            }
+            "p" { +"This is the quadratic formula." }
+        }
     }
 
     @Test
@@ -749,15 +705,11 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        parsed.render() sameAs """
-            <p>
-              Some content.
-            </p>
-            <hr/>
-            <p>
-              More content.
-            </p>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" { +"Some content." }
+            "hr" {}
+            "p" { +"More content." }
+        }
     }
 
     @Test
@@ -775,38 +727,26 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        parsed.render() sameAs """
-            <table>
-              <thead>
-                <tr>
-                  <th>
-                    Column 1
-                  </th>
-                  <th>
-                    Column 2
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>
-                    Cell 1
-                  </td>
-                  <td>
-                    Cell 2
-                  </td>
-                </tr>
-                <tr>
-                  <td>
-                    Cell 3
-                  </td>
-                  <td>
-                    Cell 4
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "table" {
+                "thead" {
+                    "tr" {
+                        "th" { +"Column 1" }
+                        "th" { +"Column 2" }
+                    }
+                }
+                "tbody" {
+                    "tr" {
+                        "td" { +"Cell 1" }
+                        "td" { +"Cell 2" }
+                    }
+                    "tr" {
+                        "td" { +"Cell 3" }
+                        "td" { +"Cell 4" }
+                    }
+                }
+            }
+        }
     }
 
     @Test
@@ -822,16 +762,18 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        parsed.render() sameAs """
-            <ul>
-              <li>
-                <input type="checkbox"/>Unchecked task
-              </li>
-              <li>
-                <input type="checkbox" checked="true"/>Checked task
-              </li>
-            </ul>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ul" {
+                "li" {
+                    "input"("type" to "checkbox") {}
+                    +"Unchecked task"
+                }
+                "li" {
+                    "input"("type" to "checkbox", "checked" to "true") {}
+                    +"Checked task"
+                }
+            }
+        }
     }
 
     @Test
@@ -846,11 +788,12 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        parsed.render() sameAs """
-            <p>
-              Here is a link: <a href="https://example.com">Example</a>
-            </p>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                +"Here is a link: "
+                "a"("href" to "https://example.com") { +"Example" }
+            }
+        }
     }
 
     @Test
@@ -865,11 +808,12 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        parsed.render() sameAs """
-            <p>
-              And an image: <img src="https://example.com/image.png" alt="Alt text"/>
-            </p>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                +"And an image: "
+                "img"("src" to "https://example.com/image.png", "alt" to "Alt text") {}
+            }
+        }
     }
 
     @Test
@@ -886,11 +830,11 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        parsed.render() sameAs """
-            <pre class="code">
-            plain text code block
-            </pre>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "pre"("class" to "code") {
+                +"plain text code block"
+            }
+        }
     }
 
     @Test
@@ -910,26 +854,14 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        parsed.render() sameAs """
-            <h1>
-              Heading 1
-            </h1>
-            <h2>
-              Heading 2
-            </h2>
-            <h3>
-              Heading 3
-            </h3>
-            <h4>
-              Heading 4
-            </h4>
-            <h5>
-              Heading 5
-            </h5>
-            <h6>
-              Heading 6
-            </h6>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "h1" { +"Heading 1" }
+            "h2" { +"Heading 2" }
+            "h3" { +"Heading 3" }
+            "h4" { +"Heading 4" }
+            "h5" { +"Heading 5" }
+            "h6" { +"Heading 6" }
+        }
     }
 
     @Test
@@ -947,30 +879,21 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        parsed.render() sameAs """
-            <blockquote>
-              <p>
-                Here are the points:
-              </p>
-              <ul>
-                <li>
-                  First point
-                </li>
-                <li>
-                  Second point
-                </li>
-                <li>
-                  Third point
-                </li>
-              </ul>
-            </blockquote>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "blockquote" {
+                "p" { +"Here are the points:" }
+                "ul" {
+                    "li" { +"First point" }
+                    "li" { +"Second point" }
+                    "li" { +"Third point" }
+                }
+            }
+        }
     }
 
     @Test
     fun `should parse custom markup in markdown`() = runTest {
         // given
-        
         val textFlow = """
             # Hello World
             
@@ -979,13 +902,13 @@ class MarkanywhereParserTest {
             </foo:bar>
             
             Another paragraph.
-        """.trimIndent().lineFlow()
+        """.trimIndent().chunkedRandomly().asFlow()
 
         // when
         val parsed = textFlow.parse()
 
         // then
-        parsed sameAs semanticEvents {
+        parsed.mergeAdjacentText() sameAs semanticEvents {
             "h1" {
                 +"Hello World"
             }
@@ -993,8 +916,7 @@ class MarkanywhereParserTest {
                 +"""println("Hello World")"""
             }
             "p" {
-                +"A"
-                +"nother paragraph."
+                +"Another paragraph."
             }
         }
     }
@@ -1021,24 +943,16 @@ class MarkanywhereParserTest {
 
         // then
         // Note: indented items are treated as paragraphs, not nested lists
-        parsed.render() sameAs """
-            <ul>
-              <li>
-                Item 1
-              </li>
-            </ul>
-            <p>
-                - Nested item 1.1
-            </p>
-            <p>
-                - Nested item 1.2
-            </p>
-            <ul>
-              <li>
-                Item 2
-              </li>
-            </ul>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ul" {
+                "li" { +"Item 1" }
+            }
+            "p" { +"  - Nested item 1.1" }
+            "p" { +"  - Nested item 1.2" }
+            "ul" {
+                "li" { +"Item 2" }
+            }
+        }
     }
 
     @Test
@@ -1058,24 +972,16 @@ class MarkanywhereParserTest {
         // then
         // Note: indented items are treated as paragraphs, not nested lists
         // The indentation is preserved from the original input
-        parsed.render() sameAs """
-            <ol>
-              <li>
-                First item
-              </li>
-            </ol>
-            <p>
-                 1. Nested first
-            </p>
-            <p>
-                 2. Nested second
-            </p>
-            <ol>
-              <li>
-                Second item
-              </li>
-            </ol>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ol" {
+                "li" { +"First item" }
+            }
+            "p" { +"   1. Nested first" }
+            "p" { +"   2. Nested second" }
+            "ol" {
+                "li" { +"Second item" }
+            }
+        }
     }
 
     @Test
@@ -1095,24 +1001,16 @@ class MarkanywhereParserTest {
         // then
         // Note: indented items are treated as paragraphs, not nested lists
         // The indentation is preserved from the original input
-        parsed.render() sameAs """
-            <ul>
-              <li>
-                Unordered item
-              </li>
-            </ul>
-            <p>
-                1. Ordered nested
-            </p>
-            <p>
-                2. Another ordered
-            </p>
-            <ul>
-              <li>
-                Another unordered
-              </li>
-            </ul>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ul" {
+                "li" { +"Unordered item" }
+            }
+            "p" { +"  1. Ordered nested" }
+            "p" { +"  2. Another ordered" }
+            "ul" {
+                "li" { +"Another unordered" }
+            }
+        }
     }
 
     @Test
@@ -1127,11 +1025,9 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        parsed.render() sameAs """
-            <p>
-              Text with **** empty bold markers.
-            </p>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" { +"Text with **** empty bold markers." }
+        }
     }
 
     @Test
@@ -1146,11 +1042,9 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        parsed.render() sameAs """
-            <p>
-              Text with ____ empty underscore markers.
-            </p>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" { +"Text with ____ empty underscore markers." }
+        }
     }
 
     // Note: The parser auto-closes unclosed inline formatting markers at the end of the paragraph.
@@ -1168,11 +1062,12 @@ class MarkanywhereParserTest {
 
         // then
         // Note: parser auto-closes unclosed bold at paragraph end
-        parsed.render() sameAs """
-            <p>
-              This has <strong>unclosed bold text.</strong>
-            </p>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                +"This has "
+                "strong" { +"unclosed bold text." }
+            }
+        }
     }
 
     @Test
@@ -1188,11 +1083,12 @@ class MarkanywhereParserTest {
 
         // then
         // Note: parser auto-closes unclosed italic at paragraph end
-        parsed.render() sameAs """
-            <p>
-              This has <em>unclosed italic text.</em>
-            </p>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                +"This has "
+                "em" { +"unclosed italic text." }
+            }
+        }
     }
 
     @Test
@@ -1208,11 +1104,12 @@ class MarkanywhereParserTest {
 
         // then
         // Note: parser auto-closes unclosed inline code at paragraph end
-        parsed.render() sameAs """
-            <p>
-              This has <code>unclosed code text.</code>
-            </p>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                +"This has "
+                "code" { +"unclosed code text." }
+            }
+        }
     }
 
     @Test
@@ -1227,11 +1124,9 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        parsed.render() sameAs """
-            <p>
-              #hashtag is not a header
-            </p>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" { +"#hashtag is not a header" }
+        }
     }
 
     @Test
@@ -1248,14 +1143,10 @@ class MarkanywhereParserTest {
 
         // then
         // Note: each line starting with hashes (no space after) becomes a separate paragraph
-        parsed.render() sameAs """
-            <p>
-              ##not a header
-            </p>
-            <p>
-              ###also not a header
-            </p>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" { +"##not a header" }
+            "p" { +"###also not a header" }
+        }
     }
 
     @Test
@@ -1273,17 +1164,11 @@ class MarkanywhereParserTest {
 
         // then
         // Note: single hash without space after is treated as a paragraph, not a header
-        parsed.render() sameAs """
-            <p>
-              #
-            </p>
-            <p>
-              ##
-            </p>
-            <p>
-              Content after hash lines.
-            </p>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" { +"#" }
+            "p" { +"##" }
+            "p" { +"Content after hash lines." }
+        }
     }
 
     @Test
@@ -1301,14 +1186,10 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        parsed.render() sameAs """
-            <h1>
-              Header
-            </h1>
-            <p>
-              $longText
-            </p>
-        """.trimIndent()
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "h1" { +"Header" }
+            "p" { +longText }
+        }
     }
 
     @Test
@@ -1327,656 +1208,13 @@ class MarkanywhereParserTest {
 
         // then
         // Note: all indented items become paragraphs, not nested lists
-        parsed.render() sameAs """
-            <ul>
-              <li>
-                Level 1
-              </li>
-            </ul>
-            <p>
-                - Level 2
-            </p>
-            <p>
-                  - Level 3
-            </p>
-            <p>
-                    - Level 4
-            </p>
-        """.trimIndent()
-    }
-
-    // incremental parsing
-
-    @Test
-    fun `should emit SemanticEvents incrementally without buffering`() = runTest {
-        // given
-        
-        val input = MutableSharedFlow<String>()
-        val eventBuffer = mutableListOf<SemanticEvent>()
-
-        suspend fun assertEmissions(vararg events: SemanticEvent) {
-            yield()
-            assert(eventBuffer == events.toList())
-            eventBuffer.clear()
-        }
-
-        // Start collecting events
-        val collectJob = launch {
-            input.parse().collect { event ->
-                eventBuffer += event
-            }
-        }
-        yield() // let the collector start
-
-        // when: send '#' - parser cannot yet determine heading level
-        input.emit("#")
-        // then: no event emitted yet
-        assertEmissions() // empty
-
-        // when: send ' ' - now parser knows it's h1
-        input.emit(" ")
-        // then: Mark(h1) should be emitted
-        assertEmissions(SemanticEvent.Mark("h1"))
-
-        // when: send header text character by character
-        input.emit("H")
-        // then
-        assertEmissions(SemanticEvent.Text("H"))
-        // when
-        input.emit("i")
-        // then
-        assertEmissions(SemanticEvent.Text("i"))
-
-        // when: send newline - header ends
-        input.emit("\n")
-        // then: h1 should be closed
-        assertEmissions(SemanticEvent.Unmark("h1"))
-
-        // when: send paragraph text
-        input.emit("T")
-        // then: paragraph should open first
-        assertEmissions(
-            SemanticEvent.Mark("p"),
-            SemanticEvent.Text("T")
-        )
-
-        // when: complete input
-        collectJob.cancel()
-    }
-
-    @Test
-    fun `should parse incrementally`() = runTest {
-        // given
-        
-        val textFlow = listOf(
-            "# Hello ",
-            "World\n",
-            "\n",
-            "<foo:bar buzz=\"42\">",
-            "println(\"Hello ",
-            "World\")",
-            "</foo:bar>\n",
-            "\n",
-            "Another paragraph."
-        ).asFlow()
-
-        // when
-        val parsed = textFlow.parse()
-
-        // then
-        parsed sameAs semanticEvents {
-            "h1" {
-                +"Hello "
-                +"World"
-            }
-            tag("foo:bar", "buzz" to "42") {
-                +"println(\"Hello "
-                +"World\")"
-            }
-            "p" {
-                +"A"
-                +"nother paragraph."
-            }
-        }
-    }
-
-    @Test
-    fun `should parse incrementally with inline formatting split at buffering boundaries`() = runTest {
-        // This test verifies that inline formatting works correctly when chunks are split
-        // at key points. Opening markers are combined with the first content char so that
-        // marker resolution and content emission happen in the same chunk.
-        
-
-        val textFlow = listOf(
-            // Heading level detection: # buffered until space seen
-            "## ",         // h2 with space (combined for resolution)
-            "Head",
-            "ing\n",
-
-            "\n",
-
-            // Bold with asterisks: combined opening + first char for resolution
-            "**b",         // bold opens with first content char
-            "old",
-            "**",          // bold closes
-            " text\n",
-
-            "\n",
-
-            // Italic with asterisk
-            "*i",          // italic opens with first content char
-            "talic",
-            "*",           // italic closes
-            " word\n",
-
-            "\n",
-
-            // Bold+italic: combined opening + first char
-            "***b",        // bold+italic opens with first content char
-            "oth",
-            "***",         // both close
-            ".\n",
-
-            "\n",
-
-            // Underscores for bold
-            "__u",         // bold opens with first content char
-            "nder",
-            "__",          // bold closes
-            " end\n",
-
-            "\n",
-
-            // Inline code single backtick
-            "`c",          // code opens with first content char
-            "ode",
-            "`",           // code closes
-            " more\n",
-
-            "\n",
-
-            // Inline code double backtick (content with embedded backtick)
-            "``",          // double backtick code opens
-            " code ",
-            " with ",
-            "``",          // double backtick code closes
-            ".\n",
-
-            "\n",
-
-            // Strikethrough
-            "~~s",         // strikethrough opens with first content char
-            "trike",
-            "~~",          // strikethrough closes
-            ".\n",
-
-            "\n",
-
-            // Subscript
-            "H",
-            "~2",          // subscript opens with content
-            "~",           // subscript closes
-            "O\n",
-
-            "\n",
-
-            // Superscript
-            "x",
-            "^2",          // superscript opens with content
-            "^",           // superscript closes
-            " end\n",
-
-            "\n",
-
-            // Highlight
-            "==h",         // highlight opens with first content char
-            "ighlight",
-            "==",          // highlight closes
-            ".\n",
-
-            "\n",
-
-            // Inline math ($ is immediate toggle, content goes through)
-            "\$E",         // math opens with first content
-            "=mc^2",
-            "\$",          // math closes
-            " done\n",
-
-            "\n",
-
-            // Link: [ starts buffering text, ]( transitions to url
-            "[l",          // link text starts
-            "ink",
-            "](",          // transition to url
-            "https://",
-            "ex.com",
-            ")",           // link ends
-            " here\n",
-
-            "\n",
-
-            // Image: ![ starts image (! buffered until [)
-            "![a",         // combined ![ with first alt char
-            "lt",
-            "](",          // transition to url
-            "img",
-            ".png",
-            ")",           // image ends
-            ".\n",
-
-            "\n",
-
-            // Nested formatting: italic containing bold
-            "*i",          // italic opens with first char
-            "ta ",
-            "**b",         // bold opens with first char
-            "old",
-            "**",          // bold closes
-            " more",
-            "*",           // italic closes
-            ".\n",
-
-            "\n",
-
-            // Triple underscore bold+italic
-            "___t",        // bold+italic opens with first char
-            "riple",
-            "___",         // both close
-            ".\n"
-        ).asFlow()
-
-        // when
-        val parsed = textFlow.parse()
-
-        // then
-        // Note: Expected chunks reflect actual parser behavior:
-        // - Fast-path optimization may merge content within formatting spans
-        // - Trailing content after closing markers may be split at control chars
-        // - Link/image text is buffered and emitted as one chunk when link completes
-        parsed sameAs semanticEvents {
-            "h2" {
-                +"Head"
-                +"ing"
-            }
-            "p" {
-                "strong" {
-                    +"b"
-                    +"old"
-                }
-                +" "
-                +"text"
-            }
-            "p" {
-                "em" {
-                    +"i"
-                    +"talic"
-                }
-                +" "
-                +"word"
-            }
-            "p" {
-                "strong" {
-                    "em" {
-                        +"b"
-                        +"oth"
-                    }
-                }
-                +"."
-            }
-            "p" {
-                "strong" {
-                    +"u"
-                    +"nder"
-                }
-                // After __ closes (triggered by space), space emitted separately, then rest fast-pathed
-                +" "
-                +"end"
-            }
-            "p" {
-                "code" {
-                    +"c"
-                    +"ode"
-                }
-                // After ` closes (immediate), next chunk starts fresh with fast-path
-                +" more"
-            }
-            "p" {
-                "code" {
-                    // Double backtick code: content goes to buffer, emitted as one chunk
-                    +"code  with"
-                }
-                +"."
-            }
-            "p" {
-                "del" {
-                    +"s"
-                    +"trike"
-                }
-                +"."
-            }
-            "p" {
-                +"H"
-                "sub" {
-                    +"2"
-                }
-                +"O"
-            }
-            "p" {
-                +"x"
-                "sup" {
-                    +"2"
-                }
-                // ^ is immediate toggle, next chunk starts fresh with fast-path
-                +" end"
-            }
-            "p" {
-                "mark" {
-                    +"h"
-                    +"ighlight"
-                }
-                +"."
-            }
-            "p" {
-                "math" {
-                    // Math uses fast-path, content merged
-                    +"E=mc^2"
-                }
-                +" done"
-            }
-            "p" {
-                "a"("href" to "https://ex.com") {
-                    // Link text is buffered, emitted as one chunk
-                    +"link"
-                }
-                +" here"
-            }
-            "p" {
-                "img"("src" to "img.png", "alt" to "alt") {}
-                +"."
-            }
-            "p" {
-                "em" {
-                    +"i"
-                    +"ta "
-                    "strong" {
-                        +"b"
-                        +"old"
-                    }
-                    // After ** closes (triggered by space), space emitted separately
-                    +" "
-                    +"more"
-                }
-                +"."
-            }
-            "p" {
-                "strong" {
-                    "em" {
-                        +"t"
-                        +"riple"
-                    }
-                }
-                +"."
-            }
-        }
-    }
-
-    @Test
-    fun `should parse incrementally with block-level structures`() = runTest {
-        // This test verifies block-level incremental parsing.
-        // Block-level patterns require certain sequences to be seen together for
-        // disambiguation. Content after the marker is processed via fast-path.
-        
-
-        val textFlow = listOf(
-            // Unordered list: "- " + first content char triggers list mode
-            // then rest of chunk is fast-pathed
-            "- i",        // list marker + first char together
-            "tem",
-            " one\n",
-            "- i",        // next item
-            "tem two\n",
-
-            "\n",
-
-            // Paragraph to clearly separate list sections
-            "Sep\n",
-
-            "\n",
-
-            // Task list - marker pattern must be together
-            "- [ ] u",    // unchecked task + first content char
-            "ndone\n",
-            "- [x] d",    // checked task + first content char
-            "one\n",
-
-            "\n",
-
-            // Paragraph separator
-            "Sep\n",
-
-            "\n",
-
-            // Ordered list - "1. " + first char together
-            "1. f",       // ordered list marker + first char
-            "irst\n",
-            "2. s",       // next item marker + first char
-            "econd\n",
-
-            "\n",
-
-            // Blockquote - "> " + first content char together
-            "> q",        // blockquote marker + first char
-            "uoted\n",
-            "> m",        // continuation + first char
-            "ore\n",
-
-            "\n",
-
-            // Horizontal rule: --- on single line
-            "---\n",
-
-            // Code block with fence + language
-            "```kotlin\n",
-            "val x = 42\n",  // code content (no inline processing, emitted as-is)
-            "```\n",
-
-            "\n",
-
-            // Math block
-            "$$\n",
-            "\\sum_{i=1}^{n} i\n",  // math content merged
-            "$$\n",
-
-            "\n",
-
-            // Table
-            "| H1 | H2 |\n",
-            "|---|---|\n",
-            "| A | B |\n"
-        ).asFlow()
-
-        // when
-        val parsed = textFlow.parse()
-
-        // then
-        parsed sameAs semanticEvents {
+        parsed.mergeAdjacentText() sameAs semanticEvents {
             "ul" {
-                "li" {
-                    +"i"
-                    +"tem"
-                    +" one"
-                }
-                "li" {
-                    +"i"
-                    +"tem two"
-                }
+                "li" { +"Level 1" }
             }
-            "p" {
-                // First char triggers paragraph open, rest is fast-pathed
-                +"S"
-                +"ep"
-            }
-            "ul" {
-                "li" {
-                    "input"("type" to "checkbox") {}
-                    +"u"
-                    +"ndone"
-                }
-                "li" {
-                    "input"("type" to "checkbox", "checked" to "true") {}
-                    +"d"
-                    +"one"
-                }
-            }
-            "p" {
-                +"S"
-                +"ep"
-            }
-            "ol" {
-                "li" {
-                    +"f"
-                    +"irst"
-                }
-                "li" {
-                    +"s"
-                    +"econd"
-                }
-            }
-            "blockquote" {
-                "p" {
-                    +"q"
-                    +"uoted"
-                    +"\n"
-                    +"m"
-                    +"ore"
-                }
-            }
-            "hr" {}
-            "pre"("class" to "code lang-kotlin") {
-                +"val x = 42"
-            }
-            "math"("display" to "block") {
-                +"\\sum_{i=1}^{n} i"
-            }
-            "table" {
-                "thead" {
-                    "tr" {
-                        "th" {
-                            +"H1"
-                        }
-                        "th" {
-                            +"H2"
-                        }
-                    }
-                }
-                "tbody" {
-                    "tr" {
-                        "td" {
-                            +"A"
-                        }
-                        "td" {
-                            +"B"
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    @Test
-    fun `should parse incrementally with custom markup tags`() = runTest {
-        // given
-        // Custom markup tags require special handling for opening and closing tags.
-        
-
-        val textFlow = listOf(
-            // Custom markup tag with attributes split character by character
-            "<",          // buffered
-            "ns",
-            ":",
-            "tag",
-            " ",
-            "attr",
-            "=",
-            "\"",
-            "val",
-            "\"",
-            ">",          // tag opens
-            "\n",
-            "con",
-            "tent\n",
-            "<",          // buffered - potential closing tag
-            "/",          // continuing
-            "ns",
-            ":",
-            "tag",
-            ">",          // tag closes
-            "\n"
-        ).asFlow()
-
-        // when
-        val parsed = textFlow.parse()
-
-        // then
-        parsed sameAs semanticEvents {
-            tag("ns:tag", "attr" to "val") {
-                +"con"
-                +"tent"
-            }
-        }
-    }
-
-    @Test
-    fun `should parse escape sequences incrementally`() = runTest {
-        // given
-        // Escape sequences with backslash buffering
-        
-
-        val textFlow = listOf(
-            "\\",         // buffered - escape
-            "*",          // escaped asterisk (literal)
-            "not italic",
-            "\\",         // buffered
-            "*"           // escaped
-        ).asFlow()
-
-        // when
-        val parsed = textFlow.parse()
-
-        // then
-        parsed sameAs semanticEvents {
-            "p" {
-                +"*"
-                +"not italic"
-                +"*"
-            }
-        }
-    }
-
-    @Test
-    fun `should parse autolinks incrementally`() = runTest {
-        // given
-        // Autolinks with < > buffering
-        
-
-        val textFlow = listOf(
-            "<",          // buffered - could be autolink
-            "test",
-            "@",
-            "email.com",
-            ">"           // autolink ends
-        ).asFlow()
-
-        // when
-        val parsed = textFlow.parse()
-
-        // then
-        parsed sameAs semanticEvents {
-            "p" {
-                "a"("href" to "mailto:test@email.com") {
-                    +"test@email.com"
-                }
-            }
+            "p" { +"  - Level 2" }
+            "p" { +"    - Level 3" }
+            "p" { +"      - Level 4" }
         }
     }
 

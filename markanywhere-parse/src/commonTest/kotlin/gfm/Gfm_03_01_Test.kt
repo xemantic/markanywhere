@@ -14,12 +14,13 @@
  * limitations under the License.
  */
 
-package com.xemantic.markanywhere.parse
+package com.xemantic.markanywhere.parse.gfm
 
 import com.xemantic.kotlin.core.text.buildText
 import com.xemantic.kotlin.test.text.chunkedRandomly
 import com.xemantic.markanywhere.flow.mergeAdjacentText
 import com.xemantic.markanywhere.flow.semanticEvents
+import com.xemantic.markanywhere.parse.parse
 import com.xemantic.markanywhere.test.sameAs
 import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.test.runTest
