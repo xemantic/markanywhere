@@ -130,9 +130,9 @@ class MarkanywhereParserTest {
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" { +"Follow these steps:" }
             "ol" {
-                "li" { +"First step" }
-                "li" { +"Second step" }
-                "li" { +"Third step" }
+                "li" { "p" { +"First step" } }
+                "li" { "p" { +"Second step" } }
+                "li" { "p" { +"Third step" } }
             }
         }
     }
@@ -923,14 +923,9 @@ class MarkanywhereParserTest {
 
     // Edge case tests
 
-    // Note: The parser currently does not support nested lists via indentation.
-    // Indented list items after a parent item are treated as regular paragraphs.
-    // These tests document the current behavior.
-
     @Test
-    fun `should treat indented list items as paragraphs - no nested list support`() = runTest {
+    fun `should parse indented bullet items as nested unordered list`() = runTest {
         // given
-        
         val textFlow = """
             - Item 1
               - Nested item 1.1
@@ -942,23 +937,23 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        // Note: indented items are treated as paragraphs, not nested lists
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "ul" {
-                "li" { +"Item 1" }
-            }
-            "p" { +"  - Nested item 1.1" }
-            "p" { +"  - Nested item 1.2" }
-            "ul" {
-                "li" { +"Item 2" }
+                "li" {
+                    "p" { +"Item 1" }
+                    "ul" {
+                        "li" { "p" { +"Nested item 1.1" } }
+                        "li" { "p" { +"Nested item 1.2" } }
+                    }
+                }
+                "li" { "p" { +"Item 2" } }
             }
         }
     }
 
     @Test
-    fun `should treat indented ordered list items as paragraphs - no nested list support`() = runTest {
+    fun `should parse indented ordered items as nested ordered list`() = runTest {
         // given
-        
         val textFlow = """
             1. First item
                1. Nested first
@@ -970,24 +965,23 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        // Note: indented items are treated as paragraphs, not nested lists
-        // The indentation is preserved from the original input
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "ol" {
-                "li" { +"First item" }
-            }
-            "p" { +"   1. Nested first" }
-            "p" { +"   2. Nested second" }
-            "ol" {
-                "li" { +"Second item" }
+                "li" {
+                    "p" { +"First item" }
+                    "ol" {
+                        "li" { "p" { +"Nested first" } }
+                        "li" { "p" { +"Nested second" } }
+                    }
+                }
+                "li" { "p" { +"Second item" } }
             }
         }
     }
 
     @Test
-    fun `should treat mixed indented list items as paragraphs - no nested list support`() = runTest {
+    fun `should parse ordered items nested inside unordered list`() = runTest {
         // given
-        
         val textFlow = """
             - Unordered item
               1. Ordered nested
@@ -999,16 +993,16 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        // Note: indented items are treated as paragraphs, not nested lists
-        // The indentation is preserved from the original input
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "ul" {
-                "li" { +"Unordered item" }
-            }
-            "p" { +"  1. Ordered nested" }
-            "p" { +"  2. Another ordered" }
-            "ul" {
-                "li" { +"Another unordered" }
+                "li" {
+                    "p" { +"Unordered item" }
+                    "ol" {
+                        "li" { "p" { +"Ordered nested" } }
+                        "li" { "p" { +"Another ordered" } }
+                    }
+                }
+                "li" { "p" { +"Another unordered" } }
             }
         }
     }
@@ -1193,9 +1187,8 @@ class MarkanywhereParserTest {
     }
 
     @Test
-    fun `should treat deeply indented list items as paragraphs - no nested list support`() = runTest {
+    fun `should parse deeply indented bullet items as four-level nested list`() = runTest {
         // given
-        
         val textFlow = """
             - Level 1
               - Level 2
@@ -1207,14 +1200,25 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        // Note: all indented items become paragraphs, not nested lists
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "ul" {
-                "li" { +"Level 1" }
+                "li" {
+                    "p" { +"Level 1" }
+                    "ul" {
+                        "li" {
+                            "p" { +"Level 2" }
+                            "ul" {
+                                "li" {
+                                    "p" { +"Level 3" }
+                                    "ul" {
+                                        "li" { "p" { +"Level 4" } }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
-            "p" { +"  - Level 2" }
-            "p" { +"    - Level 3" }
-            "p" { +"      - Level 4" }
         }
     }
 

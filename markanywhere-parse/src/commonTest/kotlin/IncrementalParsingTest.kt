@@ -109,9 +109,11 @@ class IncrementalParsingTest {
                 +"Hello "
                 +"World"
             }
-            tag("foo:bar", "buzz" to "42") {
-                +"println(\"Hello "
-                +"World\")"
+            tagged {
+                "foo:bar"("buzz" to "42") {
+                    +"println(\"Hello "
+                    +"World\")"
+                }
             }
             "p" {
                 +"A"
@@ -592,8 +594,8 @@ class IncrementalParsingTest {
         val parsed = textFlow.parse()
 
         // then
-        parsed sameAs semanticEvents {
-            tag("ns:tag", "attr" to "val") {
+        parsed sameAs semanticEvents(tagged = true) {
+            "ns:tag"("attr" to "val") {
                 +"con"
                 +"tent"
             }

@@ -907,14 +907,7 @@ private class ParserState(
                 // Keep buffering for ordered list dispatch at `\n`.
             }
             line matches Patterns.ORDERED_LIST_ITEM -> {
-                mark("ol")
-                mark("li")
-                lineBuffer.clear()
-                inListItem = true
-                blockMode = BlockMode.OrderedList
-            }
-            line matches Patterns.ORDERED_LIST_PARTIAL -> {
-                // Keep buffering
+                // Defer to `\n` handler; ListBlock handles ordered + nested ordered.
             }
             // Blockquote: > text
             line == "> " -> {
