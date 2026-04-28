@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Kazimierz Pogoda / Xemantic
+ * Copyright 2025-2026 Kazimierz Pogoda / Xemantic
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,7 +21,6 @@ import com.xemantic.kotlin.test.coroutines.should
 import com.xemantic.kotlin.test.have
 import com.xemantic.kotlin.test.sameAs
 import com.xemantic.markanywhere.flow.semanticEvents
-import com.xemantic.markanywhere.parse.DefaultMarkanywhereParser
 import com.xemantic.markanywhere.parse.parse
 import com.xemantic.markanywhere.render.render
 import com.xemantic.markanywhere.test.sameAs
@@ -34,7 +33,6 @@ class SemanticEventsExtractorTest {
     @Test
     fun `should extract custom tag`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
         val events = """
             Some text
             
@@ -43,7 +41,7 @@ class SemanticEventsExtractorTest {
             </foo:bar>
             
             Some other text
-        """.trimIndent().lineFlow().parse(parser)
+        """.trimIndent().lineFlow().parse()
         val extractor = MarkupContentExtractor(
             tag = "foo:bar"
         )
@@ -56,8 +54,10 @@ class SemanticEventsExtractorTest {
             have(succeeded)
             have(!isExtracting)
             extractedEvents.asFlow() sameAs semanticEvents {
-                tag("foo:bar", "buzz" to "42") {
-                    +"""println("Hello World")"""
+                tagged {
+                    "foo:bar"("buzz" to "42") {
+                        +"""println("Hello World")"""
+                    }
                 }
             }
             have(attributes == mapOf("buzz" to "42"))
@@ -82,10 +82,9 @@ class SemanticEventsExtractorTest {
     @Test
     fun `should not extract when tag is not found`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
         val events = """
             Some text without the target tag
-        """.trimIndent().lineFlow().parse(parser)
+        """.trimIndent().lineFlow().parse()
         val extractor = MarkupContentExtractor(
             tag = "foo:bar"
         )
@@ -112,12 +111,11 @@ class SemanticEventsExtractorTest {
     @Test
     fun `should extract tag without attributes`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
         val events = """
             <foo:bar>
             content
             </foo:bar>
-        """.trimIndent().lineFlow().parse(parser)
+        """.trimIndent().lineFlow().parse()
         val extractor = MarkupContentExtractor(
             tag = "foo:bar"
         )
@@ -131,8 +129,10 @@ class SemanticEventsExtractorTest {
             have(!isExtracting)
             have(attributes == null)
             extractedEvents.asFlow() sameAs semanticEvents {
-                tag("foo:bar") {
-                    +"content"
+                tagged {
+                    "foo:bar" {
+                        +"content"
+                    }
                 }
             }
             content sameAs "content"
@@ -148,11 +148,10 @@ class SemanticEventsExtractorTest {
     @Test
     fun `should extract empty tag`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
         val events = """
             <foo:bar>
             </foo:bar>
-        """.trimIndent().lineFlow().parse(parser)
+        """.trimIndent().lineFlow().parse()
         val extractor = MarkupContentExtractor(
             tag = "foo:bar"
         )
@@ -165,8 +164,8 @@ class SemanticEventsExtractorTest {
             have(succeeded)
             have(!isExtracting)
             have(attributes == null)
-            extractedEvents.asFlow() sameAs semanticEvents {
-                tag("foo:bar") {}
+            extractedEvents.asFlow() sameAs semanticEvents(tagged = true) {
+                "foo:bar" {}
             }
             have(content == null)
         }
@@ -180,14 +179,13 @@ class SemanticEventsExtractorTest {
     @Test
     fun `should extract multiple lines of content`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
         val events = """
             <foo:bar>
             line1
             line2
             line3
             </foo:bar>
-        """.trimIndent().lineFlow().parse(parser)
+        """.trimIndent().lineFlow().parse()
         val extractor = MarkupContentExtractor(tag = "foo:bar")
 
         // when
@@ -198,8 +196,8 @@ class SemanticEventsExtractorTest {
             have(succeeded)
             have(!isExtracting)
             have(attributes == null)
-            extractedEvents.asFlow() sameAs semanticEvents {
-                tag("foo:bar") {
+            extractedEvents.asFlow() sameAs semanticEvents(tagged = true) {
+                "foo:bar" {
                     +"line1"
                     +"\n"
                     +"l"
@@ -228,7 +226,6 @@ class SemanticEventsExtractorTest {
     @Test
     fun `should extract tag with nested tags inside`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
         // NOTE: Parser treats <nested:tag> as plain text, not as Mark events
         val events = """
             <foo:bar>
@@ -238,7 +235,7 @@ class SemanticEventsExtractorTest {
             </nested:tag>
             after
             </foo:bar>
-        """.trimIndent().lineFlow().parse(parser)
+        """.trimIndent().lineFlow().parse()
         val extractor = MarkupContentExtractor(
             tag = "foo:bar"
         )
@@ -254,8 +251,8 @@ class SemanticEventsExtractorTest {
             // NOTE: The text chunking reflects how the parser incrementally detects
             // potential closing tags - when '<' is seen, it buffers until it can
             // determine if it's the closing tag or not.
-            extractedEvents.asFlow() sameAs semanticEvents {
-                tag("foo:bar") {
+            extractedEvents.asFlow() sameAs semanticEvents(tagged = true) {
+                "foo:bar" {
                     +"before"
                     +"\n"
                     +"<n"
@@ -294,7 +291,6 @@ class SemanticEventsExtractorTest {
     @Test
     fun `should extract only first occurrence of tag`() = runTest {
         // given
-        val parser = DefaultMarkanywhereParser()
         val events = """
             <foo:bar>
             first content
@@ -303,7 +299,7 @@ class SemanticEventsExtractorTest {
             <foo:bar>
             second content
             </foo:bar>
-        """.trimIndent().lineFlow().parse(parser)
+        """.trimIndent().lineFlow().parse()
         val extractor = MarkupContentExtractor(
             tag = "foo:bar"
         )
@@ -316,8 +312,8 @@ class SemanticEventsExtractorTest {
             have(succeeded)
             have(!isExtracting)
             have(attributes == null)
-            extractedEvents.asFlow() sameAs semanticEvents {
-                tag("foo:bar") {
+            extractedEvents.asFlow() sameAs semanticEvents(tagged = true) {
+                "foo:bar" {
                     +"first content"
                 }
             }

@@ -765,12 +765,16 @@ class MarkanywhereParserTest {
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "ul" {
                 "li" {
-                    "input"("type" to "checkbox") {}
-                    +"Unchecked task"
+                    "p" {
+                        "input"("type" to "checkbox", "disabled" to "") {}
+                        +" Unchecked task"
+                    }
                 }
                 "li" {
-                    "input"("type" to "checkbox", "checked" to "true") {}
-                    +"Checked task"
+                    "p" {
+                        "input"("type" to "checkbox", "checked" to "", "disabled" to "") {}
+                        +" Checked task"
+                    }
                 }
             }
         }
@@ -912,8 +916,10 @@ class MarkanywhereParserTest {
             "h1" {
                 +"Hello World"
             }
-            tag("foo:bar", "buzz" to "42") {
-                +"""println("Hello World")"""
+            tagged {
+                "foo:bar"("buzz" to "42") {
+                    +"""println("Hello World")"""
+                }
             }
             "p" {
                 +"Another paragraph."
@@ -1144,9 +1150,9 @@ class MarkanywhereParserTest {
     }
 
     @Test
-    fun `should handle lines with only hashes as regular paragraphs`() = runTest {
+    fun `should treat bare hash lines as empty ATX headings`() = runTest {
         // given
-        
+
         val textFlow = """
             #
             ##
@@ -1157,10 +1163,9 @@ class MarkanywhereParserTest {
         val parsed = textFlow.parse()
 
         // then
-        // Note: single hash without space after is treated as a paragraph, not a header
         parsed.mergeAdjacentText() sameAs semanticEvents {
-            "p" { +"#" }
-            "p" { +"##" }
+            "h1" {}
+            "h2" {}
             "p" { +"Content after hash lines." }
         }
     }

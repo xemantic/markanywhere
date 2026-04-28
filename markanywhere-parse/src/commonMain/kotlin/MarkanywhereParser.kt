@@ -564,9 +564,14 @@ private class ParserState(
         else -> false
     }
 
-    // Characters that start block-level elements
+    // Characters that may start (or be ambiguous with) a block-level element.
+    // Used to gate eager paragraph opening in Start mode: a char NOT in this set
+    // is unambiguously paragraph content, so we can mark <p> immediately and
+    // route subsequent chars through Paragraph mode for incremental emission.
+    // Includes `*`, `_` (thematic break vs. emphasis), `\t` (indented code), and
+    // ` ` (leading whitespace before any block).
     private fun Char.isBlockStart(): Boolean = when (this) {
-        '#', '`', '-', '>', '|', '$', '<', ' ' -> true
+        '#', '`', '-', '>', '|', '$', '<', ' ', '\t', '*', '_' -> true
         else -> isDigit()
     }
 
@@ -763,6 +768,16 @@ private class ParserState(
     private suspend fun SemanticEventScope.processStart(
         char: Char
     ) {
+        // Eager paragraph opening: if this is the first char of a fresh line and the
+        // char cannot start any other block, open the paragraph now and reprocess the
+        // char through Paragraph mode (which supports fast-path for incremental emission).
+        if (lineBuffer.isEmpty() && char != '\n' && !char.isBlockStart()) {
+            mark("p")
+            blockMode = BlockMode.Paragraph
+            pendingDeferredChar = char
+            return
+        }
+
         // Handle newline - process buffered line
         if (char == '\n') {
             val line = lineBuffer.toString()
@@ -1009,6 +1024,16 @@ private class ParserState(
     private suspend fun SemanticEventScope.processParagraphContinuation(
         char: Char
     ) {
+        // Eager continuation: if this is the first char of the next line and it cannot
+        // start a block that interrupts the paragraph, emit the soft-break newline and
+        // switch to Paragraph mode so subsequent chars stream incrementally via fast-path.
+        if (lineBuffer.isEmpty() && char != '\n' && !char.isBlockStart()) {
+            +"\n"
+            blockMode = BlockMode.Paragraph
+            pendingDeferredChar = char
+            return
+        }
+
         if (char != '\n') {
             lineBuffer.append(char)
             return
@@ -1150,10 +1175,35 @@ private class ParserState(
         if (firstContent.isNotBlank()) {
             mark("p")
             ctx.paragraphOpen = true
-            processInlineContent(firstContent.trimEnd())
+            emitItemFirstContent(firstContent.trimEnd())
             flushInline()
         }
         mode.blankSeen = false
+    }
+
+    /**
+     * Emit the first paragraph content of a list item. If [content] begins with a
+     * GFM task-list marker (`[ ]`, `[x]`, or `[X]` followed by a space), emit a
+     * disabled checkbox `<input>` and pass the remainder (including the space
+     * after `]`) through inline processing. Otherwise process [content] as inline.
+     */
+    private suspend fun SemanticEventScope.emitItemFirstContent(content: String) {
+        if (content.length >= 4
+            && content[0] == '['
+            && content[2] == ']'
+            && content[3] == ' '
+            && (content[1] == ' ' || content[1] == 'x' || content[1] == 'X')
+        ) {
+            val checked = content[1] != ' '
+            if (checked) {
+                "input"("type" to "checkbox", "checked" to "", "disabled" to "") {}
+            } else {
+                "input"("type" to "checkbox", "disabled" to "") {}
+            }
+            processInlineContent(content.substring(3))
+        } else {
+            processInlineContent(content)
+        }
     }
 
     /** Close any open `<p>` in the top context. */
@@ -1273,7 +1323,7 @@ private class ParserState(
                     if (firstContent.isNotBlank()) {
                         mark("p")
                         ctx.paragraphOpen = true
-                        processInlineContent(firstContent.trimEnd())
+                        emitItemFirstContent(firstContent.trimEnd())
                         flushInline()
                     }
                     // Update content/marker cols for the new item (in case marker width differs).

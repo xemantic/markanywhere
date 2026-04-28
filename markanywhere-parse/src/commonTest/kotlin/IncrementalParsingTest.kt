@@ -97,7 +97,8 @@ class IncrementalParsingTest {
             "World\")",
             "</foo:bar>\n",
             "\n",
-            "Another paragraph."
+            "Another ",
+            "paragraph."
         )
 
         // when
@@ -116,8 +117,8 @@ class IncrementalParsingTest {
                 }
             }
             "p" {
-                +"A"
-                +"nother paragraph."
+                +"Another "
+                +"paragraph."
             }
         }
     }
@@ -480,13 +481,17 @@ class IncrementalParsingTest {
         parsed sameAs semanticEvents {
             "ul" {
                 "li" {
-                    +"i"
-                    +"tem"
-                    +" one"
+                    "p" {
+                        +"i"
+                        +"tem"
+                        +" one"
+                    }
                 }
                 "li" {
-                    +"i"
-                    +"tem two"
+                    "p" {
+                        +"i"
+                        +"tem two"
+                    }
                 }
             }
             "p" {
@@ -496,14 +501,18 @@ class IncrementalParsingTest {
             }
             "ul" {
                 "li" {
-                    "input"("type" to "checkbox") {}
-                    +"u"
-                    +"ndone"
+                    "p" {
+                        "input"("type" to "checkbox") {}
+                        +"u"
+                        +"ndone"
+                    }
                 }
                 "li" {
-                    "input"("type" to "checkbox", "checked" to "true") {}
-                    +"d"
-                    +"one"
+                    "p" {
+                        "input"("type" to "checkbox", "checked" to "true") {}
+                        +"d"
+                        +"one"
+                    }
                 }
             }
             "p" {
@@ -512,12 +521,16 @@ class IncrementalParsingTest {
             }
             "ol" {
                 "li" {
-                    +"f"
-                    +"irst"
+                    "p" {
+                        +"f"
+                        +"irst"
+                    }
                 }
                 "li" {
-                    +"s"
-                    +"econd"
+                    "p" {
+                        +"s"
+                        +"econd"
+                    }
                 }
             }
             "blockquote" {
