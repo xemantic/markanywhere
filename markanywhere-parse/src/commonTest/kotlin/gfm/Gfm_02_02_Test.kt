@@ -56,7 +56,7 @@ class Gfm_02_02_Test {
                 }
             }
         }
-        // CommonMark expected:
+        // GFM expected:
         /*
             <pre><code>foo→baz→→bim
             </code></pre>
@@ -79,7 +79,7 @@ class Gfm_02_02_Test {
                 }
             }
         }
-        // CommonMark expected:
+        // GFM expected:
         /*
             <pre><code>foo→baz→→bim
             </code></pre>
@@ -105,7 +105,7 @@ class Gfm_02_02_Test {
                 }
             }
         }
-        // CommonMark expected:
+        // GFM expected:
         /*
             <pre><code>a→a
             ὐ→a
@@ -134,7 +134,7 @@ class Gfm_02_02_Test {
                 }
             }
         }
-        // CommonMark expected:
+        // GFM expected:
         /*
             <ul>
             <li>
@@ -170,7 +170,7 @@ class Gfm_02_02_Test {
                 }
             }
         }
-        // CommonMark expected:
+        // GFM expected:
         /*
             <ul>
             <li>
@@ -200,7 +200,7 @@ class Gfm_02_02_Test {
                 }
             }
         }
-        // CommonMark expected:
+        // GFM expected:
         /*
             <blockquote>
             <pre><code>  foo
@@ -229,7 +229,7 @@ class Gfm_02_02_Test {
                 }
             }
         }
-        // CommonMark expected:
+        // GFM expected:
         /*
             <ul>
             <li>
@@ -259,7 +259,7 @@ class Gfm_02_02_Test {
                 }
             }
         }
-        // CommonMark expected:
+        // GFM expected:
         /*
             <pre><code>foo
             bar
@@ -295,7 +295,7 @@ class Gfm_02_02_Test {
                 }
             }
         }
-        // CommonMark expected:
+        // GFM expected:
         /*
             <ul>
             <li>foo
@@ -324,7 +324,7 @@ class Gfm_02_02_Test {
         parsed sameAs semanticEvents {
             "h1" { +"Foo" }
         }
-        // CommonMark expected:
+        // GFM expected:
         /*
             <h1>Foo</h1>
          */
@@ -342,7 +342,7 @@ class Gfm_02_02_Test {
         parsed sameAs semanticEvents {
             "hr" {}
         }
-        // CommonMark expected:
+        // GFM expected:
         /*
             <hr />
          */

@@ -16,7 +16,6 @@
 
 package com.xemantic.markanywhere.parse.gfm
 
-import com.xemantic.kotlin.core.text.buildText
 import com.xemantic.kotlin.test.text.chunkedRandomly
 import com.xemantic.markanywhere.flow.mergeAdjacentText
 import com.xemantic.markanywhere.flow.semanticEvents
@@ -44,10 +43,10 @@ class Gfm_03_01_Test {
     @Test
     fun `example 12 - DIVERGENCE - inline backticks match across block boundaries`() = runTest {
         // given
-        val textFlow = buildText {
-            +"- `one\n"
-            +"- two`\n"
-        }.chunkedRandomly().asFlow()
+        val textFlow = """
+            - `one
+            - two`
+        """.trimIndent().chunkedRandomly().asFlow()
 
         // when
         val parsed = textFlow.parse()
@@ -69,7 +68,7 @@ class Gfm_03_01_Test {
                 }
             }
         }
-        // CommonMark expected:
+        // GFM expected:
         /*
             <ul>
             <li>`one</li>
