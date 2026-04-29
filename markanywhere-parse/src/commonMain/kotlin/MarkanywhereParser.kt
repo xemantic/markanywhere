@@ -554,8 +554,44 @@ private class ParserState(
     private var customMarkupSkipFirstNewline = false
     private var customMarkupPendingNewline = false
 
+    // True when the previous chunk ended with `\r` and we already emitted `\n`
+    // for it. If the next chunk begins with `\n`, we swallow it so a CRLF pair
+    // straddling a chunk boundary still counts as a single line ending.
+    private var pendingCarriageReturn: Boolean = false
+
     suspend fun processChunk(chunk: String) {
-        scope.processChunk(chunk)
+        val normalized = normalizeLineEndings(chunk)
+        if (normalized.isNotEmpty()) scope.processChunk(normalized)
+    }
+
+    // Normalize CommonMark line endings to `\n` so the rest of the parser only
+    // ever sees one form. `\r\n` collapses to `\n`; a lone `\r` becomes `\n`.
+    private fun normalizeLineEndings(chunk: String): String {
+        if (chunk.isEmpty()) return chunk
+        if (!pendingCarriageReturn && chunk.indexOf('\r') < 0) return chunk
+
+        val sb = StringBuilder(chunk.length)
+        var i = 0
+        if (pendingCarriageReturn) {
+            pendingCarriageReturn = false
+            if (chunk[i] == '\n') i++
+        }
+        while (i < chunk.length) {
+            val c = chunk[i]
+            if (c == '\r') {
+                sb.append('\n')
+                i++
+                if (i < chunk.length) {
+                    if (chunk[i] == '\n') i++
+                } else {
+                    pendingCarriageReturn = true
+                }
+            } else {
+                sb.append(c)
+                i++
+            }
+        }
+        return sb.toString()
     }
 
     // Control characters that require special handling in inline text
