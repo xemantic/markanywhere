@@ -23,6 +23,7 @@ Both developers and AI agents are expected to add entries as they encounter surp
 - Tests must retain `// given`, `// when`, `// then` comment structure — AI agents tend to omit these.
 - For semantic event flow testing, use the overloaded `sameAs` infix on `Flow<SemanticEvent>` (defined in `markanywhere-test`) against a `semanticEvents { ... }` builder — this is event-stream comparison, unrelated to HTML.
 - For asserting rendered HTML output (e.g. in `markanywhere-render` tests), use `sameAsHtml` (not the generic string `sameAs`) — provides syntax highlighting in the IDE.
+- GFM example test naming convention: `example N - <description>` for spec-conformant tests, `example N - DIVERGENCE - <description>` when the parser intentionally diverges from GFM. Keep `DIVERGENCE` in the name even when updating expectations to match the divergent behavior.
 
 ## Anti-patterns to avoid
 
