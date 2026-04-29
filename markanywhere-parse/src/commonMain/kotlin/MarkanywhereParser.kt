@@ -560,15 +560,19 @@ private class ParserState(
     private var pendingCarriageReturn: Boolean = false
 
     suspend fun processChunk(chunk: String) {
-        val normalized = normalizeLineEndings(chunk)
+        val normalized = preprocessChunk(chunk)
         if (normalized.isNotEmpty()) scope.processChunk(normalized)
     }
 
-    // Normalize CommonMark line endings to `\n` so the rest of the parser only
-    // ever sees one form. `\r\n` collapses to `\n`; a lone `\r` becomes `\n`.
-    private fun normalizeLineEndings(chunk: String): String {
+    // GFM input preprocessing: normalize line endings to `\n` (§2.1) and replace
+    // the insecure U+0000 NUL with U+FFFD REPLACEMENT CHARACTER (§2.3) so the rest
+    // of the parser only ever sees a single line-ending form and no NULs.
+    private fun preprocessChunk(chunk: String): String {
         if (chunk.isEmpty()) return chunk
-        if (!pendingCarriageReturn && chunk.indexOf('\r') < 0) return chunk
+        if (!pendingCarriageReturn
+            && chunk.indexOf('\r') < 0
+            && chunk.indexOf('\u0000') < 0
+        ) return chunk
 
         val sb = StringBuilder(chunk.length)
         var i = 0
@@ -577,18 +581,24 @@ private class ParserState(
             if (chunk[i] == '\n') i++
         }
         while (i < chunk.length) {
-            val c = chunk[i]
-            if (c == '\r') {
-                sb.append('\n')
-                i++
-                if (i < chunk.length) {
-                    if (chunk[i] == '\n') i++
-                } else {
-                    pendingCarriageReturn = true
+            when (val c = chunk[i]) {
+                '\r' -> {
+                    sb.append('\n')
+                    i++
+                    if (i < chunk.length) {
+                        if (chunk[i] == '\n') i++
+                    } else {
+                        pendingCarriageReturn = true
+                    }
                 }
-            } else {
-                sb.append(c)
-                i++
+                '\u0000' -> {
+                    sb.append('\uFFFD')
+                    i++
+                }
+                else -> {
+                    sb.append(c)
+                    i++
+                }
             }
         }
         return sb.toString()
