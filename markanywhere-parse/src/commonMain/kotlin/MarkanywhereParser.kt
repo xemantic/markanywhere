@@ -529,7 +529,7 @@ private class ParserState(
     private var atLineStart = true
     private var codeBlockBackticks = 0
     private var codeBlockPendingLine: String? = null
-    private var indentedCodeBlankLines = 0
+    private val indentedCodeDeferredBlanks = mutableListOf<String>()
     private var tableHasBody = false
     private var inListItem = false
     private var inBlockquoteParagraph = false
@@ -1026,8 +1026,10 @@ private class ParserState(
             val line = lineBuffer.toString()
             lineBuffer.clear()
 
-            if (line.isEmpty()) {
-                // Empty line, stay in start
+            if (line.isBlank()) {
+                // Blank line (including whitespace-only): stay in start.
+                // A whitespace-only line is not enough to open an indented code
+                // block — GFM strips leading blanks even if they contain ≥4 spaces.
                 return
             }
 
@@ -1037,7 +1039,7 @@ private class ParserState(
                     mark("pre")
                     mark("code")
                     +"${stripIndentCols(line, 4)}\n"
-                    indentedCodeBlankLines = 0
+                    indentedCodeDeferredBlanks.clear()
                     blockMode = BlockMode.IndentedCodeBlock
                 }
                 // ATX heading allowing tab/space after #s
@@ -1773,18 +1775,20 @@ private class ParserState(
         lineBuffer.clear()
         if (line.isBlank()) {
             // Defer blank lines: only emit them if more code-block content follows.
-            indentedCodeBlankLines++
+            // Capture the stripped content so trailing whitespace past the 4-space
+            // prefix (e.g. `      \n` → `  \n`) is preserved on flush.
+            indentedCodeDeferredBlanks += stripIndentCols(line, 4)
             return
         }
         if (leadingIndentCols(line) >= 4) {
             // Flush any pending blank lines, then emit this content line.
-            repeat(indentedCodeBlankLines) { +"\n" }
-            indentedCodeBlankLines = 0
+            indentedCodeDeferredBlanks.forEach { +"$it\n" }
+            indentedCodeDeferredBlanks.clear()
             +"${stripIndentCols(line, 4)}\n"
             return
         }
         // End of code block: trailing blanks are dropped.
-        indentedCodeBlankLines = 0
+        indentedCodeDeferredBlanks.clear()
         unmark("code")
         unmark("pre")
         blockMode = BlockMode.Start
@@ -3416,7 +3420,7 @@ private class ParserState(
             }
             IndentedCodeBlock -> {
                 // Drop trailing blank lines; a final partial line, if present, is content.
-                indentedCodeBlankLines = 0
+                indentedCodeDeferredBlanks.clear()
                 if (lineBuffer.isNotEmpty()) {
                     val line = lineBuffer.toString()
                     lineBuffer.clear()
