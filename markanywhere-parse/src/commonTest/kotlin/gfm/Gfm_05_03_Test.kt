@@ -1,0 +1,123 @@
+/*
+ * Copyright 2026 Kazimierz Pogoda / Xemantic
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.xemantic.markanywhere.parse.gfm
+
+import com.xemantic.kotlin.core.text.buildText
+import com.xemantic.kotlin.test.text.chunkedRandomly
+import com.xemantic.markanywhere.flow.mergeAdjacentText
+import com.xemantic.markanywhere.flow.semanticEvents
+import com.xemantic.markanywhere.parse.parse
+import com.xemantic.markanywhere.test.sameAs
+import kotlinx.coroutines.flow.asFlow
+import kotlinx.coroutines.test.runTest
+import kotlin.test.Test
+
+/**
+ * Tests for GFM Section 05.03 — Task list items (extension).
+ *
+ * Each test corresponds to a numbered example from:
+ * https://github.github.com/gfm/#task-list-items-extension-
+ */
+@Suppress("ClassName")
+class Gfm_05_03_Test {
+
+    // TODO review
+    @Test
+    fun `example 279 - ul with 2 items`() = runTest {
+        // given
+        val textFlow = """
+            - [ ] foo
+            - [x] bar
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ul" {
+                "li" {
+                    "input"("disabled" to "", "type" to "checkbox") {}
+                    +" foo"
+                }
+                "li" {
+                    "input"("checked" to "", "disabled" to "", "type" to "checkbox") {}
+                    +" bar"
+                }
+            }
+        }
+        // GFM expected:
+        /*
+            <ul>
+            <li><input disabled="" type="checkbox"> foo</li>
+            <li><input checked="" disabled="" type="checkbox"> bar</li>
+            </ul>
+         */
+    }
+
+    // TODO review
+    @Test
+    fun `example 280 - ul with 2 items`() = runTest {
+        // given
+        val textFlow = buildText {
+            +"- [x] foo\n"
+            +"  - [ ] bar\n"
+            +"  - [x] baz\n"
+            +"- [ ] bim\n"
+        }.chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ul" {
+                "li" {
+                    "input"("checked" to "", "disabled" to "", "type" to "checkbox") {}
+                    +" foo\n"
+                    "ul" {
+                        "li" {
+                            "input"("disabled" to "", "type" to "checkbox") {}
+                            +" bar"
+                        }
+                        "li" {
+                            "input"("checked" to "", "disabled" to "", "type" to "checkbox") {}
+                            +" baz"
+                        }
+                    }
+                }
+                "li" {
+                    "input"("disabled" to "", "type" to "checkbox") {}
+                    +" bim"
+                }
+            }
+        }
+        // GFM expected:
+        /*
+            <ul>
+            <li><input checked="" disabled="" type="checkbox"> foo
+            <ul>
+            <li><input disabled="" type="checkbox"> bar</li>
+            <li><input checked="" disabled="" type="checkbox"> baz</li>
+            </ul>
+            </li>
+            <li><input disabled="" type="checkbox"> bim</li>
+            </ul>
+         */
+    }
+
+}
