@@ -1126,18 +1126,22 @@ private class ParserState(
             return
         }
         // Continuation line: soft break then inline content.
+        // Leading spaces/tabs are stripped (CommonMark: indented code cannot interrupt
+        // a paragraph, so leading indentation on continuation lines is paragraph content
+        // with the indentation removed).
+        val stripped = line.trimStart(' ', '\t')
         +"\n"
         // Special case: a line that is exactly one open HTML tag is rendered as a
         // self-closing-equivalent (mark + unmark) so the event tree stays balanced.
-        val singleTag = tryParseOpenTag(line, 0)
-        if (singleTag != null && singleTag.first == line.length &&
+        val singleTag = tryParseOpenTag(stripped, 0)
+        if (singleTag != null && singleTag.first == stripped.length &&
             singleTag.second.name.lowercase() !in INLINE_HTML_BLOCK_ELEMENTS
         ) {
             val tag = singleTag.second
             mark(tag.name, isTagged = true, attributes = tag.attributes)
             unmark(tag.name, isTagged = true)
         } else {
-            processInlineContent(line)
+            processInlineContent(stripped)
             flushInline()
         }
         blockMode = BlockMode.ParagraphContinuation
