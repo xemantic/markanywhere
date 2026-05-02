@@ -107,8 +107,12 @@ class IncrementalParsingTest {
         // then
         parsed sameAs semanticEvents {
             "h1" {
-                +"Hello "
-                +"World"
+                // Trailing space in chunk1 ("# Hello ") is buffered (could be
+                // line-trailing whitespace), then prepended to chunk2's
+                // emission once non-ws content arrives — moving the split
+                // point one char earlier than the raw chunk boundary.
+                +"Hello"
+                +" World"
             }
             tagged {
                 "foo:bar"("buzz" to "42") {

@@ -164,7 +164,6 @@ class Gfm_04_02_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 37 - h1 foo`() = runTest {
         // given
@@ -187,7 +186,6 @@ class Gfm_04_02_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 38 - h3 foo, h2 foo, h1 foo`() = runTest {
         // given
@@ -245,7 +243,6 @@ class Gfm_04_02_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 40 - paragraph foo # bar`() = runTest {
         // given
@@ -270,7 +267,6 @@ class Gfm_04_02_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 41 - h2 foo, h3 bar`() = runTest {
         // given
@@ -298,7 +294,6 @@ class Gfm_04_02_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 42 - h1 foo, h5 foo`() = runTest {
         // given
@@ -326,7 +321,6 @@ class Gfm_04_02_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 43 - h3 foo`() = runTest {
         // given
@@ -349,7 +343,6 @@ class Gfm_04_02_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 44 - h3 foo ### b`() = runTest {
         // given
@@ -370,7 +363,6 @@ class Gfm_04_02_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 45 - h1 foo#`() = runTest {
         // given
@@ -391,7 +383,6 @@ class Gfm_04_02_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 46 - h3 foo ###, h2 foo ###, h1 foo #`() = runTest {
         // given
@@ -424,7 +415,6 @@ class Gfm_04_02_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 47 - thematic break, h2 foo, thematic break`() = runTest {
         // given
@@ -453,7 +443,6 @@ class Gfm_04_02_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 48 - paragraph Foo bar, h1 baz, paragraph Bar foo`() = runTest {
         // given
@@ -486,7 +475,6 @@ class Gfm_04_02_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 49 - h2 (empty), h1 (empty), h3 (empty)`() = runTest {
         // given

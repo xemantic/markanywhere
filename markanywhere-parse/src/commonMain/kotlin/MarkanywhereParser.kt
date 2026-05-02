@@ -37,10 +37,11 @@ private object Patterns {
     val HORIZONTAL_RULE = Regex("^-{3,}$")
     /** GFM thematic break: 3+ matching `-`, `*`, or `_`, separated by spaces/tabs. */
     val THEMATIC_BREAK = Regex("^[ \t]{0,3}(?:(?:\\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})$")
-    val HEADING_WITH_SPACE = Regex("^#{1,6} $")
-    val HEADING_NO_SPACE = Regex("^#{1,6}$")
-    /** GFM ATX heading on a complete line: `#{1,6}` then EOL or whitespace + content. */
-    val ATX_HEADING_LINE = Regex("^(#{1,6})(?:[ \t]+(.*?))?[ \t]*$")
+    /** Up to 3 spaces of indentation are permitted before the `#` run (GFM). */
+    val HEADING_WITH_SPACE = Regex("^ {0,3}#{1,6} $")
+    val HEADING_NO_SPACE = Regex("^ {0,3}#{1,6}$")
+    /** GFM ATX heading on a complete line: optional 0-3 space indent, `#{1,6}`, then EOL or whitespace + content. */
+    val ATX_HEADING_LINE = Regex("^ {0,3}(#{1,6})(?:[ \t]+(.*?))?[ \t]*$")
     val TOO_MANY_HASHES = Regex("^#{7,}.*")
     val DASHES = Regex("^-+$")
     val TASK_UNCHECKED = Regex("^- \\[ \\] $")
@@ -447,7 +448,18 @@ private class ParserState(
     // Block modes
     private sealed interface BlockMode {
         data object Start : BlockMode
-        data class Heading(val level: Int) : BlockMode
+        class Heading(val level: Int) : BlockMode {
+            // Tracks whether any non-whitespace content has been seen in this
+            // heading. Used to discard leading spaces/tabs after the opening
+            // `#` run (CommonMark: an arbitrary run of spaces or tabs separates
+            // the `#` characters from the heading content).
+            var contentStarted: Boolean = false
+            // Whitespace (space/tab) buffered while we wait to see whether more
+            // content follows or the line ends. Flushed before emitting the
+            // next non-whitespace char; discarded on `\n` (CommonMark: trailing
+            // spaces/tabs are not part of heading content).
+            val pendingSpaces: StringBuilder = StringBuilder()
+        }
         data object Paragraph : BlockMode
         /** Paragraph remains open across newlines until a block-start or blank line ends it. */
         data object ParagraphContinuation : BlockMode
@@ -803,6 +815,53 @@ private class ParserState(
                 // Not a newline - continue with normal processing
             }
 
+            // Heading-specific fast-path: emits maximal runs of plain content
+            // chars. Whitespace, `#`, and inline-control chars stop the scan
+            // and fall through to processHeading, where pendingSpaces handles
+            // trailing-ws + closing-# stripping (CommonMark heading content
+            // strip). Only fires when inline state is clean.
+            val heading = blockMode
+            if (heading is BlockMode.Heading &&
+                inlineBuffer.isEmpty() && !escaped && !code && !math &&
+                !inLink && !inImage
+            ) {
+                if (!heading.contentStarted && heading.pendingSpaces.isEmpty()) {
+                    var skip = index
+                    while (skip < chunk.length &&
+                        (chunk[skip] == ' ' || chunk[skip] == '\t')
+                    ) {
+                        skip++
+                    }
+                    if (skip > index) {
+                        index = skip
+                        if (index >= chunk.length) break
+                    }
+                }
+                var end = index
+                while (end < chunk.length &&
+                    !chunk[end].isInlineControl() &&
+                    chunk[end] != ' ' && chunk[end] != '\t' &&
+                    chunk[end] != '#'
+                ) {
+                    end++
+                }
+                if (end > index) {
+                    if (heading.pendingSpaces.isNotEmpty()) {
+                        +(heading.pendingSpaces.toString() +
+                            chunk.substring(index, end))
+                        heading.pendingSpaces.clear()
+                    } else {
+                        +chunk.substring(index, end)
+                    }
+                    prevInlineChar = chunk[end - 1]
+                    heading.contentStarted = true
+                    index = end
+                    continue
+                }
+                // end == index: ws, `#`, or control char at index — fall
+                // through to char-by-char processing.
+            }
+
             // Determine if we can fast-path based on current state
             val fastPathResult = getFastPathEnd(chunk, index)
 
@@ -854,7 +913,10 @@ private class ParserState(
         // Check block mode for fast-path eligibility
         val canFastPath = when (blockMode) {
             Paragraph -> true
-            is Heading -> true
+            // Heading mode handles its own fast-path inline in processChunk
+            // (see the Heading-specific branch). The generic fast-path here
+            // is bypassed because heading content needs leading/trailing
+            // whitespace stripping that a plain substring emit can't do.
             UnorderedList -> inListItem
             OrderedList -> inListItem
             Blockquote -> inBlockquoteParagraph && !atLineStart
@@ -899,7 +961,7 @@ private class ParserState(
     private suspend fun SemanticEventScope.process(char: Char) {
         when (val mode = blockMode) {
             Start -> processStart(char)
-            is Heading -> processHeading(char, mode.level)
+            is Heading -> processHeading(char, mode)
             Paragraph -> processParagraph(char)
             ParagraphContinuation -> processParagraphContinuation(char)
             is CodeBlock -> processCodeBlock(char, mode.backticks)
@@ -1159,15 +1221,49 @@ private class ParserState(
 
     private suspend fun SemanticEventScope.processHeading(
         char: Char,
-        level: Int
+        mode: BlockMode.Heading
     ) {
         when (char) {
             '\n' -> {
+                // pendingSpaces holds trailing whitespace and any closing-#
+                // candidate; both are discarded at line end.
+                mode.pendingSpaces.clear()
                 flushInline()
-                unmark("h$level")
+                unmark("h${mode.level}")
                 blockMode = BlockMode.Start
             }
-            else -> processInlineChar(char)
+            ' ', '\t' -> when {
+                // Leading whitespace before any content or closing-# candidate.
+                !mode.contentStarted && mode.pendingSpaces.isEmpty() -> {}
+                // Pending delimiter or escape needs this char now to resolve
+                // flanking. Route directly — pendingSpaces is reserved for
+                // trailing-or-closing material observed with a clean inline
+                // state.
+                inlineBuffer.isNotEmpty() || escaped -> processInlineChar(char)
+                else -> mode.pendingSpaces.append(char)
+            }
+            '#' -> when {
+                inlineBuffer.isNotEmpty() || escaped -> processInlineChar(char)
+                // Potential closing-#: a `#` that follows the opening's
+                // whitespace (no content yet) or that follows already-buffered
+                // trailing material. Defer; flushed as content if non-trailing
+                // chars follow, dropped on `\n`.
+                !mode.contentStarted || mode.pendingSpaces.isNotEmpty() ->
+                    mode.pendingSpaces.append(char)
+                else -> processInlineChar(char)
+            }
+            else -> {
+                if (mode.pendingSpaces.isNotEmpty()) {
+                    // pendingSpaces is only populated when inlineBuffer was
+                    // empty, so it's still empty here — emit as plain text and
+                    // sync flanking state.
+                    +mode.pendingSpaces.toString()
+                    prevInlineChar = mode.pendingSpaces[mode.pendingSpaces.length - 1]
+                    mode.pendingSpaces.clear()
+                }
+                mode.contentStarted = true
+                processInlineChar(char)
+            }
         }
     }
 
