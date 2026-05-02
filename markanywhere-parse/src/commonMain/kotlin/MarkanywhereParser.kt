@@ -548,6 +548,14 @@ private class ParserState(
     // non-control characters. Replaces the previous recursive `processInlineChar`.
     private var pendingDeferredChar: Char? = null
 
+    // Flanking state for CommonMark emphasis rules.
+    // `prevInlineChar` is the most recently processed source char (null = block
+    // boundary, treated as Unicode whitespace). `runPrevChar` is the char that
+    // immediately preceded the currently-buffered delimiter run (captured when
+    // the run started). Used to compute left/right-flanking at run resolution.
+    private var prevInlineChar: Char? = null
+    private var runPrevChar: Char? = null
+
     // Custom markup state
     private var customMarkupClosingBuffer = StringBuilder()
     private var customMarkupInClosingTag = false
@@ -621,6 +629,100 @@ private class ParserState(
         else -> isDigit()
     }
 
+    // CommonMark emphasis flanking helpers. Block boundaries (null) count as
+    // Unicode whitespace per spec.
+    private fun Char?.isFlankWhitespace(): Boolean =
+        this == null || this == ' ' || this == '\t' || this == '\n' || this == '\r'
+
+    private fun Char?.isFlankPunct(): Boolean {
+        val c = this ?: return false
+        return c in '!'..'/' || c in ':'..'@' || c in '['..'`' || c in '{'..'~'
+    }
+
+    /**
+     * Returns (canOpen, canClose) for a delimiter run of [runChar] (`*`, `_`,
+     * or `~`) given the chars immediately before and after the run.
+     * Implements CommonMark §6.2 rules 1–8 (`_` has stricter rules to suppress
+     * intraword emphasis). For `~` we apply the `*` rules — GFM strikethrough
+     * doesn't formally use flanking, but the `*` rules are a reasonable proxy.
+     */
+    private fun emphasisFlanking(
+        runChar: Char,
+        prev: Char?,
+        next: Char?
+    ): Pair<Boolean, Boolean> {
+        val nextIsWs = next.isFlankWhitespace()
+        val nextIsPunct = next.isFlankPunct()
+        val prevIsWs = prev.isFlankWhitespace()
+        val prevIsPunct = prev.isFlankPunct()
+        val leftFlank = !nextIsWs && (!nextIsPunct || prevIsWs || prevIsPunct)
+        val rightFlank = !prevIsWs && (!prevIsPunct || nextIsWs || nextIsPunct)
+        return if (runChar == '_') {
+            val canOpen = leftFlank && (!rightFlank || prevIsPunct)
+            val canClose = rightFlank && (!leftFlank || nextIsPunct)
+            canOpen to canClose
+        } else {
+            leftFlank to rightFlank
+        }
+    }
+
+    /**
+     * Resolves a buffered emphasis delimiter run of length [runLen] (1, 2, or 3)
+     * for [runChar] (`*` or `_`). Applies CommonMark flanking to decide whether
+     * the run can open and/or close; if it can do neither (e.g. `_` between
+     * whitespace), emits the run as literal text.
+     *
+     * Matching of openers to closers uses the existing italic/bold toggle state
+     * rather than a full CommonMark delimiter stack — sufficient for non-nested
+     * cases. Orphan openers/closers can still leak empty `<em>`/`<strong>`
+     * pairs at block end; those cases are tracked as DIVERGENCE in tests.
+     *
+     * [next] is the char immediately after the run; null = block boundary
+     * (Unicode whitespace per spec).
+     */
+    private suspend fun SemanticEventScope.resolveEmphasisRun(
+        runChar: Char,
+        runLen: Int,
+        next: Char?
+    ) {
+        val (canOpen, canClose) = emphasisFlanking(runChar, runPrevChar, next)
+        if (!canOpen && !canClose) {
+            +runChar.toString().repeat(runLen)
+            return
+        }
+        when (runLen) {
+            1 -> when {
+                canClose && italic -> { unmark("em"); italic = false }
+                canOpen && !italic -> { mark("em"); italic = true }
+                italic -> { unmark("em"); italic = false }
+                else -> +runChar.toString()
+            }
+            2 -> when {
+                canClose && bold -> { unmark("strong"); bold = false }
+                canOpen && !bold -> { mark("strong"); bold = true }
+                bold -> { unmark("strong"); bold = false }
+                else -> +runChar.toString().repeat(2)
+            }
+            else -> when {
+                canClose && bold && italic -> {
+                    unmark("em"); italic = false
+                    unmark("strong"); bold = false
+                }
+                canOpen && !bold && !italic -> {
+                    mark("strong"); bold = true
+                    mark("em"); italic = true
+                }
+                bold && italic -> {
+                    unmark("em"); italic = false
+                    unmark("strong"); bold = false
+                }
+                bold -> { unmark("strong"); bold = false; mark("em"); italic = true }
+                italic -> { unmark("em"); italic = false; mark("strong"); bold = true }
+                else -> { mark("strong"); bold = true; mark("em"); italic = true }
+            }
+        }
+    }
+
     /**
      * Process inline content in bulk, emitting maximal text runs.
      * This is used when replaying buffered content (e.g., from lineBuffer)
@@ -635,6 +737,10 @@ private class ParserState(
 
             if (fastPathEnd > index) {
                 +content.substring(index, fastPathEnd)
+                // Keep flanking state in sync — the fast-path bypasses processInlineChar
+                // but emphasis decisions on the next delimiter need to know the char
+                // that just landed.
+                prevInlineChar = content[fastPathEnd - 1]
                 index = fastPathEnd
                 continue
             }
@@ -708,6 +814,8 @@ private class ParserState(
                 }
                 // Emit the safe substring in one go
                 +chunk.substring(index, fastPathResult)
+                // Keep flanking state in sync — see processInlineContent for rationale.
+                prevInlineChar = chunk[fastPathResult - 1]
                 index = fastPathResult
                 continue
             }
@@ -825,6 +933,7 @@ private class ParserState(
             val fastPathResult = getFastPathEnd(line, index)
             if (fastPathResult > index) {
                 +line.substring(index, fastPathResult)
+                prevInlineChar = line[fastPathResult - 1]
                 index = fastPathResult
                 continue
             }
@@ -1082,7 +1191,11 @@ private class ParserState(
     /** Open a paragraph for the given first line and leave it open for continuation lines. */
     private suspend fun SemanticEventScope.beginParagraph(line: String) {
         mark("p")
-        processInlineContent(line)
+        // Strip leading spaces/tabs (CommonMark: leading whitespace on a paragraph's
+        // first line is not part of inline content; up to 3 spaces of indentation is
+        // permitted, and 4+ spaces would have been claimed by the indented-code-block
+        // branch upstream of here).
+        processInlineContent(line.trimStart(' ', '\t'))
         flushInline()
         blockMode = BlockMode.ParagraphContinuation
     }
@@ -1157,9 +1270,12 @@ private class ParserState(
         if (line.isEmpty()) return true
         // Heading-like: any line starting with `#` (markanywhere treats invalid headings as their own paragraph).
         if (line.startsWith("#")) return true
-        // Fenced code or HR
+        // Fenced code or thematic break (GFM §4.1: a thematic break can interrupt
+        // a paragraph). HORIZONTAL_RULE is a subset of THEMATIC_BREAK kept for
+        // belt-and-suspenders; THEMATIC_BREAK matches `***`, `___`, `* * *`, etc.
         if (line == "```" || line matches Patterns.CODE_BLOCK_LANG) return true
         if (line matches Patterns.HORIZONTAL_RULE) return true
+        if (line matches Patterns.THEMATIC_BREAK) return true
         // Math block
         if (line == "$$") return true
         // Table
@@ -1249,12 +1365,30 @@ private class ParserState(
         mark("li")
         val firstContent = markerLine.substring(marker.markerEndIndex)
         if (firstContent.isNotBlank()) {
-            mark("p")
-            ctx.paragraphOpen = true
-            emitItemFirstContent(firstContent.trimEnd())
-            flushInline()
+            emitItemFirstLine(firstContent, ctx)
         }
         mode.blankSeen = false
+    }
+
+    /**
+     * Emit the first content line of a freshly opened `<li>`. If the content is a
+     * stand-alone block-level construct (currently only thematic break), emit it
+     * directly with no surrounding `<p>`. Otherwise open `<p>` and process the
+     * content as inline. Updates [ctx].paragraphOpen accordingly.
+     */
+    private suspend fun SemanticEventScope.emitItemFirstLine(
+        firstContent: String,
+        ctx: ListContext
+    ) {
+        val trimmed = firstContent.trimEnd()
+        if (trimmed matches Patterns.THEMATIC_BREAK) {
+            "hr" {}
+            return
+        }
+        mark("p")
+        ctx.paragraphOpen = true
+        emitItemFirstContent(trimmed)
+        flushInline()
     }
 
     /**
@@ -1367,6 +1501,18 @@ private class ParserState(
         val stripped = if (markerCtxIndex >= 0)
             stripIndentCols(line, containerContentCol, startCol = 0)
         else line
+        // Thematic break takes precedence over list-item markers (CommonMark §4.1):
+        // a line like `* * *` is a thematic break, not a list with `* *` content.
+        // Inside a list block this ends the current list — pop all contexts and
+        // replay the line through Start so the `<hr />` is emitted at top level.
+        if (stripped matches Patterns.THEMATIC_BREAK) {
+            popListContexts(mode, downTo = 0)
+            blockMode = BlockMode.Start
+            replay(line)
+            process('\n')
+            return
+        }
+
         val strippedMarker = parseListMarker(stripped)
 
         if (strippedMarker != null) {
@@ -1397,10 +1543,7 @@ private class ParserState(
                     mark("li")
                     val firstContent = stripped.substring(strippedMarker.markerEndIndex)
                     if (firstContent.isNotBlank()) {
-                        mark("p")
-                        ctx.paragraphOpen = true
-                        emitItemFirstContent(firstContent.trimEnd())
-                        flushInline()
+                        emitItemFirstLine(firstContent, ctx)
                     }
                     // Update content/marker cols for the new item (in case marker width differs).
                     // Keep markerStartCol stable; refresh contentCol for this item to allow
@@ -2570,6 +2713,27 @@ private class ParserState(
     }
 
     private suspend fun SemanticEventScope.processInlineChar(char: Char) {
+        // Capture the char that immediately preceded any delimiter run that
+        // might start (or has started) in this call. We do this opportunistically
+        // whenever the inline buffer is empty at the start of the call: if a run
+        // begins on this char, runPrevChar is correct; if no run starts, the
+        // captured value is harmless because it won't be read until a run resolves.
+        if (inlineBuffer.isEmpty()) {
+            runPrevChar = prevInlineChar
+        }
+        try {
+            processInlineCharImpl(char)
+        } finally {
+            // Track the most recent source char for flanking decisions on future
+            // delimiter runs. Approximate: when a delimiter run resolves, the next
+            // run's true prev would be the resolved run's last delimiter char, but
+            // tracking that adds complexity for marginal correctness gain on
+            // adjacent-delimiter cases. Most cases are well-served by char.
+            prevInlineChar = char
+        }
+    }
+
+    private suspend fun SemanticEventScope.processInlineCharImpl(char: Char) {
         // Handle escaping
         if (escaped) {
             escaped = false
@@ -2778,55 +2942,18 @@ private class ParserState(
                 +char
             }
             inlineBuffer.toString() == "***" && char != '*' -> {
-                // Three asterisks - handle bold+italic toggling
                 inlineBuffer.clear()
-                if (bold && italic) {
-                    // Close both - em first (inner), then strong (outer)
-                    unmark("em")
-                    unmark("strong")
-                    bold = false
-                    italic = false
-                } else if (bold) {
-                    unmark("strong")
-                    bold = false
-                    // Now start italic
-                    mark("em")
-                    italic = true
-                } else if (italic) {
-                    unmark("em")
-                    italic = false
-                    // Now start bold
-                    mark("strong")
-                    bold = true
-                } else {
-                    // Start both - bold then italic
-                    mark("strong")
-                    mark("em")
-                    bold = true
-                    italic = true
-                }
+                resolveEmphasisRun('*', 3, char)
                 pendingDeferredChar = char
             }
             inlineBuffer.toString() == "**" && char != '*' -> {
                 inlineBuffer.clear()
-                if (bold) {
-                    unmark("strong")
-                    bold = false
-                } else {
-                    mark("strong")
-                    bold = true
-                }
+                resolveEmphasisRun('*', 2, char)
                 pendingDeferredChar = char
             }
             inlineBuffer.toString() == "*" && char != '*' -> {
                 inlineBuffer.clear()
-                if (italic) {
-                    unmark("em")
-                    italic = false
-                } else {
-                    mark("em")
-                    italic = true
-                }
+                resolveEmphasisRun('*', 1, char)
                 pendingDeferredChar = char
             }
             // Now handle new characters that start or continue formatting markers
@@ -2858,39 +2985,17 @@ private class ParserState(
             // Underscore buffer checks (before char == '_')
             inlineBuffer.toString() == "___" && char != '_' -> {
                 inlineBuffer.clear()
-                if (bold && italic) {
-                    unmark("em")
-                    unmark("strong")
-                    bold = false
-                    italic = false
-                } else {
-                    mark("strong")
-                    mark("em")
-                    bold = true
-                    italic = true
-                }
+                resolveEmphasisRun('_', 3, char)
                 pendingDeferredChar = char
             }
             inlineBuffer.toString() == "__" && char != '_' -> {
                 inlineBuffer.clear()
-                if (bold) {
-                    unmark("strong")
-                    bold = false
-                } else {
-                    mark("strong")
-                    bold = true
-                }
+                resolveEmphasisRun('_', 2, char)
                 pendingDeferredChar = char
             }
             inlineBuffer.toString() == "_" && char != '_' -> {
                 inlineBuffer.clear()
-                if (italic) {
-                    unmark("em")
-                    italic = false
-                } else {
-                    mark("em")
-                    italic = true
-                }
+                resolveEmphasisRun('_', 1, char)
                 pendingDeferredChar = char
             }
             // Tilde buffer checks (before char == '~')
@@ -3042,22 +3147,20 @@ private class ParserState(
         if (inlineBuffer.isNotEmpty()) {
             val buf = inlineBuffer.toString()
             inlineBuffer.clear()
-            // Resolve pending formatting markers instead of emitting as text
-            when {
-                buf == "*" && italic -> { unmark("em"); italic = false }
-                buf == "*" && !italic -> { mark("em"); italic = true }
-                buf == "**" && bold -> { unmark("strong"); bold = false }
-                buf == "**" && !bold -> { mark("strong"); bold = true }
-                buf == "***" -> {
-                    if (bold && italic) { unmark("em"); italic = false; unmark("strong"); bold = false }
-                    else { mark("strong"); bold = true; mark("em"); italic = true }
+            // Resolve pending formatting markers using flanking-aware logic.
+            // `next = null` because flush happens at a block/line boundary, which
+            // counts as Unicode whitespace per CommonMark.
+            when (buf) {
+                "*" -> resolveEmphasisRun('*', 1, null)
+                "**" -> resolveEmphasisRun('*', 2, null)
+                "***" -> resolveEmphasisRun('*', 3, null)
+                "_" -> resolveEmphasisRun('_', 1, null)
+                "__" -> resolveEmphasisRun('_', 2, null)
+                "___" -> resolveEmphasisRun('_', 3, null)
+                "~~" -> when {
+                    strikethrough -> { unmark("del"); strikethrough = false }
+                    else -> { mark("del"); strikethrough = true }
                 }
-                buf == "_" && italic -> { unmark("em"); italic = false }
-                buf == "_" && !italic -> { mark("em"); italic = true }
-                buf == "__" && bold -> { unmark("strong"); bold = false }
-                buf == "__" && !bold -> { mark("strong"); bold = true }
-                buf == "~~" && strikethrough -> { unmark("del"); strikethrough = false }
-                buf == "~~" && !strikethrough -> { mark("del"); strikethrough = true }
                 else -> +buf
             }
         }
@@ -3095,6 +3198,11 @@ private class ParserState(
             bold = false
         }
         escaped = false
+        // Reset flanking state so the next inline run starts at a block boundary
+        // (treated as Unicode whitespace) — matches CommonMark expectation that
+        // delimiters at the start of a paragraph are preceded by whitespace.
+        prevInlineChar = null
+        runPrevChar = null
     }
 
     suspend fun finalize() {
