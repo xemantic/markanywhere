@@ -33,13 +33,14 @@ import kotlin.test.Test
  * https://github.github.com/gfm/#setext-headings
  *
  * DIVERGENCE: Setext headings are not supported (see README — Divergences from GFM).
- * Every example in this section exercises setext heading syntax. The tests
- * here capture the spec input and the GFM expected output for reference,
- * but assertions reflect what markanywhere-parse actually emits — usually
- * paragraphs and thematic breaks instead of h1/h2 headings.
+ * Most examples in this section exercise setext heading syntax. Tests marked
+ * `DIVERGENCE` capture the spec input and the GFM expected output for reference,
+ * but their assertions reflect what markanywhere-parse actually emits — usually
+ * paragraphs and thematic breaks instead of h1/h2 headings. The remaining
+ * examples (e.g. lines that are unambiguously thematic breaks or indented code)
+ * happen to coincide with GFM output and are therefore spec-conformant.
  */
 @Suppress("ClassName")
-// TODO review all again
 class Gfm_04_03_Test {
 
     @Test
@@ -124,7 +125,7 @@ class Gfm_04_03_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"  Foo "
+                +"Foo "
                 "em" {
                     +"bar"
                 }
@@ -189,15 +190,15 @@ class Gfm_04_03_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"   Foo"
+                +"Foo"
             }
             "hr" {}
             "p" {
-                +"  Foo"
+                +"Foo"
             }
             "hr" {}
             "p" {
-                +"  Foo\n  ==="
+                +"Foo\n==="
             }
         }
         // GFM expected:
@@ -209,7 +210,7 @@ class Gfm_04_03_Test {
     }
 
     @Test
-    fun `example 55 - DIVERGENCE - indented code block, thematic break`() = runTest {
+    fun `example 55 - indented code block, thematic break`() = runTest {
         // given
         val textFlow = buildText {
             +"    Foo\n"
@@ -243,7 +244,7 @@ class Gfm_04_03_Test {
     }
 
     @Test
-    fun `example 56 - DIVERGENCE - paragraph with indented dashes`() = runTest {
+    fun `example 56 - DIVERGENCE - paragraph Foo, thematic break`() = runTest {
         // given
         val textFlow = buildText {
             +"Foo\n"
@@ -256,8 +257,9 @@ class Gfm_04_03_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"Foo\n   ----      "
+                +"Foo"
             }
+            "hr" {}
         }
         // GFM expected:
         /*
@@ -266,7 +268,7 @@ class Gfm_04_03_Test {
     }
 
     @Test
-    fun `example 57 - DIVERGENCE - paragraph with 4-space indented dashes`() = runTest {
+    fun `example 57 - paragraph with 4-space indented dashes`() = runTest {
         // given
         val textFlow = buildText {
             +"Foo\n"
@@ -279,7 +281,7 @@ class Gfm_04_03_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"Foo\n    ---"
+                +"Foo\n---"
             }
         }
         // GFM expected:
@@ -415,7 +417,7 @@ class Gfm_04_03_Test {
     }
 
     @Test
-    fun `example 62 - DIVERGENCE - blockquote with paragraph Foo, thematic break`() = runTest {
+    fun `example 62 - blockquote with paragraph Foo, thematic break`() = runTest {
         // given
         val textFlow = """
             > Foo
@@ -573,7 +575,7 @@ class Gfm_04_03_Test {
     }
 
     @Test
-    fun `example 67 - DIVERGENCE - paragraph ====`() = runTest {
+    fun `example 67 - paragraph ====`() = runTest {
         // given
         val textFlow = """
 
@@ -596,7 +598,7 @@ class Gfm_04_03_Test {
     }
 
     @Test
-    fun `example 68 - DIVERGENCE - 2 thematic breaks`() = runTest {
+    fun `example 68 - 2 thematic breaks`() = runTest {
         // given
         val textFlow = """
             ---
@@ -650,7 +652,7 @@ class Gfm_04_03_Test {
     }
 
     @Test
-    fun `example 70 - DIVERGENCE - indented code block foo, thematic break`() = runTest {
+    fun `example 70 - indented code block foo, thematic break`() = runTest {
         // given
         val textFlow = buildText {
             +"    foo\n"
@@ -678,7 +680,7 @@ class Gfm_04_03_Test {
     }
 
     @Test
-    fun `example 71 - DIVERGENCE - blockquote with paragraph foo, thematic break`() = runTest {
+    fun `example 71 - blockquote with paragraph foo, thematic break`() = runTest {
         // given
         val textFlow = """
             > foo
@@ -766,7 +768,7 @@ class Gfm_04_03_Test {
     }
 
     @Test
-    fun `example 74 - DIVERGENCE - paragraph Foo bar, thematic break, paragraph baz`() = runTest {
+    fun `example 74 - paragraph Foo bar, thematic break, paragraph baz`() = runTest {
         // given
         val textFlow = """
             Foo
@@ -800,7 +802,7 @@ class Gfm_04_03_Test {
     }
 
     @Test
-    fun `example 75 - DIVERGENCE - paragraph with literal asterisks`() = runTest {
+    fun `example 75 - paragraph Foo bar, thematic break, paragraph baz`() = runTest {
         // given
         val textFlow = """
             Foo
@@ -815,7 +817,11 @@ class Gfm_04_03_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"Foo\nbar\n* * *\nbaz"
+                +"Foo\nbar"
+            }
+            "hr" {}
+            "p" {
+                +"baz"
             }
         }
         // GFM expected:
@@ -828,7 +834,7 @@ class Gfm_04_03_Test {
     }
 
     @Test
-    fun `example 76 - DIVERGENCE - paragraph Foo bar dashes baz`() = runTest {
+    fun `example 76 - paragraph Foo bar dashes baz`() = runTest {
         // given
         val textFlow = """
             Foo
