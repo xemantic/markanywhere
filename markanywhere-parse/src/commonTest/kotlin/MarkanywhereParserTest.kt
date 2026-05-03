@@ -154,8 +154,11 @@ class MarkanywhereParserTest {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" { +"Here is the code:" }
-            "pre"("class" to "code lang-kotlin") {
-                +"""fun hello() = println("Hello")"""
+            "pre" {
+                "code"("class" to "language-kotlin") {
+                    +"""fun hello() = println("Hello")
+"""
+                }
             }
         }
     }
@@ -404,8 +407,10 @@ class MarkanywhereParserTest {
 
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
-            "pre"("class" to "code lang-html") {
-                +"<div class=\"test\">\n  <p>Hello & goodbye</p>\n</div>"
+            "pre" {
+                "code"("class" to "language-html") {
+                    +"<div class=\"test\">\n  <p>Hello & goodbye</p>\n</div>\n"
+                }
             }
         }
     }
@@ -835,8 +840,10 @@ class MarkanywhereParserTest {
 
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
-            "pre"("class" to "code") {
-                +"plain text code block"
+            "pre" {
+                "code" {
+                    +"plain text code block\n"
+                }
             }
         }
     }

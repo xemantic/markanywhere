@@ -34,7 +34,6 @@ import kotlin.test.Test
 @Suppress("ClassName")
 class Gfm_06_00_Test {
 
-    // TODO review
     @Test
     fun `example 307 - paragraph hilo`() = runTest {
         // given

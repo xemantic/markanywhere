@@ -326,8 +326,7 @@ class IncrementalParsingTest {
             }
             "p" {
                 "del" {
-                    +"s"
-                    +"trike"
+                    +"strike"
                 }
                 +"."
             }
@@ -516,15 +515,18 @@ class IncrementalParsingTest {
             }
             "blockquote" {
                 "p" {
-                    +"quoted"
+                    +"q"
+                    +"uoted"
                     +"\n"
                     +"m"
                     +"ore"
                 }
             }
             "hr" {}
-            "pre"("class" to "code lang-kotlin") {
-                +"val x = 42"
+            "pre" {
+                "code"("class" to "language-kotlin") {
+                    +"val x = 42\n"
+                }
             }
             "math"("display" to "block") {
                 +"\\sum_{i=1}^{n} i"

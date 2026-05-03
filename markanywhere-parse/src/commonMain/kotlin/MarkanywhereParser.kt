@@ -33,7 +33,6 @@ public class DefaultMarkanywhereParser {
 
 @Suppress("RegExpRedundantEscape") // it is required for JS
 private object Patterns {
-    val CODE_BLOCK_LANG = Regex("^```[a-zA-Z0-9]*$")
     val HORIZONTAL_RULE = Regex("^-{3,}$")
     /** GFM thematic break: 3+ matching `-`, `*`, or `_`, separated by spaces/tabs. */
     val THEMATIC_BREAK = Regex("^[ \t]{0,3}(?:(?:\\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})$")
@@ -136,6 +135,64 @@ private fun parseListMarker(line: String): ListMarker? {
         }
         else -> return null
     }
+}
+
+/**
+ * Parsed opening fence of a GFM fenced code block (§4.5).
+ * [language] is the first whitespace-delimited token of the info string (or null
+ * if the info string is empty/whitespace-only).
+ */
+private data class FenceOpen(
+    val marker: Char,        // '`' or '~'
+    val length: Int,         // count of marker chars (≥3)
+    val indent: Int,         // 0..3 leading spaces of the opening fence
+    val language: String?
+)
+
+/**
+ * Try to parse [line] as a fenced code-block opening fence. Returns null if [line]
+ * is not a valid open: more than 3 leading spaces, fewer than 3 marker chars, or
+ * (for `` ` `` fences) backticks anywhere in the info string.
+ */
+private fun parseFenceOpen(line: String): FenceOpen? {
+    var i = 0
+    while (i < line.length && i < 4 && line[i] == ' ') i++
+    if (i >= 4) return null
+    val indent = i
+    if (i >= line.length) return null
+    val marker = line[i]
+    if (marker != '`' && marker != '~') return null
+    val markerStart = i
+    while (i < line.length && line[i] == marker) i++
+    val length = i - markerStart
+    if (length < 3) return null
+    val info = line.substring(i)
+    if (marker == '`' && '`' in info) return null
+    val language = info.trim().takeIf { it.isNotEmpty() }
+        ?.substringBefore(' ')
+        ?.substringBefore('\t')
+        ?.takeIf { it.isNotEmpty() }
+    return FenceOpen(marker, length, indent, language)
+}
+
+/**
+ * True if [line] is a valid closing fence for an open code block of [marker]
+ * char and at least [openLength] marker chars. Allows 0–3 spaces of leading
+ * indent and only spaces after the marker run (GFM §4.5).
+ */
+private fun isFenceClose(line: String, marker: Char, openLength: Int): Boolean {
+    var i = 0
+    while (i < line.length && i < 4 && line[i] == ' ') i++
+    if (i >= 4) return false
+    val markerStart = i
+    while (i < line.length && line[i] == marker) i++
+    val length = i - markerStart
+    if (length < openLength) return false
+    while (i < line.length) {
+        if (line[i] != ' ') return false
+        i++
+    }
+    return true
 }
 
 /**
@@ -463,7 +520,11 @@ private class ParserState(
         data object Paragraph : BlockMode
         /** Paragraph remains open across newlines until a block-start or blank line ends it. */
         data object ParagraphContinuation : BlockMode
-        data class CodeBlock(val backticks: Int) : BlockMode
+        data class CodeBlock(
+            val marker: Char,
+            val length: Int,
+            val indent: Int
+        ) : BlockMode
         /** Indented code block: started by ≥4 cols of leading whitespace at top level. */
         data object IndentedCodeBlock : BlockMode
         /**
@@ -481,6 +542,12 @@ private class ParserState(
         data object UnorderedList : BlockMode
         data object OrderedList : BlockMode
         data object Blockquote : BlockMode
+        /** Fenced code block nested inside a blockquote (GFM §5.1 + §4.5). */
+        data class BlockquoteCode(
+            val marker: Char,
+            val length: Int,
+            val indent: Int
+        ) : BlockMode
         data object BlockquoteList : BlockMode
         data object MathBlock : BlockMode
         data object Table : BlockMode
@@ -527,8 +594,6 @@ private class ParserState(
     private var blockMode: BlockMode = BlockMode.Start
     private var lineBuffer = StringBuilder()
     private var atLineStart = true
-    private var codeBlockBackticks = 0
-    private var codeBlockPendingLine: String? = null
     private val indentedCodeDeferredBlanks = mutableListOf<String>()
     private var tableHasBody = false
     private var inListItem = false
@@ -552,7 +617,8 @@ private class ParserState(
     private var imageAlt = StringBuilder()
     private var imageUrl = StringBuilder()
     private var escaped = false
-    private var doubleBacktickCode = false
+    /** Length of the opening backtick run for the currently-open inline code span (0 if not in code). */
+    private var codeRunLength = 0
     private var inlineBuffer = StringBuilder()
 
     // After resolving a buffered marker (e.g. "*"), the trailing char is left
@@ -637,7 +703,7 @@ private class ParserState(
     // Includes `*`, `_` (thematic break vs. emphasis), `\t` (indented code), and
     // ` ` (leading whitespace before any block).
     private fun Char.isBlockStart(): Boolean = when (this) {
-        '#', '`', '-', '>', '|', '$', '<', ' ', '\t', '*', '_' -> true
+        '#', '`', '~', '-', '>', '|', '$', '<', ' ', '\t', '*', '_' -> true
         else -> isDigit()
     }
 
@@ -790,8 +856,8 @@ private class ParserState(
      */
     private fun getInlineStateFastPathEnd(content: String, startIndex: Int): Int = when {
         escaped -> startIndex
-        code && !doubleBacktickCode -> findNextChar(content, startIndex, '`')
-        code && doubleBacktickCode -> startIndex
+        code && codeRunLength == 1 -> findNextChar(content, startIndex, '`')
+        code -> startIndex
         math -> findNextChar(content, startIndex, '$')
         inLinkUrl -> startIndex
         inLink -> startIndex
@@ -964,12 +1030,13 @@ private class ParserState(
             is Heading -> processHeading(char, mode)
             Paragraph -> processParagraph(char)
             ParagraphContinuation -> processParagraphContinuation(char)
-            is CodeBlock -> processCodeBlock(char, mode.backticks)
+            is CodeBlock -> processCodeBlock(char, mode)
             IndentedCodeBlock -> processIndentedCodeBlock(char)
             is ListBlock -> processListBlock(char, mode)
             UnorderedList -> processUnorderedList(char)
             OrderedList -> processOrderedList(char)
             Blockquote -> processBlockquote(char)
+            is BlockquoteCode -> processBlockquoteCode(char, mode)
             BlockquoteList -> processBlockquoteList(char)
             MathBlock -> processMathBlock(char)
             Table -> processTable(char)
@@ -1069,17 +1136,13 @@ private class ParserState(
                 shouldStartListBlock(line) -> {
                     openListBlockWithMarker(line)
                 }
-                // Code block opening: ```lang
-                line matches Patterns.CODE_BLOCK_LANG -> {
-                    val lang = line.removePrefix("```").trim()
-                    val attrs = if (lang.isNotEmpty()) {
-                        mapOf("class" to "code lang-$lang")
-                    } else {
-                        mapOf("class" to "code")
-                    }
-                    mark("pre", attributes = attrs)
-                    codeBlockBackticks = 3
-                    blockMode = BlockMode.CodeBlock(3)
+                // Fenced code block opening: ``` or ~~~ (GFM §4.5)
+                parseFenceOpen(line) != null -> {
+                    val fence = parseFenceOpen(line)!!
+                    mark("pre")
+                    val codeAttrs = fence.language?.let { mapOf("class" to "language-$it") }
+                    mark("code", attributes = codeAttrs)
+                    blockMode = BlockMode.CodeBlock(fence.marker, fence.length, fence.indent)
                 }
                 // Horizontal rule: ---
                 line matches Patterns.HORIZONTAL_RULE -> {
@@ -1145,8 +1208,9 @@ private class ParserState(
                 lineBuffer.clear()
                 blockMode = BlockMode.Paragraph
             }
-            // Code block: ```
-            line == "```" || line matches Patterns.CODE_BLOCK_LANG -> {
+            // Fenced code block opener (`` ``` `` or `~~~`) — keep buffering until newline
+            // so the full info string can be parsed by parseFenceOpen.
+            parseFenceOpen(line) != null -> {
                 // Keep buffering for newline
             }
             // Horizontal rule: --- keep buffering
@@ -1169,13 +1233,13 @@ private class ParserState(
             line matches Patterns.ORDERED_LIST_ITEM -> {
                 // Defer to `\n` handler; ListBlock handles ordered + nested ordered.
             }
-            // Blockquote: > text
+            // Blockquote: `> text`. Open `<blockquote>` only — defer `<p>` until first
+            // content char arrives so backtick/tilde-led content can open a fenced code
+            // block instead. lineBuffer keeps `> ` so processBlockquote's pattern
+            // dispatcher continues from the same prefix on the next char.
             line == "> " -> {
                 mark("blockquote")
-                mark("p")
-                inBlockquoteParagraph = true
-                lineBuffer.clear()
-                atLineStart = false
+                inBlockquoteParagraph = false
                 blockMode = BlockMode.Blockquote
             }
             line == ">" -> {
@@ -1371,7 +1435,7 @@ private class ParserState(
         // Fenced code or thematic break (GFM §4.1: a thematic break can interrupt
         // a paragraph). HORIZONTAL_RULE is a subset of THEMATIC_BREAK kept for
         // belt-and-suspenders; THEMATIC_BREAK matches `***`, `___`, `* * *`, etc.
-        if (line == "```" || line matches Patterns.CODE_BLOCK_LANG) return true
+        if (parseFenceOpen(line) != null) return true
         if (line matches Patterns.HORIZONTAL_RULE) return true
         if (line matches Patterns.THEMATIC_BREAK) return true
         // Math block
@@ -1396,25 +1460,17 @@ private class ParserState(
 
     private suspend fun SemanticEventScope.processCodeBlock(
         char: Char,
-        backticks: Int
+        mode: BlockMode.CodeBlock
     ) {
         if (char == '\n') {
             val line = lineBuffer.toString()
             lineBuffer.clear()
-            if (line.trimEnd() == "`".repeat(backticks)) {
-                // Closing fence - emit pending line without trailing newline
-                if (codeBlockPendingLine != null) {
-                    +codeBlockPendingLine!!
-                    codeBlockPendingLine = null
-                }
+            if (isFenceClose(line, mode.marker, mode.length)) {
+                unmark("code")
                 unmark("pre")
                 blockMode = BlockMode.Start
             } else {
-                // Emit previous pending line with newline, then store this line
-                if (codeBlockPendingLine != null) {
-                    +(codeBlockPendingLine + "\n")
-                }
-                codeBlockPendingLine = line
+                +"${stripIndentCols(line, mode.indent)}\n"
             }
         } else {
             lineBuffer.append(char)
@@ -1919,6 +1975,45 @@ private class ParserState(
         char: Char
     ) {
         if (char == '\n') {
+            // If we were buffering a fence-candidate line ("> ` …" or "> ~ …"),
+            // dispatch it now: open a fenced code block if the stripped content
+            // is a valid fence open, otherwise treat the line as paragraph content.
+            if (atLineStart &&
+                lineBuffer.length > 2 &&
+                lineBuffer.startsWith("> ") &&
+                (lineBuffer[2] == '`' || lineBuffer[2] == '~')
+            ) {
+                val stripped = lineBuffer.toString().removePrefix("> ")
+                lineBuffer.clear()
+                val fence = parseFenceOpen(stripped)
+                if (fence != null) {
+                    if (inBlockquoteParagraph) {
+                        flushInline()
+                        unmark("p")
+                        inBlockquoteParagraph = false
+                    }
+                    blockquotePendingNewline = false
+                    mark("pre")
+                    val codeAttrs = fence.language?.let { mapOf("class" to "language-$it") }
+                    mark("code", attributes = codeAttrs)
+                    blockMode = BlockMode.BlockquoteCode(fence.marker, fence.length, fence.indent)
+                    atLineStart = true
+                    return
+                }
+                // Not a fence — treat as paragraph content.
+                if (blockquotePendingNewline && inBlockquoteParagraph) {
+                    +"\n"
+                    blockquotePendingNewline = false
+                }
+                if (!inBlockquoteParagraph) {
+                    mark("p")
+                    inBlockquoteParagraph = true
+                }
+                processInlineContent(stripped)
+                if (inBlockquoteParagraph) blockquotePendingNewline = true
+                atLineStart = true
+                return
+            }
             if (inBlockquoteParagraph) {
                 // Don't emit newline yet - might be followed by list
                 blockquotePendingNewline = true
@@ -1951,6 +2046,12 @@ private class ParserState(
                     lineBuffer.clear()
                     inListItem = true
                     blockMode = BlockMode.BlockquoteList
+                }
+                // Potential fenced-code opener inside blockquote — buffer the whole line
+                // so parseFenceOpen can decide at `\n` whether this opens a fence or is
+                // ordinary paragraph content (e.g. a line-leading inline code span).
+                line.startsWith("> ") && line.length > 2 && (line[2] == '`' || line[2] == '~') -> {
+                    // Keep buffering until newline.
                 }
                 line.startsWith("> ") && line.length > 2 -> {
                     // Content after "> " - emit pending newline if continuing paragraph
@@ -1985,6 +2086,44 @@ private class ParserState(
             // Continue inline content within blockquote paragraph
             processInlineChar(char)
         }
+    }
+
+    private suspend fun SemanticEventScope.processBlockquoteCode(
+        char: Char,
+        mode: BlockMode.BlockquoteCode
+    ) {
+        if (char != '\n') {
+            lineBuffer.append(char)
+            return
+        }
+        val line = lineBuffer.toString()
+        lineBuffer.clear()
+        if (line.isEmpty() || !line.startsWith(">")) {
+            // Blank line or non-blockquote line: close fenced code AND blockquote.
+            unmark("code")
+            unmark("pre")
+            unmark("blockquote")
+            inBlockquoteParagraph = false
+            blockquotePendingNewline = false
+            blockMode = BlockMode.Start
+            atLineStart = true
+            if (line.isNotEmpty()) {
+                replay(line)
+                process('\n')
+            }
+            return
+        }
+        val stripped = if (line.startsWith("> ")) line.substring(2)
+        else line.substring(1)
+        if (isFenceClose(stripped, mode.marker, mode.length)) {
+            unmark("code")
+            unmark("pre")
+            blockMode = BlockMode.Blockquote
+            atLineStart = true
+            return
+        }
+        +"${stripIndentCols(stripped, mode.indent)}\n"
+        atLineStart = true
     }
 
     private suspend fun SemanticEventScope.processBlockquoteList(
@@ -2860,39 +2999,43 @@ private class ParserState(
             return
         }
 
-        // Inside code - only look for closing backtick
+        // Inside code — close on a backtick run that exactly matches the opening run length (GFM §6.1).
         if (code) {
-            when {
-                char == '`' && doubleBacktickCode && inlineBuffer.endsWith("`") -> {
-                    // Closing `` found - the buffer ends with first backtick, now second arrived
-                    // Content is everything before the trailing backtick
-                    var content = inlineBuffer.substring(0, inlineBuffer.length - 1)
-                    // Strip single leading and trailing space if both present (CommonMark rule)
-                    if (content.startsWith(" ") && content.endsWith(" ") && content.length > 1) {
-                        content = content.substring(1, content.length - 1)
-                    }
-                    +content
-                    inlineBuffer.clear()
+            if (codeRunLength == 1) {
+                // Single-tick code: stream content; any backtick closes.
+                if (char == '`') {
                     unmark("code")
                     code = false
-                    doubleBacktickCode = false
+                    codeRunLength = 0
+                } else {
+                    +char
                 }
-                char == '`' && !doubleBacktickCode -> {
-                    if (inlineBuffer.isNotEmpty()) {
-                        +inlineBuffer.toString()
-                        inlineBuffer.clear()
-                    }
-                    unmark("code")
-                    code = false
-                }
-                else -> {
-                    if (doubleBacktickCode) {
-                        inlineBuffer.append(char)
-                    } else {
-                        +char
-                    }
-                }
+                return
             }
+            // N>=2: buffer all chars; close on a non-backtick when the trailing
+            // backtick run length equals the opening run length.
+            if (char == '`') {
+                inlineBuffer.append('`')
+                return
+            }
+            var trail = 0
+            while (trail < inlineBuffer.length &&
+                inlineBuffer[inlineBuffer.length - 1 - trail] == '`'
+            ) trail++
+            if (trail == codeRunLength) {
+                var content = inlineBuffer.substring(0, inlineBuffer.length - trail)
+                if (content.startsWith(" ") && content.endsWith(" ") && content.length > 1) {
+                    content = content.substring(1, content.length - 1)
+                }
+                +content
+                inlineBuffer.clear()
+                unmark("code")
+                code = false
+                codeRunLength = 0
+                pendingDeferredChar = char
+                return
+            }
+            inlineBuffer.append(char)
             return
         }
 
@@ -3034,12 +3177,20 @@ private class ParserState(
         // IMPORTANT: Buffer-based checks must come BEFORE new character checks
         // so that pending formatting markers are processed before the new char
         when {
-            // First, check if buffer contains formatting markers that should be resolved
-            inlineBuffer.toString() == "`" && char != '`' -> {
+            // First, check if buffer contains formatting markers that should be resolved.
+            // Backtick run resolution (GFM §6.1): a run of N backticks followed by a
+            // non-backtick opens an inline code span with run length N.
+            inlineBuffer.isNotEmpty() && inlineBuffer.all { it == '`' } && char != '`' -> {
+                val n = inlineBuffer.length
                 inlineBuffer.clear()
                 code = true
+                codeRunLength = n
                 mark("code")
-                +char
+                if (n == 1) {
+                    +char
+                } else {
+                    pendingDeferredChar = char
+                }
             }
             inlineBuffer.toString() == "***" && char != '*' -> {
                 inlineBuffer.clear()
@@ -3056,20 +3207,14 @@ private class ParserState(
                 resolveEmphasisRun('*', 1, char)
                 pendingDeferredChar = char
             }
-            // Now handle new characters that start or continue formatting markers
+            // Backtick run accumulation: keep appending backticks until a non-backtick
+            // arrives, at which point the buffer-resolution branch above opens code.
             char == '`' -> {
-                if (inlineBuffer.endsWith("`")) {
+                if (inlineBuffer.isNotEmpty() && !inlineBuffer.all { it == '`' }) {
+                    +inlineBuffer.toString()
                     inlineBuffer.clear()
-                    code = true
-                    doubleBacktickCode = true
-                    mark("code")
-                } else {
-                    if (inlineBuffer.isNotEmpty()) {
-                        +inlineBuffer.toString()
-                        inlineBuffer.clear()
-                    }
-                    inlineBuffer.append('`')
                 }
+                inlineBuffer.append('`')
             }
             char == '*' -> {
                 if (inlineBuffer.endsWith("*")) {
@@ -3244,6 +3389,27 @@ private class ParserState(
     }
 
     private suspend fun SemanticEventScope.flushInline() {
+        // Close inline code first so a buffered close-run (N≥2 backticks) at line/block
+        // end is recognized as a valid close, not flushed as content + force-close.
+        if (code) {
+            var trail = 0
+            while (trail < inlineBuffer.length &&
+                inlineBuffer[inlineBuffer.length - 1 - trail] == '`'
+            ) trail++
+            if (trail == codeRunLength && codeRunLength >= 2) {
+                var content = inlineBuffer.substring(0, inlineBuffer.length - trail)
+                if (content.startsWith(" ") && content.endsWith(" ") && content.length > 1) {
+                    content = content.substring(1, content.length - 1)
+                }
+                +content
+            } else if (inlineBuffer.isNotEmpty()) {
+                +inlineBuffer.toString()
+            }
+            inlineBuffer.clear()
+            unmark("code")
+            code = false
+            codeRunLength = 0
+        }
         if (inlineBuffer.isNotEmpty()) {
             val buf = inlineBuffer.toString()
             inlineBuffer.clear()
@@ -3267,11 +3433,6 @@ private class ParserState(
         if (math) {
             unmark("math")
             math = false
-        }
-        if (code) {
-            unmark("code")
-            code = false
-            doubleBacktickCode = false
         }
         if (highlight) {
             unmark("mark")
@@ -3339,22 +3500,14 @@ private class ParserState(
                 unmark("p")
             }
             is CodeBlock -> {
-                val isClosingFence = lineBuffer.isNotEmpty() && lineBuffer.toString().trim() == "`".repeat(mode.backticks)
-
-                // Emit pending line if any
-                if (codeBlockPendingLine != null) {
-                    // If lineBuffer has content that's NOT the closing fence, add newline
-                    if (lineBuffer.isNotEmpty() && !isClosingFence) {
-                        +(codeBlockPendingLine + "\n")
-                    } else {
-                        // Last content line - no trailing newline
-                        +codeBlockPendingLine!!
+                if (lineBuffer.isNotEmpty()) {
+                    val line = lineBuffer.toString()
+                    lineBuffer.clear()
+                    if (!isFenceClose(line, mode.marker, mode.length)) {
+                        +"${stripIndentCols(line, mode.indent)}\n"
                     }
-                    codeBlockPendingLine = null
                 }
-                if (lineBuffer.isNotEmpty() && !isClosingFence) {
-                    +lineBuffer.toString()
-                }
+                unmark("code")
                 unmark("pre")
             }
             UnorderedList -> {
@@ -3377,6 +3530,23 @@ private class ParserState(
                     unmark("p")
                 }
                 unmark("blockquote")
+            }
+            is BlockquoteCode -> {
+                if (lineBuffer.isNotEmpty()) {
+                    val line = lineBuffer.toString()
+                    lineBuffer.clear()
+                    if (line.startsWith(">")) {
+                        val stripped = if (line.startsWith("> ")) line.substring(2)
+                        else line.substring(1)
+                        if (!isFenceClose(stripped, mode.marker, mode.length)) {
+                            +"${stripIndentCols(stripped, mode.indent)}\n"
+                        }
+                    }
+                }
+                unmark("code")
+                unmark("pre")
+                unmark("blockquote")
+                inBlockquoteParagraph = false
             }
             BlockquoteList -> {
                 if (inListItem) {
