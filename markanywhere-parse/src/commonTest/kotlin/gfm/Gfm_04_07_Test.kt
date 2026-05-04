@@ -32,17 +32,24 @@ import kotlin.test.Test
  * Each test corresponds to a numbered example from:
  * https://github.github.com/gfm/#link-reference-definitions
  *
- * DIVERGENCE: Link reference definitions are not supported (see README — Divergences from GFM)
- * Tests in this file document the divergence — they capture the spec input
- * and the GFM expected output for reference, but assertions reflect what
- * markanywhere-parse actually emits, not GFM.
+ * DIVERGENCE: Link reference definitions are not supported. Resolving a `[foo]`
+ * usage to a `[foo]: /url` definition that may appear *later* in the document
+ * would require retracting an already-emitted text event, violating the
+ * append-only streaming contract. LLM output overwhelmingly uses inline links
+ * (`[text](url)`) instead, so the cost of supporting reference definitions is
+ * not justified for this parser.
+ *
+ * Each test below captures the spec input and the GFM expected output for
+ * reference (in the trailing comment), but assertions reflect what
+ * markanywhere-parse actually emits: the source flows through as plain
+ * paragraph text, with inline links / inline HTML / fenced code blocks still
+ * recognized where they happen to appear.
  */
 @Suppress("ClassName")
 class Gfm_04_07_Test {
 
-    // TODO review
     @Test
-    fun `example 161 - DIVERGENCE`() = runTest {
+    fun `example 161 - DIVERGENCE - basic link reference definition`() = runTest {
         // given
         val textFlow = """
             [foo]: /url "title"
@@ -56,9 +63,10 @@ class Gfm_04_07_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "a"("href" to "/url", "title" to "title") {
-                    +"foo"
-                }
+                +"[foo]: /url \"title\""
+            }
+            "p" {
+                +"[foo]"
             }
         }
         // GFM expected:
@@ -67,9 +75,8 @@ class Gfm_04_07_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 162 - DIVERGENCE`() = runTest {
+    fun `example 162 - DIVERGENCE - indented definition with url and title on separate lines`() = runTest {
         // given
         val textFlow = buildText {
             +"   [foo]: \n"
@@ -83,11 +90,17 @@ class Gfm_04_07_Test {
         val parsed = textFlow.parse()
 
         // then
+        // Trailing two spaces on lines 1 and 2 promote those soft breaks to
+        // <br/> per GFM §6.7. The source flows through as paragraph text with
+        // hard breaks where the original lines ended in 2+ spaces.
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "a"("href" to "/url", "title" to "the title") {
-                    +"foo"
-                }
+                +"[foo]:\n/url"
+                "br" {}
+                +"\n'the title'"
+            }
+            "p" {
+                +"[foo]"
             }
         }
         // GFM expected:
@@ -96,9 +109,8 @@ class Gfm_04_07_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 163 - DIVERGENCE`() = runTest {
+    fun `example 163 - DIVERGENCE - special characters in label, parens in url`() = runTest {
         // given
         val textFlow = """
             [Foo*bar\]]:my_(url) 'title (with parens)'
@@ -110,11 +122,15 @@ class Gfm_04_07_Test {
         val parsed = textFlow.parse()
 
         // then
+        // The escaped `\]` inside the link label is emitted as a literal `]`
+        // before the bracket-abort replays the buffered `[Foo*bar`, hence the
+        // leading `]` in each paragraph.
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "a"("href" to "my_(url)", "title" to "title (with parens)") {
-                    +"Foo*bar]"
-                }
+                +"][Foo*bar]:my_(url) 'title (with parens)'"
+            }
+            "p" {
+                +"][Foo*bar]"
             }
         }
         // GFM expected:
@@ -123,9 +139,8 @@ class Gfm_04_07_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 164 - DIVERGENCE`() = runTest {
+    fun `example 164 - DIVERGENCE - angle-bracketed url with spaces`() = runTest {
         // given
         val textFlow = """
             [Foo bar]:
@@ -139,11 +154,16 @@ class Gfm_04_07_Test {
         val parsed = textFlow.parse()
 
         // then
+        // `<my url>` is recognized as inline HTML (a tagged element with name
+        // "my" and attribute "url"=""), the rest flows as paragraph text.
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "a"("href" to "my%20url", "title" to "title") {
-                    +"Foo bar"
-                }
+                +"[Foo bar]:\n"
+                tag("my", "url" to "") {}
+                +"\n'title'"
+            }
+            "p" {
+                +"[Foo bar]"
             }
         }
         // GFM expected:
@@ -152,9 +172,8 @@ class Gfm_04_07_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 165 - DIVERGENCE`() = runTest {
+    fun `example 165 - DIVERGENCE - multi-line title`() = runTest {
         // given
         val textFlow = """
             [foo]: /url '
@@ -172,9 +191,10 @@ class Gfm_04_07_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "a"("href" to "/url", "title" to "\ntitle\nline1\nline2\n") {
-                    +"foo"
-                }
+                +"[foo]: /url '\ntitle\nline1\nline2\n'"
+            }
+            "p" {
+                +"[foo]"
             }
         }
         // GFM expected:
@@ -187,9 +207,8 @@ class Gfm_04_07_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 166 - DIVERGENCE`() = runTest {
+    fun `example 166 - DIVERGENCE - blank line in title is invalid`() = runTest {
         // given
         val textFlow = """
             [foo]: /url 'title
@@ -222,9 +241,8 @@ class Gfm_04_07_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 167 - DIVERGENCE`() = runTest {
+    fun `example 167 - DIVERGENCE - url on next line`() = runTest {
         // given
         val textFlow = """
             [foo]:
@@ -239,9 +257,10 @@ class Gfm_04_07_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "a"("href" to "/url") {
-                    +"foo"
-                }
+                +"[foo]:\n/url"
+            }
+            "p" {
+                +"[foo]"
             }
         }
         // GFM expected:
@@ -250,9 +269,8 @@ class Gfm_04_07_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 168 - DIVERGENCE`() = runTest {
+    fun `example 168 - DIVERGENCE - missing url`() = runTest {
         // given
         val textFlow = """
             [foo]:
@@ -279,9 +297,8 @@ class Gfm_04_07_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 169 - DIVERGENCE`() = runTest {
+    fun `example 169 - DIVERGENCE - explicitly empty url with angle brackets`() = runTest {
         // given
         val textFlow = """
             [foo]: <>
@@ -295,9 +312,10 @@ class Gfm_04_07_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "a"("href" to "") {
-                    +"foo"
-                }
+                +"[foo]: <>"
+            }
+            "p" {
+                +"[foo]"
             }
         }
         // GFM expected:
@@ -306,9 +324,8 @@ class Gfm_04_07_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 170 - DIVERGENCE`() = runTest {
+    fun `example 170 - DIVERGENCE - trailing content after url is invalid`() = runTest {
         // given
         val textFlow = """
             [foo]: <bar>(baz)
@@ -320,10 +337,13 @@ class Gfm_04_07_Test {
         val parsed = textFlow.parse()
 
         // then
+        // `<bar>` is recognized as an inline HTML opener; absent a matching
+        // closer in the same paragraph, `flushInline` drains the unclosed
+        // inline HTML stack so the event stream stays balanced.
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
                 +"[foo]: "
-                "bar" {
+                tag("bar") {
                     +"(baz)"
                 }
             }
@@ -338,9 +358,8 @@ class Gfm_04_07_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 171 - DIVERGENCE`() = runTest {
+    fun `example 171 - DIVERGENCE - backslash escapes in url and title`() = runTest {
         // given
         val textFlow = """
             [foo]: /url\bar\*baz "foo\"bar\baz"
@@ -352,11 +371,15 @@ class Gfm_04_07_Test {
         val parsed = textFlow.parse()
 
         // then
+        // Backslash escapes consume the `\` and emit the next char literally
+        // (even for non-ASCII-punctuation chars, which is a separate divergence
+        // from CommonMark §6.1).
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "a"("href" to "/url%5Cbar*baz", "title" to "foo\"bar\\baz") {
-                    +"foo"
-                }
+                +"[foo]: /urlbar*baz \"foo\"barbaz\""
+            }
+            "p" {
+                +"[foo]"
             }
         }
         // GFM expected:
@@ -365,9 +388,8 @@ class Gfm_04_07_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 172 - DIVERGENCE`() = runTest {
+    fun `example 172 - DIVERGENCE - forward reference, definition after use`() = runTest {
         // given
         val textFlow = """
             [foo]
@@ -379,11 +401,15 @@ class Gfm_04_07_Test {
         val parsed = textFlow.parse()
 
         // then
+        // The fundamental incompatibility with append-only streaming: by the
+        // time the definition arrives, the `[foo]` use has already been emitted
+        // as text and cannot be retracted to become an `<a>`.
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "a"("href" to "url") {
-                    +"foo"
-                }
+                +"[foo]"
+            }
+            "p" {
+                +"[foo]: url"
             }
         }
         // GFM expected:
@@ -392,9 +418,8 @@ class Gfm_04_07_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 173 - DIVERGENCE`() = runTest {
+    fun `example 173 - DIVERGENCE - duplicate definitions, first wins`() = runTest {
         // given
         val textFlow = """
             [foo]
@@ -409,9 +434,10 @@ class Gfm_04_07_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "a"("href" to "first") {
-                    +"foo"
-                }
+                +"[foo]"
+            }
+            "p" {
+                +"[foo]: first\n[foo]: second"
             }
         }
         // GFM expected:
@@ -420,9 +446,8 @@ class Gfm_04_07_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 174 - DIVERGENCE`() = runTest {
+    fun `example 174 - DIVERGENCE - case-insensitive label matching`() = runTest {
         // given
         val textFlow = """
             [FOO]: /url
@@ -436,9 +461,10 @@ class Gfm_04_07_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "a"("href" to "/url") {
-                    +"Foo"
-                }
+                +"[FOO]: /url"
+            }
+            "p" {
+                +"[Foo]"
             }
         }
         // GFM expected:
@@ -447,9 +473,8 @@ class Gfm_04_07_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 175 - DIVERGENCE`() = runTest {
+    fun `example 175 - DIVERGENCE - unicode case folding in label`() = runTest {
         // given
         val textFlow = """
             [ΑΓΩ]: /φου
@@ -463,9 +488,10 @@ class Gfm_04_07_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "a"("href" to "/%CF%86%CE%BF%CF%85") {
-                    +"αγω"
-                }
+                +"[ΑΓΩ]: /φου"
+            }
+            "p" {
+                +"[αγω]"
             }
         }
         // GFM expected:
@@ -474,9 +500,8 @@ class Gfm_04_07_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 176 - DIVERGENCE`() = runTest {
+    fun `example 176 - DIVERGENCE - standalone definition produces text`() = runTest {
         // given
         val textFlow = "[foo]: /url".chunkedRandomly().asFlow()
 
@@ -485,17 +510,18 @@ class Gfm_04_07_Test {
 
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
-            // TODO assertion
+            "p" {
+                +"[foo]: /url"
+            }
         }
-        // GFM expected:
+        // GFM expected: (definition produces no output in GFM)
         /*
-            
+
          */
     }
 
-    // TODO review
     @Test
-    fun `example 177 - DIVERGENCE`() = runTest {
+    fun `example 177 - DIVERGENCE - multi-line label`() = runTest {
         // given
         val textFlow = """
             [
@@ -510,7 +536,7 @@ class Gfm_04_07_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"bar"
+                +"[\nfoo\n]: /url\nbar"
             }
         }
         // GFM expected:
@@ -519,9 +545,8 @@ class Gfm_04_07_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 178 - DIVERGENCE`() = runTest {
+    fun `example 178 - DIVERGENCE - trailing content on same line rejects definition`() = runTest {
         // given
         val textFlow = """[foo]: /url "title" ok""".chunkedRandomly().asFlow()
 
@@ -540,9 +565,8 @@ class Gfm_04_07_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 179 - DIVERGENCE`() = runTest {
+    fun `example 179 - DIVERGENCE - title on continuation line, trailing content rejects title`() = runTest {
         // given
         val textFlow = """
             [foo]: /url
@@ -555,7 +579,7 @@ class Gfm_04_07_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"\"title\" ok"
+                +"[foo]: /url\n\"title\" ok"
             }
         }
         // GFM expected:
@@ -564,9 +588,8 @@ class Gfm_04_07_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 180 - DIVERGENCE`() = runTest {
+    fun `example 180 - DIVERGENCE - four-space indent makes it a code block`() = runTest {
         // given
         val textFlow = buildText {
             +"    [foo]: /url \"title\"\n"
@@ -596,9 +619,8 @@ class Gfm_04_07_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 181 - DIVERGENCE`() = runTest {
+    fun `example 181 - DIVERGENCE - inside fenced code block`() = runTest {
         // given
         val textFlow = """
             ```
@@ -613,8 +635,10 @@ class Gfm_04_07_Test {
 
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
-            "pre"("class" to "code") {
-                +"[foo]: /url"
+            "pre" {
+                "code" {
+                    +"[foo]: /url\n"
+                }
             }
             "p" {
                 +"[foo]"
@@ -628,9 +652,8 @@ class Gfm_04_07_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 182 - DIVERGENCE`() = runTest {
+    fun `example 182 - DIVERGENCE - definition after paragraph line joins paragraph`() = runTest {
         // given
         val textFlow = """
             Foo
@@ -659,9 +682,8 @@ class Gfm_04_07_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 183 - DIVERGENCE`() = runTest {
+    fun `example 183 - DIVERGENCE - definition between heading and blockquote`() = runTest {
         // given
         val textFlow = """
             # [Foo]
@@ -675,9 +697,10 @@ class Gfm_04_07_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "h1" {
-                "a"("href" to "/url") {
-                    +"Foo"
-                }
+                +"[Foo]"
+            }
+            "p" {
+                +"[foo]: /url"
             }
             "blockquote" {
                 "p" {
@@ -694,9 +717,8 @@ class Gfm_04_07_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 184 - DIVERGENCE`() = runTest {
+    fun `example 184 - DIVERGENCE - definition before setext heading`() = runTest {
         // given
         val textFlow = """
             [foo]: /url
@@ -709,14 +731,11 @@ class Gfm_04_07_Test {
         val parsed = textFlow.parse()
 
         // then
+        // markanywhere does not implement setext headings — the `===` line
+        // becomes paragraph content rather than promoting `bar` to <h1>.
         parsed.mergeAdjacentText() sameAs semanticEvents {
-            "h1" {
-                +"bar"
-            }
             "p" {
-                "a"("href" to "/url") {
-                    +"foo"
-                }
+                +"[foo]: /url\nbar\n===\n[foo]"
             }
         }
         // GFM expected:
@@ -726,9 +745,8 @@ class Gfm_04_07_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 185 - DIVERGENCE`() = runTest {
+    fun `example 185 - DIVERGENCE - setext underline only, no heading content`() = runTest {
         // given
         val textFlow = """
             [foo]: /url
@@ -742,10 +760,7 @@ class Gfm_04_07_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"===\n"
-                "a"("href" to "/url") {
-                    +"foo"
-                }
+                +"[foo]: /url\n===\n[foo]"
             }
         }
         // GFM expected:
@@ -755,9 +770,8 @@ class Gfm_04_07_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 186 - DIVERGENCE`() = runTest {
+    fun `example 186 - DIVERGENCE - multiple definitions and references`() = runTest {
         // given
         val textFlow = buildText {
             +"[foo]: /foo-url \"foo\"\n"
@@ -776,17 +790,10 @@ class Gfm_04_07_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "a"("href" to "/foo-url", "title" to "foo") {
-                    +"foo"
-                }
-                +",\n"
-                "a"("href" to "/bar-url", "title" to "bar") {
-                    +"bar"
-                }
-                +",\n"
-                "a"("href" to "/baz-url") {
-                    +"baz"
-                }
+                +"[foo]: /foo-url \"foo\"\n[bar]: /bar-url\n\"bar\"\n[baz]: /baz-url"
+            }
+            "p" {
+                +"[foo],\n[bar],\n[baz]"
             }
         }
         // GFM expected:
@@ -797,9 +804,8 @@ class Gfm_04_07_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 187 - DIVERGENCE`() = runTest {
+    fun `example 187 - DIVERGENCE - definition inside blockquote`() = runTest {
         // given
         val textFlow = """
             [foo]
@@ -813,11 +819,12 @@ class Gfm_04_07_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "a"("href" to "/url") {
-                    +"foo"
-                }
+                +"[foo]"
             }
             "blockquote" {
+                "p" {
+                    +"[foo]: /url"
+                }
             }
         }
         // GFM expected:
@@ -828,9 +835,8 @@ class Gfm_04_07_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 188 - DIVERGENCE`() = runTest {
+    fun `example 188 - DIVERGENCE - standalone definition, no trailing newline`() = runTest {
         // given
         val textFlow = "[foo]: /url".chunkedRandomly().asFlow()
 
@@ -839,11 +845,13 @@ class Gfm_04_07_Test {
 
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
-            // TODO assertion
+            "p" {
+                +"[foo]: /url"
+            }
         }
-        // GFM expected:
+        // GFM expected: (definition produces no output in GFM)
         /*
-            
+
          */
     }
 
