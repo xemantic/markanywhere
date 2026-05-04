@@ -32,7 +32,6 @@ import kotlin.test.Test
  * Each test corresponds to a numbered example from:
  * https://github.github.com/gfm/#paragraphs
  */
-// TODO tests are failing, should we address it in the parser?
 @Suppress("ClassName")
 class Gfm_04_08_Test {
 
