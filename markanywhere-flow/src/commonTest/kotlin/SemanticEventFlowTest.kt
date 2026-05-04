@@ -85,7 +85,7 @@ class SemanticEventFlowTest {
         }
 
         // then
-        events.toJsonLines() sameAs """{"type":"mark","name":"em","isTagged":true}"""
+        events.toJsonLines() sameAs """{"type":"mark","name":"em","tagged":true}"""
     }
 
     @Test
@@ -118,7 +118,7 @@ class SemanticEventFlowTest {
         }
 
         // then
-        events.toJsonLines() sameAs """{"type":"unmark","name":"em","isTagged":true}"""
+        events.toJsonLines() sameAs """{"type":"unmark","name":"em","tagged":true}"""
     }
 
     @Test
@@ -166,9 +166,9 @@ class SemanticEventFlowTest {
 
         // then
         events.toJsonLines() sameAs """
-            {"type":"mark","name":"div","isTagged":true}
+            {"type":"mark","name":"div","tagged":true}
             {"type":"text","text":"content"}
-            {"type":"unmark","name":"div","isTagged":true}
+            {"type":"unmark","name":"div","tagged":true}
         """.trimIndent()
     }
 
@@ -183,9 +183,9 @@ class SemanticEventFlowTest {
 
         // then
         events.toJsonLines() sameAs """
-            {"type":"mark","name":"div","isTagged":true,"attributes":{"class":"container","id":"main"}}
+            {"type":"mark","name":"div","tagged":true,"attributes":{"class":"container","id":"main"}}
             {"type":"text","text":"content"}
-            {"type":"unmark","name":"div","isTagged":true}
+            {"type":"unmark","name":"div","tagged":true}
         """.trimIndent()
     }
 
@@ -200,9 +200,9 @@ class SemanticEventFlowTest {
 
         // then
         events.toJsonLines() sameAs """
-            {"type":"mark","name":"span","isTagged":true}
+            {"type":"mark","name":"span","tagged":true}
             {"type":"text","text":"text"}
-            {"type":"unmark","name":"span","isTagged":true}
+            {"type":"unmark","name":"span","tagged":true}
         """.trimIndent()
     }
 
@@ -219,9 +219,9 @@ class SemanticEventFlowTest {
 
         // then
         events.toJsonLines() sameAs """
-            {"type":"mark","name":"span","isTagged":true}
+            {"type":"mark","name":"span","tagged":true}
             {"type":"text","text":"text"}
-            {"type":"unmark","name":"span","isTagged":true}
+            {"type":"unmark","name":"span","tagged":true}
         """.trimIndent()
     }
 
@@ -261,11 +261,11 @@ class SemanticEventFlowTest {
 
         // then
         events.toJsonLines() sameAs """
-            {"type":"mark","name":"div","isTagged":true}
+            {"type":"mark","name":"div","tagged":true}
             {"type":"mark","name":"em"}
             {"type":"text","text":"text"}
             {"type":"unmark","name":"em"}
-            {"type":"unmark","name":"div","isTagged":true}
+            {"type":"unmark","name":"div","tagged":true}
         """.trimIndent()
     }
 
