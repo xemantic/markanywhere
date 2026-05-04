@@ -894,9 +894,9 @@ class MarkanywhereParserTest {
             "blockquote" {
                 "p" { +"Here are the points:" }
                 "ul" {
-                    "li" { +"First point" }
-                    "li" { +"Second point" }
-                    "li" { +"Third point" }
+                    "li" { "p" { +"First point" } }
+                    "li" { "p" { +"Second point" } }
+                    "li" { "p" { +"Third point" } }
                 }
             }
         }
