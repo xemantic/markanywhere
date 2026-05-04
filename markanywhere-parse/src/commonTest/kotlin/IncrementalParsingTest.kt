@@ -515,8 +515,7 @@ class IncrementalParsingTest {
             }
             "blockquote" {
                 "p" {
-                    +"q"
-                    +"uoted"
+                    +"quoted"
                     +"\n"
                     +"m"
                     +"ore"
