@@ -35,7 +35,6 @@ import kotlin.test.Test
 @Suppress("ClassName")
 class Gfm_05_01_Test {
 
-    // TODO review
     @Test
     fun `example 206 - blockquote (text , h1 Foo, text , paragraph bar baz, text )`() = runTest {
         // given
@@ -69,7 +68,6 @@ class Gfm_05_01_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 207 - blockquote (text , h1 Foo, text , paragraph bar baz, text )`() = runTest {
         // given
@@ -103,7 +101,6 @@ class Gfm_05_01_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 208 - blockquote (text , h1 Foo, text , paragraph bar baz, text )`() = runTest {
         // given
@@ -137,7 +134,6 @@ class Gfm_05_01_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 209 - indented code block`() = runTest {
         // given
@@ -167,7 +163,6 @@ class Gfm_05_01_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 210 - blockquote (text , h1 Foo, text , paragraph bar baz, text )`() = runTest {
         // given
@@ -201,7 +196,6 @@ class Gfm_05_01_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 211 - blockquote (text , paragraph bar baz foo, text )`() = runTest {
         // given
@@ -232,7 +226,6 @@ class Gfm_05_01_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 212 - blockquote (text , paragraph foo, text ), thematic break`() = runTest {
         // given
@@ -262,9 +255,10 @@ class Gfm_05_01_Test {
          */
     }
 
-    // TODO review
+    // DIVERGENCE: list items are always loose (`<p>` wrapper) per the project-wide
+    // always-loose list policy. GFM would emit tight `<li>foo</li>`.
     @Test
-    fun `example 213 - blockquote (text , ul with 1 item, text ), ul with 1 item`() = runTest {
+    fun `example 213 - DIVERGENCE - blockquote (ul with 1 item), ul with 1 item`() = runTest {
         // given
         val textFlow = """
             > - foo
@@ -279,13 +273,17 @@ class Gfm_05_01_Test {
             "blockquote" {
                 "ul" {
                     "li" {
-                        +"foo"
+                        "p" {
+                            +"foo"
+                        }
                     }
                 }
             }
             "ul" {
                 "li" {
-                    +"bar"
+                    "p" {
+                        +"bar"
+                    }
                 }
             }
         }
@@ -302,7 +300,6 @@ class Gfm_05_01_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 214 - blockquote (text , indented code block, text ), indented code block`() = runTest {
         // given
@@ -340,9 +337,8 @@ class Gfm_05_01_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 215 - blockquote (text , indented code block, text ), paragraph foo, indente (truncated)`() = runTest {
+    fun `example 215 - blockquote (empty fenced code), paragraph foo, empty fenced code`() = runTest {
         // given
         val textFlow = """
             > ```
@@ -357,18 +353,14 @@ class Gfm_05_01_Test {
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "blockquote" {
                 "pre" {
-                    "code" {
-                        +""
-                    }
+                    "code" {}
                 }
             }
             "p" {
                 +"foo"
             }
             "pre" {
-                "code" {
-                    +""
-                }
+                "code" {}
             }
         }
         // GFM expected:
@@ -381,7 +373,6 @@ class Gfm_05_01_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 216 - blockquote (text , paragraph foo - bar, text )`() = runTest {
         // given
@@ -410,7 +401,6 @@ class Gfm_05_01_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 217 - blockquote (text )`() = runTest {
         // given
@@ -431,7 +421,6 @@ class Gfm_05_01_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 218 - blockquote (text )`() = runTest {
         // given
@@ -456,7 +445,6 @@ class Gfm_05_01_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 219 - blockquote (text , paragraph foo, text )`() = runTest {
         // given
@@ -485,7 +473,6 @@ class Gfm_05_01_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 220 - blockquote (text , paragraph foo, text ), blockquote (text , paragraph (truncated)`() = runTest {
         // given
@@ -522,7 +509,6 @@ class Gfm_05_01_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 221 - blockquote (text , paragraph foo bar, text )`() = runTest {
         // given
@@ -551,7 +537,6 @@ class Gfm_05_01_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 222 - blockquote (text , paragraph foo, text , paragraph bar, text )`() = runTest {
         // given
@@ -584,7 +569,6 @@ class Gfm_05_01_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 223 - paragraph foo, blockquote (text , paragraph bar, text )`() = runTest {
         // given
@@ -616,7 +600,6 @@ class Gfm_05_01_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 224 - blockquote (text , paragraph aaa, text ), thematic break, blockquote ( (truncated)`() = runTest {
         // given
@@ -655,7 +638,6 @@ class Gfm_05_01_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 225 - blockquote (text , paragraph bar baz, text )`() = runTest {
         // given
@@ -684,7 +666,6 @@ class Gfm_05_01_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 226 - blockquote (text , paragraph bar, text ), paragraph baz`() = runTest {
         // given
@@ -717,7 +698,6 @@ class Gfm_05_01_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 227 - blockquote (text , paragraph bar, text ), paragraph baz`() = runTest {
         // given
@@ -750,7 +730,6 @@ class Gfm_05_01_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 228 - blockquote (text , blockquote (text , blockquote (text , paragraph foo (truncated)`() = runTest {
         // given
@@ -787,7 +766,6 @@ class Gfm_05_01_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 229 - blockquote (text , blockquote (text , blockquote (text , paragraph foo (truncated)`() = runTest {
         // given
@@ -826,7 +804,6 @@ class Gfm_05_01_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 230 - blockquote (text , indented code block, text ), blockquote (text , par (truncated)`() = runTest {
         // given
