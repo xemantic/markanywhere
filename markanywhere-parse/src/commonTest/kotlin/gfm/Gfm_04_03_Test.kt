@@ -336,9 +336,14 @@ class Gfm_04_03_Test {
         val parsed = textFlow.parse()
 
         // then
+        // DIVERGENCE: GFM treats `-----` after `Foo  ` as a setext H2 marker
+        // (`<h2>Foo</h2>`); markanywhere parses it as paragraph + thematic
+        // break. Trailing spaces on the paragraph's last line are stripped
+        // when the paragraph closes (matches GFM §6.7: hard breaks fire only
+        // when the paragraph continues, not at end-of-block).
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"Foo  "
+                +"Foo"
             }
             "hr" {}
         }
