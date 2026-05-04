@@ -289,6 +289,32 @@ private val CUSTOM_MARKUP_TAGNAME = Regex("^[a-zA-Z][a-zA-Z0-9-]*:[a-zA-Z][a-zA-
 // emit literal text so renderers escape `<div>` rather than treat it as actual markup).
 private val INLINE_HTML_BLOCK_ELEMENTS = HTML_BLOCK_TYPE6_TAGS + HTML_BLOCK_TYPE1_TAGS
 
+// Known HTML5 element names. Tag and attribute names of these elements are
+// emitted lowercased (so `<DIV CLASS="foo">` becomes `mark("div", {"class":
+// "foo"})`); names outside this set are emitted with their source casing
+// preserved (so `<Warning>` stays `Warning`, treating non-HTML5 tags as
+// XML-ish where case is significant). Combines TYPE1, TYPE6, and the
+// inline-only HTML5 elements not covered by either of those sets.
+private val HTML5_ELEMENTS: Set<String> = HTML_BLOCK_TYPE1_TAGS + HTML_BLOCK_TYPE6_TAGS + setOf(
+    "a", "abbr", "b", "bdi", "bdo", "br", "button", "canvas", "cite", "code",
+    "data", "datalist", "del", "dfn", "em", "embed", "hgroup", "i", "img",
+    "input", "ins", "kbd", "label", "map", "mark", "math", "meta", "meter",
+    "noscript", "object", "output", "picture", "progress", "q", "rp", "rt",
+    "ruby", "s", "samp", "select", "slot", "small", "source", "span",
+    "strong", "sub", "sup", "svg", "time", "u", "var", "video", "wbr"
+)
+
+/**
+ * Returns [name] lowercased if its lowercased form names a known HTML5
+ * element, otherwise returns [name] verbatim. Used to normalize tag names
+ * for `mark`/`unmark` emission so HTML5 tags are case-insensitive while
+ * custom (non-HTML5) tags keep their source casing.
+ */
+private fun normalizeHtmlName(name: String): String {
+    val lower = name.lowercase()
+    return if (lower in HTML5_ELEMENTS) lower else name
+}
+
 private sealed interface HtmlToken {
     data class OpenTag(
         val name: String,
@@ -541,14 +567,15 @@ private class ParserState(
         ) : BlockMode
         data object UnorderedList : BlockMode
         data object OrderedList : BlockMode
+        /**
+         * Blockquote sub-parse frame. The frame is "passive" — content is sub-parsed
+         * by the regular Markdown dispatcher in a `Start` frame pushed on top. Each
+         * subsequent line's `>` prefix is consumed by a parser-level interceptor
+         * before chars reach the inner sub-parser; non-`>` lines are either lazy-
+         * continuation (when the inner top is `ParagraphContinuation`) or close the
+         * blockquote and replay through the outer `Start`.
+         */
         data object Blockquote : BlockMode
-        /** Fenced code block nested inside a blockquote (GFM §5.1 + §4.5). */
-        data class BlockquoteCode(
-            val marker: Char,
-            val length: Int,
-            val indent: Int
-        ) : BlockMode
-        data object BlockquoteList : BlockMode
         data object MathBlock : BlockMode
         data object Table : BlockMode
         data object TableBody : BlockMode
@@ -565,39 +592,126 @@ private class ParserState(
         /** Types 2–5 (comment / PI / declaration / CDATA): emit each line as raw text. */
         data class HtmlBlock2to5(val closingSequence: String) : BlockMode
 
-        /** Types 6/7 (block-level / type-7 tag). Buffered until close decision. */
+        /**
+         * Types 6/7 (block-level / type-7 tag). Streamed incrementally — the opening
+         * tag emits `mark` immediately (after `>` is parsed); content lines emit text
+         * events as they arrive; the matching root close tag emits `unmark` and exits.
+         *
+         * Two child-content modes: `RawText` is the default (each line streams as
+         * text events, nested HTML tokens recognized). On the first blank line the
+         * frame transitions to `SubParse`, and subsequent lines route through the
+         * regular Markdown line dispatcher (paragraph/list/heading/code/etc.).
+         * The matching root close tag still pops the frame in either mode.
+         */
         class HtmlBlock6or7(
+            /** Lowercased root tag name, as detected from the opener line. */
             val rootTagName: String,
+            /** True when the opener was a closing tag (e.g. `</div>`); no mark is emitted. */
             val rootIsClosingTag: Boolean
         ) : BlockMode {
-            // Buffer for the first opening tag (may span multiple lines until '>' found).
+            // Phase 1: buffer the opening tag chars until '>' is parsed. Null once consumed.
             var firstLineBuffer: StringBuilder? = StringBuilder()
-            // After firstLineBuffer is parsed: tokens of the first complete line.
-            var firstLineTokens: List<HtmlToken>? = null
-            // Captured raw text of the first complete line (without trailing \n).
-            var firstLineRaw: String = ""
-            // Whether a matching root close was found in the first line tokens.
-            var rootCloseInFirstLine: Boolean = false
-            // Lines after the first complete line, before any blank line.
-            val preBlankLines: MutableList<String> = mutableListOf()
-            // Index of the matching root close within preBlankLines, or -1.
-            var rootCloseInPreBlank: Int = -1
-            // True once a blank line has been observed.
-            var blankLineSeen: Boolean = false
-            // Lines after the first blank (markdown sub-mode); may contain blank lines too.
-            val postBlankLines: MutableList<String> = mutableListOf()
-            // Index of the matching root close within postBlankLines, or -1.
-            var rootCloseInPostBlank: Int = -1
+            // Phase 2: stack of all open tag names (root first, lowercased) still inside.
+            // Empty when rootIsClosingTag (raw-text mode).
+            val openTags: MutableList<String> = mutableListOf()
+            // Child-content mode. Starts as `RawText`; flips to `SubParse` on the
+            // first blank line in the block, after which inner content is parsed as
+            // Markdown until the matching root close tag (or EOF).
+            var childMode: ChildMode = ChildMode.RawText
         }
+
+        enum class ChildMode { RawText, SubParse }
     }
 
-    private var blockMode: BlockMode = BlockMode.Start
+    // Stack of block-mode frames. Bottom is always the outermost context (initially
+    // `Start`); top drives dispatch. Pushing on top represents nesting (currently
+    // only when entering an HTML block 6/7 in sub-parse mode); replacing the top
+    // is the common sibling-transition case (e.g. Start -> Paragraph). Popping
+    // returns to the enclosing frame (e.g. closing the matching root HTML tag).
+    private val blockModeStack: ArrayDeque<BlockMode> =
+        ArrayDeque<BlockMode>().apply { addLast(BlockMode.Start) }
+    private val blockMode: BlockMode get() = blockModeStack.last()
+    private fun replaceMode(m: BlockMode) {
+        blockModeStack[blockModeStack.lastIndex] = m
+    }
+    private fun pushMode(m: BlockMode) {
+        blockModeStack.addLast(m)
+    }
+    private fun popMode(): BlockMode = blockModeStack.removeLast()
+    /**
+     * Index (from the bottom of the stack) of the nearest enclosing
+     * `HtmlBlock6or7` frame whose root close tag appears in [line], or -1.
+     * Scans from the top down so the most recently opened HTML frame is
+     * matched first (e.g. `<section>...<div>...</section>` resolves
+     * `</section>` against the section frame).
+     */
+    private fun findEnclosingHtmlFrameIndex(line: String): Int {
+        for (i in blockModeStack.lastIndex downTo 0) {
+            val frame = blockModeStack[i]
+            if (frame is BlockMode.HtmlBlock6or7 && !frame.rootIsClosingTag &&
+                frame.firstLineBuffer == null &&
+                findRootCloseTagIndex(line, frame.rootTagName) >= 0
+            ) {
+                return i
+            }
+        }
+        return -1
+    }
+
+    /**
+     * If [line] is solely a close tag (with at most leading/trailing whitespace)
+     * whose lowercased name matches an `openTag` tracked by an enclosing
+     * `HtmlBlock6or7` frame *other than* that frame's root, returns
+     * `(frame index, close tag name)`. The match scans top-down so the
+     * deepest still-open inner tag wins.
+     *
+     * Used to (a) interrupt a sub-parsed paragraph when an inner tag closes
+     * and (b) trigger the partial close in `tryCloseEnclosingHtmlBlock` —
+     * which drains the frame's `openTags` down to and including the matched
+     * name, then resumes sub-parse with a fresh `Start` frame on top.
+     *
+     * Excludes root matches because those are handled by
+     * [findEnclosingHtmlFrameIndex], which fully pops the frame.
+     */
+    private fun findEnclosingHtmlOpenTagClose(line: String): Pair<Int, String>? {
+        val trimmed = line.trimStart()
+        if (!trimmed.startsWith("</")) return null
+        val close = tryParseCloseTag(trimmed, 0) ?: return null
+        if (trimmed.substring(close.first).trimEnd().isNotEmpty()) return null
+        val name = close.second.name.lowercase()
+        for (i in blockModeStack.lastIndex downTo 0) {
+            val frame = blockModeStack[i] as? BlockMode.HtmlBlock6or7 ?: continue
+            if (frame.rootIsClosingTag || frame.firstLineBuffer != null) continue
+            // Skip frames whose root matches — root case handled elsewhere.
+            if (frame.rootTagName == name) continue
+            // openTags entries may keep source casing for non-HTML5 tags, so
+            // compare case-insensitively against the (already-lowercased) name.
+            if (frame.openTags.any { it.lowercase() == name }) return i to name
+        }
+        return null
+    }
+
     private var lineBuffer = StringBuilder()
     private var atLineStart = true
     private val indentedCodeDeferredBlanks = mutableListOf<String>()
     private var tableHasBody = false
     private var inListItem = false
-    private var inBlockquoteParagraph = false
+
+    // Blockquote prefix-consumption state. At the start of every line where
+    // `blockquoteFrameCount() > 0`, the interceptor consumes `>` markers (and
+    // optional spaces) before chars reach the inner sub-parser. `prefixDone`
+    // flips to true once all enclosing Blockquote frames' prefixes are consumed
+    // (or when the line is recognized as content already past the prefix).
+    private var blockquotePrefixDone: Boolean = true
+    private var blockquotePrefixCount: Int = 0
+    private var blockquotePrefixIndent: Int = 0
+    private var blockquoteJustAfterGt: Boolean = false
+    // When prefix consumption fails before all levels are matched, the rest of
+    // the line is buffered here so its content can be classified at `\n`:
+    // blank → close blockquote; paragraph-eligible + inner is paragraph → lazy
+    // continue; otherwise close blockquote and replay through outer Start.
+    private var blockquoteInFailedLine: Boolean = false
+    private val blockquoteFailedLineBuffer = StringBuilder()
 
     // Inline state
     private var bold = false
@@ -985,8 +1099,6 @@ private class ParserState(
             // whitespace stripping that a plain substring emit can't do.
             UnorderedList -> inListItem
             OrderedList -> inListItem
-            Blockquote -> inBlockquoteParagraph && !atLineStart
-            BlockquoteList -> inListItem
             else -> false
         }
 
@@ -1025,6 +1137,12 @@ private class ParserState(
     }
 
     private suspend fun SemanticEventScope.process(char: Char) {
+        // Blockquote prefix interceptor: consumes `>` (and optional space) at the
+        // start of each line for every enclosing Blockquote frame, before chars
+        // reach the inner sub-parser. Failed prefix consumption either closes
+        // the blockquote(s) or routes the line as lazy continuation.
+        if (interceptBlockquoteLine(char)) return
+
         when (val mode = blockMode) {
             Start -> processStart(char)
             is Heading -> processHeading(char, mode)
@@ -1035,9 +1153,7 @@ private class ParserState(
             is ListBlock -> processListBlock(char, mode)
             UnorderedList -> processUnorderedList(char)
             OrderedList -> processOrderedList(char)
-            Blockquote -> processBlockquote(char)
-            is BlockquoteCode -> processBlockquoteCode(char, mode)
-            BlockquoteList -> processBlockquoteList(char)
+            Blockquote -> { /* passive frame; chars dispatch to the Start above it */ }
             MathBlock -> processMathBlock(char)
             Table -> processTable(char)
             TableBody -> processTableBody(char)
@@ -1045,6 +1161,16 @@ private class ParserState(
             is HtmlBlock1 -> processHtmlBlock1(char, mode)
             is HtmlBlock2to5 -> processHtmlBlock2to5(char, mode)
             is HtmlBlock6or7 -> processHtmlBlock6or7(char, mode)
+        }
+
+        // Reset prefix-consume state at line boundaries so the next line starts
+        // a fresh prefix detection cycle (only meaningful when a Blockquote frame
+        // is still on the stack).
+        if (char == '\n' && blockquoteFrameCount() > 0) {
+            blockquotePrefixDone = false
+            blockquotePrefixCount = 0
+            blockquotePrefixIndent = 0
+            blockquoteJustAfterGt = false
         }
     }
 
@@ -1083,7 +1209,7 @@ private class ParserState(
         // char through Paragraph mode (which supports fast-path for incremental emission).
         if (lineBuffer.isEmpty() && char != '\n' && !char.isBlockStart()) {
             mark("p")
-            blockMode = BlockMode.Paragraph
+            replaceMode(BlockMode.Paragraph)
             pendingDeferredChar = char
             return
         }
@@ -1100,6 +1226,12 @@ private class ParserState(
                 return
             }
 
+            // Close-tag detection for sub-parsed HTML 6/7 blocks. If any enclosing
+            // frame's matching root close tag is on this line, pop everything above
+            // it (including the pushed sub-parse `Start` frame) and pop the HTML
+            // frame, emitting unmarks for its open tags.
+            if (tryCloseEnclosingHtmlBlock(line)) return
+
             when {
                 // Indented code block: ≥4 cols of leading whitespace (tabs count to tab stop 4).
                 leadingIndentCols(line) >= 4 -> {
@@ -1107,7 +1239,7 @@ private class ParserState(
                     mark("code")
                     +"${stripIndentCols(line, 4)}\n"
                     indentedCodeDeferredBlanks.clear()
-                    blockMode = BlockMode.IndentedCodeBlock
+                    replaceMode(BlockMode.IndentedCodeBlock)
                 }
                 // ATX heading allowing tab/space after #s
                 line matches Patterns.ATX_HEADING_LINE -> {
@@ -1136,13 +1268,21 @@ private class ParserState(
                 shouldStartListBlock(line) -> {
                     openListBlockWithMarker(line)
                 }
+                // Blockquote opener: 0..3 spaces + `>` then optional content.
+                // Sub-parses inner content via a Start frame pushed atop a
+                // Blockquote frame; subsequent lines have their `>` prefix
+                // consumed by `interceptBlockquoteLine` before reaching the
+                // inner sub-parser.
+                isBlockquoteOpener(line) -> {
+                    openBlockquote(line)
+                }
                 // Fenced code block opening: ``` or ~~~ (GFM §4.5)
                 parseFenceOpen(line) != null -> {
                     val fence = parseFenceOpen(line)!!
                     mark("pre")
                     val codeAttrs = fence.language?.let { mapOf("class" to "language-$it") }
                     mark("code", attributes = codeAttrs)
-                    blockMode = BlockMode.CodeBlock(fence.marker, fence.length, fence.indent)
+                    replaceMode(BlockMode.CodeBlock(fence.marker, fence.length, fence.indent))
                 }
                 // Horizontal rule: ---
                 line matches Patterns.HORIZONTAL_RULE -> {
@@ -1151,7 +1291,7 @@ private class ParserState(
                 // Math block: $$
                 line == "$$" -> {
                     mark("math", attributes = mapOf("display" to "block"))
-                    blockMode = BlockMode.MathBlock
+                    replaceMode(BlockMode.MathBlock)
                 }
                 // Table row
                 line.startsWith("|") -> {
@@ -1161,10 +1301,13 @@ private class ParserState(
                         emitTableRow(line, isHeader = true)
                     }
                     tableHasBody = false
-                    blockMode = BlockMode.Table
+                    replaceMode(BlockMode.Table)
                 }
-                // HTML block detection (CommonMark 4.6) - check before custom markup
-                detectHtmlBlockType(line) > 0 -> {
+                // HTML block detection (CommonMark 4.6) - check before custom markup.
+                // DIVERGENCE: when sub-parsing inside a blockquote, suppress HTML block
+                // detection so `> <div>` etc. flow as paragraph content (matches the
+                // existing 04_06 behaviour for blockquote-prefixed HTML).
+                detectHtmlBlockType(line) > 0 && !isInsideBlockquote() -> {
                     enterHtmlBlock(line)
                 }
                 // Custom markup opening tag: <namespace:name ...>
@@ -1175,7 +1318,7 @@ private class ParserState(
                         mark(tagName, isTagged = true, attributes = attributes)
                         customMarkupSkipFirstNewline = false  // Already consumed by line-based detection
                         customMarkupPendingNewline = false  // Reset any stale state from previous custom markup
-                        blockMode = BlockMode.CustomMarkup(tagName)
+                        replaceMode(BlockMode.CustomMarkup(tagName))
                     } else {
                         // Not a valid custom markup tag, treat as paragraph
                         beginParagraph(line)
@@ -1196,7 +1339,7 @@ private class ParserState(
                 val level = line.count { it == '#' }
                 mark("h$level")
                 lineBuffer.clear()
-                blockMode = BlockMode.Heading(level)
+                replaceMode(BlockMode.Heading(level))
             }
             line matches Patterns.HEADING_NO_SPACE -> {
                 // Keep buffering to see if space follows
@@ -1206,7 +1349,7 @@ private class ParserState(
                 mark("p")
                 processInlineContent(line)
                 lineBuffer.clear()
-                blockMode = BlockMode.Paragraph
+                replaceMode(BlockMode.Paragraph)
             }
             // Fenced code block opener (`` ``` `` or `~~~`) — keep buffering until newline
             // so the full info string can be parsed by parseFenceOpen.
@@ -1233,17 +1376,11 @@ private class ParserState(
             line matches Patterns.ORDERED_LIST_ITEM -> {
                 // Defer to `\n` handler; ListBlock handles ordered + nested ordered.
             }
-            // Blockquote: `> text`. Open `<blockquote>` only — defer `<p>` until first
-            // content char arrives so backtick/tilde-led content can open a fenced code
-            // block instead. lineBuffer keeps `> ` so processBlockquote's pattern
-            // dispatcher continues from the same prefix on the next char.
-            line == "> " -> {
-                mark("blockquote")
-                inBlockquoteParagraph = false
-                blockMode = BlockMode.Blockquote
-            }
-            line == ">" -> {
-                // Keep buffering - might be "> " or just ">"
+            // Blockquote opener: any line starting with `>` is dispatched at `\n`
+            // by `openBlockquote(line)`. Buffer until newline so we have the full
+            // line for prefix stripping and inner-content replay.
+            line.startsWith(">") -> {
+                // Keep buffering until `\n`.
             }
             // Table: | header |
             line.startsWith("|") -> {
@@ -1263,7 +1400,7 @@ private class ParserState(
                     lineBuffer.clear()
                     customMarkupSkipFirstNewline = true  // Skip newline that may follow immediately
                     customMarkupPendingNewline = false  // Reset any stale state from previous custom markup
-                    blockMode = BlockMode.CustomMarkup(tagName)
+                    replaceMode(BlockMode.CustomMarkup(tagName))
                 }
                 // If not valid custom markup, keep buffering until newline
             }
@@ -1296,7 +1433,7 @@ private class ParserState(
                 mode.pendingSpaces.clear()
                 flushInline()
                 unmark("h${mode.level}")
-                blockMode = BlockMode.Start
+                replaceMode(BlockMode.Start)
             }
             ' ', '\t' -> when {
                 // Leading whitespace before any content or closing-# candidate.
@@ -1341,7 +1478,7 @@ private class ParserState(
                 flushInline()
                 lineBuffer.clear()
                 atLineStart = true
-                blockMode = BlockMode.ParagraphContinuation
+                replaceMode(BlockMode.ParagraphContinuation)
             }
             else -> {
                 atLineStart = false
@@ -1359,7 +1496,7 @@ private class ParserState(
         // branch upstream of here).
         processInlineContent(line.trimStart(' ', '\t'))
         flushInline()
-        blockMode = BlockMode.ParagraphContinuation
+        replaceMode(BlockMode.ParagraphContinuation)
     }
 
     /**
@@ -1376,7 +1513,7 @@ private class ParserState(
         // switch to Paragraph mode so subsequent chars stream incrementally via fast-path.
         if (lineBuffer.isEmpty() && char != '\n' && !char.isBlockStart()) {
             +"\n"
-            blockMode = BlockMode.Paragraph
+            replaceMode(BlockMode.Paragraph)
             pendingDeferredChar = char
             return
         }
@@ -1387,14 +1524,17 @@ private class ParserState(
         }
         val line = lineBuffer.toString()
         lineBuffer.clear()
-        if (line.isEmpty()) {
+        if (line.isEmpty() || (isInsideBlockquote() && line.isBlank())) {
+            // Inside a blockquote, a line that is only whitespace after `>` prefix
+            // stripping (e.g. `>  ` → `" "`) is a blank-line-within-blockquote and
+            // closes the inner paragraph without ending the blockquote.
             unmark("p")
-            blockMode = BlockMode.Start
+            replaceMode(BlockMode.Start)
             return
         }
         if (lineInterruptsParagraph(line)) {
             unmark("p")
-            blockMode = BlockMode.Start
+            replaceMode(BlockMode.Start)
             // Replay the line through Start so it can be parsed as its own block.
             replay(line)
             process('\n')
@@ -1419,7 +1559,7 @@ private class ParserState(
             processInlineContent(stripped)
             flushInline()
         }
-        blockMode = BlockMode.ParagraphContinuation
+        replaceMode(BlockMode.ParagraphContinuation)
     }
 
     /**
@@ -1455,6 +1595,11 @@ private class ParserState(
         // HTML block start: types 1-6 interrupt paragraphs (type 7 does not by spec).
         val type = detectHtmlBlockType(line)
         if (type in 1..6) return true
+        // Inside a sub-parsed HTML 6/7 frame, a stand-alone close tag for any
+        // tag tracked by an enclosing frame's `openTags` (e.g. `</pre>` inside
+        // a sub-parsed `<table>...<pre>...`) closes that inner element — let
+        // the paragraph drop out so the close-tag check can fire in `processStart`.
+        if (findEnclosingHtmlOpenTagClose(line) != null) return true
         return false
     }
 
@@ -1468,7 +1613,7 @@ private class ParserState(
             if (isFenceClose(line, mode.marker, mode.length)) {
                 unmark("code")
                 unmark("pre")
-                blockMode = BlockMode.Start
+                replaceMode(BlockMode.Start)
             } else {
                 +"${stripIndentCols(line, mode.indent)}\n"
             }
@@ -1492,7 +1637,7 @@ private class ParserState(
      */
     private suspend fun SemanticEventScope.openListBlockWithMarker(markerLine: String) {
         val mode = BlockMode.ListBlock()
-        blockMode = mode
+        replaceMode(mode)
         startListItemFromMarker(mode, markerLine, parentContentCol = 0)
     }
 
@@ -1547,9 +1692,9 @@ private class ParserState(
 
     /**
      * Emit the first paragraph content of a list item. If [content] begins with a
-     * GFM task-list marker (`[ ]`, `[x]`, or `[X]` followed by a space), emit a
-     * disabled checkbox `<input>` and pass the remainder (including the space
-     * after `]`) through inline processing. Otherwise process [content] as inline.
+     * GFM task-list marker (`\[ \]`, `\[x\]`, or `\[X\]` followed by a space), emit
+     * a disabled checkbox `<input>` and pass the remainder (including the space
+     * after `\]`) through inline processing. Otherwise process [content] as inline.
      */
     private suspend fun SemanticEventScope.emitItemFirstContent(content: String) {
         if (content.length >= 4
@@ -1592,9 +1737,9 @@ private class ParserState(
     }
 
     /**
-     * Pop list contexts down to (and including, when [includeIndex] is true) [index],
-     * emitting `</li>` and `</ul>`/`</ol>` for each. Closes any open `<p>` or code
-     * block on the topmost context as part of closing the active item.
+     * Pop list contexts of [mode] until the stack size equals [downTo], emitting
+     * `</li>` and `</ul>`/`</ol>` for each popped level. Closes any open `<p>` or
+     * code block on the topmost context as part of closing the active item.
      */
     private suspend fun SemanticEventScope.popListContexts(
         mode: BlockMode.ListBlock,
@@ -1607,14 +1752,6 @@ private class ParserState(
             val ctx = mode.stack.removeLast()
             unmark(if (ctx.ordered) "ol" else "ul")
         }
-    }
-
-    /** Close the current `<li>` of the top context and open a new sibling `<li>`. */
-    private suspend fun SemanticEventScope.openSiblingItem(mode: BlockMode.ListBlock) {
-        closeListParagraphIfOpen(mode)
-        closeListCodeIfOpen(mode)
-        unmark("li")
-        mark("li")
     }
 
     private suspend fun SemanticEventScope.processListBlock(
@@ -1661,7 +1798,7 @@ private class ParserState(
         // replay the line through Start so the `<hr />` is emitted at top level.
         if (stripped matches Patterns.THEMATIC_BREAK) {
             popListContexts(mode, downTo = 0)
-            blockMode = BlockMode.Start
+            replaceMode(BlockMode.Start)
             replay(line)
             process('\n')
             return
@@ -1719,7 +1856,7 @@ private class ParserState(
         // Not a marker. If no context contains this line at all, the list ends.
         if (markerCtxIndex < 0) {
             popListContexts(mode, downTo = 0)
-            blockMode = BlockMode.Start
+            replaceMode(BlockMode.Start)
             replay(line)
             process('\n')
             return
@@ -1847,7 +1984,7 @@ private class ParserState(
         indentedCodeDeferredBlanks.clear()
         unmark("code")
         unmark("pre")
-        blockMode = BlockMode.Start
+        replaceMode(BlockMode.Start)
         // Replay this line through Start so it can be parsed as its own block.
         replay(line)
         process('\n')
@@ -1900,20 +2037,20 @@ private class ParserState(
                 line.isEmpty() -> {
                     // End of list
                     unmark("ul")
-                    blockMode = BlockMode.Start
+                    replaceMode(BlockMode.Start)
                 }
                 line.startsWith("#") -> {
                     // Header after list
                     unmark("ul")
                     lineBuffer.clear()
-                    blockMode = BlockMode.Start
+                    replaceMode(BlockMode.Start)
                     replay(line)
                 }
                 else -> {
                     // End of list, start new block
                     unmark("ul")
                     lineBuffer.clear()
-                    blockMode = BlockMode.Start
+                    replaceMode(BlockMode.Start)
                     replay(line)
                 }
             }
@@ -1949,18 +2086,18 @@ private class ParserState(
                 }
                 line.isEmpty() -> {
                     unmark("ol")
-                    blockMode = BlockMode.Start
+                    replaceMode(BlockMode.Start)
                 }
                 line.startsWith("#") -> {
                     unmark("ol")
                     lineBuffer.clear()
-                    blockMode = BlockMode.Start
+                    replaceMode(BlockMode.Start)
                     replay(line)
                 }
                 else -> {
                     unmark("ol")
                     lineBuffer.clear()
-                    blockMode = BlockMode.Start
+                    replaceMode(BlockMode.Start)
                     replay(line)
                 }
             }
@@ -1969,212 +2106,276 @@ private class ParserState(
         }
     }
 
-    private var blockquotePendingNewline = false
+    /** Number of `Blockquote` frames currently on `blockModeStack`. */
+    private fun blockquoteFrameCount(): Int =
+        blockModeStack.count { it is BlockMode.Blockquote }
 
-    private suspend fun SemanticEventScope.processBlockquote(
-        char: Char
-    ) {
-        if (char == '\n') {
-            // If we were buffering a fence-candidate line ("> ` …" or "> ~ …"),
-            // dispatch it now: open a fenced code block if the stripped content
-            // is a valid fence open, otherwise treat the line as paragraph content.
-            if (atLineStart &&
-                lineBuffer.length > 2 &&
-                lineBuffer.startsWith("> ") &&
-                (lineBuffer[2] == '`' || lineBuffer[2] == '~')
-            ) {
-                val stripped = lineBuffer.toString().removePrefix("> ")
-                lineBuffer.clear()
-                val fence = parseFenceOpen(stripped)
-                if (fence != null) {
-                    if (inBlockquoteParagraph) {
-                        flushInline()
-                        unmark("p")
-                        inBlockquoteParagraph = false
-                    }
-                    blockquotePendingNewline = false
-                    mark("pre")
-                    val codeAttrs = fence.language?.let { mapOf("class" to "language-$it") }
-                    mark("code", attributes = codeAttrs)
-                    blockMode = BlockMode.BlockquoteCode(fence.marker, fence.length, fence.indent)
-                    atLineStart = true
-                    return
-                }
-                // Not a fence — treat as paragraph content.
-                if (blockquotePendingNewline && inBlockquoteParagraph) {
-                    +"\n"
-                    blockquotePendingNewline = false
-                }
-                if (!inBlockquoteParagraph) {
-                    mark("p")
-                    inBlockquoteParagraph = true
-                }
-                processInlineContent(stripped)
-                if (inBlockquoteParagraph) blockquotePendingNewline = true
-                atLineStart = true
-                return
+    /** True if any enclosing frame is a `Blockquote`. */
+    private fun isInsideBlockquote(): Boolean =
+        blockModeStack.any { it is BlockMode.Blockquote }
+
+    /**
+     * True iff [line] (already stripped of any outer container prefix) matches
+     * a blockquote opener: 0..3 leading spaces, then `>`. The `>` may be the
+     * last char or be followed by anything (CommonMark allows the optional
+     * single space after `>`, but also accepts `>X` where X is content).
+     */
+    private fun isBlockquoteOpener(line: String): Boolean {
+        var i = 0
+        while (i < line.length && i < 3 && line[i] == ' ') i++
+        return i < line.length && line[i] == '>'
+    }
+
+    /**
+     * Blockquote prefix interceptor. Called from `process()` before the normal
+     * dispatch. Returns true when the char was handled here (consumed as part
+     * of a `>` prefix or buffered as the start of a failed-prefix line) and
+     * the caller should skip normal dispatch.
+     *
+     * State machine — for each enclosing `Blockquote` frame the line must
+     * supply (in order):
+     *   - 0..3 leading spaces
+     *   - one `>`
+     *   - optionally one space (or tab acting as a single space)
+     *
+     * Once all levels are matched, [blockquotePrefixDone] flips to true and
+     * subsequent chars on this line dispatch normally to the inner sub-parser.
+     */
+    private suspend fun SemanticEventScope.interceptBlockquoteLine(char: Char): Boolean {
+        // Already buffering a failed-prefix line: keep buffering until `\n`,
+        // then classify (blank / lazy continuation / close-and-replay).
+        if (blockquoteInFailedLine) {
+            if (char != '\n') {
+                blockquoteFailedLineBuffer.append(char)
+                return true
             }
-            if (inBlockquoteParagraph) {
-                // Don't emit newline yet - might be followed by list
-                blockquotePendingNewline = true
-            }
-            lineBuffer.clear()
-            atLineStart = true
-            return
+            val line = blockquoteFailedLineBuffer.toString()
+            blockquoteFailedLineBuffer.clear()
+            blockquoteInFailedLine = false
+            dispatchFailedBlockquoteLine(line)
+            return true
         }
 
-        if (atLineStart) {
-            lineBuffer.append(char)
-            val line = lineBuffer.toString()
+        val depth = blockquoteFrameCount()
+        if (depth == 0 || blockquotePrefixDone) return false
 
-            when {
-                line == ">" || line == "> " || line == "> -" -> {
-                    // Continue blockquote marker - keep buffering (including potential list start)
-                }
-                line.startsWith("> - ") -> {
-                    // List in blockquote - discard pending newline
-                    blockquotePendingNewline = false
-                    if (inBlockquoteParagraph) {
-                        flushInline()
-                        unmark("p")
-                        inBlockquoteParagraph = false
+        if (char == '\n') {
+            // `\n` while still expecting prefix:
+            //   - prefixCount == 0 and not just-after-`>`: a blank line at the
+            //     outer level closes the blockquote.
+            //   - otherwise the line carried at least one `>` (possibly empty
+            //     content) — dispatch the `\n` through the inner sub-parser.
+            if (blockquotePrefixCount == 0 && !blockquoteJustAfterGt) {
+                closeAllBlockquotes()
+            }
+            blockquotePrefixDone = true
+            return false
+        }
+
+        if (tryConsumeBlockquotePrefixChar(char, depth)) {
+            if (blockquotePrefixCount >= depth) blockquotePrefixDone = true
+            return true
+        }
+
+        // `tryConsume` may have closed the last open level as a side effect
+        // (e.g. `>X` where X is the first content char with no optional space).
+        // If all levels are now matched, treat the char as content and dispatch
+        // normally instead of buffering it as a failed-prefix line.
+        if (blockquotePrefixCount >= depth) {
+            blockquotePrefixDone = true
+            return false
+        }
+
+        // Prefix consumption failed: buffer the rest of the line for `\n`-time
+        // classification.
+        blockquoteInFailedLine = true
+        blockquoteFailedLineBuffer.append(char)
+        return true
+    }
+
+    /**
+     * Try to consume one prefix char. Returns true if [char] advanced the
+     * prefix state machine; false signals "no fit, the line lacks the
+     * remaining `>` prefix(es)".
+     */
+    private fun tryConsumeBlockquotePrefixChar(char: Char, depth: Int): Boolean {
+        when {
+            char == '>' -> {
+                if (blockquoteJustAfterGt) {
+                    // Previous level had no following space (e.g. `>>`); count it now.
+                    blockquotePrefixCount++
+                    if (blockquotePrefixCount >= depth) {
+                        // Prefix already complete — this `>` is content (a nested
+                        // blockquote opener). Don't consume.
+                        return false
                     }
-                    mark("ul")
-                    mark("li")
-                    // Process content after "> - "
-                    processInlineContent(line.removePrefix("> - "))
-                    lineBuffer.clear()
-                    inListItem = true
-                    blockMode = BlockMode.BlockquoteList
                 }
-                // Potential fenced-code opener inside blockquote — buffer the whole line
-                // so parseFenceOpen can decide at `\n` whether this opens a fence or is
-                // ordinary paragraph content (e.g. a line-leading inline code span).
-                line.startsWith("> ") && line.length > 2 && (line[2] == '`' || line[2] == '~') -> {
-                    // Keep buffering until newline.
+                blockquotePrefixIndent = 0
+                blockquoteJustAfterGt = true
+                return true
+            }
+            (char == ' ' || char == '\t') && blockquoteJustAfterGt -> {
+                // Optional single space (or tab) after `>`. Closes this level.
+                blockquoteJustAfterGt = false
+                blockquotePrefixCount++
+                return true
+            }
+            char == ' ' && blockquotePrefixIndent < 3 -> {
+                blockquotePrefixIndent++
+                return true
+            }
+            blockquoteJustAfterGt -> {
+                // Non-space, non-`>` after `>` (no optional space). Close this
+                // level; if more levels are still expected, the caller will
+                // see prefixCount < depth and fail.
+                blockquoteJustAfterGt = false
+                blockquotePrefixCount++
+                if (blockquotePrefixCount >= depth) {
+                    // All levels matched — caller should treat as "consumed"
+                    // and dispatch this char normally on next call. We signal
+                    // success by returning true *without* advancing state, but
+                    // the prefixDone check in the caller will fire because
+                    // prefixCount is now >= depth.
+                    // Re-classify the char: it's content. Don't consume here.
+                    return false
                 }
-                line.startsWith("> ") && line.length > 2 -> {
-                    // Content after "> " - emit pending newline if continuing paragraph
-                    if (blockquotePendingNewline && inBlockquoteParagraph) {
-                        +"\n"
-                        blockquotePendingNewline = false
-                    }
-                    if (!inBlockquoteParagraph) {
-                        mark("p")
-                        inBlockquoteParagraph = true
-                    }
-                    // Process content after "> "
-                    processInlineContent(line.removePrefix("> "))
-                    lineBuffer.clear()
-                    atLineStart = false
-                }
-                !line.startsWith(">") -> {
-                    // End blockquote - line doesn't start with >
-                    blockquotePendingNewline = false
-                    if (inBlockquoteParagraph) {
-                        flushInline()
-                        unmark("p")
-                        inBlockquoteParagraph = false
-                    }
+                return false
+            }
+            else -> return false
+        }
+    }
+
+    /**
+     * Classify a buffered failed-prefix line and act:
+     * - Empty line → close all blockquote frames.
+     * - Inner top is `ParagraphContinuation` and the line wouldn't interrupt
+     *   a paragraph → lazy continuation: replay through the inner mode.
+     * - Otherwise → close all blockquotes and replay through the outer Start.
+     */
+    private suspend fun SemanticEventScope.dispatchFailedBlockquoteLine(line: String) {
+        if (line.isEmpty()) {
+            closeAllBlockquotes()
+            return
+        }
+        val innerIsParagraphContinuation = blockMode is BlockMode.ParagraphContinuation
+        if (innerIsParagraphContinuation && !lineInterruptsParagraph(line)) {
+            // Lazy continuation. Skip prefix detection during the replay.
+            blockquotePrefixDone = true
+            replay(line)
+            process('\n')
+            return
+        }
+        closeAllBlockquotes()
+        replay(line)
+        process('\n')
+    }
+
+    /**
+     * Drain frames above the bottommost `Blockquote`, then pop the blockquote
+     * frame(s) themselves, leaving the outer `Start` on top. Resets prefix
+     * state.
+     */
+    private suspend fun SemanticEventScope.closeAllBlockquotes() {
+        while (blockModeStack.any { it is BlockMode.Blockquote }) {
+            when (blockMode) {
+                BlockMode.Blockquote -> {
                     unmark("blockquote")
-                    lineBuffer.clear()
-                    blockMode = BlockMode.Start
-                    replay(line)
+                    popMode()
                 }
+                BlockMode.Start -> {
+                    if (blockModeStack.size == 1) break
+                    popMode()
+                }
+                else -> drainTopFrameToStart()
             }
-        } else {
-            // Continue inline content within blockquote paragraph
-            processInlineChar(char)
         }
+        blockquotePrefixDone = true
+        blockquotePrefixCount = 0
+        blockquotePrefixIndent = 0
+        blockquoteJustAfterGt = false
+        blockquoteInFailedLine = false
+        blockquoteFailedLineBuffer.clear()
     }
 
-    private suspend fun SemanticEventScope.processBlockquoteCode(
-        char: Char,
-        mode: BlockMode.BlockquoteCode
-    ) {
-        if (char != '\n') {
-            lineBuffer.append(char)
-            return
-        }
-        val line = lineBuffer.toString()
-        lineBuffer.clear()
-        if (line.isEmpty() || !line.startsWith(">")) {
-            // Blank line or non-blockquote line: close fenced code AND blockquote.
-            unmark("code")
-            unmark("pre")
-            unmark("blockquote")
-            inBlockquoteParagraph = false
-            blockquotePendingNewline = false
-            blockMode = BlockMode.Start
-            atLineStart = true
-            if (line.isNotEmpty()) {
-                replay(line)
-                process('\n')
-            }
-            return
-        }
-        val stripped = if (line.startsWith("> ")) line.substring(2)
-        else line.substring(1)
-        if (isFenceClose(stripped, mode.marker, mode.length)) {
-            unmark("code")
-            unmark("pre")
-            blockMode = BlockMode.Blockquote
-            atLineStart = true
-            return
-        }
-        +"${stripIndentCols(stripped, mode.indent)}\n"
-        atLineStart = true
-    }
-
-    private suspend fun SemanticEventScope.processBlockquoteList(
-        char: Char
-    ) {
-        if (char == '\n') {
-            if (inListItem) {
+    /**
+     * Close the in-flight block of the current top frame, replacing it with
+     * `Start`. Used by [closeAllBlockquotes] to drain inner sub-parse state
+     * before unmarking the enclosing `<blockquote>`.
+     */
+    private suspend fun SemanticEventScope.drainTopFrameToStart() {
+        when (val mode = blockMode) {
+            is BlockMode.Heading -> {
                 flushInline()
-                unmark("li")
-                inListItem = false
+                unmark("h${mode.level}")
+                replaceMode(BlockMode.Start)
             }
-            lineBuffer.clear()
-            return
-        }
-
-        if (!inListItem) {
-            lineBuffer.append(char)
-            val line = lineBuffer.toString()
-            when {
-                line == "> - " -> {
-                    mark("li")
+            BlockMode.Paragraph -> {
+                flushInline()
+                unmark("p")
+                replaceMode(BlockMode.Start)
+            }
+            BlockMode.ParagraphContinuation -> {
+                unmark("p")
+                replaceMode(BlockMode.Start)
+            }
+            is BlockMode.CodeBlock -> {
+                if (lineBuffer.isNotEmpty()) {
+                    val line = lineBuffer.toString()
                     lineBuffer.clear()
-                    inListItem = true
-                }
-                line matches Patterns.BLOCKQUOTE_EMPTY || line matches Patterns.BLOCKQUOTE_DASH_PARTIAL -> {
-                    // Keep buffering
-                }
-                line.isEmpty() -> {
-                    unmark("ul")
-                    unmark("blockquote")
-                    blockMode = BlockMode.Start
-                }
-                else -> {
-                    unmark("ul")
-                    if (line.startsWith(">")) {
-                        blockMode = BlockMode.Blockquote
-                        lineBuffer.clear()
-                        for (c in line) {
-                            processBlockquote(c)
-                        }
-                    } else {
-                        unmark("blockquote")
-                        lineBuffer.clear()
-                        blockMode = BlockMode.Start
-                        replay(line)
+                    if (!isFenceClose(line, mode.marker, mode.length)) {
+                        +"${stripIndentCols(line, mode.indent)}\n"
                     }
                 }
+                unmark("code")
+                unmark("pre")
+                replaceMode(BlockMode.Start)
             }
-        } else {
-            processInlineChar(char)
+            BlockMode.IndentedCodeBlock -> {
+                indentedCodeDeferredBlanks.clear()
+                if (lineBuffer.isNotEmpty()) {
+                    val line = lineBuffer.toString()
+                    lineBuffer.clear()
+                    if (leadingIndentCols(line) >= 4) {
+                        +"${stripIndentCols(line, 4)}\n"
+                    }
+                }
+                unmark("code")
+                unmark("pre")
+                replaceMode(BlockMode.Start)
+            }
+            is BlockMode.ListBlock -> {
+                popListContexts(mode, downTo = 0)
+                replaceMode(BlockMode.Start)
+            }
+            else -> {
+                // Best-effort fallback for any other in-flight frame.
+                replaceMode(BlockMode.Start)
+            }
         }
+    }
+
+    /**
+     * Open a blockquote frame and route inner content through a fresh `Start`
+     * sub-parse frame. Called from `processStart` once a blockquote opener
+     * line (`>`, `> X`, or `>X`) has been recognized.
+     */
+    private suspend fun SemanticEventScope.openBlockquote(line: String) {
+        mark("blockquote")
+        pushMode(BlockMode.Blockquote)
+        pushMode(BlockMode.Start)
+        // We just consumed this line's `>` prefix at the new level; mark prefix done
+        // so the rest of the line (replayed below) flows through inner Start as content.
+        blockquotePrefixDone = true
+        blockquotePrefixCount = blockquoteFrameCount()
+        // Strip the leading 0..3 spaces, the `>`, and the optional single space.
+        var i = 0
+        while (i < line.length && i < 3 && line[i] == ' ') i++
+        if (i >= line.length || line[i] != '>') return
+        i++
+        if (i < line.length && (line[i] == ' ' || line[i] == '\t')) i++
+        val rest = if (i < line.length) line.substring(i) else ""
+        if (rest.isNotEmpty()) replay(rest)
+        process('\n')
     }
 
     private suspend fun SemanticEventScope.processMathBlock(
@@ -2185,7 +2386,7 @@ private class ParserState(
             if (line.trim() == "$$") {
                 unmark("math")
                 lineBuffer.clear()
-                blockMode = BlockMode.Start
+                replaceMode(BlockMode.Start)
             } else {
                 if (line.isNotEmpty()) {
                     +line
@@ -2209,7 +2410,7 @@ private class ParserState(
                 mark("tbody")
                 tableHasBody = true
                 lineBuffer.clear()
-                blockMode = BlockMode.TableBody
+                replaceMode(BlockMode.TableBody)
             } else if (line.startsWith("|")) {
                 // Another header row
                 "tr" {
@@ -2221,7 +2422,7 @@ private class ParserState(
                 unmark("thead")
                 unmark("table")
                 lineBuffer.clear()
-                blockMode = BlockMode.Start
+                replaceMode(BlockMode.Start)
                 if (line.isNotEmpty()) {
                     replay(line)
                     process('\n')
@@ -2246,7 +2447,7 @@ private class ParserState(
                 unmark("tbody")
                 unmark("table")
                 lineBuffer.clear()
-                blockMode = BlockMode.Start
+                replaceMode(BlockMode.Start)
                 if (line.isNotEmpty()) {
                     replay(line)
                     process('\n')
@@ -2296,46 +2497,6 @@ private class ParserState(
         return tagName to attributes
     }
 
-    private data class InlineHtmlTag(
-        val name: String,
-        val isClose: Boolean,
-        val isSelfClosing: Boolean,
-        val attributes: Map<String, String>?
-    )
-
-    /**
-     * Parses the content between < and > to determine if it's a valid inline HTML tag.
-     * Returns null if not a valid tag.
-     */
-    // TODO not used at the moment, might be useful for HTML parsing later
-    private fun parseInlineHtmlTag(content: String): InlineHtmlTag? {
-        if (content.isEmpty()) return null
-
-        // Closing tag: /tagname with optional whitespace
-        if (content.startsWith("/")) {
-            val tagName = content.substring(1).trim()
-            if (tagName.isEmpty() || !tagName[0].isLetter()) return null
-            if (!tagName.all { it.isLetterOrDigit() || it == '-' }) return null
-            return InlineHtmlTag(tagName, isClose = true, isSelfClosing = false, attributes = null)
-        }
-
-        // Opening tag: tagname followed by optional attributes and optional /
-        if (!content[0].isLetter()) return null
-
-        var i = 0
-        while (i < content.length && (content[i].isLetterOrDigit() || content[i] == '-')) i++
-        val tagName = content.substring(0, i)
-        if (tagName.isEmpty()) return null
-
-        val rest = content.substring(i).trim()
-        val isSelfClosing = rest.endsWith("/")
-        val attrStr = if (isSelfClosing) rest.dropLast(1).trim() else rest
-
-        val attributes = if (attrStr.isNotEmpty()) parseAttributes(attrStr) else null
-
-        return InlineHtmlTag(tagName, isClose = false, isSelfClosing = isSelfClosing, attributes = attributes)
-    }
-
     /**
      * Parses attribute string like `attr="value" other="val2"` into a map.
      */
@@ -2382,7 +2543,7 @@ private class ParserState(
                     customMarkupClosingBuffer.clear()
                     customMarkupInClosingTag = false
                     unmark(tagName, isTagged = true)
-                    blockMode = BlockMode.Start
+                    replaceMode(BlockMode.Start)
                 }
                 // Still a valid prefix of closing tag
                 closingTag.startsWith(bufferStr) -> {
@@ -2427,6 +2588,35 @@ private class ParserState(
     }
 
     /**
+     * Emit `mark` for an HTML-derived tag with `isTagged = true`. Known HTML5
+     * tag and attribute names are lowercased (so `<DIV CLASS="foo">` and
+     * `<div class="foo">` produce identical events); names outside the HTML5
+     * set keep their source casing — `<Warning>` stays `Warning`, treating
+     * non-HTML5 tags as XML-ish where case is significant.
+     */
+    private suspend fun SemanticEventScope.markHtml(
+        name: String,
+        attributes: Map<String, String>? = null
+    ) {
+        val isHtml5 = name.lowercase() in HTML5_ELEMENTS
+        mark(
+            name = if (isHtml5) name.lowercase() else name,
+            isTagged = true,
+            attributes = attributes?.takeIf { it.isNotEmpty() }
+                ?.let { attrs -> if (isHtml5) attrs.mapKeys { it.key.lowercase() } else attrs }
+        )
+    }
+
+    /**
+     * Emit `unmark` for an HTML-derived tag with `isTagged = true`. Known
+     * HTML5 names are lowercased; non-HTML5 names keep their source casing.
+     * See [markHtml] for the rationale.
+     */
+    private suspend fun SemanticEventScope.unmarkHtml(name: String) {
+        unmark(normalizeHtmlName(name), isTagged = true)
+    }
+
+    /**
      * Enter an HTML block (CommonMark 4.6) given the first source line (already buffered).
      * Dispatches by detected block type and seeds the per-type state.
      */
@@ -2439,7 +2629,7 @@ private class ParserState(
                     return
                 }
                 val mode = BlockMode.HtmlBlock1(rootTag)
-                blockMode = mode
+                replaceMode(mode)
                 // Feed every character of the first line into the type-1 processor.
                 for (c in line) processHtmlBlock1(c, mode)
                 processHtmlBlock1('\n', mode)
@@ -2454,9 +2644,9 @@ private class ParserState(
                 }
                 +"$line\n"
                 if (lineContainsClosingSeq(line, closingSeq)) {
-                    blockMode = BlockMode.Start
+                    replaceMode(BlockMode.Start)
                 } else {
-                    blockMode = BlockMode.HtmlBlock2to5(closingSeq)
+                    replaceMode(BlockMode.HtmlBlock2to5(closingSeq))
                 }
             }
             6, 7 -> {
@@ -2465,7 +2655,10 @@ private class ParserState(
                     return
                 }
                 val mode = BlockMode.HtmlBlock6or7(rootName, isClose)
-                blockMode = mode
+                // Push (don't replace) so the enclosing context survives — sub-parse
+                // may push a fresh `Start` frame on top, and the matching root close
+                // tag pops back to whatever was underneath.
+                pushMode(mode)
                 // Buffer the first line into firstLineBuffer for tag-completion checks.
                 mode.firstLineBuffer!!.append(line)
                 tryFinishHtmlBlock6or7FirstLine(mode)
@@ -2541,16 +2734,19 @@ private class ParserState(
                     is HtmlToken.Text -> text.append(tok.content)
                     is HtmlToken.CloseTag -> {
                         if (text.isNotEmpty()) { +text.toString(); text.clear() }
-                        if (mode.openTags.isNotEmpty() && mode.openTags.last() == tok.name) {
+                        val tokLower = tok.name.lowercase()
+                        if (mode.openTags.isNotEmpty() &&
+                            mode.openTags.last().lowercase() == tokLower
+                        ) {
                             mode.openTags.removeLast()
                         }
-                        unmark(tok.name, isTagged = true)
+                        unmarkHtml(tok.name)
                     }
                     is HtmlToken.OpenTag -> {
                         if (text.isNotEmpty()) { +text.toString(); text.clear() }
-                        mark(tok.name, isTagged = true, attributes = tok.attributes)
-                        if (tok.selfClosing) unmark(tok.name, isTagged = true)
-                        else mode.openTags.add(tok.name)
+                        markHtml(tok.name, tok.attributes)
+                        if (tok.selfClosing) unmarkHtml(tok.name)
+                        else mode.openTags.add(normalizeHtmlName(tok.name))
                     }
                 }
             }
@@ -2558,17 +2754,17 @@ private class ParserState(
         }
         // Close any nested still-open tags then the root.
         while (mode.openTags.size > 1) {
-            unmark(mode.openTags.removeLast(), isTagged = true)
+            unmarkHtml(mode.openTags.removeLast())
         }
         if (mode.openTags.isNotEmpty()) {
-            unmark(mode.openTags.removeLast(), isTagged = true)
+            unmarkHtml(mode.openTags.removeLast())
         }
         // Trailing content after the close becomes a top-level text event with newline.
         val trailing = line.substring(closeEnd)
         if (trailing.isNotEmpty()) {
             +"$trailing\n"
         }
-        blockMode = BlockMode.Start
+        replaceMode(BlockMode.Start)
     }
 
     /**
@@ -2600,8 +2796,8 @@ private class ParserState(
         // Successfully parsed up to and including the root tag.
         if (leading.isNotEmpty()) +leading
         for (tag in opens) {
-            mark(tag.name, isTagged = true, attributes = tag.attributes)
-            mode.openTags.add(tag.name)
+            markHtml(tag.name, tag.attributes)
+            mode.openTags.add(normalizeHtmlName(tag.name))
         }
         mode.firstLineBuffer = null
         // Handle any remaining content on the same first line.
@@ -2626,61 +2822,55 @@ private class ParserState(
         lineBuffer.clear()
         +"$line\n"
         if (lineContainsClosingSeq(line, mode.closingSequence)) {
-            blockMode = BlockMode.Start
+            replaceMode(BlockMode.Start)
         }
     }
 
-    /** Process a character inside an HTML block of type 6 or 7 (block-level / type-7 tag). */
+    /**
+     * Process a character inside an HTML block of type 6 or 7. Streams incrementally:
+     *
+     *   Phase 1 — opening tag(s): buffer until the first tag's `>` is parsed, then
+     *     emit `mark` for each open tag (and any inline content before the matching
+     *     root close, if it lands on the same line). For a closing-tag opener
+     *     (e.g. `</div>` on its own line), no mark is emitted; the block transitions
+     *     to raw-text mode.
+     *
+     *   Phase 2 — content streaming: each subsequent line is tokenized; nested
+     *     open/close tags emit marks; the matching root close emits the final
+     *     `unmark` and exits. Blank lines emit `\n` as text and the block stays
+     *     open (DIVERGENCE from GFM, which closes on blank lines — required to
+     *     keep emission append-only).
+     *
+     *   EOF — `flush()` emits any still-open `unmark` for tags on the openTags stack.
+     */
     private suspend fun SemanticEventScope.processHtmlBlock6or7(
         char: Char,
         mode: BlockMode.HtmlBlock6or7
     ) {
-        // Phase 1: buffer the first line until the opening tag's `>` is matched.
         val firstLineBuffer = mode.firstLineBuffer
         if (firstLineBuffer != null) {
             if (char == '\n') {
+                // tryFinish appends '\n' to the buffer on failure so that
+                // multi-line attribute values keep their line breaks.
                 tryFinishHtmlBlock6or7FirstLine(mode)
                 return
             }
             firstLineBuffer.append(char)
             return
         }
-        // Phase 2: buffer subsequent lines.
         if (char != '\n') {
             lineBuffer.append(char)
             return
         }
         val line = lineBuffer.toString()
         lineBuffer.clear()
-        if (line.isEmpty()) {
-            if (!mode.blankLineSeen) {
-                mode.blankLineSeen = true
-            } else {
-                mode.postBlankLines.add("")
-            }
-            return
-        }
-        if (!mode.blankLineSeen) {
-            mode.preBlankLines.add(line)
-            if (mode.rootCloseInPreBlank < 0 &&
-                findRootCloseTagIndex(line, mode.rootTagName) >= 0
-            ) {
-                mode.rootCloseInPreBlank = mode.preBlankLines.size - 1
-            }
-        } else {
-            mode.postBlankLines.add(line)
-            if (mode.rootCloseInPostBlank < 0 &&
-                findRootCloseTagIndex(line, mode.rootTagName) >= 0
-            ) {
-                mode.rootCloseInPostBlank = mode.postBlankLines.size - 1
-                emitHtmlBlock6or7AndExit(mode)
-            }
-        }
+        streamHtmlBlock6or7ContentLine(line, mode)
     }
 
     /**
-     * Try to parse the first opening tag from `mode.firstLineBuffer`. Returns true if
-     * the opening tag was completed (advances mode out of phase 1).
+     * Once `mode.firstLineBuffer` contains a complete opening (or closing) tag,
+     * emit marks for any open tag(s), then process any remainder of the same line
+     * as content. Returns true if the tag was parsed (Phase 1 complete).
      */
     private suspend fun SemanticEventScope.tryFinishHtmlBlock6or7FirstLine(
         mode: BlockMode.HtmlBlock6or7
@@ -2699,198 +2889,217 @@ private class ParserState(
             buf.append('\n')
             return false
         }
-        // Tag complete.
-        mode.firstLineRaw = source
-        mode.firstLineTokens = tokenizeHtmlLine(source)
         mode.firstLineBuffer = null
-        // Detect if the matching root close also appears on the first line.
-        if (findRootCloseTagIndex(source, mode.rootTagName) >= 0 && !mode.rootIsClosingTag) {
-            mode.rootCloseInFirstLine = true
+        if (mode.rootIsClosingTag) {
+            // Closing-tag root: no mark. Pass opener line through as raw text and
+            // continue in raw-text streaming mode (no nested-tag recognition).
+            +"$source\n"
+            return true
+        }
+        // Opening-tag root: emit mark for the first open and any contiguous opens
+        // that follow on the same line, then stream the remainder as content.
+        val leading = source.substring(0, i)
+        if (leading.isNotEmpty()) +leading
+        var idx = i
+        while (idx < source.length && source[idx] == '<') {
+            val nextOpen = tryParseOpenTag(source, idx) ?: break
+            markHtml(nextOpen.second.name, nextOpen.second.attributes)
+            if (nextOpen.second.selfClosing) {
+                unmarkHtml(nextOpen.second.name)
+            } else {
+                mode.openTags.add(normalizeHtmlName(nextOpen.second.name))
+            }
+            idx = nextOpen.first
+        }
+        val remainder = source.substring(idx)
+        if (remainder.isEmpty()) {
+            +"\n"
+        } else {
+            streamHtmlBlock6or7ContentLine(remainder, mode)
         }
         return true
     }
 
     /**
-     * Emit the buffered Type 6/7 block and exit to BlockMode.Start. If a matching root
-     * closing tag was observed, emit the block structurally; otherwise emit raw text.
+     * Stream a single content line of a type-6/7 block: tokenize, emit nested
+     * open/close marks, and exit on the matching root close. Blank lines emit
+     * a single `\n` text event and keep the block open.
      */
-    private suspend fun SemanticEventScope.emitHtmlBlock6or7AndExit(
+    private suspend fun SemanticEventScope.streamHtmlBlock6or7ContentLine(
+        line: String,
         mode: BlockMode.HtmlBlock6or7
     ) {
-        val structural = mode.rootCloseInFirstLine ||
-            mode.rootCloseInPreBlank >= 0 ||
-            mode.rootCloseInPostBlank >= 0
-        if (structural) {
-            emitHtmlBlock6or7Structurally(mode)
-        } else {
-            emitHtmlBlock6or7AsText(mode)
-        }
-        blockMode = BlockMode.Start
-    }
-
-    /** Structural emission for closed type-6/7 blocks. */
-    private suspend fun SemanticEventScope.emitHtmlBlock6or7Structurally(
-        mode: BlockMode.HtmlBlock6or7
-    ) {
-        val tokens = mode.firstLineTokens ?: return
-        if (mode.rootCloseInFirstLine) {
-            // Emit first line tokens (root open + close + any extras) and remaining lines as raw text.
-            for (tok in tokens) {
-                when (tok) {
-                    is HtmlToken.OpenTag -> {
-                        mark(tok.name, isTagged = true, attributes = tok.attributes)
-                        if (tok.selfClosing) unmark(tok.name, isTagged = true)
-                    }
-                    is HtmlToken.CloseTag -> unmark(tok.name, isTagged = true)
-                    is HtmlToken.Text -> +tok.content
-                }
-            }
-            // Pre-blank lines (post-close): emit as raw text events.
-            for (ln in mode.preBlankLines) +"$ln\n"
-            // Post-blank: untagged markdown.
-            if (mode.blankLineSeen && mode.postBlankLines.isNotEmpty()) {
-                emitUntaggedMarkdown(mode.postBlankLines)
-            }
+        if (mode.rootIsClosingTag) {
+            // Raw-text passthrough mode — no nested tag recognition.
+            +"$line\n"
             return
         }
-        // First line opens but does not close. Emit first-line tokens (mark for opens).
-        for (tok in tokens) {
-            when (tok) {
-                is HtmlToken.OpenTag -> {
-                    mark(tok.name, isTagged = true, attributes = tok.attributes)
-                    if (tok.selfClosing) unmark(tok.name, isTagged = true)
-                }
-                is HtmlToken.CloseTag -> unmark(tok.name, isTagged = true)
-                is HtmlToken.Text -> +tok.content
-            }
+        if (line.isEmpty()) {
+            // Blank line in raw-text mode: emit `\n` and transition the frame to
+            // sub-parse mode. From here on, subsequent lines route through the
+            // regular Markdown dispatcher (we push a fresh `Start` frame on top).
+            // The matching root close tag is then handled by the close-tag check
+            // at the top of `processStart`'s `\n` handler.
+            +"\n"
+            mode.childMode = BlockMode.ChildMode.SubParse
+            pushMode(BlockMode.Start)
+            return
         }
-        // Pre-blank lines: emit as inline tokens with proper newlines.
-        if (mode.rootCloseInPreBlank >= 0) {
-            for (i in 0 until mode.rootCloseInPreBlank) {
-                emitTokensInBlock(mode.preBlankLines[i], mode.rootTagName, isLast = false)
-            }
-            emitTokensInBlock(
-                mode.preBlankLines[mode.rootCloseInPreBlank],
-                mode.rootTagName,
-                isLast = true
-            )
-            // After close, remaining pre-blank lines emit as text.
-            for (i in (mode.rootCloseInPreBlank + 1) until mode.preBlankLines.size) {
-                +"${mode.preBlankLines[i]}\n"
-            }
-            // Post-blank as untagged markdown if present.
-            if (mode.blankLineSeen && mode.postBlankLines.isNotEmpty()) {
-                emitUntaggedMarkdown(mode.postBlankLines)
-            }
-        } else {
-            // Close is in post-blank.
-            for (ln in mode.preBlankLines) {
-                emitTokensInBlock(ln, mode.rootTagName, isLast = false)
-            }
-            // Sub-parse post-blank lines before the close as untagged markdown.
-            if (mode.rootCloseInPostBlank >= 0) {
-                val subLines = mode.postBlankLines.subList(0, mode.rootCloseInPostBlank).toList()
-                if (subLines.isNotEmpty()) emitUntaggedMarkdown(subLines)
-                emitTokensInBlock(
-                    mode.postBlankLines[mode.rootCloseInPostBlank],
-                    mode.rootTagName,
-                    isLast = true
-                )
-            }
+        val rootCloseIdx = findRootCloseTagIndex(line, mode.rootTagName)
+        if (rootCloseIdx < 0) {
+            emitContentTokensWithTrailingNewline(line, mode)
+            return
         }
+        // Root close present on this line. Emit content before it (with nested-tag
+        // handling), then unmark all open tags, then trailing as top-level text.
+        val before = line.substring(0, rootCloseIdx)
+        if (before.isNotEmpty()) emitContentTokensNoTrailing(before, mode)
+        // Advance past `</rootTag` then optional whitespace + `>`.
+        var p = rootCloseIdx + 2 + mode.rootTagName.length
+        while (p < line.length && (line[p] == ' ' || line[p] == '\t')) p++
+        val closeEnd = p + 1  // past '>'
+        while (mode.openTags.size > 1) unmarkHtml(mode.openTags.removeLast())
+        if (mode.openTags.isNotEmpty()) unmarkHtml(mode.openTags.removeLast())
+        val trailing = line.substring(closeEnd)
+        if (trailing.isNotEmpty()) +"$trailing\n"
+        // Pop the HTML frame; the enclosing context resumes (typically `Start`).
+        popMode()
     }
 
-    /** Emit tokens in a content line of a structural type-6/7 block. */
-    private suspend fun SemanticEventScope.emitTokensInBlock(
+    /**
+     * If [line] contains the matching root close tag of an enclosing
+     * `HtmlBlock6or7` sub-parse frame, close everything above it (the pushed
+     * sub-parse `Start` frame), then close the HTML frame itself: emit unmarks
+     * for nested still-open tags plus the root, and emit any trailing text
+     * after the close tag. Returns true when the close fired.
+     *
+     * Called from `processStart`'s `\n` handler after the line has been formed.
+     * Top of stack is `Start`; below it is the HTML frame whose root close was
+     * matched. Frames between (defensive — should not normally exist here)
+     * are popped without ceremony.
+     */
+    private suspend fun SemanticEventScope.tryCloseEnclosingHtmlBlock(
+        line: String
+    ): Boolean {
+        val idx = findEnclosingHtmlFrameIndex(line)
+        if (idx >= 0) {
+            val mode = blockModeStack[idx] as BlockMode.HtmlBlock6or7
+            // Drop frames above the HTML frame (the pushed sub-parse `Start`,
+            // and any defensive remnants).
+            while (blockModeStack.lastIndex > idx) popMode()
+            val rootCloseIdx = findRootCloseTagIndex(line, mode.rootTagName)
+            val before = line.substring(0, rootCloseIdx)
+            if (before.isNotEmpty()) emitContentTokensNoTrailing(before, mode)
+            var p = rootCloseIdx + 2 + mode.rootTagName.length
+            while (p < line.length && (line[p] == ' ' || line[p] == '\t')) p++
+            val closeEnd = p + 1
+            while (mode.openTags.size > 1) unmarkHtml(mode.openTags.removeLast())
+            if (mode.openTags.isNotEmpty()) unmarkHtml(mode.openTags.removeLast())
+            val trailing = line.substring(closeEnd)
+            if (trailing.isNotEmpty()) +"$trailing\n"
+            popMode()
+            return true
+        }
+        // Non-root close: a stand-alone close tag matching an inner `openTag`
+        // tracked by an enclosing frame (e.g. `</pre>` while a `<table>` frame
+        // has `pre` in its openTags). Drain that frame's openTags down to and
+        // including the matched name, then resume sub-parse with a fresh
+        // `Start` on top so subsequent lines route through the dispatcher.
+        val nonRoot = findEnclosingHtmlOpenTagClose(line)
+        if (nonRoot != null) {
+            val (frameIdx, closeName) = nonRoot
+            while (blockModeStack.lastIndex > frameIdx) popMode()
+            val mode = blockModeStack[frameIdx] as BlockMode.HtmlBlock6or7
+            // Compare case-insensitively against `closeName` (always lowercased)
+            // so non-HTML5 openTags (which preserve source casing) still match.
+            while (mode.openTags.isNotEmpty() &&
+                mode.openTags.last().lowercase() != closeName
+            ) {
+                unmarkHtml(mode.openTags.removeLast())
+            }
+            if (mode.openTags.isNotEmpty()) {
+                unmarkHtml(mode.openTags.removeLast())
+            }
+            mode.childMode = BlockMode.ChildMode.SubParse
+            pushMode(BlockMode.Start)
+            return true
+        }
+        return false
+    }
+
+    /**
+     * Tokenize [line] and emit nested open/close marks plus text. Adds a trailing
+     * `\n` as the line's terminator (used when the root close did NOT appear).
+     */
+    private suspend fun SemanticEventScope.emitContentTokensWithTrailingNewline(
         line: String,
-        rootTagName: String,
-        isLast: Boolean
-    ) {
-        val tokens = tokenizeHtmlLine(line)
-        // Helper: when the trailing run of text tokens ends the line, coalesce + \n.
-        val lastTextRunStart = run {
-            var idx = tokens.size
-            while (idx > 0 && tokens[idx - 1] is HtmlToken.Text) idx--
-            idx
-        }
-        var done = false
-        for ((i, tok) in tokens.withIndex()) {
-            if (done) {
-                // After root close on the last line, emit any trailing tokens as raw text events.
-                when (tok) {
-                    is HtmlToken.Text -> +tok.content
-                    is HtmlToken.OpenTag -> {
-                        mark(tok.name, isTagged = true, attributes = tok.attributes)
-                        if (tok.selfClosing) unmark(tok.name, isTagged = true)
-                    }
-                    is HtmlToken.CloseTag -> unmark(tok.name, isTagged = true)
-                }
-                continue
-            }
-            when (tok) {
-                is HtmlToken.OpenTag -> {
-                    mark(tok.name, isTagged = true, attributes = tok.attributes)
-                    if (tok.selfClosing) unmark(tok.name, isTagged = true)
-                }
-                is HtmlToken.CloseTag -> {
-                    unmark(tok.name, isTagged = true)
-                    if (isLast && tok.name.lowercase() == rootTagName) {
-                        done = true
-                    }
-                }
-                is HtmlToken.Text -> {
-                    if (i >= lastTextRunStart) {
-                        // Build the trailing text run and emit with \n at end (if not last+close-emitted).
-                        val sb = StringBuilder()
-                        for (j in i until tokens.size) {
-                            sb.append((tokens[j] as HtmlToken.Text).content)
-                        }
-                        if (isLast) +sb.toString() else +"${sb}\n"
-                        return
-                    } else {
-                        +tok.content
-                    }
-                }
-            }
-        }
-        // No trailing text on this line. If not the last (close) line, emit \n.
-        if (!isLast && !done) +"\n"
-    }
-
-    /** Sub-parse the given lines as fresh markdown and emit events wrapped in untagged{}. */
-    private suspend fun SemanticEventScope.emitUntaggedMarkdown(lines: List<String>) {
-        if (lines.isEmpty()) return
-        // TODO commented out on the architecture change, some equivalent might be needed for HTML parsing
-        //val sub = DefaultMarkanywhereParser()
-        val content = lines.joinToString("\n") + "\n"
-        val flow = kotlinx.coroutines.flow.flowOf(content)
-        untagged {
-//            sub.parse(flow).collect { ev ->
-//                when (ev) {
-//                    is com.xemantic.markanywhere.SemanticEvent.Text -> text(ev.text)
-//                    is com.xemantic.markanywhere.SemanticEvent.Mark -> mark(ev.name, ev.isTagged, ev.attributes)
-//                    is com.xemantic.markanywhere.SemanticEvent.Unmark -> unmark(ev.name, ev.isTagged)
-//                }
-//            }
-        }
-    }
-
-    /** Raw-text emission for unclosed type-6/7 blocks. */
-    private suspend fun SemanticEventScope.emitHtmlBlock6or7AsText(
         mode: BlockMode.HtmlBlock6or7
     ) {
-        // First line may have spanned multiple source lines (incomplete opening tag).
-        val rawLines = mode.firstLineRaw.split('\n')
-        for ((i, ln) in rawLines.withIndex()) {
-            if (i == rawLines.lastIndex && ln.isEmpty() && rawLines.size > 1) continue
-            +"$ln\n"
+        val pending = StringBuilder()
+        suspend fun flushPending() {
+            if (pending.isNotEmpty()) { +pending.toString(); pending.clear() }
         }
-        for (ln in mode.preBlankLines) {
-            +"$ln\n"
+        val tokens = tokenizeHtmlLine(line)
+        for (tok in tokens) {
+            when (tok) {
+                is HtmlToken.Text -> pending.append(tok.content)
+                is HtmlToken.OpenTag -> {
+                    flushPending()
+                    markHtml(tok.name, tok.attributes)
+                    if (tok.selfClosing) unmarkHtml(tok.name)
+                    else mode.openTags.add(normalizeHtmlName(tok.name))
+                }
+                is HtmlToken.CloseTag -> {
+                    flushPending()
+                    val tokLower = tok.name.lowercase()
+                    if (mode.openTags.isNotEmpty() &&
+                        mode.openTags.last().lowercase() == tokLower
+                    ) {
+                        mode.openTags.removeLast()
+                    }
+                    unmarkHtml(tok.name)
+                }
+            }
         }
-        if (mode.blankLineSeen && mode.postBlankLines.isNotEmpty()) {
-            emitUntaggedMarkdown(mode.postBlankLines)
+        pending.append('\n')
+        +pending.toString()
+    }
+
+    /**
+     * Tokenize [line] and emit nested open/close marks plus text. Does NOT add a
+     * trailing `\n` (used for the segment before a root close on the same line).
+     */
+    private suspend fun SemanticEventScope.emitContentTokensNoTrailing(
+        line: String,
+        mode: BlockMode.HtmlBlock6or7
+    ) {
+        val pending = StringBuilder()
+        suspend fun flushPending() {
+            if (pending.isNotEmpty()) { +pending.toString(); pending.clear() }
         }
+        val tokens = tokenizeHtmlLine(line)
+        for (tok in tokens) {
+            when (tok) {
+                is HtmlToken.Text -> pending.append(tok.content)
+                is HtmlToken.OpenTag -> {
+                    flushPending()
+                    markHtml(tok.name, tok.attributes)
+                    if (tok.selfClosing) unmarkHtml(tok.name)
+                    else mode.openTags.add(normalizeHtmlName(tok.name))
+                }
+                is HtmlToken.CloseTag -> {
+                    flushPending()
+                    val tokLower = tok.name.lowercase()
+                    if (mode.openTags.isNotEmpty() &&
+                        mode.openTags.last().lowercase() == tokLower
+                    ) {
+                        mode.openTags.removeLast()
+                    }
+                    unmarkHtml(tok.name)
+                }
+            }
+        }
+        if (pending.isNotEmpty()) +pending.toString()
     }
 
     /** Find the index of the matching root close tag `</rootName>` (case-insensitive) in [line], or -1. */
@@ -3471,208 +3680,208 @@ private class ParserState(
     }
 
     private suspend fun SemanticEventScope.finalize() {
-        // Handle any remaining content based on mode
-        when (val mode = blockMode) {
-            is Heading -> {
-                flushInline()
-                unmark("h${mode.level}")
-            }
-            Paragraph -> {
-                flushInline()
-                unmark("p")
-            }
-            ParagraphContinuation -> {
-                if (lineBuffer.isNotEmpty()) {
-                    val line = lineBuffer.toString()
-                    lineBuffer.clear()
-                    if (lineInterruptsParagraph(line)) {
-                        unmark("p")
-                        blockMode = Start
-                        replay(line)
-                        process('\n')
-                        finalize()  // re-finalize after replaying
-                        return
-                    }
-                    +"\n"
-                    processInlineContent(line)
+        // If a failed-prefix blockquote line was being buffered when the input
+        // ended (no trailing `\n`), dispatch it now as if a `\n` arrived.
+        if (blockquoteInFailedLine) {
+            val line = blockquoteFailedLineBuffer.toString()
+            blockquoteFailedLineBuffer.clear()
+            blockquoteInFailedLine = false
+            dispatchFailedBlockquoteLine(line)
+        }
+
+        // Drain the block-mode stack from top to bottom. Each iteration closes
+        // the current top frame's in-flight block (emitting balancing unmarks
+        // and any buffered trailing content), then transitions or pops so the
+        // loop converges on the bottom `Start` frame with empty `lineBuffer`.
+        while (true) {
+            when (val mode = blockMode) {
+                is Heading -> {
                     flushInline()
+                    unmark("h${mode.level}")
+                    replaceMode(Start)
                 }
-                unmark("p")
-            }
-            is CodeBlock -> {
-                if (lineBuffer.isNotEmpty()) {
-                    val line = lineBuffer.toString()
-                    lineBuffer.clear()
-                    if (!isFenceClose(line, mode.marker, mode.length)) {
-                        +"${stripIndentCols(line, mode.indent)}\n"
-                    }
-                }
-                unmark("code")
-                unmark("pre")
-            }
-            UnorderedList -> {
-                if (inListItem) {
-                    flushInline()
-                    unmark("li")
-                }
-                unmark("ul")
-            }
-            OrderedList -> {
-                if (inListItem) {
-                    flushInline()
-                    unmark("li")
-                }
-                unmark("ol")
-            }
-            Blockquote -> {
-                if (inBlockquoteParagraph) {
+                Paragraph -> {
                     flushInline()
                     unmark("p")
+                    replaceMode(Start)
                 }
-                unmark("blockquote")
-            }
-            is BlockquoteCode -> {
-                if (lineBuffer.isNotEmpty()) {
-                    val line = lineBuffer.toString()
-                    lineBuffer.clear()
-                    if (line.startsWith(">")) {
-                        val stripped = if (line.startsWith("> ")) line.substring(2)
-                        else line.substring(1)
-                        if (!isFenceClose(stripped, mode.marker, mode.length)) {
-                            +"${stripIndentCols(stripped, mode.indent)}\n"
+                ParagraphContinuation -> {
+                    if (lineBuffer.isNotEmpty()) {
+                        val line = lineBuffer.toString()
+                        lineBuffer.clear()
+                        if (lineInterruptsParagraph(line)) {
+                            unmark("p")
+                            replaceMode(Start)
+                            replay(line)
+                            process('\n')
+                            continue
+                        }
+                        +"\n"
+                        processInlineContent(line)
+                        flushInline()
+                    }
+                    unmark("p")
+                    replaceMode(Start)
+                }
+                is CodeBlock -> {
+                    if (lineBuffer.isNotEmpty()) {
+                        val line = lineBuffer.toString()
+                        lineBuffer.clear()
+                        if (!isFenceClose(line, mode.marker, mode.length)) {
+                            +"${stripIndentCols(line, mode.indent)}\n"
                         }
                     }
+                    unmark("code")
+                    unmark("pre")
+                    replaceMode(Start)
                 }
-                unmark("code")
-                unmark("pre")
-                unmark("blockquote")
-                inBlockquoteParagraph = false
-            }
-            BlockquoteList -> {
-                if (inListItem) {
-                    flushInline()
-                    unmark("li")
+                UnorderedList -> {
+                    if (inListItem) {
+                        flushInline()
+                        unmark("li")
+                        inListItem = false
+                    }
+                    unmark("ul")
+                    replaceMode(Start)
                 }
-                unmark("ul")
-                unmark("blockquote")
-            }
-            MathBlock -> {
-                if (lineBuffer.isNotEmpty()) {
-                    +lineBuffer.toString()
+                OrderedList -> {
+                    if (inListItem) {
+                        flushInline()
+                        unmark("li")
+                        inListItem = false
+                    }
+                    unmark("ol")
+                    replaceMode(Start)
                 }
-                unmark("math")
-            }
-            Table -> {
-                unmark("thead")
-                unmark("table")
-            }
-            TableBody -> {
-                // Process any pending row in lineBuffer
-                if (lineBuffer.isNotEmpty()) {
-                    val line = lineBuffer.toString().trimEnd()
-                    if (line.startsWith("|")) {
-                        "tr" {
-                            emitTableRow(line, isHeader = false)
+                Blockquote -> {
+                    // Sub-parse blockquote frame: any in-flight inner content was
+                    // already drained by the time we reach this frame (inner
+                    // frames sit above and are popped first). Emit the closing
+                    // `</blockquote>` and pop.
+                    unmark("blockquote")
+                    popMode()
+                }
+                MathBlock -> {
+                    if (lineBuffer.isNotEmpty()) {
+                        +lineBuffer.toString()
+                        lineBuffer.clear()
+                    }
+                    unmark("math")
+                    replaceMode(Start)
+                }
+                Table -> {
+                    // An unterminated separator/header line is discarded — baseline
+                    // behavior: the partial line never got dispatched as a row.
+                    lineBuffer.clear()
+                    unmark("thead")
+                    unmark("table")
+                    replaceMode(Start)
+                }
+                TableBody -> {
+                    if (lineBuffer.isNotEmpty()) {
+                        val line = lineBuffer.toString().trimEnd()
+                        lineBuffer.clear()
+                        if (line.startsWith("|")) {
+                            "tr" {
+                                emitTableRow(line, isHeader = false)
+                            }
                         }
                     }
+                    unmark("tbody")
+                    unmark("table")
+                    replaceMode(Start)
                 }
-                unmark("tbody")
-                unmark("table")
-            }
-            Start -> {
-                // Trigger end-of-line processing for any buffered content; this lets
-                // block-level detection (indented code, ATX heading, thematic break,
-                // etc.) run, and we then recurse to close whatever mode it opened.
-                if (lineBuffer.isNotEmpty()) {
-                    process('\n')
-                    if (blockMode != Start) finalize()
-                }
-            }
-            IndentedCodeBlock -> {
-                // Drop trailing blank lines; a final partial line, if present, is content.
-                indentedCodeDeferredBlanks.clear()
-                if (lineBuffer.isNotEmpty()) {
-                    val line = lineBuffer.toString()
-                    lineBuffer.clear()
-                    if (leadingIndentCols(line) >= 4) {
-                        +"${stripIndentCols(line, 4)}\n"
+                Start -> {
+                    if (lineBuffer.isNotEmpty()) {
+                        process('\n')
+                        continue
                     }
+                    if (blockModeStack.size == 1) return
+                    // Pushed sub-parse `Start` frame above an HTML block — pop and
+                    // continue draining the enclosing frame.
+                    popMode()
                 }
-                unmark("code")
-                unmark("pre")
-            }
-            is ListBlock -> {
-                // Drain any partial trailing line through the streaming machine.
-                if (lineBuffer.isNotEmpty()) {
-                    process('\n')
-                    if (blockMode != mode) {
-                        // The trailing line ended the list and replayed as a new block.
-                        if (blockMode != Start) finalize()
-                        return
+                IndentedCodeBlock -> {
+                    indentedCodeDeferredBlanks.clear()
+                    if (lineBuffer.isNotEmpty()) {
+                        val line = lineBuffer.toString()
+                        lineBuffer.clear()
+                        if (leadingIndentCols(line) >= 4) {
+                            +"${stripIndentCols(line, 4)}\n"
+                        }
                     }
+                    unmark("code")
+                    unmark("pre")
+                    replaceMode(Start)
                 }
-                popListContexts(mode, downTo = 0)
-                blockMode = Start
-            }
-            is CustomMarkup -> {
-                // Emit any buffered content from incomplete closing tag detection
-                if (customMarkupClosingBuffer.isNotEmpty()) {
-                    +customMarkupClosingBuffer.toString()
-                    customMarkupClosingBuffer.clear()
-                    customMarkupInClosingTag = false
+                is ListBlock -> {
+                    if (lineBuffer.isNotEmpty()) {
+                        process('\n')
+                        if (blockMode !== mode) continue
+                    }
+                    popListContexts(mode, downTo = 0)
+                    replaceMode(Start)
                 }
-                unmark(mode.tagName, isTagged = true)
-            }
-            is HtmlBlock1 -> {
-                if (mode.firstLineBuffer != null) {
-                    // Opening tag never completed: emit raw text fallback.
-                    val raw = mode.firstLineBuffer!!.toString()
-                    if (raw.isNotEmpty()) +"$raw\n"
-                    mode.firstLineBuffer = null
-                } else {
+                is CustomMarkup -> {
+                    if (customMarkupClosingBuffer.isNotEmpty()) {
+                        +customMarkupClosingBuffer.toString()
+                        customMarkupClosingBuffer.clear()
+                        customMarkupInClosingTag = false
+                    }
+                    unmark(mode.tagName, isTagged = true)
+                    replaceMode(Start)
+                }
+                is HtmlBlock1 -> {
+                    if (mode.firstLineBuffer != null) {
+                        val raw = mode.firstLineBuffer!!.toString()
+                        if (raw.isNotEmpty()) +"$raw\n"
+                        mode.firstLineBuffer = null
+                    } else {
+                        if (lineBuffer.isNotEmpty()) {
+                            +"${lineBuffer.toString()}\n"
+                            lineBuffer.clear()
+                        }
+                        while (mode.openTags.isNotEmpty()) {
+                            unmarkHtml(mode.openTags.removeLast())
+                        }
+                    }
+                    replaceMode(Start)
+                }
+                is HtmlBlock2to5 -> {
                     if (lineBuffer.isNotEmpty()) {
                         +"${lineBuffer.toString()}\n"
                         lineBuffer.clear()
                     }
-                    // Auto-close any tags opened in the block.
+                    replaceMode(Start)
+                }
+                is HtmlBlock6or7 -> {
+                    val fb = mode.firstLineBuffer
+                    if (fb != null) {
+                        val raw = fb.toString()
+                        if (raw.isNotEmpty()) +"$raw\n"
+                        mode.firstLineBuffer = null
+                        if (lineBuffer.isNotEmpty()) {
+                            +"${lineBuffer.toString()}\n"
+                            lineBuffer.clear()
+                        }
+                        // Phase-1 fallback emitted the buffered opener as text; pop
+                        // back to the enclosing frame.
+                        popMode()
+                        continue
+                    }
+                    if (lineBuffer.isNotEmpty()) {
+                        val line = lineBuffer.toString()
+                        lineBuffer.clear()
+                        streamHtmlBlock6or7ContentLine(line, mode)
+                        // Streaming may have popped (root close) or pushed (blank-
+                        // line transition to sub-parse). Re-enter the loop.
+                        if (blockMode !== mode) continue
+                    }
                     while (mode.openTags.isNotEmpty()) {
-                        unmark(mode.openTags.removeLast(), isTagged = true)
+                        unmarkHtml(mode.openTags.removeLast())
                     }
+                    popMode()
                 }
-            }
-            is HtmlBlock2to5 -> {
-                if (lineBuffer.isNotEmpty()) {
-                    +"${lineBuffer.toString()}\n"
-                    lineBuffer.clear()
-                }
-            }
-            is HtmlBlock6or7 -> {
-                if (mode.firstLineBuffer != null) {
-                    val raw = mode.firstLineBuffer!!.toString()
-                    mode.firstLineRaw = raw
-                    mode.firstLineTokens = emptyList()
-                    mode.firstLineBuffer = null
-                }
-                if (lineBuffer.isNotEmpty()) {
-                    val pending = lineBuffer.toString()
-                    if (!mode.blankLineSeen) {
-                        mode.preBlankLines.add(pending)
-                        if (mode.rootCloseInPreBlank < 0 &&
-                            findRootCloseTagIndex(pending, mode.rootTagName) >= 0
-                        ) {
-                            mode.rootCloseInPreBlank = mode.preBlankLines.size - 1
-                        }
-                    } else {
-                        mode.postBlankLines.add(pending)
-                        if (mode.rootCloseInPostBlank < 0 &&
-                            findRootCloseTagIndex(pending, mode.rootTagName) >= 0
-                        ) {
-                            mode.rootCloseInPostBlank = mode.postBlankLines.size - 1
-                        }
-                    }
-                    lineBuffer.clear()
-                }
-                emitHtmlBlock6or7AndExit(mode)
             }
         }
     }
