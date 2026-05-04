@@ -360,11 +360,11 @@ class MarkanywhereTestsTest {
             +++ actual
             @@ -1,3 +1,3 @@
             -{"type":"mark","name":"div"}
-            +{"type":"mark","name":"div","isTagged":true}
+            +{"type":"mark","name":"div","tagged":true}
              {"type":"text","text":"Content"}
             -{"type":"unmark","name":"div"}
             \ No newline at end of file
-            +{"type":"unmark","name":"div","isTagged":true}
+            +{"type":"unmark","name":"div","tagged":true}
             \ No newline at end of file
 
         """.trimIndent()
