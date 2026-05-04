@@ -121,8 +121,11 @@ class IncrementalParsingTest {
                 }
             }
             "p" {
-                +"Another "
-                +"paragraph."
+                // Same trailing-space deferral as the h1 case above: the
+                // trailing space in chunk "Another " is buffered (could be a
+                // hard-break run) and prepended to the next chunk's emission.
+                +"Another"
+                +" paragraph."
             }
         }
     }
@@ -615,7 +618,12 @@ class IncrementalParsingTest {
         parsed sameAs semanticEvents {
             "p" {
                 +"*"
-                +"not italic"
+                // Mid-line space splits the chunk into two text events: the
+                // run before the space, and the space combined with the run
+                // after it (paragraph trailing-space deferral, mirroring the
+                // h1 chunk-boundary behavior).
+                +"not"
+                +" italic"
                 +"*"
             }
         }

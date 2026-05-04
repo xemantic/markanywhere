@@ -693,6 +693,13 @@ private class ParserState(
 
     private var lineBuffer = StringBuilder()
     private var atLineStart = true
+    // Count of trailing ASCII spaces on the most recently processed paragraph line.
+    // Read at the next-line boundary in `processParagraphContinuation` to decide
+    // whether to emit a `<br/>` (GFM §6.7 hard line break: ≥2 trailing spaces).
+    // In fast-path `processParagraph`, doubles as the in-flight trailing-run
+    // counter — space chars increment it and are deferred (not emitted) until a
+    // non-space char flushes them as text or `\n` finalizes the count.
+    private var paragraphTrailingSpaces: Int = 0
     private val indentedCodeDeferredBlanks = mutableListOf<String>()
     private var tableHasBody = false
     private var inListItem = false
@@ -734,6 +741,13 @@ private class ParserState(
     /** Length of the opening backtick run for the currently-open inline code span (0 if not in code). */
     private var codeRunLength = 0
     private var inlineBuffer = StringBuilder()
+
+    // Stack of inline HTML open tag names (source casing) that have emitted a
+    // `mark` but not yet a matching `unmark` within the current inline run.
+    // Drained at every `flushInline` so the event stream is *always* balanced
+    // — every `mark` is paired with an `unmark`, even when the source omits
+    // the closer (e.g. `<bar>` with no `</bar>` in the same paragraph).
+    private val inlineHtmlOpenTags = ArrayDeque<String>()
 
     // After resolving a buffered marker (e.g. "*"), the trailing char is left
     // unconsumed so the outer loop's fast-path can coalesce it with subsequent
@@ -1051,11 +1065,26 @@ private class ParserState(
                     customMarkupPendingNewline = false
                     +'\n'
                 }
-                // Emit the safe substring in one go
-                +chunk.substring(index, fastPathResult)
+                // Combine any deferred paragraph trailing-space run (from prior
+                // char-by-char iterations) with this fast-path substring into a
+                // single text emit. The substring here starts with a non-space
+                // char, so those spaces were mid-line content rather than line-
+                // trailing whitespace.
+                if (paragraphTrailingSpaces > 0 && blockMode == Paragraph) {
+                    +(" ".repeat(paragraphTrailingSpaces) +
+                        chunk.substring(index, fastPathResult))
+                    paragraphTrailingSpaces = 0
+                } else {
+                    +chunk.substring(index, fastPathResult)
+                }
                 // Keep flanking state in sync — see processInlineContent for rationale.
                 prevInlineChar = chunk[fastPathResult - 1]
                 index = fastPathResult
+                // If a deferred char was waiting for re-processing, the substring
+                // we just emitted covered its position; clear the flag so the
+                // next char-by-char iteration doesn't reprocess the char after
+                // [index] twice.
+                pendingDeferredChar = null
                 continue
             }
 
@@ -1104,8 +1133,22 @@ private class ParserState(
 
         if (!canFastPath) return startIndex
 
+        // In Paragraph mode, also stop at ASCII space so the per-char dispatcher
+        // (processParagraph) can defer trailing whitespace runs and promote ≥2
+        // trailing spaces before `\n` into a `<br/>` (GFM §6.7).
+        if (blockMode == Paragraph) {
+            return findNextParagraphFastPathEnd(chunk, startIndex)
+        }
         // In inline text (possibly with active formatting like bold/italic) - scan for any control character
         return findNextControlChar(chunk, startIndex)
+    }
+
+    private fun findNextParagraphFastPathEnd(chunk: String, startIndex: Int): Int {
+        for (i in startIndex until chunk.length) {
+            val c = chunk[i]
+            if (c == ' ' || c.isInlineControl()) return i
+        }
+        return chunk.length
     }
 
     private fun findNextChar(chunk: String, startIndex: Int, target: Char): Int {
@@ -1187,6 +1230,7 @@ private class ParserState(
         while (index < line.length) {
             val fastPathResult = getFastPathEnd(line, index)
             if (fastPathResult > index) {
+                flushDeferredParagraphSpaces()
                 +line.substring(index, fastPathResult)
                 prevInlineChar = line[fastPathResult - 1]
                 index = fastPathResult
@@ -1198,6 +1242,21 @@ private class ParserState(
             } else {
                 index++
             }
+        }
+    }
+
+    /**
+     * Emit any deferred paragraph mid-line space run as text. Called before a
+     * fast-path substring emit so that mid-line spaces accumulated by the
+     * char-by-char dispatcher (where each `' '` increments the counter without
+     * emitting) appear in the output before the next non-space content.
+     */
+    private suspend fun SemanticEventScope.flushDeferredParagraphSpaces() {
+        if (paragraphTrailingSpaces > 0 && blockMode == BlockMode.Paragraph) {
+            val n = paragraphTrailingSpaces
+            paragraphTrailingSpaces = 0
+            +" ".repeat(n)
+            prevInlineChar = ' '
         }
     }
 
@@ -1475,12 +1534,45 @@ private class ParserState(
     ) {
         when (char) {
             '\n' -> {
+                // Trailing ASCII spaces accumulated in `paragraphTrailingSpaces` are
+                // dropped from the visible stream; the count is preserved across the
+                // line boundary so `processParagraphContinuation` can promote it to
+                // a `<br/>` (GFM §6.7) once continuation is confirmed, or discard it
+                // if the paragraph ends here.
                 flushInline()
                 lineBuffer.clear()
                 atLineStart = true
                 replaceMode(BlockMode.ParagraphContinuation)
             }
+            ' ' -> {
+                if (inlineBuffer.isNotEmpty() || escaped) {
+                    // Inline state is non-neutral (e.g. an unresolved `***`
+                    // delimiter run, or a pending backslash escape). The space
+                    // must flow through inline processing to drive resolution;
+                    // re-processing via `pendingDeferredChar` will then re-enter
+                    // this `' '` branch with a clean buffer and increment the
+                    // counter normally.
+                    if (paragraphTrailingSpaces > 0) {
+                        val n = paragraphTrailingSpaces
+                        paragraphTrailingSpaces = 0
+                        repeat(n) { processInlineChar(' ') }
+                    }
+                    atLineStart = false
+                    processInlineChar(' ')
+                } else {
+                    // Defer: this run might be trailing whitespace before `\n`.
+                    // If a non-space char follows on the same line, the spaces
+                    // flush as text (mid-line whitespace); if `\n` follows, the
+                    // count survives as the trailing-space tally for the
+                    // hard-break decision.
+                    paragraphTrailingSpaces++
+                }
+            }
             else -> {
+                if (paragraphTrailingSpaces > 0) {
+                    repeat(paragraphTrailingSpaces) { processInlineChar(' ') }
+                    paragraphTrailingSpaces = 0
+                }
                 atLineStart = false
                 processInlineChar(char)
             }
@@ -1494,7 +1586,10 @@ private class ParserState(
         // first line is not part of inline content; up to 3 spaces of indentation is
         // permitted, and 4+ spaces would have been claimed by the indented-code-block
         // branch upstream of here).
-        processInlineContent(line.trimStart(' ', '\t'))
+        val leftTrimmed = line.trimStart(' ', '\t')
+        val content = leftTrimmed.trimEnd(' ')
+        paragraphTrailingSpaces = leftTrimmed.length - content.length
+        processInlineContent(content)
         flushInline()
         replaceMode(BlockMode.ParagraphContinuation)
     }
@@ -1512,7 +1607,7 @@ private class ParserState(
         // start a block that interrupts the paragraph, emit the soft-break newline and
         // switch to Paragraph mode so subsequent chars stream incrementally via fast-path.
         if (lineBuffer.isEmpty() && char != '\n' && !char.isBlockStart()) {
-            +"\n"
+            emitParagraphLineBreak()
             replaceMode(BlockMode.Paragraph)
             pendingDeferredChar = char
             return
@@ -1530,22 +1625,27 @@ private class ParserState(
             // closes the inner paragraph without ending the blockquote.
             unmark("p")
             replaceMode(BlockMode.Start)
+            paragraphTrailingSpaces = 0
             return
         }
         if (lineInterruptsParagraph(line)) {
             unmark("p")
             replaceMode(BlockMode.Start)
+            paragraphTrailingSpaces = 0
             // Replay the line through Start so it can be parsed as its own block.
             replay(line)
             process('\n')
             return
         }
-        // Continuation line: soft break then inline content.
+        // Continuation line: hard or soft break then inline content.
         // Leading spaces/tabs are stripped (CommonMark: indented code cannot interrupt
         // a paragraph, so leading indentation on continuation lines is paragraph content
-        // with the indentation removed).
-        val stripped = line.trimStart(' ', '\t')
-        +"\n"
+        // with the indentation removed). Trailing spaces are stripped here and their
+        // count carried forward for the *next* line's hard-break decision.
+        val leftTrimmed = line.trimStart(' ', '\t')
+        val stripped = leftTrimmed.trimEnd(' ')
+        val newTrailing = leftTrimmed.length - stripped.length
+        emitParagraphLineBreak()
         // Special case: a line that is exactly one open HTML tag is rendered as a
         // self-closing-equivalent (mark + unmark) so the event tree stays balanced.
         val singleTag = tryParseOpenTag(stripped, 0)
@@ -1559,7 +1659,23 @@ private class ParserState(
             processInlineContent(stripped)
             flushInline()
         }
+        paragraphTrailingSpaces = newTrailing
         replaceMode(BlockMode.ParagraphContinuation)
+    }
+
+    /**
+     * Emit the line break separating the previous paragraph line from the next.
+     * If the previous line ended with ≥2 trailing ASCII spaces (GFM §6.7), the
+     * break is a hard `<br/>` followed by `\n`; otherwise just `\n`. Resets
+     * `paragraphTrailingSpaces` to 0.
+     */
+    private suspend fun SemanticEventScope.emitParagraphLineBreak() {
+        if (paragraphTrailingSpaces >= 2) {
+            mark("br")
+            unmark("br")
+        }
+        paragraphTrailingSpaces = 0
+        +"\n"
     }
 
     /**
@@ -2313,10 +2429,12 @@ private class ParserState(
                 flushInline()
                 unmark("p")
                 replaceMode(BlockMode.Start)
+                paragraphTrailingSpaces = 0
             }
             BlockMode.ParagraphContinuation -> {
                 unmark("p")
                 replaceMode(BlockMode.Start)
+                paragraphTrailingSpaces = 0
             }
             is BlockMode.CodeBlock -> {
                 if (lineBuffer.isNotEmpty()) {
@@ -3265,13 +3383,19 @@ private class ParserState(
 
         // Handle image states (check before link since both use inLinkUrl)
         if (inImage && !inLinkUrl) {
-            if (char == ']') {
-                inlineBuffer.append(']')
-            } else if (char == '(' && inlineBuffer.endsWith("]")) {
-                inlineBuffer.clear()
-                inLinkUrl = true
-            } else {
-                imageAlt.append(char)
+            when {
+                inlineBuffer.endsWith("]") && char == '(' -> {
+                    inlineBuffer.clear()
+                    inLinkUrl = true
+                }
+                inlineBuffer.endsWith("]") -> {
+                    // ![alt] not followed by `(`. Abort image parsing,
+                    // replay the literal source, then re-process current char.
+                    abortInlineImage()
+                    pendingDeferredChar = char
+                }
+                char == ']' -> inlineBuffer.append(']')
+                else -> imageAlt.append(char)
             }
             return
         }
@@ -3295,13 +3419,19 @@ private class ParserState(
 
         // Handle link states
         if (inLink && !inLinkUrl) {
-            if (char == ']') {
-                inlineBuffer.append(']')
-            } else if (char == '(' && inlineBuffer.endsWith("]")) {
-                inlineBuffer.clear()
-                inLinkUrl = true
-            } else {
-                linkText.append(char)
+            when {
+                inlineBuffer.endsWith("]") && char == '(' -> {
+                    inlineBuffer.clear()
+                    inLinkUrl = true
+                }
+                inlineBuffer.endsWith("]") -> {
+                    // [label] not followed by `(`. Abort link parsing,
+                    // replay the literal source, then re-process current char.
+                    abortInlineLink()
+                    pendingDeferredChar = char
+                }
+                char == ']' -> inlineBuffer.append(']')
+                else -> linkText.append(char)
             }
             return
         }
@@ -3362,11 +3492,28 @@ private class ParserState(
                         ) {
                             val tag = open.second
                             mark(tag.name, isTagged = true, attributes = tag.attributes)
-                            if (tag.selfClosing) unmark(tag.name, isTagged = true)
+                            if (tag.selfClosing) {
+                                unmark(tag.name, isTagged = true)
+                            } else {
+                                inlineHtmlOpenTags.addLast(tag.name)
+                            }
                         } else if (close != null && close.first == full.length &&
                             close.second.name.lowercase() !in INLINE_HTML_BLOCK_ELEMENTS
                         ) {
-                            unmark(close.second.name, isTagged = true)
+                            // Match against the most recent open whose name equals (case-insensitive).
+                            // Pop everything above it, emitting balancing `unmark` for each — keeps
+                            // the stream LIFO-balanced even if the source closes out of order.
+                            // Orphan close (no matching open): fall back to literal text rather
+                            // than emit an unbalanced `unmark`.
+                            val name = close.second.name
+                            val matchIdx = inlineHtmlOpenTags.indexOfLast { it.equals(name, ignoreCase = true) }
+                            if (matchIdx >= 0) {
+                                while (inlineHtmlOpenTags.size > matchIdx) {
+                                    unmark(inlineHtmlOpenTags.removeLast(), isTagged = true)
+                                }
+                            } else {
+                                +"<${applyBackslashEscapes(content)}>"
+                            }
                         } else {
                             // Fallback: not a valid tag — apply backslash-escape pass to the
                             // raw content and emit as text. (Matches CommonMark: failed HTML
@@ -3597,7 +3744,62 @@ private class ParserState(
         }
     }
 
+    /**
+     * Replay an unresolved inline link `[label]` (or `[label](partial_url`) as
+     * literal text and reset link state. Called when the parser determines that
+     * a `[` did not start a real link — either because `[label]` was not
+     * followed by `(`, or because a block boundary (`flushInline`) closed the
+     * paragraph mid-link.
+     */
+    private suspend fun SemanticEventScope.abortInlineLink() {
+        val replay = StringBuilder()
+        replay.append('[')
+        replay.append(linkText)
+        if (inlineBuffer.endsWith("]")) {
+            replay.append(']')
+            inlineBuffer.deleteAt(inlineBuffer.length - 1)
+        }
+        if (inLinkUrl) {
+            replay.append('(')
+            replay.append(linkUrl)
+        }
+        +replay.toString()
+        inLink = false
+        inLinkUrl = false
+        linkText.clear()
+        linkUrl.clear()
+        linkTitle.clear()
+    }
+
+    /**
+     * Image counterpart of [abortInlineLink]. Replays `![alt]` (or
+     * `![alt](partial_url`) as literal text.
+     */
+    private suspend fun SemanticEventScope.abortInlineImage() {
+        val replay = StringBuilder()
+        replay.append("![")
+        replay.append(imageAlt)
+        if (inlineBuffer.endsWith("]")) {
+            replay.append(']')
+            inlineBuffer.deleteAt(inlineBuffer.length - 1)
+        }
+        if (inLinkUrl) {
+            replay.append('(')
+            replay.append(imageUrl)
+        }
+        +replay.toString()
+        inImage = false
+        inLinkUrl = false
+        imageAlt.clear()
+        imageUrl.clear()
+    }
+
     private suspend fun SemanticEventScope.flushInline() {
+        // Abort any in-flight link/image parse: a block boundary means the
+        // bracket run never resolved, so replay it as literal text instead of
+        // silently dropping the buffered label.
+        if (inLink) abortInlineLink()
+        if (inImage) abortInlineImage()
         // Close inline code first so a buffered close-run (N≥2 backticks) at line/block
         // end is recognized as a valid close, not flushed as content + force-close.
         if (code) {
@@ -3667,6 +3869,12 @@ private class ParserState(
             unmark("strong")
             bold = false
         }
+        // Drain any unclosed inline HTML opens so the stream stays balanced.
+        // LIFO order matches CommonMark's nesting expectation; the inline
+        // HTML opens were tracked in `inlineHtmlOpenTags` as they were emitted.
+        while (inlineHtmlOpenTags.isNotEmpty()) {
+            unmark(inlineHtmlOpenTags.removeLast(), isTagged = true)
+        }
         escaped = false
         // Reset flanking state so the next inline run starts at a block boundary
         // (treated as Unicode whitespace) — matches CommonMark expectation that
@@ -3704,6 +3912,7 @@ private class ParserState(
                     flushInline()
                     unmark("p")
                     replaceMode(Start)
+                    paragraphTrailingSpaces = 0
                 }
                 ParagraphContinuation -> {
                     if (lineBuffer.isNotEmpty()) {
@@ -3712,16 +3921,18 @@ private class ParserState(
                         if (lineInterruptsParagraph(line)) {
                             unmark("p")
                             replaceMode(Start)
+                            paragraphTrailingSpaces = 0
                             replay(line)
                             process('\n')
                             continue
                         }
-                        +"\n"
-                        processInlineContent(line)
+                        emitParagraphLineBreak()
+                        processInlineContent(line.trimEnd(' '))
                         flushInline()
                     }
                     unmark("p")
                     replaceMode(Start)
+                    paragraphTrailingSpaces = 0
                 }
                 is CodeBlock -> {
                     if (lineBuffer.isNotEmpty()) {
