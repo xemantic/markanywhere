@@ -446,7 +446,7 @@ class Gfm_04_03_Test {
     }
 
     @Test
-    fun `example 63 - DIVERGENCE - blockquote with paragraph foo, paragraph bar with equals`() = runTest {
+    fun `example 63 - blockquote with paragraph foo bar equals`() = runTest {
         // given
         val textFlow = """
             > foo
@@ -461,11 +461,8 @@ class Gfm_04_03_Test {
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "blockquote" {
                 "p" {
-                    +"foo"
+                    +"foo\nbar\n==="
                 }
-            }
-            "p" {
-                +"bar\n==="
             }
         }
         // GFM expected:
