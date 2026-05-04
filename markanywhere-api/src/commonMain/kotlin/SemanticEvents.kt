@@ -51,6 +51,7 @@ public sealed interface SemanticEvent {
     @SerialName("mark")
     public data class Mark(
         public override val name: String,
+        @SerialName("tagged")
         public override val isTagged: Boolean = false,
         public val attributes: Map<String, String>? = null
     ) : SemanticEvent, Marked {
@@ -61,6 +62,7 @@ public sealed interface SemanticEvent {
     @SerialName("unmark")
     public data class Unmark(
         public override val name: String,
+        @SerialName("tagged")
         public override val isTagged: Boolean = false
     ) : SemanticEvent, Marked {
         override fun toString(): String = toJson()

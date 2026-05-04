@@ -206,7 +206,7 @@ class SemanticEventToStringTest {
             {
               "type": "mark",
               "name": "br",
-              "isTagged": true
+              "tagged": true
             }
         """.trimIndent()
     }
@@ -228,7 +228,7 @@ class SemanticEventToStringTest {
             {
               "type": "mark",
               "name": "img",
-              "isTagged": true,
+              "tagged": true,
               "attributes": {
                 "src": "image.png",
                 "alt": "An image"
@@ -267,7 +267,7 @@ class SemanticEventToStringTest {
             {
               "type": "unmark",
               "name": "br",
-              "isTagged": true
+              "tagged": true
             }
         """.trimIndent()
     }
