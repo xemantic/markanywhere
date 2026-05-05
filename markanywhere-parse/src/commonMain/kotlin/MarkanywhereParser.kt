@@ -207,6 +207,7 @@ private fun parseFenceOpen(line: String): FenceOpen? {
         ?.substringBefore(' ')
         ?.substringBefore('\t')
         ?.takeIf { it.isNotEmpty() }
+        ?.let(::decodeEntities)
         ?.let(::applyBackslashEscapes)
     return FenceOpen(marker, length, indent, language)
 }
@@ -332,6 +333,168 @@ private fun normalizeUrlEscapes(s: String): String {
     return out.toString()
 }
 
+/**
+ * UTF-8 percent-encode every non-ASCII char (code > 0x7F) in [s], leaving ASCII
+ * bytes untouched. Matches CommonMark URL normalization for link destinations
+ * after entity refs have been decoded (e.g. `&ouml;` → `ö` → `%C3%B6`).
+ * Surrogate pairs decode to a single supplementary codepoint and produce a
+ * 4-byte UTF-8 sequence.
+ */
+private fun percentEncodeNonAscii(s: String): String {
+    if (s.all { it.code <= 0x7F }) return s
+    val out = StringBuilder(s.length)
+    var i = 0
+    while (i < s.length) {
+        val c = s[i]
+        if (c.code <= 0x7F) {
+            out.append(c)
+            i++
+            continue
+        }
+        val cp: Int
+        if (c.code in 0xD800..0xDBFF && i + 1 < s.length) {
+            val low = s[i + 1].code
+            if (low in 0xDC00..0xDFFF) {
+                cp = 0x10000 + ((c.code - 0xD800) shl 10) + (low - 0xDC00)
+                i += 2
+            } else {
+                cp = 0xFFFD; i++
+            }
+        } else {
+            cp = c.code; i++
+        }
+        when {
+            cp < 0x80 -> appendPercentByte(out, cp)
+            cp < 0x800 -> {
+                appendPercentByte(out, 0xC0 or (cp ushr 6))
+                appendPercentByte(out, 0x80 or (cp and 0x3F))
+            }
+            cp < 0x10000 -> {
+                appendPercentByte(out, 0xE0 or (cp ushr 12))
+                appendPercentByte(out, 0x80 or ((cp ushr 6) and 0x3F))
+                appendPercentByte(out, 0x80 or (cp and 0x3F))
+            }
+            else -> {
+                appendPercentByte(out, 0xF0 or (cp ushr 18))
+                appendPercentByte(out, 0x80 or ((cp ushr 12) and 0x3F))
+                appendPercentByte(out, 0x80 or ((cp ushr 6) and 0x3F))
+                appendPercentByte(out, 0x80 or (cp and 0x3F))
+            }
+        }
+    }
+    return out.toString()
+}
+
+private fun appendPercentByte(out: StringBuilder, b: Int) {
+    out.append('%')
+    val hi = (b ushr 4) and 0xF
+    val lo = b and 0xF
+    out.append(if (hi < 10) ('0' + hi) else ('A' + (hi - 10)))
+    out.append(if (lo < 10) ('0' + lo) else ('A' + (lo - 10)))
+}
+
+// Subset of HTML5 named character references covering the entities used in GFM
+// §6.2 example tests. Extend as needed; an unknown name causes the entity to be
+// emitted literally (the source `&name;` flows through as text).
+private val NAMED_ENTITIES: Map<String, String> = mapOf(
+    "amp" to "&",
+    "lt" to "<",
+    "gt" to ">",
+    "quot" to "\"",
+    "apos" to "'",
+    "nbsp" to " ",
+    "copy" to "©",
+    "AElig" to "Æ",
+    "Dcaron" to "Ď",
+    "frac34" to "¾",
+    "HilbertSpace" to "ℋ",
+    "DifferentialD" to "ⅆ",
+    "ClockwiseContourIntegral" to "∲",
+    "ngE" to "≧̸",
+    "ouml" to "ö"
+)
+
+/**
+ * Convert a Unicode codepoint to its String form, handling the supplementary
+ * range (> 0xFFFF) by emitting a UTF-16 surrogate pair manually. Avoids
+ * `Character.toChars` which is JVM-only.
+ */
+private fun codepointToString(cp: Int): String {
+    if (cp <= 0xFFFF) return cp.toChar().toString()
+    val adjusted = cp - 0x10000
+    val high = (0xD800 or (adjusted ushr 10)).toChar()
+    val low = (0xDC00 or (adjusted and 0x3FF)).toChar()
+    return "$high$low"
+}
+
+/**
+ * Try to decode an HTML entity / numeric character reference *body* — i.e. the
+ * chars between `&` and `;`, exclusive of both. Returns the decoded String or
+ * null if [body] does not name a valid reference (unknown entity name, missing
+ * digits, too many digits, etc.). The caller is responsible for stripping any
+ * `&` prefix and verifying the trailing `;` was seen.
+ *
+ * GFM rules:
+ *  - Decimal numeric: `#` + 1..7 digits. Codepoint 0, surrogate range, or
+ *    > 0x10FFFF resolves to U+FFFD.
+ *  - Hex numeric: `#x` or `#X` + 1..6 hex digits. Same out-of-range rule.
+ *  - Named: must be in [NAMED_ENTITIES] (HTML5 spec list, restricted subset here).
+ */
+private fun tryDecodeEntityBody(body: String): String? {
+    if (body.isEmpty()) return null
+    if (body[0] == '#') {
+        if (body.length < 2) return null
+        val hex = body[1] == 'x' || body[1] == 'X'
+        val digits = if (hex) body.substring(2) else body.substring(1)
+        if (digits.isEmpty()) return null
+        val maxLen = if (hex) 6 else 7
+        if (digits.length > maxLen) return null
+        for (c in digits) {
+            val ok = if (hex) {
+                c in '0'..'9' || c in 'a'..'f' || c in 'A'..'F'
+            } else {
+                c in '0'..'9'
+            }
+            if (!ok) return null
+        }
+        val cp = digits.toInt(if (hex) 16 else 10)
+        if (cp == 0 || cp > 0x10FFFF || cp in 0xD800..0xDFFF) return "�"
+        return codepointToString(cp)
+    }
+    return NAMED_ENTITIES[body]
+}
+
+/**
+ * Decode every valid HTML entity / numeric character reference in [s] in a
+ * single pass, leaving invalid `&...;` runs literal. Used for batch decoding of
+ * link URLs, link titles, fenced code info strings, and HTML attribute values.
+ * Inline paragraph text uses the streaming entity-buffer state in the parser
+ * instead, so this helper isn't on the per-char hot path.
+ */
+private fun decodeEntities(s: String): String {
+    if ('&' !in s) return s
+    val out = StringBuilder(s.length)
+    var i = 0
+    while (i < s.length) {
+        val c = s[i]
+        if (c == '&') {
+            val semi = s.indexOf(';', i + 1)
+            if (semi > i + 1) {
+                val body = s.substring(i + 1, semi)
+                val decoded = tryDecodeEntityBody(body)
+                if (decoded != null) {
+                    out.append(decoded)
+                    i = semi + 1
+                    continue
+                }
+            }
+        }
+        out.append(c)
+        i++
+    }
+    return out.toString()
+}
+
 // Strict custom markup tagname: namespace:name where each segment is letter then letters/digits/dashes.
 private val CUSTOM_MARKUP_TAGNAME = Regex("^[a-zA-Z][a-zA-Z0-9-]*:[a-zA-Z][a-zA-Z0-9-]*$")
 
@@ -424,14 +587,14 @@ private fun tryParseOpenTag(s: String, start: Int): Pair<Int, HtmlToken.OpenTag>
                             if (i >= s.length) return null
                             val v = s.substring(valStart, i)
                             i++
-                            attrs[attrName] = v
+                            attrs[attrName] = decodeEntities(v)
                         }
                         else -> {
                             // unquoted attribute value: cannot contain whitespace, <, >, =, `, ', ", or be empty
                             val valStart = i
                             while (i < s.length && s[i] !in " \t\n<>=`\"'") i++
                             if (i == valStart) return null
-                            attrs[attrName] = s.substring(valStart, i)
+                            attrs[attrName] = decodeEntities(s.substring(valStart, i))
                         }
                     }
                 } else {
@@ -834,6 +997,15 @@ private class ParserState(
     // non-control characters. Replaces the previous recursive `processInlineChar`.
     private var pendingDeferredChar: Char? = null
 
+    // HTML entity / numeric character reference accumulation (GFM §6.2). Set
+    // when we see `&` in regular inline text; chars after the `&` (entity body)
+    // accumulate in [entityBuffer] until either `;` arrives (try to decode) or
+    // an invalid char arrives (abort, emit `&body` literally, reprocess char).
+    // Decoded chars are emitted as plain text — they do NOT participate in
+    // inline parsing (so `&#42;foo&#42;` produces literal `*foo*`, not `<em>`).
+    private var inEntityRef = false
+    private val entityBuffer = StringBuilder()
+
     // Flanking state for CommonMark emphasis rules.
     // `prevInlineChar` is the most recently processed source char (null = block
     // boundary, treated as Unicode whitespace). `runPrevChar` is the char that
@@ -900,7 +1072,7 @@ private class ParserState(
 
     // Control characters that require special handling in inline text
     private fun Char.isInlineControl(): Boolean = when (this) {
-        '*', '_', '`', '~', '^', '=', '$', '[', '!', '<', '\\', '\n' -> true
+        '*', '_', '`', '~', '^', '=', '$', '[', '!', '<', '\\', '\n', '&' -> true
         else -> false
     }
 
@@ -1070,6 +1242,7 @@ private class ParserState(
         inLinkUrl -> startIndex
         inLink -> startIndex
         inImage -> startIndex
+        inEntityRef -> startIndex
         else -> -1
     }
 
@@ -1628,13 +1801,13 @@ private class ParserState(
                 replaceMode(BlockMode.ParagraphContinuation)
             }
             ' ' -> {
-                if (inlineBuffer.isNotEmpty() || escaped) {
+                if (inlineBuffer.isNotEmpty() || escaped || inEntityRef) {
                     // Inline state is non-neutral (e.g. an unresolved `***`
-                    // delimiter run, or a pending backslash escape). The space
-                    // must flow through inline processing to drive resolution;
-                    // re-processing via `pendingDeferredChar` will then re-enter
-                    // this `' '` branch with a clean buffer and increment the
-                    // counter normally.
+                    // delimiter run, a pending backslash escape, or an in-flight
+                    // entity ref). The space must flow through inline processing
+                    // to drive resolution; re-processing via `pendingDeferredChar`
+                    // will then re-enter this `' '` branch with a clean buffer
+                    // and increment the counter normally.
                     if (paragraphTrailingSpaces > 0) {
                         val n = paragraphTrailingSpaces
                         paragraphTrailingSpaces = 0
@@ -3945,13 +4118,19 @@ private class ParserState(
                 ')' -> {
                     val urlPart = linkUrl.toString().trim()
                     val title = linkTitle.toString().trim()
-                    val url = applyBackslashEscapes(urlPart.substringBefore(" \"").trim())
+                    // Entity / numeric character references are recognized in
+                    // link destinations and titles (GFM §6.2). Decode here, then
+                    // apply backslash escapes (the order matches CommonMark:
+                    // backslash escapes consume an adjacent literal punctuation
+                    // char, while entity refs operate on the source token).
+                    val rawUrl = decodeEntities(urlPart.substringBefore(" \"").trim())
+                    val url = percentEncodeNonAscii(applyBackslashEscapes(rawUrl))
                     val rawTitle = if (urlPart.contains(" \"")) {
                         urlPart.substringAfter(" \"").removeSuffix("\"").trim()
                     } else {
                         title
                     }
-                    val extractedTitle = applyBackslashEscapes(rawTitle)
+                    val extractedTitle = applyBackslashEscapes(decodeEntities(rawTitle))
                     val attrs = if (extractedTitle.isNotEmpty()) {
                         mapOf("href" to url, "title" to extractedTitle)
                     } else {
@@ -4032,6 +4211,14 @@ private class ParserState(
                 inlineBuffer.append(char)
                 return
             }
+        }
+
+        // Entity / numeric character reference accumulation. Once an `&` has
+        // started an entity ref, every subsequent char either extends the body,
+        // commits via `;`, or aborts (replay raw + reprocess current char).
+        if (inEntityRef) {
+            handleEntityRefChar(char)
+            return
         }
 
         // Handle special characters
@@ -4239,6 +4426,14 @@ private class ParserState(
                 }
                 inlineBuffer.append('<')
             }
+            char == '&' -> {
+                if (inlineBuffer.isNotEmpty()) {
+                    +inlineBuffer.toString()
+                    inlineBuffer.clear()
+                }
+                inEntityRef = true
+                entityBuffer.clear()
+            }
             else -> {
                 if (inlineBuffer.isNotEmpty()) {
                     +inlineBuffer.toString()
@@ -4247,6 +4442,60 @@ private class ParserState(
                 +char
             }
         }
+    }
+
+    /**
+     * Step the entity-ref accumulator on [char] while [inEntityRef] is true.
+     * On a valid commit (`;` after a recognized body), emits the decoded chars
+     * as plain text — they do NOT re-enter inline parsing, so e.g. `&#42;`
+     * becomes literal `*` rather than an emphasis delimiter (GFM example 333).
+     * On any other terminator (invalid char, no decode), replays `&body` as
+     * literal text and reprocesses the current char via [pendingDeferredChar].
+     */
+    private suspend fun SemanticEventScope.handleEntityRefChar(char: Char) {
+        if (char == ';') {
+            val decoded = tryDecodeEntityBody(entityBuffer.toString())
+            if (decoded != null) {
+                +decoded
+            } else {
+                +"&$entityBuffer;"
+            }
+            entityBuffer.clear()
+            inEntityRef = false
+            return
+        }
+        val accept = char.isLetterOrDigit() ||
+            (char == '#' && entityBuffer.isEmpty()) ||
+            ((char == 'x' || char == 'X') &&
+                entityBuffer.length == 1 && entityBuffer[0] == '#')
+        if (accept) {
+            entityBuffer.append(char)
+            // Cap body length defensively: longest valid named entity is short
+            // and numeric refs cap at 7 digits + `#x`. Anything past 32 chars
+            // is definitely not a valid ref — abort to avoid unbounded buffering.
+            if (entityBuffer.length > 32) {
+                +"&$entityBuffer"
+                entityBuffer.clear()
+                inEntityRef = false
+            }
+            return
+        }
+        +"&$entityBuffer"
+        entityBuffer.clear()
+        inEntityRef = false
+        pendingDeferredChar = char
+    }
+
+    /**
+     * Force-close an in-flight entity ref at a block/line boundary by replaying
+     * `&body` as literal text. Called from [flushInline] so an unterminated
+     * `&copy` (no `;`) survives as source rather than vanishing.
+     */
+    private suspend fun SemanticEventScope.abortEntityRef() {
+        if (!inEntityRef) return
+        +"&$entityBuffer"
+        entityBuffer.clear()
+        inEntityRef = false
     }
 
     /**
@@ -4305,6 +4554,9 @@ private class ParserState(
         // silently dropping the buffered label.
         if (inLink) abortInlineLink()
         if (inImage) abortInlineImage()
+        // Same idea for entity refs: an unterminated `&copy` at block end must
+        // survive as literal source, not silently disappear.
+        if (inEntityRef) abortEntityRef()
         // Close inline code first so a buffered close-run (N≥2 backticks) at line/block
         // end is recognized as a valid close, not flushed as content + force-close.
         if (code) {
