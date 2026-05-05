@@ -59,13 +59,16 @@ private object Patterns {
 /**
  * Parsed bullet-list marker (`-`, `+`, or `*`) or ordered-list marker (e.g. `1.`)
  * at the start of a line. [contentCol] is the column where item content begins.
+ * [digits] holds the raw digit run for ordered markers (null for bullet markers),
+ * used to emit the `<ol start="N">` attribute when the parsed value is not 1.
  */
 private data class ListMarker(
     val ordered: Boolean,
     val markerStartCol: Int,
     val contentCol: Int,
     /** Index in the source line where the marker (and its trailing whitespace) ends. */
-    val markerEndIndex: Int
+    val markerEndIndex: Int,
+    val digits: String? = null
 )
 
 /**
@@ -75,14 +78,30 @@ private data class ListMarker(
  */
 private class ListContext(
     val ordered: Boolean,
-    val markerStartCol: Int,
-    val contentCol: Int,
+    var markerStartCol: Int,
+    var contentCol: Int,
     /** True while a `<p>` is currently open in the active item. */
     var paragraphOpen: Boolean = false,
     /** True while a `<pre><code>` block is currently open in the active item. */
     var codeBlockOpen: Boolean = false,
     /** Pending blank lines in an open code block (emitted lazily on next code line). */
-    var codeBlankLines: Int = 0
+    var codeBlankLines: Int = 0,
+    /** True while a fenced `<pre><code>` block is currently open in the active item. */
+    var fencedCodeOpen: Boolean = false,
+    /** Marker char (`` ` `` or `~`) and length of the open fenced block, if any. */
+    var fencedMarker: Char = ' ',
+    var fencedLength: Int = 0,
+    /** True while a `<blockquote>` is currently open in the active item. */
+    var blockquoteOpen: Boolean = false,
+    /** True while the inner `<p>` of an open blockquote is currently open. */
+    var blockquoteParagraphOpen: Boolean = false,
+    /**
+     * True once any content (paragraph, code, heading, blockquote, etc.) has
+     * been emitted for the active item. Used to decide whether a blank line
+     * followed by a continuation line ends the list (an empty item followed
+     * by a blank line ends the list — GFM §5.2 example 258).
+     */
+    var hasContent: Boolean = false
 )
 
 /**
@@ -99,6 +118,7 @@ private fun parseListMarker(line: String): ListMarker? {
     val ch = line[i]
     val ordered: Boolean
     val markerWidth: Int
+    var digits: String? = null
     when {
         ch in "-+*" -> { ordered = false; markerWidth = 1; i++ }
         ch in '0'..'9' -> {
@@ -106,6 +126,7 @@ private fun parseListMarker(line: String): ListMarker? {
             while (i < line.length && line[i].isDigit()) i++
             if (i - digitStart > 9 || i >= line.length) return null
             if (line[i] != '.' && line[i] != ')') return null
+            digits = line.substring(digitStart, i)
             i++
             ordered = true; markerWidth = i - digitStart
         }
@@ -113,7 +134,7 @@ private fun parseListMarker(line: String): ListMarker? {
     }
     val markerEndCol = markerStartCol + markerWidth
     if (i >= line.length) {
-        return ListMarker(ordered, markerStartCol, markerEndCol + 1, i)
+        return ListMarker(ordered, markerStartCol, markerEndCol + 1, i, digits)
     }
     when (line[i]) {
         ' ' -> {
@@ -122,15 +143,21 @@ private fun parseListMarker(line: String): ListMarker? {
             while (j < line.length && line[j] == ' ' && cc - markerEndCol < 5) {
                 cc++; j++
             }
+            // Marker followed only by whitespace (empty item on this line): per
+            // CommonMark, content (if any continuation arrives) begins at
+            // markerEndCol + 1, regardless of how many trailing spaces follow.
+            if (j >= line.length) {
+                return ListMarker(ordered, markerStartCol, markerEndCol + 1, line.length, digits)
+            }
             val spacesAfter = cc - markerEndCol
             val contentCol = if (spacesAfter >= 5) markerEndCol + 1 else cc
             val end = if (spacesAfter >= 5) i + 1 else j
-            return ListMarker(ordered, markerStartCol, contentCol, end)
+            return ListMarker(ordered, markerStartCol, contentCol, end, digits)
         }
         '\t' -> {
             // Tab after marker: per GFM, marker + 1-space-equivalent consumes 1 col.
             // The unconsumed remainder of the tab stays as content indent.
-            return ListMarker(ordered, markerStartCol, markerEndCol + 1, i + 1)
+            return ListMarker(ordered, markerStartCol, markerEndCol + 1, i + 1, digits)
         }
         else -> return null
     }
@@ -1732,10 +1759,11 @@ private class ParserState(
         if (line matches Patterns.TASK_UNCHECKED) return true
         if (line matches Patterns.TASK_CHECKED) return true
         if (line.startsWith("- ") && line.length > 2 && line[2] != '[') return true
-        // Ordered list: digit(s) then '.' then ' ' (or end-of-line)
+        // Ordered list: digit(s) then '.' then ' '. An empty marker (no space
+        // after `.`) cannot interrupt a paragraph — GFM §5.2 example 263.
         var i = 0
         while (i < line.length && line[i].isDigit()) i++
-        if (i > 0 && i < line.length && line[i] == '.' && (i + 1 == line.length || line[i + 1] == ' ')) return true
+        if (i > 0 && i + 1 < line.length && line[i] == '.' && line[i + 1] == ' ') return true
         // HTML block start: types 1-6 interrupt paragraphs (type 7 does not by spec).
         val type = detectHtmlBlockType(line)
         if (type in 1..6) return true
@@ -1804,11 +1832,23 @@ private class ParserState(
             contentCol = parentContentCol + marker.contentCol
         )
         mode.stack.add(ctx)
-        mark(if (ctx.ordered) "ol" else "ul")
+        val listAttrs = if (marker.ordered && marker.digits != null) {
+            val start = marker.digits.trimStart('0').ifEmpty { "0" }
+            if (start != "1") mapOf("start" to start) else null
+        } else null
+        mark(if (ctx.ordered) "ol" else "ul", attributes = listAttrs)
         mark("li")
         val firstContent = markerLine.substring(marker.markerEndIndex)
         if (firstContent.isNotBlank()) {
-            emitItemFirstLine(firstContent, ctx)
+            // Same-line nested list (GFM §5.2 examples 276, 277): if the content
+            // immediately following the marker is itself a list marker, recurse
+            // to open the nested level rather than emit it as paragraph text.
+            if (parseListMarker(firstContent) != null) {
+                ctx.hasContent = true
+                startListItemFromMarker(mode, firstContent, parentContentCol = ctx.contentCol)
+            } else {
+                emitItemFirstLine(firstContent, ctx)
+            }
         }
         mode.blankSeen = false
     }
@@ -1824,8 +1864,47 @@ private class ParserState(
         ctx: ListContext
     ) {
         val trimmed = firstContent.trimEnd()
+        ctx.hasContent = true
         if (trimmed matches Patterns.THEMATIC_BREAK) {
             "hr" {}
+            return
+        }
+        // GFM §5.2: when ≥5 spaces follow the list marker, content begins at
+        // marker+1 and the remaining whitespace is part of the content. ≥4 leading
+        // spaces in that content open an indented code block as the item's first
+        // child rather than a paragraph (examples 235, 251, 252).
+        if (leadingIndentCols(firstContent) >= 4) {
+            mark("pre")
+            mark("code")
+            ctx.codeBlockOpen = true
+            +"${stripIndentCols(trimmed, 4)}\n"
+            return
+        }
+        // ATX heading as first content of a list item (example 278).
+        if (trimmed matches Patterns.ATX_HEADING_LINE) {
+            val match = Patterns.ATX_HEADING_LINE.matchEntire(trimmed)!!
+            val level = match.groupValues[1].length
+            val content = match.groupValues[2].trimEnd().removeSuffix("#").trimEnd()
+            "h$level" {
+                if (content.isNotEmpty()) processInlineContent(content)
+                flushInline()
+            }
+            return
+        }
+        // Blockquote as first content of a list item (e.g. `1. > X`). Open the
+        // inner `<blockquote>` and its `<p>`; subsequent `>`-prefixed lines (or
+        // lazy-continuation lines) extend the same paragraph via the
+        // blockquote-handling branches in `processListBlock`.
+        if (isBlockquoteOpener(trimmed)) {
+            mark("blockquote")
+            ctx.blockquoteOpen = true
+            mark("p")
+            ctx.blockquoteParagraphOpen = true
+            val bqContent = stripBlockquotePrefix(trimmed)
+            if (bqContent.isNotBlank()) {
+                processInlineContent(bqContent.trimEnd())
+            }
+            flushInline()
             return
         }
         mark("p")
@@ -1880,6 +1959,30 @@ private class ParserState(
         }
     }
 
+    /** Close any open fenced code block in the top context. */
+    private suspend fun SemanticEventScope.closeListFencedCodeIfOpen(mode: BlockMode.ListBlock) {
+        val top = mode.stack.lastOrNull() ?: return
+        if (top.fencedCodeOpen) {
+            unmark("code")
+            unmark("pre")
+            top.fencedCodeOpen = false
+        }
+    }
+
+    /** Close any open blockquote (and its inner paragraph) in the top context. */
+    private suspend fun SemanticEventScope.closeListBlockquoteIfOpen(mode: BlockMode.ListBlock) {
+        val top = mode.stack.lastOrNull() ?: return
+        if (top.blockquoteOpen) {
+            if (top.blockquoteParagraphOpen) {
+                flushInline()
+                unmark("p")
+                top.blockquoteParagraphOpen = false
+            }
+            unmark("blockquote")
+            top.blockquoteOpen = false
+        }
+    }
+
     /**
      * Pop list contexts of [mode] until the stack size equals [downTo], emitting
      * `</li>` and `</ul>`/`</ol>` for each popped level. Closes any open `<p>` or
@@ -1892,6 +1995,8 @@ private class ParserState(
         while (mode.stack.size > downTo) {
             closeListParagraphIfOpen(mode)
             closeListCodeIfOpen(mode)
+            closeListFencedCodeIfOpen(mode)
+            closeListBlockquoteIfOpen(mode)
             unmark("li")
             val ctx = mode.stack.removeLast()
             unmark(if (ctx.ordered) "ol" else "ul")
@@ -1974,15 +2079,21 @@ private class ParserState(
                 } else {
                     closeListParagraphIfOpen(mode)
                     closeListCodeIfOpen(mode)
+                    closeListFencedCodeIfOpen(mode)
+                    closeListBlockquoteIfOpen(mode)
                     unmark("li")
                     mark("li")
+                    ctx.hasContent = false
+                    // Refresh marker/content cols to the new sibling's positions.
+                    // Required for the 0..3-leading-space progression case (GFM
+                    // example 273): without this, `- foo\n - bar\n  - baz` would
+                    // see the third line's marker treated as a deeper level.
+                    ctx.markerStartCol = absMarkerStart
+                    ctx.contentCol = containerContentCol + strippedMarker.contentCol
                     val firstContent = stripped.substring(strippedMarker.markerEndIndex)
                     if (firstContent.isNotBlank()) {
                         emitItemFirstLine(firstContent, ctx)
                     }
-                    // Update content/marker cols for the new item (in case marker width differs).
-                    // Keep markerStartCol stable; refresh contentCol for this item to allow
-                    // varying continuation columns. (Approximation: we keep original.)
                 }
                 mode.blankSeen = false
                 return
@@ -1993,12 +2104,37 @@ private class ParserState(
             // content inside the parent item).
             closeListParagraphIfOpen(mode)
             closeListCodeIfOpen(mode)
+            closeListFencedCodeIfOpen(mode)
+            closeListBlockquoteIfOpen(mode)
             startListItemFromMarker(mode, stripped, parentContentCol = containerContentCol)
             return
         }
 
-        // Not a marker. If no context contains this line at all, the list ends.
+        // Not a marker. If no context contains this line at all, the list ends —
+        // unless this line is lazy-continuation content for an open paragraph in
+        // the deepest item (GFM §5.2 examples 268, 269: an under-indented,
+        // non-blank, non-interrupting line joins the open paragraph via soft-break).
         if (markerCtxIndex < 0) {
+            val top = mode.stack.lastOrNull()
+            if (top != null && top.paragraphOpen && !lineInterruptsParagraph(line.trimStart())) {
+                +"\n"
+                processInlineContent(line.trimStart().trimEnd())
+                flushInline()
+                mode.blankSeen = false
+                return
+            }
+            // Lazy continuation of an in-item blockquote's `<p>`: a non-indented
+            // non-interrupting line joins the open inner-blockquote paragraph
+            // via soft-break (mirrors the paragraphOpen branch above for the
+            // inner-blockquote case used by GFM §5.2 examples 270, 271).
+            if (top != null && top.blockquoteOpen && top.blockquoteParagraphOpen
+                && !lineInterruptsParagraph(line.trimStart())) {
+                +"\n"
+                processInlineContent(line.trimStart().trimEnd())
+                flushInline()
+                mode.blankSeen = false
+                return
+            }
             popListContexts(mode, downTo = 0)
             replaceMode(BlockMode.Start)
             replay(line)
@@ -2011,34 +2147,128 @@ private class ParserState(
         popListContexts(mode, downTo = markerCtxIndex + 1)
         val ctx = mode.stack[markerCtxIndex]
 
+        // Empty item followed by a blank line ends the list (GFM §5.2 example 258).
+        // The current line is replayed through Start so its block type is decided
+        // afresh at top level.
+        if (mode.blankSeen && !ctx.hasContent) {
+            popListContexts(mode, downTo = 0)
+            replaceMode(BlockMode.Start)
+            replay(line)
+            process('\n')
+            return
+        }
+
         // `stripped` is the line with the container's contentCol of leading indent
         // removed; semantically it begins at absolute column [containerContentCol].
         val innerIndent = leadingIndentCols(stripped, startCol = containerContentCol)
 
+        // Fenced code continuation: route every line through the fenced block
+        // until we see a matching close fence.
+        if (ctx.fencedCodeOpen) {
+            if (isFenceClose(stripped, ctx.fencedMarker, ctx.fencedLength)) {
+                closeListFencedCodeIfOpen(mode)
+                mode.blankSeen = false
+                return
+            }
+            +"$stripped\n"
+            mode.blankSeen = false
+            return
+        }
+
         // Indented code block start/continuation: only if a blank line preceded (item
         // is between blocks) or a code block is already open for this context.
         if (ctx.codeBlockOpen) {
-            // Continuation of an open code block: emit any deferred blank lines, then
-            // the stripped line content (further stripped by 4 cols past container col).
-            repeat(ctx.codeBlankLines) { +"\n" }
-            ctx.codeBlankLines = 0
             if (innerIndent >= 4) {
+                // Continuation: flush deferred blank lines, then the stripped content.
+                repeat(ctx.codeBlankLines) { +"\n" }
+                ctx.codeBlankLines = 0
                 +"${stripIndentCols(stripped, 4, startCol = containerContentCol)}\n"
                 return
             }
-            // Code block ends — close it and fall through to handle this line as paragraph.
+            // Code block ends — close it (deferred blanks are dropped, mirroring
+            // top-level processIndentedCodeBlock) and fall through.
             closeListCodeIfOpen(mode)
         }
 
         if (innerIndent >= 4 && (mode.blankSeen || !ctx.paragraphOpen)) {
             // Open a new indented code block within the current item.
             closeListParagraphIfOpen(mode)
+            closeListBlockquoteIfOpen(mode)
             mark("pre")
             mark("code")
             ctx.codeBlockOpen = true
+            ctx.hasContent = true
             +"${stripIndentCols(stripped, 4, startCol = containerContentCol)}\n"
             mode.blankSeen = false
             return
+        }
+
+        // At a block boundary inside the active item, detect block-level constructs
+        // (fenced code, ATX heading, blockquote) before falling through to paragraph.
+        // Only applies when `mode.blankSeen` (between sub-blocks) or no paragraph
+        // is currently open — otherwise the line continues the active paragraph.
+        val atBlockBoundary = mode.blankSeen || (!ctx.paragraphOpen && !ctx.blockquoteOpen)
+        if (atBlockBoundary) {
+            val fence = parseFenceOpen(stripped)
+            if (fence != null) {
+                closeListParagraphIfOpen(mode)
+                closeListBlockquoteIfOpen(mode)
+                mark("pre")
+                val codeAttrs = fence.language?.let { mapOf("class" to "language-$it") }
+                mark("code", attributes = codeAttrs)
+                ctx.fencedCodeOpen = true
+                ctx.fencedMarker = fence.marker
+                ctx.fencedLength = fence.length
+                ctx.hasContent = true
+                mode.blankSeen = false
+                return
+            }
+            if (stripped matches Patterns.ATX_HEADING_LINE) {
+                closeListParagraphIfOpen(mode)
+                closeListBlockquoteIfOpen(mode)
+                val match = Patterns.ATX_HEADING_LINE.matchEntire(stripped)!!
+                val level = match.groupValues[1].length
+                val content = match.groupValues[2].trimEnd().removeSuffix("#").trimEnd()
+                "h$level" {
+                    if (content.isNotEmpty()) processInlineContent(content)
+                    flushInline()
+                }
+                ctx.hasContent = true
+                mode.blankSeen = false
+                return
+            }
+        }
+
+        // Blockquote inside list item. A `>`-prefixed line at a block boundary opens
+        // the blockquote (if not already open) and emits its content as a paragraph;
+        // consecutive `>`-prefixed lines join the same paragraph via soft-break.
+        // Only single-line lazy continuation is supported.
+        if (atBlockBoundary || ctx.blockquoteOpen) {
+            if (isBlockquoteOpener(stripped)) {
+                closeListParagraphIfOpen(mode)
+                if (!ctx.blockquoteOpen) {
+                    mark("blockquote")
+                    ctx.blockquoteOpen = true
+                }
+                val bqContent = stripBlockquotePrefix(stripped)
+                if (!ctx.blockquoteParagraphOpen) {
+                    mark("p")
+                    ctx.blockquoteParagraphOpen = true
+                } else {
+                    +"\n"
+                }
+                if (bqContent.isNotBlank()) {
+                    processInlineContent(bqContent.trimEnd())
+                }
+                flushInline()
+                ctx.hasContent = true
+                mode.blankSeen = false
+                return
+            }
+            // Non-`>` line at a block boundary closes the blockquote.
+            if (ctx.blockquoteOpen && atBlockBoundary) {
+                closeListBlockquoteIfOpen(mode)
+            }
         }
 
         // Plain continuation paragraph content.
@@ -2055,6 +2285,7 @@ private class ParserState(
         }
         processInlineContent(stripped.trimStart().trimEnd())
         flushInline()
+        ctx.hasContent = true
         mode.blankSeen = false
     }
 
@@ -2271,6 +2502,20 @@ private class ParserState(
     }
 
     /**
+     * Strip a single blockquote prefix (`0..3 spaces` + `>` + optional one space)
+     * from [line]. Used by the list-item dispatcher's blockquote handler to
+     * recover the content portion of a `>`-prefixed line.
+     */
+    private fun stripBlockquotePrefix(line: String): String {
+        var i = 0
+        while (i < line.length && i < 3 && line[i] == ' ') i++
+        if (i >= line.length || line[i] != '>') return line
+        i++
+        if (i < line.length && line[i] == ' ') i++
+        return line.substring(i)
+    }
+
+    /**
      * Blockquote prefix interceptor. Called from `process()` before the normal
      * dispatch. Returns true when the char was handled here (consumed as part
      * of a `>` prefix or buffered as the start of a failed-prefix line) and
@@ -2404,6 +2649,19 @@ private class ParserState(
         val innerIsParagraphContinuation = blockMode is BlockMode.ParagraphContinuation
         if (innerIsParagraphContinuation && !lineInterruptsParagraph(line)) {
             // Lazy continuation. Skip prefix detection during the replay.
+            blockquotePrefixDone = true
+            replay(line)
+            process('\n')
+            return
+        }
+        // Lazy continuation through a list-item's inner blockquote: when the
+        // deepest list context has an open `<blockquote><p>`, replay the line
+        // through the list-block dispatcher so it joins that paragraph via
+        // soft-break instead of closing the outer blockquote (GFM §5.2 ex. 270).
+        val listMode = blockMode as? BlockMode.ListBlock
+        val listTop = listMode?.stack?.lastOrNull()
+        if (listTop != null && listTop.blockquoteOpen && listTop.blockquoteParagraphOpen
+            && !lineInterruptsParagraph(line)) {
             blockquotePrefixDone = true
             replay(line)
             process('\n')
