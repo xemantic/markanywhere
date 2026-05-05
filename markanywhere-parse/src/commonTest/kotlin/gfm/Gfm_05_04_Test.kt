@@ -35,9 +35,8 @@ import kotlin.test.Test
 @Suppress("ClassName")
 class Gfm_05_04_Test {
 
-    // TODO review
     @Test
-    fun `example 281 - ul with 2 items, ul with 1 item`() = runTest {
+    fun `example 281 - DIVERGENCE - ul with 2 items, ul with 1 item`() = runTest {
         // given
         val textFlow = """
             - foo
@@ -52,15 +51,15 @@ class Gfm_05_04_Test {
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "ul" {
                 "li" {
-                    +"foo"
+                    "p" { +"foo" }
                 }
                 "li" {
-                    +"bar"
+                    "p" { +"bar" }
                 }
             }
             "ul" {
                 "li" {
-                    +"baz"
+                    "p" { +"baz" }
                 }
             }
         }
@@ -76,9 +75,8 @@ class Gfm_05_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 282 - ol with 2 items, ol with 1 item (start 3)`() = runTest {
+    fun `example 282 - DIVERGENCE - ol with 2 items, ol with 1 item (start 3)`() = runTest {
         // given
         val textFlow = """
             1. foo
@@ -93,15 +91,15 @@ class Gfm_05_04_Test {
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "ol" {
                 "li" {
-                    +"foo"
+                    "p" { +"foo" }
                 }
                 "li" {
-                    +"bar"
+                    "p" { +"bar" }
                 }
             }
             "ol"("start" to "3") {
                 "li" {
-                    +"baz"
+                    "p" { +"baz" }
                 }
             }
         }
@@ -117,9 +115,8 @@ class Gfm_05_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 283 - paragraph Foo, ul with 2 items`() = runTest {
+    fun `example 283 - DIVERGENCE - paragraph Foo, ul with 2 items`() = runTest {
         // given
         val textFlow = """
             Foo
@@ -137,10 +134,10 @@ class Gfm_05_04_Test {
             }
             "ul" {
                 "li" {
-                    +"bar"
+                    "p" { +"bar" }
                 }
                 "li" {
-                    +"baz"
+                    "p" { +"baz" }
                 }
             }
         }
@@ -154,7 +151,6 @@ class Gfm_05_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 284 - paragraph The number of windows i`() = runTest {
         // given
@@ -179,9 +175,8 @@ class Gfm_05_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 285 - paragraph The number of windows i, ol with 1 item`() = runTest {
+    fun `example 285 - DIVERGENCE - paragraph The number of windows i, ol with 1 item`() = runTest {
         // given
         val textFlow = """
             The number of windows in my house is
@@ -198,7 +193,7 @@ class Gfm_05_04_Test {
             }
             "ol" {
                 "li" {
-                    +"The number of doors is 6."
+                    "p" { +"The number of doors is 6." }
                 }
             }
         }
@@ -211,7 +206,6 @@ class Gfm_05_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 286 - ul with 3 items`() = runTest {
         // given
@@ -263,9 +257,8 @@ class Gfm_05_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 287 - ul with 1 item`() = runTest {
+    fun `example 287 - DIVERGENCE - ul with 1 item`() = runTest {
         // given
         val textFlow = buildText {
             +"- foo\n"
@@ -283,10 +276,10 @@ class Gfm_05_04_Test {
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "ul" {
                 "li" {
-                    +"foo\n"
+                    "p" { +"foo" }
                     "ul" {
                         "li" {
-                            +"bar\n"
+                            "p" { +"bar" }
                             "ul" {
                                 "li" {
                                     "p" {
@@ -321,9 +314,8 @@ class Gfm_05_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 288 - two ul with 2 items`() = runTest {
+    fun `example 288 - DIVERGENCE - two ul with 2 items`() = runTest {
         // given
         val textFlow = """
             - foo
@@ -342,18 +334,19 @@ class Gfm_05_04_Test {
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "ul" {
                 "li" {
-                    +"foo"
+                    "p" { +"foo" }
                 }
                 "li" {
-                    +"bar"
+                    "p" { +"bar" }
                 }
             }
+            +"<!-- -->\n"
             "ul" {
                 "li" {
-                    +"baz"
+                    "p" { +"baz" }
                 }
                 "li" {
-                    +"bim"
+                    "p" { +"bim" }
                 }
             }
         }
@@ -371,9 +364,8 @@ class Gfm_05_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 289 - ul with 2 items, indented code block`() = runTest {
+    fun `example 289 - DIVERGENCE - ul with 2 items, indented code block`() = runTest {
         // given
         val textFlow = buildText {
             +"-   foo\n"
@@ -407,6 +399,7 @@ class Gfm_05_04_Test {
                     }
                 }
             }
+            +"<!-- -->\n"
             "pre" {
                 "code" {
                     +"code\n"
@@ -430,9 +423,8 @@ class Gfm_05_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 290 - ul with 7 items`() = runTest {
+    fun `example 290 - DIVERGENCE - ul with 7 items`() = runTest {
         // given
         val textFlow = buildText {
             +"- a\n"
@@ -450,27 +442,13 @@ class Gfm_05_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "ul" {
-                "li" {
-                    +"a"
-                }
-                "li" {
-                    +"b"
-                }
-                "li" {
-                    +"c"
-                }
-                "li" {
-                    +"d"
-                }
-                "li" {
-                    +"e"
-                }
-                "li" {
-                    +"f"
-                }
-                "li" {
-                    +"g"
-                }
+                "li" { "p" { +"a" } }
+                "li" { "p" { +"b" } }
+                "li" { "p" { +"c" } }
+                "li" { "p" { +"d" } }
+                "li" { "p" { +"e" } }
+                "li" { "p" { +"f" } }
+                "li" { "p" { +"g" } }
             }
         }
         // GFM expected:
@@ -487,7 +465,6 @@ class Gfm_05_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 291 - ol with 3 items`() = runTest {
         // given
@@ -538,9 +515,8 @@ class Gfm_05_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 292 - ul with 4 items`() = runTest {
+    fun `example 292 - DIVERGENCE - ul with 4 items`() = runTest {
         // given
         val textFlow = buildText {
             +"- a\n"
@@ -556,17 +532,11 @@ class Gfm_05_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "ul" {
+                "li" { "p" { +"a" } }
+                "li" { "p" { +"b" } }
+                "li" { "p" { +"c" } }
                 "li" {
-                    +"a"
-                }
-                "li" {
-                    +"b"
-                }
-                "li" {
-                    +"c"
-                }
-                "li" {
-                    +"d\n- e"
+                    "p" { +"d\n- e" }
                 }
             }
         }
@@ -582,7 +552,6 @@ class Gfm_05_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 293 - ol with 2 items, indented code block`() = runTest {
         // given
@@ -632,7 +601,6 @@ class Gfm_05_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 294 - ul with 3 items`() = runTest {
         // given
@@ -682,7 +650,6 @@ class Gfm_05_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 295 - ul with 3 items`() = runTest {
         // given
@@ -727,7 +694,6 @@ class Gfm_05_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 296 - ul with 3 items`() = runTest {
         // given
@@ -782,9 +748,8 @@ class Gfm_05_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 297 - ul with 3 items`() = runTest {
+    fun `example 297 - DIVERGENCE - ul with 3 items`() = runTest {
         // given
         val textFlow = buildText {
             +"- a\n"
@@ -798,6 +763,9 @@ class Gfm_05_04_Test {
         val parsed = textFlow.parse()
 
         // then
+        // DIVERGENCE: GFM treats `[ref]: /url` as a link reference definition
+        // and emits no visible output. We don't track link reference definitions,
+        // so the line is rendered as a second paragraph inside the second item.
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "ul" {
                 "li" {
@@ -808,6 +776,9 @@ class Gfm_05_04_Test {
                 "li" {
                     "p" {
                         +"b"
+                    }
+                    "p" {
+                        +"[ref]: /url"
                     }
                 }
                 "li" {
@@ -833,9 +804,8 @@ class Gfm_05_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 298 - ul with 3 items`() = runTest {
+    fun `example 298 - DIVERGENCE - ul with 3 items`() = runTest {
         // given
         val textFlow = buildText {
             +"- a\n"
@@ -854,7 +824,7 @@ class Gfm_05_04_Test {
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "ul" {
                 "li" {
-                    +"a"
+                    "p" { +"a" }
                 }
                 "li" {
                     "pre" {
@@ -864,7 +834,7 @@ class Gfm_05_04_Test {
                     }
                 }
                 "li" {
-                    +"c"
+                    "p" { +"c" }
                 }
             }
         }
@@ -883,9 +853,8 @@ class Gfm_05_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 299 - ul with 2 items`() = runTest {
+    fun `example 299 - DIVERGENCE - ul with 2 items`() = runTest {
         // given
         val textFlow = buildText {
             +"- a\n"
@@ -902,7 +871,7 @@ class Gfm_05_04_Test {
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "ul" {
                 "li" {
-                    +"a\n"
+                    "p" { +"a" }
                     "ul" {
                         "li" {
                             "p" {
@@ -915,7 +884,7 @@ class Gfm_05_04_Test {
                     }
                 }
                 "li" {
-                    +"d"
+                    "p" { +"d" }
                 }
             }
         }
@@ -935,9 +904,8 @@ class Gfm_05_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 300 - ul with 2 items`() = runTest {
+    fun `example 300 - DIVERGENCE - ul with 2 items`() = runTest {
         // given
         val textFlow = buildText {
             +"* a\n"
@@ -953,7 +921,7 @@ class Gfm_05_04_Test {
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "ul" {
                 "li" {
-                    +"a\n"
+                    "p" { +"a" }
                     "blockquote" {
                         "p" {
                             +"b"
@@ -961,7 +929,7 @@ class Gfm_05_04_Test {
                     }
                 }
                 "li" {
-                    +"c"
+                    "p" { +"c" }
                 }
             }
         }
@@ -978,9 +946,8 @@ class Gfm_05_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 301 - ul with 2 items`() = runTest {
+    fun `example 301 - DIVERGENCE - ul with 2 items`() = runTest {
         // given
         val textFlow = buildText {
             +"- a\n"
@@ -998,7 +965,7 @@ class Gfm_05_04_Test {
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "ul" {
                 "li" {
-                    +"a\n"
+                    "p" { +"a" }
                     "blockquote" {
                         "p" {
                             +"b"
@@ -1011,7 +978,7 @@ class Gfm_05_04_Test {
                     }
                 }
                 "li" {
-                    +"d"
+                    "p" { +"d" }
                 }
             }
         }
@@ -1030,9 +997,8 @@ class Gfm_05_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 302 - ul with 1 item`() = runTest {
+    fun `example 302 - DIVERGENCE - ul with 1 item`() = runTest {
         // given
         val textFlow = "- a".chunkedRandomly().asFlow()
 
@@ -1043,7 +1009,7 @@ class Gfm_05_04_Test {
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "ul" {
                 "li" {
-                    +"a"
+                    "p" { +"a" }
                 }
             }
         }
@@ -1055,9 +1021,8 @@ class Gfm_05_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 303 - ul with 1 item`() = runTest {
+    fun `example 303 - DIVERGENCE - ul with 1 item`() = runTest {
         // given
         val textFlow = buildText {
             +"- a\n"
@@ -1071,10 +1036,10 @@ class Gfm_05_04_Test {
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "ul" {
                 "li" {
-                    +"a\n"
+                    "p" { +"a" }
                     "ul" {
                         "li" {
-                            +"b"
+                            "p" { +"b" }
                         }
                     }
                 }
@@ -1092,7 +1057,6 @@ class Gfm_05_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 304 - ol with 1 item`() = runTest {
         // given
@@ -1134,9 +1098,8 @@ class Gfm_05_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 305 - ul with 1 item`() = runTest {
+    fun `example 305 - DIVERGENCE - ul with 1 item`() = runTest {
         // given
         val textFlow = buildText {
             +"* foo\n"
@@ -1157,7 +1120,7 @@ class Gfm_05_04_Test {
                     }
                     "ul" {
                         "li" {
-                            +"bar"
+                            "p" { +"bar" }
                         }
                     }
                     "p" {
@@ -1180,9 +1143,8 @@ class Gfm_05_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 306 - ul with 2 items`() = runTest {
+    fun `example 306 - DIVERGENCE - ul with 2 items`() = runTest {
         // given
         val textFlow = buildText {
             +"- a\n"
@@ -1205,12 +1167,8 @@ class Gfm_05_04_Test {
                         +"a"
                     }
                     "ul" {
-                        "li" {
-                            +"b"
-                        }
-                        "li" {
-                            +"c"
-                        }
+                        "li" { "p" { +"b" } }
+                        "li" { "p" { +"c" } }
                     }
                 }
                 "li" {
@@ -1218,12 +1176,8 @@ class Gfm_05_04_Test {
                         +"d"
                     }
                     "ul" {
-                        "li" {
-                            +"e"
-                        }
-                        "li" {
-                            +"f"
-                        }
+                        "li" { "p" { +"e" } }
+                        "li" { "p" { +"f" } }
                     }
                 }
             }

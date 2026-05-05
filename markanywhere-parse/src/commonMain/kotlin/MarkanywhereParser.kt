@@ -61,6 +61,10 @@ private object Patterns {
  * at the start of a line. [contentCol] is the column where item content begins.
  * [digits] holds the raw digit run for ordered markers (null for bullet markers),
  * used to emit the `<ol start="N">` attribute when the parsed value is not 1.
+ * [markerChar] is the bullet character (`-`, `+`, `*`) for unordered, or the
+ * delimiter (`.` or `)`) for ordered. Per GFM §5.4, a list ends when the next
+ * marker uses a different bullet char (or different ordered delimiter), even
+ * at the same indent level.
  */
 private data class ListMarker(
     val ordered: Boolean,
@@ -68,7 +72,8 @@ private data class ListMarker(
     val contentCol: Int,
     /** Index in the source line where the marker (and its trailing whitespace) ends. */
     val markerEndIndex: Int,
-    val digits: String? = null
+    val digits: String? = null,
+    val markerChar: Char
 )
 
 /**
@@ -78,6 +83,8 @@ private data class ListMarker(
  */
 private class ListContext(
     val ordered: Boolean,
+    /** Bullet char (`-`, `+`, `*`) for unordered, or delimiter (`.`, `)`) for ordered. */
+    var markerChar: Char,
     var markerStartCol: Int,
     var contentCol: Int,
     /** True while a `<p>` is currently open in the active item. */
@@ -119,14 +126,16 @@ private fun parseListMarker(line: String): ListMarker? {
     val ordered: Boolean
     val markerWidth: Int
     var digits: String? = null
+    val markerChar: Char
     when {
-        ch in "-+*" -> { ordered = false; markerWidth = 1; i++ }
+        ch in "-+*" -> { ordered = false; markerWidth = 1; markerChar = ch; i++ }
         ch in '0'..'9' -> {
             val digitStart = i
             while (i < line.length && line[i].isDigit()) i++
             if (i - digitStart > 9 || i >= line.length) return null
             if (line[i] != '.' && line[i] != ')') return null
             digits = line.substring(digitStart, i)
+            markerChar = line[i]
             i++
             ordered = true; markerWidth = i - digitStart
         }
@@ -134,7 +143,7 @@ private fun parseListMarker(line: String): ListMarker? {
     }
     val markerEndCol = markerStartCol + markerWidth
     if (i >= line.length) {
-        return ListMarker(ordered, markerStartCol, markerEndCol + 1, i, digits)
+        return ListMarker(ordered, markerStartCol, markerEndCol + 1, i, digits, markerChar)
     }
     when (line[i]) {
         ' ' -> {
@@ -147,17 +156,17 @@ private fun parseListMarker(line: String): ListMarker? {
             // CommonMark, content (if any continuation arrives) begins at
             // markerEndCol + 1, regardless of how many trailing spaces follow.
             if (j >= line.length) {
-                return ListMarker(ordered, markerStartCol, markerEndCol + 1, line.length, digits)
+                return ListMarker(ordered, markerStartCol, markerEndCol + 1, line.length, digits, markerChar)
             }
             val spacesAfter = cc - markerEndCol
             val contentCol = if (spacesAfter >= 5) markerEndCol + 1 else cc
             val end = if (spacesAfter >= 5) i + 1 else j
-            return ListMarker(ordered, markerStartCol, contentCol, end, digits)
+            return ListMarker(ordered, markerStartCol, contentCol, end, digits, markerChar)
         }
         '\t' -> {
             // Tab after marker: per GFM, marker + 1-space-equivalent consumes 1 col.
             // The unconsumed remainder of the tab stays as content indent.
-            return ListMarker(ordered, markerStartCol, markerEndCol + 1, i + 1, digits)
+            return ListMarker(ordered, markerStartCol, markerEndCol + 1, i + 1, digits, markerChar)
         }
         else -> return null
     }
@@ -1761,9 +1770,14 @@ private class ParserState(
         if (line.startsWith("- ") && line.length > 2 && line[2] != '[') return true
         // Ordered list: digit(s) then '.' then ' '. An empty marker (no space
         // after `.`) cannot interrupt a paragraph — GFM §5.2 example 263.
+        // Only a `1.` marker can interrupt a paragraph (GFM §5.4 example 284):
+        // otherwise `windows is\n14. ...` would split into a paragraph +
+        // ordered list with start=14.
         var i = 0
         while (i < line.length && line[i].isDigit()) i++
-        if (i > 0 && i + 1 < line.length && line[i] == '.' && line[i + 1] == ' ') return true
+        if (i > 0 && i + 1 < line.length && line[i] == '.' && line[i + 1] == ' '
+            && line.substring(0, i).trimStart('0') == "1"
+        ) return true
         // HTML block start: types 1-6 interrupt paragraphs (type 7 does not by spec).
         val type = detectHtmlBlockType(line)
         if (type in 1..6) return true
@@ -1828,6 +1842,7 @@ private class ParserState(
         val marker = parseListMarker(markerLine) ?: return
         val ctx = ListContext(
             ordered = marker.ordered,
+            markerChar = marker.markerChar,
             markerStartCol = parentContentCol + marker.markerStartCol,
             contentCol = parentContentCol + marker.contentCol
         )
@@ -1889,6 +1904,19 @@ private class ParserState(
                 if (content.isNotEmpty()) processInlineContent(content)
                 flushInline()
             }
+            return
+        }
+        // Fenced code as first content of a list item (GFM §5.4 example 304).
+        // Subsequent indented lines stream through `processListBlock`'s
+        // `ctx.fencedCodeOpen` branch until the matching close fence.
+        val fence = parseFenceOpen(trimmed)
+        if (fence != null) {
+            mark("pre")
+            val codeAttrs = fence.language?.let { mapOf("class" to "language-$it") }
+            mark("code", attributes = codeAttrs)
+            ctx.fencedCodeOpen = true
+            ctx.fencedMarker = fence.marker
+            ctx.fencedLength = fence.length
             return
         }
         // Blockquote as first content of a list item (e.g. `1. > X`). Open the
@@ -2019,9 +2047,13 @@ private class ParserState(
         // a subsequent indented continuation opens a new paragraph.
         if (line.isBlank()) {
             closeListParagraphIfOpen(mode)
-            // Defer blank-line emission for an open code block until more code arrives.
             val top = mode.stack.lastOrNull()
+            // Defer blank-line emission for an open indented code block until more
+            // code arrives (it may turn out to be the trailing blanks before the
+            // block closes, which are dropped). Fenced code preserves every blank
+            // line literally — emit straight away (GFM §5.4 example 298).
             if (top != null && top.codeBlockOpen) top.codeBlankLines++
+            else if (top != null && top.fencedCodeOpen) +"\n"
             mode.blankSeen = true
             return
         }
@@ -2071,9 +2103,13 @@ private class ParserState(
                 // Close everything below the sibling, including its current item.
                 popListContexts(mode, downTo = siblingIndex + 1)
                 val ctx = mode.stack[siblingIndex]
-                // If the marker style differs (ordered vs unordered), close this list
-                // and start a new sibling list at the same indent level.
-                if (ctx.ordered != strippedMarker.ordered) {
+                // GFM §5.4: a list ends when the next marker uses a different
+                // marker style. For unordered, that means a different bullet char
+                // (`-` vs `+` vs `*`); for ordered, a different delimiter
+                // (`.` vs `)`). Either change closes this list and opens a new
+                // sibling list at the same indent.
+                if (ctx.ordered != strippedMarker.ordered
+                    || ctx.markerChar != strippedMarker.markerChar) {
                     popListContexts(mode, downTo = siblingIndex)
                     startListItemFromMarker(mode, stripped, parentContentCol = containerContentCol)
                 } else {
@@ -2084,11 +2120,15 @@ private class ParserState(
                     unmark("li")
                     mark("li")
                     ctx.hasContent = false
-                    // Refresh marker/content cols to the new sibling's positions.
-                    // Required for the 0..3-leading-space progression case (GFM
-                    // example 273): without this, `- foo\n - bar\n  - baz` would
-                    // see the third line's marker treated as a deeper level.
-                    ctx.markerStartCol = absMarkerStart
+                    // Track the leftmost marker col seen so far. The 0..3-leading-
+                    // space progression case (GFM §5.2 example 273) requires the
+                    // sibling range to expand outward only — never narrow — or
+                    // example 290 (`- a\n - b\n  - c\n   - d\n  - e\n - f\n- g`)
+                    // would see the back-and-forth indents create spurious
+                    // nested lists once the marker column dropped again.
+                    if (absMarkerStart < ctx.markerStartCol) {
+                        ctx.markerStartCol = absMarkerStart
+                    }
                     ctx.contentCol = containerContentCol + strippedMarker.contentCol
                     val firstContent = stripped.substring(strippedMarker.markerEndIndex)
                     if (firstContent.isNotBlank()) {
@@ -2116,7 +2156,12 @@ private class ParserState(
         // non-blank, non-interrupting line joins the open paragraph via soft-break).
         if (markerCtxIndex < 0) {
             val top = mode.stack.lastOrNull()
-            if (top != null && top.paragraphOpen && !lineInterruptsParagraph(line.trimStart())) {
+            // Use the un-trimmed line for the interrupter check: a `- ` at col 4+
+            // is NOT a valid list marker (markers allow 0..3 leading spaces) and
+            // therefore does not interrupt the paragraph (GFM §5.4 example 292
+            // — `    - e` lazy-continues the open paragraph instead of opening
+            // a new sibling item).
+            if (top != null && top.paragraphOpen && !lineInterruptsParagraph(line)) {
                 +"\n"
                 processInlineContent(line.trimStart().trimEnd())
                 flushInline()
@@ -2128,7 +2173,7 @@ private class ParserState(
             // via soft-break (mirrors the paragraphOpen branch above for the
             // inner-blockquote case used by GFM §5.2 examples 270, 271).
             if (top != null && top.blockquoteOpen && top.blockquoteParagraphOpen
-                && !lineInterruptsParagraph(line.trimStart())) {
+                && !lineInterruptsParagraph(line)) {
                 +"\n"
                 processInlineContent(line.trimStart().trimEnd())
                 flushInline()
@@ -2205,9 +2250,14 @@ private class ParserState(
 
         // At a block boundary inside the active item, detect block-level constructs
         // (fenced code, ATX heading, blockquote) before falling through to paragraph.
-        // Only applies when `mode.blankSeen` (between sub-blocks) or no paragraph
-        // is currently open — otherwise the line continues the active paragraph.
-        val atBlockBoundary = mode.blankSeen || (!ctx.paragraphOpen && !ctx.blockquoteOpen)
+        // Applies when `mode.blankSeen` (between sub-blocks), no paragraph is
+        // currently open, OR the line is a paragraph-interrupter (`>`, fence,
+        // ATX, etc. — GFM §5.4 examples 300, 301): such lines must close any
+        // open paragraph or inner blockquote and let the new block take over.
+        val atBlockBoundary = mode.blankSeen
+            || (!ctx.paragraphOpen && !ctx.blockquoteOpen)
+            || ((ctx.paragraphOpen || ctx.blockquoteParagraphOpen)
+                && lineInterruptsParagraph(stripped.trimStart()))
         if (atBlockBoundary) {
             val fence = parseFenceOpen(stripped)
             if (fence != null) {
@@ -2251,6 +2301,16 @@ private class ParserState(
                     ctx.blockquoteOpen = true
                 }
                 val bqContent = stripBlockquotePrefix(stripped)
+                // Empty `>` line: end the blockquote's open paragraph (GFM §5.4
+                // example 300) — the next blockquote line starts a fresh `<p>`.
+                if (bqContent.isBlank() && ctx.blockquoteParagraphOpen) {
+                    flushInline()
+                    unmark("p")
+                    ctx.blockquoteParagraphOpen = false
+                    ctx.hasContent = true
+                    mode.blankSeen = false
+                    return
+                }
                 if (!ctx.blockquoteParagraphOpen) {
                     mark("p")
                     ctx.blockquoteParagraphOpen = true
