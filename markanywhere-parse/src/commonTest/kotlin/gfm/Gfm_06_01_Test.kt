@@ -35,9 +35,8 @@ import kotlin.test.Test
 @Suppress("ClassName")
 class Gfm_06_01_Test {
 
-    // TODO review
     @Test
-    fun `example 308 - paragraph !#$%&'()+,-=@`() = runTest {
+    fun `example 308 - escapes for all ASCII punctuation`() = runTest {
         // given
         val textFlow = buildText {
             +"\\!\\\"\\#\\\$\\%\\&\\'\\(\\)\\*\\+\\,\\-\\.\\/\\:\\;\\<\\=\\>\\?\\@\\[\\\\\\]\\^\\_\\`\\{\\|\\}\\~\n"
@@ -58,9 +57,8 @@ class Gfm_06_01_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 309 - paragraph Aa 3φ«`() = runTest {
+    fun `example 309 - backslash before non-punctuation stays literal`() = runTest {
         // given
         val textFlow = buildText {
             +"\\\t\\A\\a\\ \\3\\φ\\«\n"
@@ -81,9 +79,8 @@ class Gfm_06_01_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 310 - paragraph not emphasized br`() = runTest {
+    fun `example 310 - backslash prevents Markdown construct`() = runTest {
         // given
         val textFlow = """
             \*not emphasized*
@@ -120,9 +117,8 @@ class Gfm_06_01_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 311 - paragraph emphasis`() = runTest {
+    fun `example 311 - escaped backslash before emphasis`() = runTest {
         // given
         val textFlow = buildText {
             +"\\\\*emphasis*\n"
@@ -146,9 +142,8 @@ class Gfm_06_01_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 312 - paragraph foo bar`() = runTest {
+    fun `example 312 - backslash before newline is hard line break`() = runTest {
         // given
         val textFlow = """
             foo\
@@ -173,9 +168,8 @@ class Gfm_06_01_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 313 - paragraph`() = runTest {
+    fun `example 313 - backslashes in code span are literal`() = runTest {
         // given
         val textFlow = buildText {
             +"`` \\[\\` ``\n"
@@ -198,9 +192,8 @@ class Gfm_06_01_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 314 - indented code block`() = runTest {
+    fun `example 314 - backslashes in indented code block are literal`() = runTest {
         // given
         val textFlow = buildText {
             +"    \\[\\]\n"
@@ -224,9 +217,8 @@ class Gfm_06_01_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 315 - indented code block`() = runTest {
+    fun `example 315 - backslashes in fenced code block are literal`() = runTest {
         // given
         val textFlow = """
             ~~~
@@ -239,8 +231,10 @@ class Gfm_06_01_Test {
 
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
-            "pre"("class" to "code") {
-                +"\\[\\]"
+            "pre" {
+                "code" {
+                    +"\\[\\]\n"
+                }
             }
         }
         // GFM expected:
@@ -250,9 +244,8 @@ class Gfm_06_01_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 316 - paragraph httpexamplecomfind`() = runTest {
+    fun `example 316 - autolink URL escape is percent-encoded`() = runTest {
         // given
         val textFlow = buildText {
             +"<http://example.com?find=\\*>\n"
@@ -275,9 +268,8 @@ class Gfm_06_01_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 317 - link to bar)`() = runTest {
+    fun `example 317 - backslashes in raw HTML are literal`() = runTest {
         // given
         val textFlow = buildText {
             +"<a href=\"/bar\\/)\">\n"
@@ -288,7 +280,7 @@ class Gfm_06_01_Test {
 
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
-            "a"("href" to "/bar\\/)") {
+            tag("a", "href" to "/bar\\/)") {
                 +"\n"
             }
         }
@@ -298,9 +290,8 @@ class Gfm_06_01_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 318 - paragraph foo`() = runTest {
+    fun `example 318 - backslash escapes in link URL and title`() = runTest {
         // given
         val textFlow = buildText {
             +"[foo](/bar\\* \"ti\\*tle\")\n"
@@ -323,9 +314,11 @@ class Gfm_06_01_Test {
          */
     }
 
-    // TODO review
+    // DIVERGENCE: link reference definitions require buffering the whole paragraph
+    // before deciding whether `[foo]` resolves to a link, which is incompatible with
+    // append-only streaming. The reference is treated as a literal paragraph instead.
     @Test
-    fun `example 319 - paragraph foo`() = runTest {
+    fun `example 319 - DIVERGENCE - reference link definition with escapes`() = runTest {
         // given
         val textFlow = """
             [foo]
@@ -339,9 +332,10 @@ class Gfm_06_01_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "a"("href" to "/bar*", "title" to "ti*tle") {
-                    +"foo"
-                }
+                +"[foo]"
+            }
+            "p" {
+                +"[foo]: /bar* \"ti*tle\""
             }
         }
         // GFM expected:
@@ -350,9 +344,8 @@ class Gfm_06_01_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 320 - fenced code`() = runTest {
+    fun `example 320 - backslash escapes in fenced code info string`() = runTest {
         // given
         val textFlow = """
             ``` foo\+bar
@@ -365,8 +358,10 @@ class Gfm_06_01_Test {
 
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
-            "pre"("class" to "code lang-foo+bar") {
-                +"foo"
+            "pre" {
+                "code"("class" to "language-foo+bar") {
+                    +"foo\n"
+                }
             }
         }
         // GFM expected:

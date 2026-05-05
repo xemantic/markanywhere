@@ -207,6 +207,7 @@ private fun parseFenceOpen(line: String): FenceOpen? {
         ?.substringBefore(' ')
         ?.substringBefore('\t')
         ?.takeIf { it.isNotEmpty() }
+        ?.let(::applyBackslashEscapes)
     return FenceOpen(marker, length, indent, language)
 }
 
@@ -312,6 +313,21 @@ private fun applyBackslashEscapes(s: String): String {
             out.append(c)
             i++
         }
+    }
+    return out.toString()
+}
+
+/**
+ * Percent-encodes URL-unsafe characters in a link href the same way GFM/CommonMark
+ * normalizes URLs. Currently only encodes `\` → `%5C`; the full URL normalization
+ * (space → `%20`, non-ASCII → UTF-8 percent-encoding, etc.) is applied lazily by
+ * other paths and can be expanded here later.
+ */
+private fun normalizeUrlEscapes(s: String): String {
+    if ('\\' !in s) return s
+    val out = StringBuilder(s.length)
+    for (c in s) {
+        if (c == '\\') out.append("%5C") else out.append(c)
     }
     return out.toString()
 }
@@ -1599,6 +1615,13 @@ private class ParserState(
                 // line boundary so `processParagraphContinuation` can promote it to
                 // a `<br/>` (GFM §6.7) once continuation is confirmed, or discard it
                 // if the paragraph ends here.
+                if (escaped) {
+                    // Backslash immediately before `\n` is a hard line break (GFM §6.7).
+                    // Reuse the trailing-space tally so `emitParagraphLineBreak` produces
+                    // `<br/>` once the next line confirms continuation.
+                    escaped = false
+                    paragraphTrailingSpaces = 2
+                }
                 flushInline()
                 lineBuffer.clear()
                 atLineStart = true
@@ -3771,7 +3794,8 @@ private class ParserState(
     }
 
     private suspend fun SemanticEventScope.processInlineCharImpl(char: Char) {
-        // Handle escaping
+        // Handle escaping (GFM §6.1: only ASCII punctuation is escapable; before any
+        // other char the backslash stays literal).
         if (escaped) {
             escaped = false
             // If we are inside an inline HTML tag accumulation, backslashes are literal.
@@ -3779,10 +3803,19 @@ private class ParserState(
                 inlineBuffer.append(char)
                 return
             }
-            +char
+            if (char in ASCII_PUNCTUATION) {
+                +char
+            } else {
+                +"\\"
+                +char
+            }
             return
         }
-        if (char == '\\') {
+        // Inside a code span backslashes are literal (GFM §6.3) — skip the escape
+        // pre-processing so the backslash flows into the code-span buffer below.
+        // Inside a link URL / image URL the backslash is buffered raw and resolved
+        // by `applyBackslashEscapes` when the URL/title is finalized at `)`.
+        if (char == '\\' && !code && !(inLink && inLinkUrl) && !(inImage && inLinkUrl)) {
             // Inside an inline HTML tag accumulation, the backslash is literal too —
             // preserve it in the buffer so attribute values keep `\` characters.
             if (inlineBuffer.startsWith("<")) {
@@ -3875,7 +3908,7 @@ private class ParserState(
             when (char) {
                 ')' -> {
                     "img"(
-                        "src" to imageUrl.toString().trim(),
+                        "src" to applyBackslashEscapes(imageUrl.toString().trim()),
                         "alt" to imageAlt.toString()
                     ) {}
                     inImage = false
@@ -3912,12 +3945,13 @@ private class ParserState(
                 ')' -> {
                     val urlPart = linkUrl.toString().trim()
                     val title = linkTitle.toString().trim()
-                    val url = urlPart.substringBefore(" \"").trim()
-                    val extractedTitle = if (urlPart.contains(" \"")) {
+                    val url = applyBackslashEscapes(urlPart.substringBefore(" \"").trim())
+                    val rawTitle = if (urlPart.contains(" \"")) {
                         urlPart.substringAfter(" \"").removeSuffix("\"").trim()
                     } else {
                         title
                     }
+                    val extractedTitle = applyBackslashEscapes(rawTitle)
                     val attrs = if (extractedTitle.isNotEmpty()) {
                         mapOf("href" to url, "title" to extractedTitle)
                     } else {
@@ -3950,7 +3984,7 @@ private class ParserState(
                         }
                     }
                     !content.contains(" ") && content.contains("://") -> {
-                        "a"("href" to content) {
+                        "a"("href" to normalizeUrlEscapes(content)) {
                             +content
                         }
                     }

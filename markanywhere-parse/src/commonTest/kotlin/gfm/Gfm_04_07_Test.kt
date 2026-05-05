@@ -371,12 +371,12 @@ class Gfm_04_07_Test {
         val parsed = textFlow.parse()
 
         // then
-        // Backslash escapes consume the `\` and emit the next char literally
-        // (even for non-ASCII-punctuation chars, which is a separate divergence
-        // from CommonMark §6.1).
+        // Backslash escapes follow GFM §6.1: `\X` becomes `X` only when X is ASCII
+        // punctuation; otherwise the `\` stays literal. The DIVERGENCE here is that
+        // the link reference definition is not resolved (it stays as paragraph text).
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"[foo]: /urlbar*baz \"foo\"barbaz\""
+                +"[foo]: /url\\bar*baz \"foo\"bar\\baz\""
             }
             "p" {
                 +"[foo]"
