@@ -90,7 +90,6 @@ class Gfm_04_10_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 199 - table`() = runTest {
         // given
@@ -147,7 +146,6 @@ class Gfm_04_10_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 200 - table`() = runTest {
         // given
@@ -213,7 +211,6 @@ class Gfm_04_10_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 201 - table, blockquote (text , paragraph bar, text )`() = runTest {
         // given
@@ -279,7 +276,6 @@ class Gfm_04_10_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 202 - table, paragraph bar`() = runTest {
         // given
@@ -354,7 +350,6 @@ class Gfm_04_10_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 203 - paragraph abc def ---`() = runTest {
         // given
@@ -381,7 +376,6 @@ class Gfm_04_10_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 204 - table`() = runTest {
         // given
@@ -450,7 +444,6 @@ class Gfm_04_10_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 205 - table`() = runTest {
         // given

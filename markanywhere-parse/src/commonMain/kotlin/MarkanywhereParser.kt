@@ -50,7 +50,6 @@ private object Patterns {
     val ORDERED_LIST_PARTIAL = Regex("^\\d+\\.?$")
     val BLOCKQUOTE_EMPTY = Regex("^> ?$")
     val BLOCKQUOTE_DASH_PARTIAL = Regex("^> -?$")
-    val TABLE_SEPARATOR = Regex("^\\|[-:|\\s]+\\|$")
     val WHITESPACE = Regex("\\s+")
     val ATTRIBUTE = Regex("""(\w+)=["']([^"']*)["']""")
     val HTML_OPEN_TAG = Regex("^<([a-zA-Z][a-zA-Z0-9-]*)(\\s|/?>|$)")
@@ -577,8 +576,32 @@ private class ParserState(
          */
         data object Blockquote : BlockMode
         data object MathBlock : BlockMode
-        data object Table : BlockMode
-        data object TableBody : BlockMode
+        /**
+         * Holds the prospective table header line until the next line is seen.
+         * If that next line is a valid separator with matching column count we
+         * commit (emit `<table><thead>…</thead><tbody>` and switch to
+         * [TableBody]); otherwise we replay [headerLine] back through `Start`
+         * so it dispatches as a paragraph (or whatever it actually is).
+         *
+         * This one-line lookahead is the minimum needed to satisfy GFM's
+         * spec — a `|`-prefixed line is only a header when followed by a
+         * matching separator. Emitting `<table>` eagerly would lock in a
+         * decision the stream can't retract.
+         */
+        data class TableHeaderPending(val headerLine: String) : BlockMode
+        /**
+         * In-progress table body. [columnCount] and [alignments] come from the
+         * separator row and govern cell padding/truncation and per-cell
+         * `align=` attributes for every body row. [bodyOpened] is flipped from
+         * false to true when the first body row arrives, deferring the
+         * `<tbody>` mark so a header-only table emits no empty `<tbody>`.
+         */
+        class TableBody(
+            val columnCount: Int,
+            val alignments: List<String?>
+        ) : BlockMode {
+            var bodyOpened: Boolean = false
+        }
         data class CustomMarkup(val tagName: String) : BlockMode
 
         /** Type 1 block (pre/script/style/textarea). Always emitted structurally. */
@@ -701,7 +724,12 @@ private class ParserState(
     // non-space char flushes them as text or `\n` finalizes the count.
     private var paragraphTrailingSpaces: Int = 0
     private val indentedCodeDeferredBlanks = mutableListOf<String>()
-    private var tableHasBody = false
+    // True while replaying lines that we already proved cannot start a table
+    // (TableHeaderPending rejection branch). Suppresses the `|`-line table
+    // entry in `processStart` and the `|`-line interrupt in
+    // `lineInterruptsParagraph` so the replayed lines flow as paragraph
+    // content instead of immediately re-entering table detection.
+    private var suppressTableDetection = false
     private var inListItem = false
 
     // Blockquote prefix-consumption state. At the start of every line where
@@ -1198,8 +1226,8 @@ private class ParserState(
             OrderedList -> processOrderedList(char)
             Blockquote -> { /* passive frame; chars dispatch to the Start above it */ }
             MathBlock -> processMathBlock(char)
-            Table -> processTable(char)
-            TableBody -> processTableBody(char)
+            is TableHeaderPending -> processTableHeaderPending(char, mode)
+            is TableBody -> processTableBody(char, mode)
             is CustomMarkup -> processCustomMarkup(char, mode.tagName)
             is HtmlBlock1 -> processHtmlBlock1(char, mode)
             is HtmlBlock2to5 -> processHtmlBlock2to5(char, mode)
@@ -1352,15 +1380,11 @@ private class ParserState(
                     mark("math", attributes = mapOf("display" to "block"))
                     replaceMode(BlockMode.MathBlock)
                 }
-                // Table row
-                line.startsWith("|") -> {
-                    mark("table")
-                    mark("thead")
-                    "tr" {
-                        emitTableRow(line, isHeader = true)
-                    }
-                    tableHasBody = false
-                    replaceMode(BlockMode.Table)
+                // Table header (provisional). Don't emit yet — buffer the line
+                // and decide on the next line whether this is actually a table.
+                // See TableHeaderPending for the rationale.
+                line.startsWith("|") && !suppressTableDetection -> {
+                    replaceMode(BlockMode.TableHeaderPending(line))
                 }
                 // HTML block detection (CommonMark 4.6) - check before custom markup.
                 // DIVERGENCE: when sub-parsing inside a blockquote, suppress HTML block
@@ -1696,8 +1720,12 @@ private class ParserState(
         if (line matches Patterns.THEMATIC_BREAK) return true
         // Math block
         if (line == "$$") return true
-        // Table
-        if (line.startsWith("|")) return true
+        // DIVERGENCE: GFM allows a `|`-line to interrupt a paragraph and start
+        // a table (when followed by a valid separator). That requires the same
+        // 2-line lookahead from ParagraphContinuation that processStart uses,
+        // which we don't implement. As a result a `|`-line in mid-paragraph
+        // stays paragraph content; tables only start at a block boundary
+        // (after a blank line or another block close).
         // Blockquote
         if (line == ">" || line.startsWith("> ")) return true
         // Lists
@@ -2516,75 +2544,200 @@ private class ParserState(
         }
     }
 
-    private suspend fun SemanticEventScope.processTable(
-        char: Char
+    /**
+     * Validate the buffered header line against [separatorLine]: parse the
+     * separator into per-column alignments (each entry: "left", "center",
+     * "right", or null) iff every cell matches `:?-+:?`. Returns null when
+     * [separatorLine] is not a valid separator or its column count differs
+     * from [expectedCols].
+     */
+    private fun parseSeparatorAlignments(
+        separatorLine: String,
+        expectedCols: Int
+    ): List<String?>? {
+        val trimmed = separatorLine.trim()
+        if (trimmed.isEmpty()) return null
+        // Quick reject: separator chars are only `:`, `-`, `|`, space, tab.
+        if (!trimmed.all { it == ':' || it == '-' || it == '|' || it == ' ' || it == '\t' }) return null
+        val cells = splitTableCells(trimmed)
+        if (cells.size != expectedCols) return null
+        val out = ArrayList<String?>(cells.size)
+        for (cell in cells) {
+            val c = cell.trim()
+            if (c.isEmpty()) return null
+            val left = c.startsWith(":")
+            val right = c.endsWith(":")
+            val mid = c.removePrefix(":").removeSuffix(":")
+            if (mid.isEmpty() || !mid.all { it == '-' }) return null
+            out += when {
+                left && right -> "center"
+                right -> "right"
+                left -> "left"
+                else -> null
+            }
+        }
+        return out
+    }
+
+    /**
+     * Split a GFM table row into cells. Strips one optional leading and one
+     * optional trailing pipe, treats `\|` as a literal `|` in cell content
+     * (not a separator), and treats `|` inside a backtick code span as cell
+     * content (not a separator). Whitespace around cells is preserved here —
+     * callers trim individual cells.
+     */
+    private fun splitTableCells(line: String): List<String> {
+        var s = line
+        if (s.startsWith("|")) s = s.substring(1)
+        // Drop a single trailing unescaped `|`.
+        if (s.endsWith("|") && !s.endsWith("\\|")) s = s.substring(0, s.length - 1)
+        val cells = mutableListOf<String>()
+        val sb = StringBuilder()
+        var i = 0
+        var inCode = false
+        while (i < s.length) {
+            val c = s[i]
+            when {
+                c == '\\' && i + 1 < s.length && s[i + 1] == '|' -> {
+                    // GFM table extension: `\|` is a literal pipe in cell text.
+                    sb.append('|')
+                    i += 2
+                }
+                c == '`' -> {
+                    var j = i
+                    while (j < s.length && s[j] == '`') {
+                        sb.append('`')
+                        j++
+                    }
+                    inCode = !inCode
+                    i = j
+                }
+                c == '|' && !inCode -> {
+                    cells += sb.toString()
+                    sb.clear()
+                    i++
+                }
+                else -> {
+                    sb.append(c)
+                    i++
+                }
+            }
+        }
+        cells += sb.toString()
+        return cells
+    }
+
+    /**
+     * Process the line that follows a buffered prospective table header.
+     * If it parses as a valid separator with matching column count, commit
+     * the table (emit thead with the cached header cells, then defer the
+     * tbody mark until the first body row); otherwise replay the header
+     * line and the current line back through `Start` (with table detection
+     * suppressed) so they flow as a paragraph instead of re-entering
+     * TableHeaderPending in an infinite loop.
+     */
+    private suspend fun SemanticEventScope.processTableHeaderPending(
+        char: Char,
+        mode: BlockMode.TableHeaderPending
     ) {
         lineBuffer.append(char)
-        if (char == '\n') {
-            val line = lineBuffer.toString().trimEnd()
-            if (line matches Patterns.TABLE_SEPARATOR) {
-                // Separator row
-                unmark("thead")
-                mark("tbody")
-                tableHasBody = true
-                lineBuffer.clear()
-                replaceMode(BlockMode.TableBody)
-            } else if (line.startsWith("|")) {
-                // Another header row
-                "tr" {
-                    emitTableRow(line, isHeader = true)
-                }
-                lineBuffer.clear()
-            } else {
-                // End of table
-                unmark("thead")
-                unmark("table")
-                lineBuffer.clear()
-                replaceMode(BlockMode.Start)
-                if (line.isNotEmpty()) {
-                    replay(line)
+        if (char != '\n') return
+        val secondLine = lineBuffer.toString().trimEnd()
+        lineBuffer.clear()
+        val headerCells = splitTableCells(mode.headerLine.trimEnd())
+        val alignments = parseSeparatorAlignments(secondLine, headerCells.size)
+        if (alignments != null) {
+            mark("table")
+            mark("thead")
+            "tr" {
+                emitTableCells(headerCells, isHeader = true, alignments = alignments)
+            }
+            unmark("thead")
+            replaceMode(BlockMode.TableBody(headerCells.size, alignments))
+        } else {
+            replaceMode(BlockMode.Start)
+            suppressTableDetection = true
+            try {
+                replay(mode.headerLine)
+                process('\n')
+                if (secondLine.isNotEmpty()) {
+                    replay(secondLine)
                     process('\n')
                 }
+            } finally {
+                suppressTableDetection = false
             }
         }
     }
 
     private suspend fun SemanticEventScope.processTableBody(
-        char: Char
+        char: Char,
+        mode: BlockMode.TableBody
     ) {
         lineBuffer.append(char)
-        if (char == '\n') {
-            val line = lineBuffer.toString().trimEnd()
-            if (line.startsWith("|")) {
-                "tr" {
-                    emitTableRow(line, isHeader = false)
-                }
-                lineBuffer.clear()
-            } else {
-                // End of table
-                unmark("tbody")
-                unmark("table")
-                lineBuffer.clear()
-                replaceMode(BlockMode.Start)
-                if (line.isNotEmpty()) {
-                    replay(line)
-                    process('\n')
-                }
-            }
+        if (char != '\n') return
+        val line = lineBuffer.toString().trimEnd()
+        lineBuffer.clear()
+        if (line.isEmpty()) {
+            closeTableBody(mode)
+            replaceMode(BlockMode.Start)
+            return
+        }
+        // A `|`-prefixed line is always a row. A non-`|` line is a continuation
+        // row unless it would interrupt a paragraph (heading, blockquote, list,
+        // hr, fenced code, html block, …) — those break the table and replay.
+        val endsTable = !line.startsWith("|") && lineInterruptsParagraph(line)
+        if (endsTable) {
+            closeTableBody(mode)
+            replaceMode(BlockMode.Start)
+            replay(line)
+            process('\n')
+            return
+        }
+        emitBodyRow(mode, line)
+    }
+
+    private suspend fun SemanticEventScope.emitBodyRow(
+        mode: BlockMode.TableBody,
+        line: String
+    ) {
+        if (!mode.bodyOpened) {
+            mark("tbody")
+            mode.bodyOpened = true
+        }
+        val cells = splitTableCells(line)
+        "tr" {
+            emitTableCells(
+                cells,
+                isHeader = false,
+                alignments = mode.alignments,
+                columnCount = mode.columnCount
+            )
         }
     }
 
-    private suspend fun SemanticEventScope.emitTableRow(
-        line: String,
-        isHeader: Boolean
+    private suspend fun SemanticEventScope.closeTableBody(mode: BlockMode.TableBody) {
+        if (mode.bodyOpened) unmark("tbody")
+        unmark("table")
+    }
+
+    private suspend fun SemanticEventScope.emitTableCells(
+        cells: List<String>,
+        isHeader: Boolean,
+        alignments: List<String?>,
+        columnCount: Int = cells.size
     ) {
-        val cells = line.trim().removePrefix("|").removeSuffix("|").split("|")
-        val cellTag = if (isHeader) "th" else "td"
-        for (cell in cells) {
-            cellTag {
-                processInlineContent(cell.trim())
+        val tag = if (isHeader) "th" else "td"
+        for (i in 0 until columnCount) {
+            val align = alignments.getOrNull(i)
+            val attrs = align?.let { mapOf("align" to it) }
+            mark(tag, attributes = attrs)
+            val cell = cells.getOrNull(i)?.trim().orEmpty()
+            if (cell.isNotEmpty()) {
+                processInlineContent(cell)
                 flushInline()
             }
+            unmark(tag)
         }
     }
 
@@ -3980,26 +4133,58 @@ private class ParserState(
                     unmark("math")
                     replaceMode(Start)
                 }
-                Table -> {
-                    // An unterminated separator/header line is discarded — baseline
-                    // behavior: the partial line never got dispatched as a row.
+                is TableHeaderPending -> {
+                    // EOF before the second line was newline-terminated. If the
+                    // residual line in `lineBuffer` parses as a valid separator,
+                    // commit a header-only table; otherwise replay both as
+                    // ordinary content with table detection suppressed.
+                    val pendingTail = lineBuffer.toString().trimEnd()
                     lineBuffer.clear()
-                    unmark("thead")
-                    unmark("table")
-                    replaceMode(Start)
+                    val headerCells = splitTableCells(mode.headerLine.trimEnd())
+                    val alignments = if (pendingTail.isNotEmpty())
+                        parseSeparatorAlignments(pendingTail, headerCells.size)
+                    else null
+                    if (alignments != null) {
+                        mark("table")
+                        mark("thead")
+                        "tr" {
+                            emitTableCells(headerCells, isHeader = true, alignments = alignments)
+                        }
+                        unmark("thead")
+                        unmark("table")
+                        replaceMode(Start)
+                    } else {
+                        replaceMode(Start)
+                        suppressTableDetection = true
+                        try {
+                            replay(mode.headerLine)
+                            process('\n')
+                            if (pendingTail.isNotEmpty()) {
+                                replay(pendingTail)
+                                process('\n')
+                            }
+                        } finally {
+                            suppressTableDetection = false
+                        }
+                    }
                 }
-                TableBody -> {
+                is TableBody -> {
                     if (lineBuffer.isNotEmpty()) {
                         val line = lineBuffer.toString().trimEnd()
                         lineBuffer.clear()
-                        if (line.startsWith("|")) {
-                            "tr" {
-                                emitTableRow(line, isHeader = false)
+                        if (line.isNotEmpty()) {
+                            val endsTable = !line.startsWith("|") && lineInterruptsParagraph(line)
+                            if (endsTable) {
+                                closeTableBody(mode)
+                                replaceMode(Start)
+                                replay(line)
+                                process('\n')
+                                continue
                             }
+                            emitBodyRow(mode, line)
                         }
                     }
-                    unmark("tbody")
-                    unmark("table")
+                    closeTableBody(mode)
                     replaceMode(Start)
                 }
                 Start -> {
