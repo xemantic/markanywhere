@@ -1619,10 +1619,10 @@ private class ParserState(
         }
         val line = lineBuffer.toString()
         lineBuffer.clear()
-        if (line.isEmpty() || (isInsideBlockquote() && line.isBlank())) {
-            // Inside a blockquote, a line that is only whitespace after `>` prefix
-            // stripping (e.g. `>  ` → `" "`) is a blank-line-within-blockquote and
-            // closes the inner paragraph without ending the blockquote.
+        if (line.isBlank()) {
+            // GFM treats a whitespace-only line as a blank line (§4.9). At top level
+            // this closes the paragraph; inside a blockquote the same close happens
+            // here and the outer blockquote machinery preserves the blockquote frame.
             unmark("p")
             replaceMode(BlockMode.Start)
             paragraphTrailingSpaces = 0
