@@ -490,13 +490,13 @@ class IncrementalParsingTest {
             "ul" {
                 "li" {
                     "p" {
-                        "input"("type" to "checkbox", "disabled" to "") {}
+                        "input"("disabled" to "", "type" to "checkbox") {}
                         +" undone"
                     }
                 }
                 "li" {
                     "p" {
-                        "input"("type" to "checkbox", "checked" to "", "disabled" to "") {}
+                        "input"("checked" to "", "disabled" to "", "type" to "checkbox") {}
                         +" done"
                     }
                 }

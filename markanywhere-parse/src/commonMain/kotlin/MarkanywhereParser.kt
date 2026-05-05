@@ -1928,9 +1928,9 @@ private class ParserState(
         ) {
             val checked = content[1] != ' '
             if (checked) {
-                "input"("type" to "checkbox", "checked" to "", "disabled" to "") {}
+                "input"("checked" to "", "disabled" to "", "type" to "checkbox") {}
             } else {
-                "input"("type" to "checkbox", "disabled" to "") {}
+                "input"("disabled" to "", "type" to "checkbox") {}
             }
             processInlineContent(content.substring(3))
         } else {

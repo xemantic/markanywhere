@@ -771,13 +771,13 @@ class MarkanywhereParserTest {
             "ul" {
                 "li" {
                     "p" {
-                        "input"("type" to "checkbox", "disabled" to "") {}
+                        "input"("disabled" to "", "type" to "checkbox") {}
                         +" Unchecked task"
                     }
                 }
                 "li" {
                     "p" {
-                        "input"("type" to "checkbox", "checked" to "", "disabled" to "") {}
+                        "input"("checked" to "", "disabled" to "", "type" to "checkbox") {}
                         +" Checked task"
                     }
                 }
