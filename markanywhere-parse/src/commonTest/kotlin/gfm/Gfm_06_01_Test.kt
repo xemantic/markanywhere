@@ -330,12 +330,12 @@ class Gfm_06_01_Test {
         val parsed = textFlow.parse()
 
         // then
+        // Forward reference DIVERGENCE: `[foo]` is emitted before the
+        // definition is registered. The trailing definition is recognized and
+        // consumed silently (no second paragraph appears).
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
                 +"[foo]"
-            }
-            "p" {
-                +"[foo]: /bar* \"ti*tle\""
             }
         }
         // GFM expected:
