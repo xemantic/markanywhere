@@ -1101,7 +1101,7 @@ class MarkanywhereParserTest {
     @Test
     fun `should auto-close unclosed inline code marker at paragraph end`() = runTest {
         // given
-        
+
         val textFlow = """
             This has `unclosed code text.
         """.trimIndent().chunkedRandomly().asFlow()

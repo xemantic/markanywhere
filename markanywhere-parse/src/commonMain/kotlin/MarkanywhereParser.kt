@@ -319,19 +319,29 @@ private fun applyBackslashEscapes(s: String): String {
 }
 
 /**
- * Percent-encodes URL-unsafe characters in a link href the same way GFM/CommonMark
- * normalizes URLs. Currently only encodes `\` → `%5C`; the full URL normalization
- * (space → `%20`, non-ASCII → UTF-8 percent-encoding, etc.) is applied lazily by
- * other paths and can be expanded here later.
+ * Percent-encodes URL-unsafe ASCII characters in a link href the same way
+ * GFM/CommonMark normalizes URLs. Encodes `` ` `` → `%60`, `\` → `%5C`, space →
+ * `%20`, `<` → `%3C`, `>` → `%3E`, `"` → `%22`, `{` → `%7B`, `}` → `%7D`,
+ * `|` → `%7C`, `^` → `%5E`. Other characters (including already-percent-encoded
+ * sequences) pass through; non-ASCII handling is done by [percentEncodeNonAscii].
  */
 private fun normalizeUrlEscapes(s: String): String {
-    if ('\\' !in s) return s
+    if (s.none { it.code <= 0x7F && it in URL_UNSAFE_ASCII }) return s
     val out = StringBuilder(s.length)
     for (c in s) {
-        if (c == '\\') out.append("%5C") else out.append(c)
+        if (c.code <= 0x7F && c in URL_UNSAFE_ASCII) {
+            out.append('%')
+            out.append(HEX_DIGITS[(c.code ushr 4) and 0xF])
+            out.append(HEX_DIGITS[c.code and 0xF])
+        } else {
+            out.append(c)
+        }
     }
     return out.toString()
 }
+
+private val URL_UNSAFE_ASCII = setOf(' ', '"', '<', '>', '\\', '^', '`', '{', '|', '}')
+private val HEX_DIGITS = "0123456789ABCDEF".toCharArray()
 
 /**
  * UTF-8 percent-encode every non-ASCII char (code > 0x7F) in [s], leaving ASCII
@@ -1236,7 +1246,17 @@ private class ParserState(
      */
     private fun getInlineStateFastPathEnd(content: String, startIndex: Int): Int = when {
         escaped -> startIndex
-        code && codeRunLength == 1 -> findNextChar(content, startIndex, '`')
+        // N=1 code spans stream content as text events for typewriter UX — the
+        // fast-path emits a maximal run of non-backtick chars at once, stopping
+        // at the next `` ` `` so the run-length-matching tentative-close logic
+        // in `processInlineCharImpl` can take over. The `inlineBuffer.isEmpty()`
+        // guard is critical: once a tentative close `` ` `` has been buffered,
+        // the next non-` char must flow through `processInlineCharImpl` to
+        // resolve the close — fast-path would otherwise emit content past the
+        // unresolved buffer (turning `` `foo`bar` `` into `` `<code>foo`bar`</code> ``).
+        // N≥2 buffers everything and therefore must not fast-path.
+        code && codeRunLength == 1 && inlineBuffer.isEmpty() ->
+            findNextChar(content, startIndex, '`')
         code -> startIndex
         math -> findNextChar(content, startIndex, '$')
         inLinkUrl -> startIndex
@@ -4003,17 +4023,33 @@ private class ParserState(
             return
         }
 
-        // Inside code — close on a backtick run that exactly matches the opening run length (GFM §6.1).
+        // Inside code — close on a backtick run of *exactly* the opening run length
+        // (GFM §6.3). N=1 streams non-backtick content as text events for typewriter UX;
+        // backticks are tentatively buffered so a longer run can be recognized as
+        // content (e.g. ` `` ` keeps the inner `` `` `` as content of a 1-tick span)
+        // rather than closing. N≥2 buffers everything since the strip rule needs full
+        // content visibility at close. An opener with no matching closer force-closes
+        // at `flushInline` (deliberate streaming divergence — see CLAUDE.md, examples
+        // 357/358/359).
         if (code) {
             if (codeRunLength == 1) {
-                // Single-tick code: stream content; any backtick closes.
                 if (char == '`') {
-                    unmark("code")
-                    code = false
-                    codeRunLength = 0
-                } else {
-                    +char
+                    inlineBuffer.append('`')
+                    return
                 }
+                if (inlineBuffer.isNotEmpty()) {
+                    if (inlineBuffer.length == 1) {
+                        inlineBuffer.clear()
+                        unmark("code")
+                        code = false
+                        codeRunLength = 0
+                        pendingDeferredChar = char
+                        return
+                    }
+                    +inlineBuffer.toString()
+                    inlineBuffer.clear()
+                }
+                +char
                 return
             }
             // N>=2: buffer all chars; close on a non-backtick when the trailing
@@ -4028,7 +4064,8 @@ private class ParserState(
             ) trail++
             if (trail == codeRunLength) {
                 var content = inlineBuffer.substring(0, inlineBuffer.length - trail)
-                if (content.startsWith(" ") && content.endsWith(" ") && content.length > 1) {
+                if (content.startsWith(" ") && content.endsWith(" ") && content.length > 1
+                    && content.any { it != ' ' }) {
                     content = content.substring(1, content.length - 1)
                 }
                 +content
@@ -4557,23 +4594,37 @@ private class ParserState(
         // Same idea for entity refs: an unterminated `&copy` at block end must
         // survive as literal source, not silently disappear.
         if (inEntityRef) abortEntityRef()
-        // Close inline code first so a buffered close-run (N≥2 backticks) at line/block
-        // end is recognized as a valid close, not flushed as content + force-close.
+        // Close inline code: an N≥2 buffered close-run at the boundary is recognized
+        // as a valid close (with strip rule). For N=1 a tentative single-` in the
+        // buffer counts as the close; a longer run is content. Otherwise, force-close
+        // — the `<code>` mark was committed at open and cannot be retracted in this
+        // append-only stream, so unmatched openers visibly close as `<code>…</code>`
+        // (deliberate streaming divergence from GFM, see CLAUDE.md).
         if (code) {
-            var trail = 0
-            while (trail < inlineBuffer.length &&
-                inlineBuffer[inlineBuffer.length - 1 - trail] == '`'
-            ) trail++
-            if (trail == codeRunLength && codeRunLength >= 2) {
-                var content = inlineBuffer.substring(0, inlineBuffer.length - trail)
-                if (content.startsWith(" ") && content.endsWith(" ") && content.length > 1) {
-                    content = content.substring(1, content.length - 1)
+            if (codeRunLength == 1) {
+                if (inlineBuffer.length == 1) {
+                    inlineBuffer.clear()
+                } else if (inlineBuffer.isNotEmpty()) {
+                    +inlineBuffer.toString()
+                    inlineBuffer.clear()
                 }
-                +content
-            } else if (inlineBuffer.isNotEmpty()) {
-                +inlineBuffer.toString()
+            } else {
+                var trail = 0
+                while (trail < inlineBuffer.length &&
+                    inlineBuffer[inlineBuffer.length - 1 - trail] == '`'
+                ) trail++
+                if (trail == codeRunLength) {
+                    var content = inlineBuffer.substring(0, inlineBuffer.length - trail)
+                    if (content.startsWith(" ") && content.endsWith(" ") && content.length > 1
+                        && content.any { it != ' ' }) {
+                        content = content.substring(1, content.length - 1)
+                    }
+                    +content
+                } else if (inlineBuffer.isNotEmpty()) {
+                    +inlineBuffer.toString()
+                }
+                inlineBuffer.clear()
             }
-            inlineBuffer.clear()
             unmark("code")
             code = false
             codeRunLength = 0
