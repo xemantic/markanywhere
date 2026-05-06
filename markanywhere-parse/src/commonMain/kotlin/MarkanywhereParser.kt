@@ -974,11 +974,8 @@ private class ParserState(
     private val blockquoteFailedLineBuffer = StringBuilder()
 
     // Inline state
-    private var bold = false
-    private var italic = false
     private var code = false
     private var strikethrough = false
-    private var subscript = false
     private var superscript = false
     private var highlight = false
     private var math = false
@@ -995,12 +992,20 @@ private class ParserState(
     private var codeRunLength = 0
     private var inlineBuffer = StringBuilder()
 
-    // Stack of inline HTML open tag names (source casing) that have emitted a
-    // `mark` but not yet a matching `unmark` within the current inline run.
-    // Drained at every `flushInline` so the event stream is *always* balanced
-    // — every `mark` is paired with an `unmark`, even when the source omits
-    // the closer (e.g. `<bar>` with no `</bar>` in the same paragraph).
-    private val inlineHtmlOpenTags = ArrayDeque<String>()
+    // Unified stack of in-flight inline opens — emphasis (`em`/`strong`) and
+    // inline HTML tags — recorded in the order they were emitted. A single
+    // stack is required to preserve LIFO close order across the two: a
+    // `<strong>` opened *inside* an outer `<em>` must close *before* the em,
+    // even when the matching `*` arrives first. Drained top-to-bottom in
+    // `flushInline` so the event stream is *always* balanced — every `mark`
+    // pairs with an `unmark`, including for sources that omit the closer
+    // (e.g. `*foo` with no closing `*` in the same paragraph) or close tags
+    // out of order.
+    private data class InlineOpenFrame(val name: String, val isTagged: Boolean)
+    private val inlineOpenStack = ArrayDeque<InlineOpenFrame>()
+
+    private fun isInlineOpen(name: String): Boolean =
+        inlineOpenStack.any { !it.isTagged && it.name == name }
 
     // After resolving a buffered marker (e.g. "*"), the trailing char is left
     // unconsumed so the outer loop's fast-path can coalesce it with subsequent
@@ -1098,9 +1103,15 @@ private class ParserState(
     }
 
     // CommonMark emphasis flanking helpers. Block boundaries (null) count as
-    // Unicode whitespace per spec.
-    private fun Char?.isFlankWhitespace(): Boolean =
-        this == null || this == ' ' || this == '\t' || this == '\n' || this == '\r'
+    // Unicode whitespace per spec. Per CommonMark, "Unicode whitespace" is any
+    // char in Unicode general category `Zs` (which already includes ASCII space
+    // and NBSP) plus tab, line feed, form feed, and carriage return — so e.g.
+    // `* a *` with NBSPs around `a` is non-flanking on both sides.
+    private fun Char?.isFlankWhitespace(): Boolean {
+        val c = this ?: return true
+        return c == '\t' || c == '\n' || c == '\u000C' || c == '\r' ||
+            c.category == CharCategory.SPACE_SEPARATOR
+    }
 
     private fun Char?.isFlankPunct(): Boolean {
         val c = this ?: return false
@@ -1140,10 +1151,14 @@ private class ParserState(
      * the run can open and/or close; if it can do neither (e.g. `_` between
      * whitespace), emits the run as literal text.
      *
-     * Matching of openers to closers uses the existing italic/bold toggle state
-     * rather than a full CommonMark delimiter stack — sufficient for non-nested
-     * cases. Orphan openers/closers can still leak empty `<em>`/`<strong>`
-     * pairs at block end; those cases are tracked as DIVERGENCE in tests.
+     * Closes via [closeInlineDownTo] so any inner inline frames (other emphasis
+     * or HTML tags opened *inside* the one being closed) are force-closed first
+     * — the LIFO drain keeps the event stream balanced even when the source
+     * delimiter ordering would cross. When the run can't legitimately close
+     * (no matching opener on the stack) and can't open (already open with
+     * same name), the delimiters are emitted as literal text rather than
+     * force-closing the wrong opener — closer to spec than the previous
+     * fallback-close behavior.
      *
      * [next] is the char immediately after the run; null = block boundary
      * (Unicode whitespace per spec).
@@ -1158,37 +1173,78 @@ private class ParserState(
             +runChar.toString().repeat(runLen)
             return
         }
+        val emOpen = isInlineOpen("em")
+        val strongOpen = isInlineOpen("strong")
         when (runLen) {
             1 -> when {
-                canClose && italic -> { unmark("em"); italic = false }
-                canOpen && !italic -> { mark("em"); italic = true }
-                italic -> { unmark("em"); italic = false }
+                canClose && emOpen -> closeInlineDownTo("em", isTagged = false)
+                canOpen && !emOpen -> openInlineEmphasis("em")
                 else -> +runChar.toString()
             }
             2 -> when {
-                canClose && bold -> { unmark("strong"); bold = false }
-                canOpen && !bold -> { mark("strong"); bold = true }
-                bold -> { unmark("strong"); bold = false }
+                canClose && strongOpen -> closeInlineDownTo("strong", isTagged = false)
+                canOpen && !strongOpen -> openInlineEmphasis("strong")
                 else -> +runChar.toString().repeat(2)
             }
             else -> when {
-                canClose && bold && italic -> {
-                    unmark("em"); italic = false
-                    unmark("strong"); bold = false
+                canClose && strongOpen && emOpen -> {
+                    // Close the inner first, then the outer — opening order on
+                    // the stack tells us which is which.
+                    closeInlineDownTo("em", isTagged = false)
+                    closeInlineDownTo("strong", isTagged = false)
                 }
-                canOpen && !bold && !italic -> {
-                    mark("strong"); bold = true
-                    mark("em"); italic = true
+                canClose && strongOpen -> {
+                    // 2 of the 3 delimiters close strong; the remaining 1 opens
+                    // em if it can, else falls through as literal.
+                    closeInlineDownTo("strong", isTagged = false)
+                    if (canOpen) openInlineEmphasis("em") else +runChar.toString()
                 }
-                bold && italic -> {
-                    unmark("em"); italic = false
-                    unmark("strong"); bold = false
+                canClose && emOpen -> {
+                    // 1 of the 3 delimiters closes em; the remaining 2 open
+                    // strong if they can, else fall through as literal.
+                    closeInlineDownTo("em", isTagged = false)
+                    if (canOpen) openInlineEmphasis("strong") else +runChar.toString().repeat(2)
                 }
-                bold -> { unmark("strong"); bold = false; mark("em"); italic = true }
-                italic -> { unmark("em"); italic = false; mark("strong"); bold = true }
-                else -> { mark("strong"); bold = true; mark("em"); italic = true }
+                canOpen && !strongOpen && !emOpen -> {
+                    // ***foo***: outer strong, inner em — closes em first via LIFO.
+                    openInlineEmphasis("strong")
+                    openInlineEmphasis("em")
+                }
+                else -> +runChar.toString().repeat(3)
             }
         }
+    }
+
+    /**
+     * Open an emphasis tag and push it onto [inlineOpenStack].
+     */
+    private suspend fun SemanticEventScope.openInlineEmphasis(name: String) {
+        mark(name)
+        inlineOpenStack.addLast(InlineOpenFrame(name, isTagged = false))
+    }
+
+    /**
+     * Close down to the topmost frame matching [name] + [isTagged], emitting
+     * `unmark` for every frame along the way (LIFO). Returns false if no
+     * matching frame is found; the caller is responsible for the literal
+     * fallback in that case.
+     */
+    private suspend fun SemanticEventScope.closeInlineDownTo(
+        name: String,
+        isTagged: Boolean,
+        nameIgnoreCase: Boolean = false
+    ): Boolean {
+        val idx = inlineOpenStack.indexOfLast {
+            it.isTagged == isTagged && (
+                if (nameIgnoreCase) it.name.equals(name, ignoreCase = true) else it.name == name
+                )
+        }
+        if (idx < 0) return false
+        while (inlineOpenStack.size > idx) {
+            val frame = inlineOpenStack.removeLast()
+            unmark(frame.name, isTagged = frame.isTagged)
+        }
+        return true
     }
 
     /**
@@ -4216,23 +4272,19 @@ private class ParserState(
                             if (tag.selfClosing) {
                                 unmark(tag.name, isTagged = true)
                             } else {
-                                inlineHtmlOpenTags.addLast(tag.name)
+                                inlineOpenStack.addLast(InlineOpenFrame(tag.name, isTagged = true))
                             }
                         } else if (close != null && close.first == full.length &&
                             close.second.name.lowercase() !in INLINE_HTML_BLOCK_ELEMENTS
                         ) {
                             // Match against the most recent open whose name equals (case-insensitive).
-                            // Pop everything above it, emitting balancing `unmark` for each — keeps
-                            // the stream LIFO-balanced even if the source closes out of order.
-                            // Orphan close (no matching open): fall back to literal text rather
-                            // than emit an unbalanced `unmark`.
+                            // `closeInlineDownTo` pops every inline frame above the match —
+                            // including non-HTML emphasis frames opened *inside* the HTML element
+                            // — emitting their balancing `unmark`s LIFO. Orphan close (no matching
+                            // open): fall back to literal text rather than emit an unbalanced
+                            // `unmark`.
                             val name = close.second.name
-                            val matchIdx = inlineHtmlOpenTags.indexOfLast { it.equals(name, ignoreCase = true) }
-                            if (matchIdx >= 0) {
-                                while (inlineHtmlOpenTags.size > matchIdx) {
-                                    unmark(inlineHtmlOpenTags.removeLast(), isTagged = true)
-                                }
-                            } else {
+                            if (!closeInlineDownTo(name, isTagged = true, nameIgnoreCase = true)) {
                                 +"<${applyBackslashEscapes(content)}>"
                             }
                         } else {
@@ -4342,12 +4394,12 @@ private class ParserState(
             }
             inlineBuffer.toString() == "~" && char != '~' -> {
                 inlineBuffer.clear()
-                if (subscript) {
-                    unmark("sub")
-                    subscript = false
+                if (strikethrough) {
+                    unmark("del")
+                    strikethrough = false
                 } else {
-                    mark("sub")
-                    subscript = true
+                    mark("del")
+                    strikethrough = true
                 }
                 pendingDeferredChar = char
             }
@@ -4642,7 +4694,7 @@ private class ParserState(
                 "_" -> resolveEmphasisRun('_', 1, null)
                 "__" -> resolveEmphasisRun('_', 2, null)
                 "___" -> resolveEmphasisRun('_', 3, null)
-                "~~" -> when {
+                "~", "~~" -> when {
                     strikethrough -> { unmark("del"); strikethrough = false }
                     else -> { mark("del"); strikethrough = true }
                 }
@@ -4661,27 +4713,17 @@ private class ParserState(
             unmark("sup")
             superscript = false
         }
-        if (subscript) {
-            unmark("sub")
-            subscript = false
-        }
         if (strikethrough) {
             unmark("del")
             strikethrough = false
         }
-        if (italic) {
-            unmark("em")
-            italic = false
-        }
-        if (bold) {
-            unmark("strong")
-            bold = false
-        }
-        // Drain any unclosed inline HTML opens so the stream stays balanced.
-        // LIFO order matches CommonMark's nesting expectation; the inline
-        // HTML opens were tracked in `inlineHtmlOpenTags` as they were emitted.
-        while (inlineHtmlOpenTags.isNotEmpty()) {
-            unmark(inlineHtmlOpenTags.removeLast(), isTagged = true)
+        // Drain any unclosed inline opens — emphasis (`em`/`strong`) and HTML
+        // tags share a single stack so they pop in *opening order*. A
+        // `<strong>` opened inside an outer `<em>` closes *before* the em
+        // here, never after — required to keep the event stream balanced.
+        while (inlineOpenStack.isNotEmpty()) {
+            val frame = inlineOpenStack.removeLast()
+            unmark(frame.name, isTagged = frame.isTagged)
         }
         escaped = false
         // Reset flanking state so the next inline run starts at a block boundary
