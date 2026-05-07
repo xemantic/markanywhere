@@ -59,7 +59,6 @@ class Gfm_06_13_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 674 - paragraph foo baz`() = runTest {
         // given
