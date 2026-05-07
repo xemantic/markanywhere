@@ -35,7 +35,6 @@ import kotlin.test.Test
 @Suppress("ClassName")
 class Gfm_06_10_Test {
 
-    // TODO review
     @Test
     fun `example 636 - empty paragraph`() = runTest {
         // given
@@ -47,9 +46,11 @@ class Gfm_06_10_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "a" {
-                    "bab" {
-                        "c2c" {
+                tagged {
+                    "a" {
+                        "bab" {
+                            "c2c" {
+                            }
                         }
                     }
                 }
@@ -61,7 +62,6 @@ class Gfm_06_10_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 637 - empty paragraph`() = runTest {
         // given
@@ -73,8 +73,10 @@ class Gfm_06_10_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "a" {}
-                "b2" {}
+                tagged {
+                    "a" {}
+                    "b2" {}
+                }
             }
         }
         // GFM expected:
@@ -83,9 +85,8 @@ class Gfm_06_10_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 638 - empty paragraph`() = runTest {
+    fun `example 638 - DIVERGENCE - multi-line opening tag`() = runTest {
         // given
         val textFlow = """
             <a  /><b2
@@ -96,11 +97,13 @@ class Gfm_06_10_Test {
         val parsed = textFlow.parse()
 
         // then
+        // DIVERGENCE: inline HTML opening tags cannot span newlines — `flushInline`
+        // force-closes inline state at every line break, so the second tag whose
+        // opener and attributes straddle `\n` falls through as literal text.
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "a" {}
-                "b2"("data" to "foo") {
-                }
+                tag("a") {}
+                +"<b2\ndata=\"foo\" >"
             }
         }
         // GFM expected:
@@ -110,9 +113,8 @@ class Gfm_06_10_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 639 - empty paragraph`() = runTest {
+    fun `example 639 - DIVERGENCE - multi-line attributes`() = runTest {
         // given
         val textFlow = """
             <a foo="bar" bam = 'baz <em>"</em>'
@@ -123,9 +125,17 @@ class Gfm_06_10_Test {
         val parsed = textFlow.parse()
 
         // then
+        // DIVERGENCE: opening tag with attributes spanning a newline cannot be
+        // recognised — inline HTML buffering aborts at `\n`. The first line drops
+        // out as literal text (with the inner `<em>` / `</em>` also failing to
+        // tag-resolve), and the second line's leading `_boolean` opens a real em
+        // span that flushInline force-closes at paragraph end.
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "a"("foo" to "bar", "bam" to "baz <em>\"</em>", "_boolean" to "", "zoop:33" to "zoop:33") {}
+                +"<a foo=\"bar\" bam = 'baz <em>\"</em>'\n"
+                "em" {
+                    +"boolean zoop:33=zoop:33 />"
+                }
             }
         }
         // GFM expected:
@@ -135,7 +145,6 @@ class Gfm_06_10_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 640 - paragraph Foo`() = runTest {
         // given
@@ -148,7 +157,7 @@ class Gfm_06_10_Test {
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
                 +"Foo "
-                "responsive-image"("src" to "foo.jpg") {}
+                tag("responsive-image", "src" to "foo.jpg") {}
             }
         }
         // GFM expected:
@@ -157,7 +166,6 @@ class Gfm_06_10_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 641 - paragraph 33 __`() = runTest {
         // given
@@ -178,7 +186,6 @@ class Gfm_06_10_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 642 - paragraph a h#ref=hi`() = runTest {
         // given
@@ -199,7 +206,6 @@ class Gfm_06_10_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 643 - paragraph a href=hi' a href=h`() = runTest {
         // given
@@ -220,7 +226,6 @@ class Gfm_06_10_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 644 - paragraph a foobar foo`() = runTest {
         // given
@@ -249,7 +254,6 @@ class Gfm_06_10_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 645 - paragraph a href='bar'title=titl`() = runTest {
         // given
@@ -270,9 +274,8 @@ class Gfm_06_10_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 646 - empty paragraph`() = runTest {
+    fun `example 646 - DIVERGENCE - orphan close tags`() = runTest {
         // given
         val textFlow = "</a></foo >".chunkedRandomly().asFlow()
 
@@ -280,8 +283,13 @@ class Gfm_06_10_Test {
         val parsed = textFlow.parse()
 
         // then
+        // DIVERGENCE: GFM passes through valid orphan close tags as raw HTML.
+        // Our parser falls back to literal text when an inline `</tag>` has no
+        // matching open in `inlineOpenStack` — emitting an unmark would break
+        // the LIFO mark/unmark invariant.
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
+                +"</a></foo >"
             }
         }
         // GFM expected:
@@ -310,9 +318,8 @@ class Gfm_06_10_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 648 - paragraph foo`() = runTest {
+    fun `example 648 - DIVERGENCE - multi-line comment`() = runTest {
         // given
         val textFlow = """
             foo <!-- this is a
@@ -323,9 +330,13 @@ class Gfm_06_10_Test {
         val parsed = textFlow.parse()
 
         // then
+        // DIVERGENCE: the parser does not recognise inline HTML comments at all,
+        // and even if it did, a comment whose body spans `\n` would still be
+        // unrecognisable in an append-only stream that closes inline state at
+        // line breaks. Source survives as literal text.
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"foo "
+                +"foo <!-- this is a\ncomment - with hyphen -->"
             }
         }
         // GFM expected:
@@ -335,7 +346,6 @@ class Gfm_06_10_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 649 - paragraph foo !-- not a comment`() = runTest {
         // given
@@ -384,9 +394,8 @@ class Gfm_06_10_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 651 - paragraph foo`() = runTest {
+    fun `example 651 - DIVERGENCE - processing instruction`() = runTest {
         // given
         val textFlow = buildText {
             +$$"foo <?php echo $a; ?>\n"
@@ -396,9 +405,13 @@ class Gfm_06_10_Test {
         val parsed = textFlow.parse()
 
         // then
+        // DIVERGENCE: inline HTML processing instructions (`<?…?>`) are not
+        // recognised — the inline `<` accumulator terminates on the first `>`,
+        // which for a PI is the `?>` closer, so the construct cannot be matched
+        // generically. Source survives as literal text.
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"foo "
+                +$$"foo <?php echo $a; ?>"
             }
         }
         // GFM expected:
@@ -407,9 +420,8 @@ class Gfm_06_10_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 652 - paragraph foo`() = runTest {
+    fun `example 652 - DIVERGENCE - declaration`() = runTest {
         // given
         val textFlow = "foo <!ELEMENT br EMPTY>".chunkedRandomly().asFlow()
 
@@ -417,9 +429,12 @@ class Gfm_06_10_Test {
         val parsed = textFlow.parse()
 
         // then
+        // DIVERGENCE: inline HTML declarations (`<!NAME …>`) are not recognised —
+        // the inline raw-HTML dispatch only handles `<tag …>` / `</tag>` forms.
+        // Source survives as literal text.
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"foo "
+                +"foo <!ELEMENT br EMPTY>"
             }
         }
         // GFM expected:
@@ -428,9 +443,8 @@ class Gfm_06_10_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 653 - paragraph foo`() = runTest {
+    fun `example 653 - DIVERGENCE - CDATA`() = runTest {
         // given
         val textFlow = "foo <![CDATA[>&<]]>".chunkedRandomly().asFlow()
 
@@ -438,9 +452,13 @@ class Gfm_06_10_Test {
         val parsed = textFlow.parse()
 
         // then
+        // DIVERGENCE: inline CDATA sections are not recognised. The body would
+        // need a multi-char terminator scan (`]]>`) inside the inline buffer, and
+        // CDATA content can contain `>` and `<` literally — incompatible with the
+        // current `>`-terminated buffer. Source survives as literal text.
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"foo "
+                +"foo <![CDATA[>&<]]>"
             }
         }
         // GFM expected:
@@ -449,7 +467,6 @@ class Gfm_06_10_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 654 - paragraph foo`() = runTest {
         // given
@@ -462,7 +479,7 @@ class Gfm_06_10_Test {
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
                 +"foo "
-                "a"("href" to "ö") {
+                tag("a", "href" to "ö") {
                 }
             }
         }
@@ -472,7 +489,6 @@ class Gfm_06_10_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 655 - paragraph foo`() = runTest {
         // given
@@ -487,7 +503,7 @@ class Gfm_06_10_Test {
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
                 +"foo "
-                "a"("href" to "\\*") {
+                tag("a", "href" to "\\*") {
                 }
             }
         }

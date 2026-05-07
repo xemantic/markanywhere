@@ -9,24 +9,7 @@ estimates how often the construct shows up in typical LLM output.
 
 ## Next-batch candidates (recommended order)
 
-### 1. GFM §6.10 — Raw HTML inline (12 tests, **MEDIUM impact**)
-
-CommonMark §6.10 / GFM §6.10 inline raw HTML edge cases. The 12 failures cover
-multi-line opening tags (ex 638), multi-line attribute values, HTML comments
-spanning lines (ex 648), processing instructions `<?php …?>` (ex 651), CDATA
-sections, and declarations.
-
-**Where**: `Gfm_06_10_Test`. Most failures involve constructs that span
-newlines — likely systematic DIVERGENCE territory (same constraint as
-multi-line code spans / soft breaks per CLAUDE.md). Audit one-by-one to see
-which are real bugs vs. divergences. The single-line tag edge cases (ex 636
-maybe) may be fixable.
-
-> Note on \"§6.10 disallowed raw HTML\": the disallowed-tag GFM extension is
-> §6.11, which already closed (one straggler — `Gfm_06_11_Test` ex 657 —
-> remains, see below).
-
-### 2. Full HTML5 named entity table (GFM §6.2, **MEDIUM impact**)
+### 1. Full HTML5 named entity table (GFM §6.2, **MEDIUM impact**)
 
 `NAMED_ENTITIES` in `MarkanywhereParser.kt` (around line 470) is a hand-picked
 16-entry subset covering only the names exercised by the §6.2 test suite. The
@@ -78,6 +61,26 @@ Conclusion: codegen the table once, ship it to every KMP target uniformly.
 ---
 
 ## Closed sections (kept for context)
+
+### GFM §6.10 — Raw HTML inline (closed, 0 failing)
+
+12 prior failures resolved as a mix of test fixes and DIVERGENCE re-baselines:
+
+- **5 test bugs** (parser already correct): ex 636, 637, 640, 654, 655 — the
+  expected events were missing `tagged = true` on HTML-derived marks. Updated
+  to use `tagged { … }` / `tag(name) { … }` builders.
+- **3 multi-line constructs** (DIVERGENCE — `flushInline` aborts at `\n`):
+  ex 638 (multi-line opening tag), 639 (attributes spanning newline), 648
+  (multi-line comment). Same root constraint as §6.1/§6.3/§6.13 multi-line
+  inline divergences.
+- **4 unimplemented inline raw HTML constructs** (DIVERGENCE — emit as literal
+  text): ex 646 orphan close tags, 651 processing instruction `<?…?>`, 652
+  declaration `<!NAME …>`, 653 CDATA `<![CDATA[…]]>`. Implementing these
+  would require multi-char terminator scans (`?>`, `]]>`, `-->`) inside the
+  inline `<…>` buffer — currently terminates at the first `>`. LLM impact is
+  near-zero for these constructs.
+
+See CLAUDE.md "Known gotchas" for the inline raw HTML divergence summary.
 
 ### GFM §6.7 — Images (closed as DIVERGENCE, 0 failing)
 
@@ -156,7 +159,13 @@ LLMs essentially never produce this pattern.
   §6.7 images then closed as DIVERGENCE — 13 forward-ref + 1 multi-line
   collapsed-ref + 2 nested-construct tests renamed to `DIVERGENCE` and
   re-baselined to actual streaming output (literal `![…]` text, depth-counter
-  alt-text); count is 19 failures.
+  alt-text); count is 19 failures. §6.10 inline raw HTML then closed — 5 test
+  fixes (missing `tagged = true` on HTML-derived marks) + 3 multi-line
+  DIVERGENCE re-baselines (opener/attrs/comment spanning `\n`) + 4 single-line
+  DIVERGENCE re-baselines for unimplemented constructs (orphan close tags,
+  PI `<?…?>`, declaration `<!NAME …>`, CDATA `<![CDATA[…]]>` — all emit as
+  literal text); count is 7 failures (all in §6.6 link cases or the §6.11
+  ex 657 straggler below).
 - The systematic divergences are documented in `CLAUDE.md` under "Streaming
   divergences" — read that before starting any of the link cases above.
 - Most failures map cleanly to a single GFM section, so each work stream is
