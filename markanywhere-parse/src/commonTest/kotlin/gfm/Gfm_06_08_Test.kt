@@ -376,9 +376,14 @@ class Gfm_06_08_Test {
          */
     }
 
-    // TODO review
+    // DIVERGENCE: GFM expects `<m:abc>` to render as literal text because a
+    // 1-letter scheme is too short for a URI autolink and `:` is not allowed in
+    // a standard HTML tag name. This parser's custom-markup extension (see
+    // `parseCustomMarkupOpeningTag` and the `<foo:bar>...</foo:bar>` block test)
+    // intentionally treats a `<namespace:name>` line at block boundary as a
+    // custom-markup opener.
     @Test
-    fun `example 618 - paragraph mabc`() = runTest {
+    fun `example 618 - DIVERGENCE - paragraph mabc as custom markup opener`() = runTest {
         // given
         val textFlow = "<m:abc>".chunkedRandomly().asFlow()
 
@@ -386,10 +391,8 @@ class Gfm_06_08_Test {
         val parsed = textFlow.parse()
 
         // then
-        parsed.mergeAdjacentText() sameAs semanticEvents {
-            "p" {
-                +"<m:abc>"
-            }
+        parsed.mergeAdjacentText() sameAs semanticEvents(tagged = true) {
+            "m:abc" {}
         }
         // GFM expected:
         /*

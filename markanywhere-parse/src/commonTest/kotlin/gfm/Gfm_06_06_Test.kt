@@ -1065,7 +1065,7 @@ class Gfm_06_06_Test {
     }
 
     @Test
-    fun `example 535 - DIVERGENCE - foohttpexamplecom autolink in label`() = runTest {
+    fun `example 535 - foohttpexamplecom autolink in label`() = runTest {
         // given
         val textFlow = "[foo<http://example.com/?search=](uri)>".chunkedRandomly().asFlow()
 
@@ -1073,14 +1073,12 @@ class Gfm_06_06_Test {
         val parsed = textFlow.parse()
 
         // then
-        // The autolink `<...>` consumes the `](` chars. Outer label never
-        // closes; aborts to `[foo` + the autolink. DIVERGENCE: the autolink
-        // href does not percent-encode `]` (URL_UNSAFE_ASCII doesn't include
-        // it), so href has the raw `](uri)`. Spec encodes `]` → `%5D`.
+        // The autolink `<...>` takes precedence over link parsing and consumes
+        // the `](` chars; outer label aborts, replaying `[foo` as literal.
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
                 +"[foo"
-                "a"("href" to "http://example.com/?search=](uri)") {
+                "a"("href" to "http://example.com/?search=%5D(uri)") {
                     +"http://example.com/?search=](uri)"
                 }
             }
@@ -1408,7 +1406,7 @@ class Gfm_06_06_Test {
     }
 
     @Test
-    fun `example 547 - DIVERGENCE - forward ref with autolink in label`() = runTest {
+    fun `example 547 - forward ref with autolink in label`() = runTest {
         // given
         val textFlow = """
             [foo<http://example.com/?search=][ref]>
@@ -1420,15 +1418,14 @@ class Gfm_06_06_Test {
         val parsed = textFlow.parse()
 
         // then
-        // Autolink inside the label captures the `]` chars; no tentative
-        // close fires. Outer label aborts; replay emits the literal `[foo`
-        // followed by the autolink as a real `<a>` element. Since the
-        // autolink href percent-encoding is not done by the in-label autolink
-        // path, it surfaces unencoded `]` and `[` in the href.
+        // Autolink takes precedence: `<...>` swallows `][ref]`; outer label
+        // aborts, emitting literal `[foo` followed by the autolink. The
+        // trailing `[ref]: /uri` is a link reference definition and is
+        // silently consumed.
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
                 +"[foo"
-                "a"("href" to "http://example.com/?search=][ref]") {
+                "a"("href" to "http://example.com/?search=%5D%5Bref%5D") {
                     +"http://example.com/?search=][ref]"
                 }
             }

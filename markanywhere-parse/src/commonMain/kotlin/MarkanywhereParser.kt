@@ -401,8 +401,67 @@ private fun normalizeUrlEscapes(s: String): String {
     return out.toString()
 }
 
-private val URL_UNSAFE_ASCII = setOf(' ', '"', '<', '>', '\\', '^', '`', '{', '|', '}')
+private val URL_UNSAFE_ASCII = setOf(' ', '"', '<', '>', '[', '\\', ']', '^', '`', '{', '|', '}')
 private val HEX_DIGITS = "0123456789ABCDEF".toCharArray()
+
+/**
+ * GFM §6.8 URI-autolink validation: scheme `[A-Za-z][A-Za-z0-9+.-]{1,31}`,
+ * a `:`, then any chars except space, ASCII control, `<`, `>`. Backslash
+ * escapes do not apply inside autolinks, so [content] is the raw buffer.
+ */
+private fun isValidUriAutolink(content: String): Boolean {
+    val colonIdx = content.indexOf(':')
+    if (colonIdx !in 2..32) return false
+    val first = content[0]
+    if (!(first in 'A'..'Z' || first in 'a'..'z')) return false
+    for (i in 1 until colonIdx) {
+        val c = content[i]
+        if (!(c in 'A'..'Z' || c in 'a'..'z' || c in '0'..'9' ||
+              c == '+' || c == '-' || c == '.')) return false
+    }
+    for (i in colonIdx + 1 until content.length) {
+        val c = content[i]
+        if (c == ' ' || c == '<' || c == '>' || c.code < 0x20 || c.code == 0x7F) return false
+    }
+    return true
+}
+
+/**
+ * GFM §6.8 email-autolink regex:
+ *   `[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*`
+ */
+private fun isValidEmailAutolink(content: String): Boolean {
+    val atIdx = content.indexOf('@')
+    if (atIdx <= 0 || atIdx == content.length - 1) return false
+    for (i in 0 until atIdx) {
+        val c = content[i]
+        if (!(c in 'A'..'Z' || c in 'a'..'z' || c in '0'..'9' ||
+              c in EMAIL_LOCAL_PART_PUNCT)) return false
+    }
+    var i = atIdx + 1
+    while (i < content.length) {
+        val labelStart = i
+        while (i < content.length && content[i] != '.') i++
+        val labelEnd = i
+        val labelLen = labelEnd - labelStart
+        if (labelLen == 0 || labelLen > 63) return false
+        val firstC = content[labelStart]
+        val lastC = content[labelEnd - 1]
+        if (!(firstC in 'A'..'Z' || firstC in 'a'..'z' || firstC in '0'..'9')) return false
+        if (!(lastC in 'A'..'Z' || lastC in 'a'..'z' || lastC in '0'..'9')) return false
+        for (j in labelStart until labelEnd) {
+            val c = content[j]
+            if (!(c in 'A'..'Z' || c in 'a'..'z' || c in '0'..'9' || c == '-')) return false
+        }
+        if (i < content.length) i++ // consume `.`
+    }
+    return true
+}
+
+private val EMAIL_LOCAL_PART_PUNCT = setOf(
+    '.', '!', '#', '$', '%', '&', '\'', '*', '+', '/', '=', '?',
+    '^', '_', '`', '{', '|', '}', '~', '-'
+)
 
 /**
  * UTF-8 percent-encode every non-ASCII char (code > 0x7F) in [s], leaving ASCII
@@ -621,6 +680,13 @@ private fun tryParseOpenTag(s: String, start: Int): Pair<Int, HtmlToken.OpenTag>
     var i = start + 1
     while (i < s.length && (s[i].isLetterOrDigit() || s[i] == '-')) i++
     val name = s.substring(start + 1, i)
+    // CommonMark: each attribute requires preceding whitespace, so the char
+    // immediately after the tag name must be whitespace, `>`, or `/` (self-close).
+    // Otherwise constructs like `<m:abc>` would parse as tag `m` with attribute
+    // `:abc`, which is invalid HTML.
+    if (i < s.length && s[i] != ' ' && s[i] != '\t' && s[i] != '\n' &&
+        s[i] != '>' && s[i] != '/'
+    ) return null
     val attrs = mutableMapOf<String, String>()
     while (i < s.length) {
         // skip whitespace
@@ -4400,7 +4466,7 @@ private class ParserState(
         // the current char. The `linkLabelTentativeClose` flag stays set during
         // the shortcut lookup so that an abort can replay the `]` literal; it
         // is cleared on a successful resolution.
-        if ((inLink || inImage) && !inLinkRef && linkLabelTentativeClose) {
+        if ((inLink || inImage) && linkLabelTentativeClose) {
             when (char) {
                 '(' -> {
                     linkLabelTentativeClose = false
@@ -4538,14 +4604,15 @@ private class ParserState(
                 val content = inlineBuffer.substring(1)
                 inlineBuffer.clear()
                 when {
-                    // Check inline HTML tags BEFORE autolinks (tags can contain ://)
-                    !content.contains(" ") && content.contains("@") && !content.contains("://") -> {
-                        "a"("href" to "mailto:$content") {
+                    // GFM §6.8: URI autolink takes precedence — `<MAILTO:FOO@BAR.BAZ>`
+                    // is a URI autolink with scheme `MAILTO`, not a mailto-prefixed email.
+                    isValidUriAutolink(content) -> {
+                        "a"("href" to normalizeUrlEscapes(content)) {
                             +content
                         }
                     }
-                    !content.contains(" ") && content.contains("://") -> {
-                        "a"("href" to normalizeUrlEscapes(content)) {
+                    isValidEmailAutolink(content) -> {
+                        "a"("href" to "mailto:$content") {
                             +content
                         }
                     }

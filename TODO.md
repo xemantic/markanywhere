@@ -53,27 +53,18 @@ marks. Defensive sanitisation of LLM-produced HTML — useful but not critical.
 **Scope**: a hard-coded tag name set, applied in `tryParseOpenTag` /
 `tryParseCloseTag` to redirect those tags to literal-text emission.
 
-### 4. GFM §6.8 — Standard Autolinks (6 tests, **LOW–MEDIUM impact**)
-
-`<http://...>` and `<email@...>` autolinks. Already partially handled by the
-inline `<...>` recogniser in `processInlineCharImpl`. The 6 failing tests are
-edge cases — empty schemes, invalid email shapes, escaped chars in autolink.
-
-**Where**: the existing `inlineBuffer.startsWith("<")` resolution path
-(around line 4400 in `MarkanywhereParser.kt`).
-
-### 5. GFM §6.12 — Hard line breaks (8 tests, **MEDIUM impact**)
+### 4. GFM §6.12 — Hard line breaks (8 tests, **MEDIUM impact**)
 
 Trailing `  \n` (two-or-more-spaces + newline) and `\\\n` (backslash + newline)
 should produce `<br/>`. Already partially supported via
 `paragraphTrailingSpaces` and the `\` + `\n` path. Edge cases in interaction
 with code spans, soft breaks, and inside other inline constructs.
 
-### 6. Singletons in §6.11 (1) and §6.14 (1)
+### 5. Singletons in §6.11 (1) and §6.14 (1)
 
 One test each. Probably small spec compliance fixes.
 
-### 7. Full HTML5 named entity table (GFM §6.2, **MEDIUM impact**)
+### 6. Full HTML5 named entity table (GFM §6.2, **MEDIUM impact**)
 
 `NAMED_ENTITIES` in `MarkanywhereParser.kt` (around line 470) is a hand-picked
 16-entry subset covering only the names exercised by the §6.2 test suite. The
@@ -162,8 +153,10 @@ LLMs essentially never produce this pattern.
 ## Notes for whoever picks this up
 
 - Run `./gradlew :markanywhere-parse:jvmTest 2>&1 | grep "tests completed"` to
-  see current count. Baseline at the start of link work was 205 failures; we
-  shipped at 63 (143 fixed, 0 regressions).
+  see current count. Baseline at the start of link work was 205 failures; the
+  link work shipped at 63. §6.8 standard autolinks then closed (5 spec
+  compliance fixes + 1 marked DIVERGENCE for the custom-markup `<ns:name>`
+  extension); current count is 57 failures.
 - The systematic divergences are documented in `CLAUDE.md` under "Streaming
   divergences" — read that before starting any of the link cases above.
 - Most failures map cleanly to a single GFM section, so each work stream is
