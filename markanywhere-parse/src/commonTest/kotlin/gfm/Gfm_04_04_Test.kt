@@ -267,7 +267,7 @@ class Gfm_04_04_Test {
     }
 
     @Test
-    fun `example 84 - indented code block, paragraph bar`() = runTest {
+    fun `example 84 - indented code block paragraph bar`() = runTest {
         // given
         val textFlow = buildText {
             +"    foo\n"
@@ -302,7 +302,7 @@ class Gfm_04_04_Test {
     // a setext heading requires holding the paragraph until the underline
     // appears on the next line.
     @Test
-    fun `example 85 - DIVERGENCE - h1, indented code, paragraph, hr, indented code, hr`() = runTest {
+    fun `example 85 - DIVERGENCE - h1 indented code paragraph hr indented code hr`() = runTest {
         // given
         val textFlow = buildText {
             +"# Heading\n"

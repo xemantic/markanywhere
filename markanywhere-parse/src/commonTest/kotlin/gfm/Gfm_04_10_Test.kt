@@ -212,7 +212,7 @@ class Gfm_04_10_Test {
     }
 
     @Test
-    fun `example 201 - table, blockquote (text , paragraph bar, text )`() = runTest {
+    fun `example 201 - table blockquote text paragraph bar text`() = runTest {
         // given
         val textFlow = """
             | abc | def |
@@ -277,7 +277,7 @@ class Gfm_04_10_Test {
     }
 
     @Test
-    fun `example 202 - table, paragraph bar`() = runTest {
+    fun `example 202 - table paragraph bar`() = runTest {
         // given
         val textFlow = """
             | abc | def |

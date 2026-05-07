@@ -36,7 +36,7 @@ import kotlin.test.Test
 class Gfm_04_02_Test {
 
     @Test
-    fun `example 32 - h1 foo, h2 foo, h3 foo, h4 foo, h5 foo, h6 foo`() = runTest {
+    fun `example 32 - h1 foo h2 foo h3 foo h4 foo h5 foo h6 foo`() = runTest {
         // given
         val textFlow = """
             # foo
@@ -71,7 +71,7 @@ class Gfm_04_02_Test {
     }
 
     @Test
-    fun `example 33 - paragraph ####### foo`() = runTest {
+    fun `example 33 - paragraph foo`() = runTest {
         // given
         val textFlow = "####### foo".chunkedRandomly().asFlow()
 
@@ -91,7 +91,7 @@ class Gfm_04_02_Test {
     }
 
     @Test
-    fun `example 34 - paragraph #5 bolt, paragraph #hashtag`() = runTest {
+    fun `example 34 - paragraph 5 bolt paragraph hashtag`() = runTest {
         // given
         val textFlow = """
             #5 bolt
@@ -119,7 +119,7 @@ class Gfm_04_02_Test {
     }
 
     @Test
-    fun `example 35 - paragraph ## foo`() = runTest {
+    fun `example 35 - paragraph foo`() = runTest {
         // given
         val textFlow = "\\## foo\n".chunkedRandomly().asFlow()
 
@@ -187,7 +187,7 @@ class Gfm_04_02_Test {
     }
 
     @Test
-    fun `example 38 - h3 foo, h2 foo, h1 foo`() = runTest {
+    fun `example 38 - h3 foo h2 foo h1 foo`() = runTest {
         // given
         val textFlow = buildText {
             +" ### foo\n"
@@ -244,7 +244,7 @@ class Gfm_04_02_Test {
     }
 
     @Test
-    fun `example 40 - paragraph foo # bar`() = runTest {
+    fun `example 40 - paragraph foo bar`() = runTest {
         // given
         val textFlow = buildText {
             +"foo\n"
@@ -268,7 +268,7 @@ class Gfm_04_02_Test {
     }
 
     @Test
-    fun `example 41 - h2 foo, h3 bar`() = runTest {
+    fun `example 41 - h2 foo h3 bar`() = runTest {
         // given
         val textFlow = buildText {
             +"## foo ##\n"
@@ -295,7 +295,7 @@ class Gfm_04_02_Test {
     }
 
     @Test
-    fun `example 42 - h1 foo, h5 foo`() = runTest {
+    fun `example 42 - h1 foo h5 foo`() = runTest {
         // given
         val textFlow = """
             # foo ##################################
@@ -344,7 +344,7 @@ class Gfm_04_02_Test {
     }
 
     @Test
-    fun `example 44 - h3 foo ### b`() = runTest {
+    fun `example 44 - h3 foo b`() = runTest {
         // given
         val textFlow = "### foo ### b".chunkedRandomly().asFlow()
 
@@ -364,7 +364,7 @@ class Gfm_04_02_Test {
     }
 
     @Test
-    fun `example 45 - h1 foo#`() = runTest {
+    fun `example 45 - h1 foo`() = runTest {
         // given
         val textFlow = "# foo#".chunkedRandomly().asFlow()
 
@@ -384,7 +384,7 @@ class Gfm_04_02_Test {
     }
 
     @Test
-    fun `example 46 - h3 foo ###, h2 foo ###, h1 foo #`() = runTest {
+    fun `example 46 - h3 foo h2 foo h1 foo`() = runTest {
         // given
         val textFlow = """
             ### foo \###
@@ -416,7 +416,7 @@ class Gfm_04_02_Test {
     }
 
     @Test
-    fun `example 47 - thematic break, h2 foo, thematic break`() = runTest {
+    fun `example 47 - thematic break h2 foo thematic break`() = runTest {
         // given
         val textFlow = """
             ****
@@ -444,7 +444,7 @@ class Gfm_04_02_Test {
     }
 
     @Test
-    fun `example 48 - paragraph Foo bar, h1 baz, paragraph Bar foo`() = runTest {
+    fun `example 48 - paragraph Foo bar h1 baz paragraph Bar foo`() = runTest {
         // given
         val textFlow = """
             Foo bar
@@ -476,7 +476,7 @@ class Gfm_04_02_Test {
     }
 
     @Test
-    fun `example 49 - h2 (empty), h1 (empty), h3 (empty)`() = runTest {
+    fun `example 49 - h2 empty h1 empty h3 empty`() = runTest {
         // given
         val textFlow = buildText {
             +"## \n"

@@ -122,7 +122,7 @@ class Gfm_04_05_Test {
     }
 
     @Test
-    fun `example 92 - fenced code block, tilde-only inside backtick fence`() = runTest {
+    fun `example 92 - fenced code block tilde-only inside backtick fence`() = runTest {
         // given
         val textFlow = """
             ```
@@ -151,7 +151,7 @@ class Gfm_04_05_Test {
     }
 
     @Test
-    fun `example 93 - fenced code block, backticks-only inside tilde fence`() = runTest {
+    fun `example 93 - fenced code block backticks-only inside tilde fence`() = runTest {
         // given
         val textFlow = """
             ~~~
@@ -180,7 +180,7 @@ class Gfm_04_05_Test {
     }
 
     @Test
-    fun `example 94 - fenced code block, longer fence allows shorter inside`() = runTest {
+    fun `example 94 - fenced code block longer fence allows shorter inside`() = runTest {
         // given
         val textFlow = """
             ````
@@ -209,7 +209,7 @@ class Gfm_04_05_Test {
     }
 
     @Test
-    fun `example 95 - fenced code block, longer tilde fence allows shorter inside`() = runTest {
+    fun `example 95 - fenced code block longer tilde fence allows shorter inside`() = runTest {
         // given
         val textFlow = """
             ~~~~
@@ -238,7 +238,7 @@ class Gfm_04_05_Test {
     }
 
     @Test
-    fun `example 96 - unclosed fenced code block, empty`() = runTest {
+    fun `example 96 - unclosed fenced code block empty`() = runTest {
         // given
         val textFlow = "```".chunkedRandomly().asFlow()
 
@@ -288,7 +288,7 @@ class Gfm_04_05_Test {
     }
 
     @Test
-    fun `example 98 - blockquote with fenced code, then paragraph bbb`() = runTest {
+    fun `example 98 - blockquote with fenced code then paragraph bbb`() = runTest {
         // given
         val textFlow = """
             > ```
@@ -376,7 +376,7 @@ class Gfm_04_05_Test {
     }
 
     @Test
-    fun `example 101 - fenced code block, 1-space indented opening fence`() = runTest {
+    fun `example 101 - fenced code block 1-space indented opening fence`() = runTest {
         // given
         val textFlow = buildText {
             +" ```\n"
@@ -405,7 +405,7 @@ class Gfm_04_05_Test {
     }
 
     @Test
-    fun `example 102 - fenced code block, 2-space indented opening fence`() = runTest {
+    fun `example 102 - fenced code block 2-space indented opening fence`() = runTest {
         // given
         val textFlow = buildText {
             +"  ```\n"
@@ -436,7 +436,7 @@ class Gfm_04_05_Test {
     }
 
     @Test
-    fun `example 103 - fenced code block, 3-space indented opening fence`() = runTest {
+    fun `example 103 - fenced code block 3-space indented opening fence`() = runTest {
         // given
         val textFlow = buildText {
             +"   ```\n"
@@ -467,7 +467,7 @@ class Gfm_04_05_Test {
     }
 
     @Test
-    fun `example 104 - 4-space indent makes indented code block, not fence`() = runTest {
+    fun `example 104 - 4-space indent makes indented code block not fence`() = runTest {
         // given
         val textFlow = buildText {
             +"    ```\n"
@@ -496,7 +496,7 @@ class Gfm_04_05_Test {
     }
 
     @Test
-    fun `example 105 - fenced code block, 2-space indented closing fence`() = runTest {
+    fun `example 105 - fenced code block 2-space indented closing fence`() = runTest {
         // given
         val textFlow = buildText {
             +"```\n"
@@ -523,7 +523,7 @@ class Gfm_04_05_Test {
     }
 
     @Test
-    fun `example 106 - fenced code block, mixed-indent open and close`() = runTest {
+    fun `example 106 - fenced code block mixed-indent open and close`() = runTest {
         // given
         val textFlow = buildText {
             +"   ```\n"
@@ -550,7 +550,7 @@ class Gfm_04_05_Test {
     }
 
     @Test
-    fun `example 107 - fenced code block, 4-space indented closing fence is content`() = runTest {
+    fun `example 107 - fenced code block 4-space indented closing fence is content`() = runTest {
         // given
         val textFlow = buildText {
             +"```\n"
@@ -605,7 +605,7 @@ class Gfm_04_05_Test {
     }
 
     @Test
-    fun `example 109 - unclosed tilde fence, internal tildes do not close`() = runTest {
+    fun `example 109 - unclosed tilde fence internal tildes do not close`() = runTest {
         // given
         val textFlow = """
             ~~~~~~
@@ -633,7 +633,7 @@ class Gfm_04_05_Test {
     }
 
     @Test
-    fun `example 110 - paragraph foo, fenced code block, paragraph baz`() = runTest {
+    fun `example 110 - paragraph foo fenced code block paragraph baz`() = runTest {
         // given
         val textFlow = """
             foo
@@ -674,7 +674,7 @@ class Gfm_04_05_Test {
     // and `---` as a thematic break before reaching the fenced code block and the
     // ATX `# baz` heading.
     @Test
-    fun `example 111 - DIVERGENCE - paragraph foo, hr, fenced code, h1 baz`() = runTest {
+    fun `example 111 - DIVERGENCE - paragraph foo hr fenced code h1 baz`() = runTest {
         // given
         val textFlow = """
             foo
@@ -775,7 +775,7 @@ class Gfm_04_05_Test {
     }
 
     @Test
-    fun `example 114 - fenced code block, info string can be punctuation`() = runTest {
+    fun `example 114 - fenced code block info string can be punctuation`() = runTest {
         // given
         val textFlow = """
             ````;

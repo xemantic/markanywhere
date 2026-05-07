@@ -36,7 +36,7 @@ import kotlin.test.Test
 class Gfm_05_04_Test {
 
     @Test
-    fun `example 281 - DIVERGENCE - ul with 2 items, ul with 1 item`() = runTest {
+    fun `example 281 - DIVERGENCE - ul with 2 items ul with 1 item`() = runTest {
         // given
         val textFlow = """
             - foo
@@ -76,7 +76,7 @@ class Gfm_05_04_Test {
     }
 
     @Test
-    fun `example 282 - DIVERGENCE - ol with 2 items, ol with 1 item (start 3)`() = runTest {
+    fun `example 282 - DIVERGENCE - ol with 2 items ol with 1 item start 3`() = runTest {
         // given
         val textFlow = """
             1. foo
@@ -116,7 +116,7 @@ class Gfm_05_04_Test {
     }
 
     @Test
-    fun `example 283 - DIVERGENCE - paragraph Foo, ul with 2 items`() = runTest {
+    fun `example 283 - DIVERGENCE - paragraph Foo ul with 2 items`() = runTest {
         // given
         val textFlow = """
             Foo
@@ -176,7 +176,7 @@ class Gfm_05_04_Test {
     }
 
     @Test
-    fun `example 285 - DIVERGENCE - paragraph The number of windows i, ol with 1 item`() = runTest {
+    fun `example 285 - DIVERGENCE - paragraph The number of windows i ol with 1 item`() = runTest {
         // given
         val textFlow = """
             The number of windows in my house is
@@ -365,7 +365,7 @@ class Gfm_05_04_Test {
     }
 
     @Test
-    fun `example 289 - DIVERGENCE - ul with 2 items, indented code block`() = runTest {
+    fun `example 289 - DIVERGENCE - ul with 2 items indented code block`() = runTest {
         // given
         val textFlow = buildText {
             +"-   foo\n"
@@ -553,7 +553,7 @@ class Gfm_05_04_Test {
     }
 
     @Test
-    fun `example 293 - ol with 2 items, indented code block`() = runTest {
+    fun `example 293 - ol with 2 items indented code block`() = runTest {
         // given
         val textFlow = buildText {
             +"1. a\n"

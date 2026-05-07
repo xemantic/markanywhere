@@ -36,7 +36,7 @@ import kotlin.test.Test
 class Gfm_04_08_Test {
 
     @Test
-    fun `example 189 - paragraph aaa, paragraph bbb`() = runTest {
+    fun `example 189 - paragraph aaa paragraph bbb`() = runTest {
         // given
         val textFlow = """
             aaa
@@ -64,7 +64,7 @@ class Gfm_04_08_Test {
     }
 
     @Test
-    fun `example 190 - paragraph aaa bbb, paragraph ccc ddd`() = runTest {
+    fun `example 190 - paragraph aaa bbb paragraph ccc ddd`() = runTest {
         // given
         val textFlow = """
             aaa
@@ -96,7 +96,7 @@ class Gfm_04_08_Test {
     }
 
     @Test
-    fun `example 191 - paragraph aaa, paragraph bbb`() = runTest {
+    fun `example 191 - paragraph aaa paragraph bbb`() = runTest {
         // given
         val textFlow = """
             aaa
@@ -199,7 +199,7 @@ class Gfm_04_08_Test {
     }
 
     @Test
-    fun `example 195 - indented code block, paragraph bbb`() = runTest {
+    fun `example 195 - indented code block paragraph bbb`() = runTest {
         // given
         val textFlow = buildText {
             +"    aaa\n"

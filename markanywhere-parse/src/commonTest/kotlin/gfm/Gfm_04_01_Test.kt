@@ -298,7 +298,7 @@ class Gfm_04_01_Test {
     }
 
     @Test
-    fun `example 25 - paragraph _ _ _ _ a, paragraph a------, paragraph ---a---`() = runTest {
+    fun `example 25 - paragraph _ _ _ _ a paragraph a------ paragraph ---a---`() = runTest {
         // given
         val textFlow = """
             _ _ _ _ a
@@ -361,7 +361,7 @@ class Gfm_04_01_Test {
     // items; the streaming parser cannot defer that decision without buffering the
     // full list, so it conservatively emits `<p>` always.
     @Test
-    fun `example 27 - DIVERGENCE - ul with 1 item, thematic break, ul with 1 item`() = runTest {
+    fun `example 27 - DIVERGENCE - ul with 1 item thematic break ul with 1 item`() = runTest {
         // given
         val textFlow = """
             - foo
@@ -403,7 +403,7 @@ class Gfm_04_01_Test {
     }
 
     @Test
-    fun `example 28 - paragraph Foo, thematic break, paragraph bar`() = runTest {
+    fun `example 28 - paragraph Foo thematic break paragraph bar`() = runTest {
         // given
         val textFlow = """
             Foo
@@ -436,7 +436,7 @@ class Gfm_04_01_Test {
     // section devoted to them). `Foo\n---` would be an h2 in GFM; the parser
     // treats `---` as a thematic break that interrupts the paragraph.
     @Test
-    fun `example 29 - DIVERGENCE - paragraph Foo, thematic break, paragraph bar`() = runTest {
+    fun `example 29 - DIVERGENCE - paragraph Foo thematic break paragraph bar`() = runTest {
         // given
         val textFlow = """
             Foo
@@ -467,7 +467,7 @@ class Gfm_04_01_Test {
     // DIVERGENCE: incremental list-item parsing wraps text content in `<p>` even
     // for tight (single-line) items — see ex 27 for the rationale.
     @Test
-    fun `example 30 - DIVERGENCE - ul with 1 item, thematic break, ul with 1 item`() = runTest {
+    fun `example 30 - DIVERGENCE - ul with 1 item thematic break ul with 1 item`() = runTest {
         // given
         val textFlow = """
             * Foo

@@ -35,7 +35,6 @@ import kotlin.test.Test
 @Suppress("ClassName")
 class Gfm_06_08_Test {
 
-    // TODO review
     @Test
     fun `example 603 - paragraph httpfoobarbaz`() = runTest {
         // given
@@ -58,7 +57,6 @@ class Gfm_06_08_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 604 - paragraph httpfoobarbaztest`() = runTest {
         // given
@@ -81,7 +79,6 @@ class Gfm_06_08_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 605 - paragraph ircfoobar2233baz`() = runTest {
         // given
@@ -104,9 +101,8 @@ class Gfm_06_08_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 606 - paragraph MAILTOFOO@BARBAZ`() = runTest {
+    fun `example 606 - paragraph MAILTOFOOBARBAZ`() = runTest {
         // given
         val textFlow = "<MAILTO:FOO@BAR.BAZ>".chunkedRandomly().asFlow()
 
@@ -127,7 +123,6 @@ class Gfm_06_08_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 607 - paragraph a+b+cd`() = runTest {
         // given
@@ -150,9 +145,8 @@ class Gfm_06_08_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 608 - paragraph made-up-schemefoo,bar`() = runTest {
+    fun `example 608 - paragraph made-up-schemefoobar`() = runTest {
         // given
         val textFlow = "<made-up-scheme://foo,bar>".chunkedRandomly().asFlow()
 
@@ -173,7 +167,6 @@ class Gfm_06_08_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 609 - paragraph http`() = runTest {
         // given
@@ -196,7 +189,6 @@ class Gfm_06_08_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 610 - paragraph localhost5001foo`() = runTest {
         // given
@@ -219,7 +211,6 @@ class Gfm_06_08_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 611 - paragraph httpfoobarbaz bim`() = runTest {
         // given
@@ -240,7 +231,6 @@ class Gfm_06_08_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 612 - paragraph httpexamplecom`() = runTest {
         // given
@@ -265,9 +255,8 @@ class Gfm_06_08_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 613 - paragraph foo@barexamplecom`() = runTest {
+    fun `example 613 - paragraph foobarexamplecom`() = runTest {
         // given
         val textFlow = "<foo@bar.example.com>".chunkedRandomly().asFlow()
 
@@ -288,9 +277,8 @@ class Gfm_06_08_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 614 - paragraph foo+special@Barbaz-bar`() = runTest {
+    fun `example 614 - paragraph foo+specialBarbaz-bar`() = runTest {
         // given
         val textFlow = "<foo+special@Bar.baz-bar0.com>".chunkedRandomly().asFlow()
 
@@ -311,9 +299,8 @@ class Gfm_06_08_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 615 - paragraph foo+@barexamplecom`() = runTest {
+    fun `example 615 - paragraph foo+barexamplecom`() = runTest {
         // given
         val textFlow = buildText {
             +"<foo\\+@bar.example.com>\n"
@@ -334,7 +321,6 @@ class Gfm_06_08_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 616 - paragraph`() = runTest {
         // given
@@ -407,7 +393,6 @@ class Gfm_06_08_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 619 - paragraph foobarbaz`() = runTest {
         // given
@@ -456,7 +441,7 @@ class Gfm_06_08_Test {
     // CommonMark §6.8 expects no autolink for a bare email. With GFM §6.9
     // extended autolinks active, the address is wrapped in `<a href="mailto:…">`.
     @Test
-    fun `example 621 - paragraph foo@barexamplecom`() = runTest {
+    fun `example 621 - paragraph foobarexamplecom`() = runTest {
         // given
         val textFlow = "foo@bar.example.com".chunkedRandomly().asFlow()
 

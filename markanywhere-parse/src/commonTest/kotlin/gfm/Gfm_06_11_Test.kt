@@ -36,7 +36,7 @@ import kotlin.test.Test
 class Gfm_06_11_Test {
 
     @Test
-    fun `example 657 - paragraph title style, blockquote (text xmp is disallowed X)`() = runTest {
+    fun `example 657 - paragraph title style blockquote text xmp is disallowed X`() = runTest {
         // given
         val textFlow = buildText {
             +"<strong> <title> <style> <em>\n"
@@ -54,7 +54,7 @@ class Gfm_06_11_Test {
             "p" {
                 tag("strong") {
                     +" <title> <style> "
-                    "em" {
+                    tag("em") {
                     }
                 }
             }

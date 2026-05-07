@@ -143,7 +143,7 @@ class Gfm_04_06_Test {
     // DIVERGENCE: incremental streaming surfaces the indentation/newlines
     // between sibling HTML tags as text events.
     @Test
-    fun `example 119 - DIVERGENCE - table, paragraph okay`() = runTest {
+    fun `example 119 - DIVERGENCE - table paragraph okay`() = runTest {
         // given
         val textFlow = buildText {
             +"<table>\n"
@@ -387,7 +387,7 @@ class Gfm_04_06_Test {
     // DIVERGENCE: an opening tag that never completes (no `>`) falls back to
     // raw text output rather than starting an HTML block.
     @Test
-    fun `example 126 - DIVERGENCE - text div, hi`() = runTest {
+    fun `example 126 - DIVERGENCE - text div hi`() = runTest {
         // given
         val textFlow = """
             <div id="foo"
@@ -410,7 +410,7 @@ class Gfm_04_06_Test {
 
     // DIVERGENCE: incomplete attribute parsing falls back to raw text.
     @Test
-    fun `example 127 - DIVERGENCE - text div class, foo`() = runTest {
+    fun `example 127 - DIVERGENCE - text div class foo`() = runTest {
         // given
         val textFlow = """
             <div class
@@ -433,7 +433,7 @@ class Gfm_04_06_Test {
 
     // DIVERGENCE: invalid attribute syntax falls back to raw text.
     @Test
-    fun `example 128 - DIVERGENCE - text div, foo`() = runTest {
+    fun `example 128 - DIVERGENCE - text div foo`() = runTest {
         // given
         val textFlow = """
             <div *???-&&&-<---
@@ -510,7 +510,7 @@ class Gfm_04_06_Test {
     // is parsed structurally as `<pre><code class="language-c">`, while GFM
     // would emit the fence text literally as part of the surrounding HTML.
     @Test
-    fun `example 131 - DIVERGENCE - div, fenced code c`() = runTest {
+    fun `example 131 - DIVERGENCE - div fenced code c`() = runTest {
         // given
         val textFlow = """
             <div></div>
@@ -738,7 +738,7 @@ class Gfm_04_06_Test {
     // a leading `\n` text event. (GFM-style renderers often display this
     // newline; we can re-add it later if needed.)
     @Test
-    fun `example 139 - DIVERGENCE - pre haskell, paragraph okay`() = runTest {
+    fun `example 139 - DIVERGENCE - pre haskell paragraph okay`() = runTest {
         // given
         val textFlow = buildText {
             +"<pre language=\"haskell\"><code>\n"
@@ -780,7 +780,7 @@ class Gfm_04_06_Test {
 
     // DIVERGENCE: same as #139 — no leading `\n` after the type-1 opener.
     @Test
-    fun `example 140 - DIVERGENCE - script JavaScript example, paragraph okay`() = runTest {
+    fun `example 140 - DIVERGENCE - script JavaScript example paragraph okay`() = runTest {
         // given
         val textFlow = """
             <script type="text/javascript">
@@ -816,7 +816,7 @@ class Gfm_04_06_Test {
 
     // DIVERGENCE: same as #139 — no leading `\n` after the type-1 opener.
     @Test
-    fun `example 141 - DIVERGENCE - style css, paragraph okay`() = runTest {
+    fun `example 141 - DIVERGENCE - style css paragraph okay`() = runTest {
         // given
         val textFlow = buildText {
             +"<style\n"
@@ -885,7 +885,7 @@ class Gfm_04_06_Test {
     // DIVERGENCE: blockquote-prefixed `<div>` is not recognised as opening an
     // HTML block at top level — the blockquote treats it as paragraph content.
     @Test
-    fun `example 143 - DIVERGENCE - blockquote (text div foo), paragraph bar`() = runTest {
+    fun `example 143 - DIVERGENCE - blockquote text div foo paragraph bar`() = runTest {
         // given
         val textFlow = """
             > <div>
@@ -958,7 +958,7 @@ class Gfm_04_06_Test {
     }
 
     @Test
-    fun `example 145 - style p{colorred}, paragraph foo`() = runTest {
+    fun `example 145 - style pcolorred paragraph foo`() = runTest {
         // given
         val textFlow = """
             <style>p{color:red;}</style>
@@ -992,7 +992,7 @@ class Gfm_04_06_Test {
     // and trailing `*bar*` arrive as one text run, which renders the same
     // as GFM's literal raw-HTML pass-through for that line.
     @Test
-    fun `example 146 - text bar, paragraph baz`() = runTest {
+    fun `example 146 - text bar paragraph baz`() = runTest {
         // given
         val textFlow = """
             <!-- foo -->*bar*
@@ -1023,7 +1023,7 @@ class Gfm_04_06_Test {
     // doesn't run — content + close + trailing all flatten into one text event,
     // and the `<script>` is auto-closed at EOF.
     @Test
-    fun `example 147 - DIVERGENCE - script foo, text 1 bar`() = runTest {
+    fun `example 147 - DIVERGENCE - script foo text 1 bar`() = runTest {
         // given
         val textFlow = """
             <script>
@@ -1052,7 +1052,7 @@ class Gfm_04_06_Test {
     // trailing paragraph follows. Renders the same as GFM's literal
     // pass-through of the multi-line comment.
     @Test
-    fun `example 148 - comment, paragraph okay`() = runTest {
+    fun `example 148 - comment paragraph okay`() = runTest {
         // given
         val textFlow = buildText {
             +"<!-- Foo\n"
@@ -1085,7 +1085,7 @@ class Gfm_04_06_Test {
     // Type-3 (processing instruction) block streams as raw text, matching
     // GFM's literal pass-through.
     @Test
-    fun `example 149 - php, paragraph okay`() = runTest {
+    fun `example 149 - php paragraph okay`() = runTest {
         // given
         val textFlow = buildText {
             +"<?php\n"
@@ -1139,7 +1139,7 @@ class Gfm_04_06_Test {
     // Type-5 (CDATA) block streams as raw text, matching GFM's literal
     // pass-through.
     @Test
-    fun `example 151 - cdata, paragraph okay`() = runTest {
+    fun `example 151 - cdata paragraph okay`() = runTest {
         // given
         val textFlow = buildText {
             +"<![CDATA[\n"
@@ -1189,7 +1189,7 @@ class Gfm_04_06_Test {
     // emitted as raw text; the 4-space indent on the next non-blank line opens
     // an indented code block — same structural output as GFM.
     @Test
-    fun `example 152 - comment, indented code block`() = runTest {
+    fun `example 152 - comment indented code block`() = runTest {
         // given
         val textFlow = buildText {
             +"  <!-- foo -->\n"
@@ -1255,7 +1255,7 @@ class Gfm_04_06_Test {
     }
 
     @Test
-    fun `example 154 - paragraph Foo, div bar`() = runTest {
+    fun `example 154 - paragraph Foo div bar`() = runTest {
         // given
         val textFlow = """
             Foo
@@ -1286,7 +1286,7 @@ class Gfm_04_06_Test {
     }
 
     @Test
-    fun `example 155 - div bar, text foo`() = runTest {
+    fun `example 155 - div bar text foo`() = runTest {
         // given
         val textFlow = """
             <div>

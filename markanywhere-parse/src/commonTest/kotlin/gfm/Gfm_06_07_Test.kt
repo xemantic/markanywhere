@@ -492,7 +492,7 @@ class Gfm_06_07_Test {
     }
 
     @Test
-    fun `example 599 - paragraph !foo, paragraph foo url title`() = runTest {
+    fun `example 599 - paragraph !foo paragraph foo url title`() = runTest {
         // given
         val textFlow = """
             ![[foo]]

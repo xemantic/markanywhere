@@ -310,7 +310,7 @@ class Gfm_06_04_Test {
     }
 
     @Test
-    fun `example 373 - paragraph foo-(bar)`() = runTest {
+    fun `example 373 - paragraph foo-bar`() = runTest {
         // given
         val textFlow = "foo-_(bar)_".chunkedRandomly().asFlow()
 
@@ -404,7 +404,7 @@ class Gfm_06_04_Test {
     }
 
     @Test
-    fun `example 377 - DIVERGENCE - paragraph (foo)`() = runTest {
+    fun `example 377 - DIVERGENCE - paragraph foo`() = runTest {
         // given
         val textFlow = "*(*foo)".chunkedRandomly().asFlow()
 
@@ -426,7 +426,7 @@ class Gfm_06_04_Test {
     }
 
     @Test
-    fun `example 378 - DIVERGENCE - paragraph (foo)`() = runTest {
+    fun `example 378 - DIVERGENCE - paragraph foo`() = runTest {
         // given
         val textFlow = "*(*foo*)*".chunkedRandomly().asFlow()
 
@@ -494,7 +494,7 @@ class Gfm_06_04_Test {
     }
 
     @Test
-    fun `example 381 - DIVERGENCE - paragraph _(_foo)`() = runTest {
+    fun `example 381 - DIVERGENCE - paragraph __foo`() = runTest {
         // given
         val textFlow = "_(_foo)".chunkedRandomly().asFlow()
 
@@ -516,7 +516,7 @@ class Gfm_06_04_Test {
     }
 
     @Test
-    fun `example 382 - DIVERGENCE - paragraph (foo)`() = runTest {
+    fun `example 382 - DIVERGENCE - paragraph foo`() = runTest {
         // given
         val textFlow = "_(_foo_)_".chunkedRandomly().asFlow()
 
@@ -605,7 +605,7 @@ class Gfm_06_04_Test {
     }
 
     @Test
-    fun `example 386 - paragraph (bar)`() = runTest {
+    fun `example 386 - paragraph bar`() = runTest {
         // given
         val textFlow = "_(bar)_.".chunkedRandomly().asFlow()
 
@@ -859,7 +859,7 @@ class Gfm_06_04_Test {
     }
 
     @Test
-    fun `example 398 - DIVERGENCE - paragraph foo, bar, baz`() = runTest {
+    fun `example 398 - DIVERGENCE - paragraph foo bar baz`() = runTest {
         // given
         val textFlow = "__foo, __bar__, baz__".chunkedRandomly().asFlow()
 
@@ -882,7 +882,7 @@ class Gfm_06_04_Test {
     }
 
     @Test
-    fun `example 399 - paragraph foo-(bar)`() = runTest {
+    fun `example 399 - paragraph foo-bar`() = runTest {
         // given
         val textFlow = "foo-__(bar)__".chunkedRandomly().asFlow()
 
@@ -927,7 +927,7 @@ class Gfm_06_04_Test {
     }
 
     @Test
-    fun `example 401 - DIVERGENCE - paragraph (foo)`() = runTest {
+    fun `example 401 - DIVERGENCE - paragraph foo`() = runTest {
         // given
         val textFlow = "**(**foo)".chunkedRandomly().asFlow()
 
@@ -949,7 +949,7 @@ class Gfm_06_04_Test {
     }
 
     @Test
-    fun `example 402 - paragraph (foo)`() = runTest {
+    fun `example 402 - paragraph foo`() = runTest {
         // given
         val textFlow = "*(**foo**)*".chunkedRandomly().asFlow()
 
@@ -975,7 +975,7 @@ class Gfm_06_04_Test {
     }
 
     @Test
-    fun `example 403 - DIVERGENCE - paragraph Gomphocarpus (Gomphocar`() = runTest {
+    fun `example 403 - DIVERGENCE - paragraph Gomphocarpus Gomphocar`() = runTest {
         // given
         val textFlow = """
             **Gomphocarpus (*Gomphocarpus physocarpus*, syn.
@@ -1081,7 +1081,7 @@ class Gfm_06_04_Test {
     }
 
     @Test
-    fun `example 407 - DIVERGENCE - paragraph __(__foo)`() = runTest {
+    fun `example 407 - DIVERGENCE - paragraph ____foo`() = runTest {
         // given
         val textFlow = "__(__foo)".chunkedRandomly().asFlow()
 
@@ -1103,7 +1103,7 @@ class Gfm_06_04_Test {
     }
 
     @Test
-    fun `example 408 - paragraph (foo)`() = runTest {
+    fun `example 408 - paragraph foo`() = runTest {
         // given
         val textFlow = "_(__foo__)_".chunkedRandomly().asFlow()
 
@@ -1195,7 +1195,7 @@ class Gfm_06_04_Test {
     }
 
     @Test
-    fun `example 412 - paragraph (bar)`() = runTest {
+    fun `example 412 - paragraph bar`() = runTest {
         // given
         val textFlow = "__(bar)__.".chunkedRandomly().asFlow()
 
@@ -2948,7 +2948,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 488 - paragraph a _`() = runTest {
         // given

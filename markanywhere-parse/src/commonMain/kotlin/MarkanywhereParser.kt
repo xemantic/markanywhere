@@ -538,28 +538,6 @@ private fun appendPercentByte(out: StringBuilder, b: Int) {
     out.append(if (lo < 10) ('0' + lo) else ('A' + (lo - 10)))
 }
 
-// Subset of HTML5 named character references covering the entities used in GFM
-// §6.2 example tests. Extend as needed; an unknown name causes the entity to be
-// emitted literally (the source `&name;` flows through as text).
-private val NAMED_ENTITIES: Map<String, String> = mapOf(
-    "amp" to "&",
-    "lt" to "<",
-    "gt" to ">",
-    "quot" to "\"",
-    "apos" to "'",
-    "nbsp" to " ",
-    "copy" to "©",
-    "AElig" to "Æ",
-    "Dcaron" to "Ď",
-    "frac34" to "¾",
-    "HilbertSpace" to "ℋ",
-    "DifferentialD" to "ⅆ",
-    "ClockwiseContourIntegral" to "∲",
-    "ngE" to "≧̸",
-    "ouml" to "ö",
-    "auml" to "ä"
-)
-
 /**
  * Convert a Unicode codepoint to its String form, handling the supplementary
  * range (> 0xFFFF) by emitting a UTF-16 surrogate pair manually. Avoids
@@ -584,7 +562,9 @@ private fun codepointToString(cp: Int): String {
  *  - Decimal numeric: `#` + 1..7 digits. Codepoint 0, surrogate range, or
  *    > 0x10FFFF resolves to U+FFFD.
  *  - Hex numeric: `#x` or `#X` + 1..6 hex digits. Same out-of-range rule.
- *  - Named: must be in [NAMED_ENTITIES] (HTML5 spec list, restricted subset here).
+ *  - Named: must be in [NAMED_ENTITIES] (the full HTML5 named-character-reference
+ *    list, codegen'd into `NamedEntities.kt` from `entities.json`; filtered to
+ *    the canonical trailing-`;` form).
  */
 private fun tryDecodeEntityBody(body: String): String? {
     if (body.isEmpty()) return null

@@ -36,7 +36,7 @@ import kotlin.test.Test
 class Gfm_05_01_Test {
 
     @Test
-    fun `example 206 - blockquote (text , h1 Foo, text , paragraph bar baz, text )`() = runTest {
+    fun `example 206 - blockquote text h1 Foo text paragraph bar baz text`() = runTest {
         // given
         val textFlow = """
             > # Foo
@@ -69,7 +69,7 @@ class Gfm_05_01_Test {
     }
 
     @Test
-    fun `example 207 - blockquote (text , h1 Foo, text , paragraph bar baz, text )`() = runTest {
+    fun `example 207 - blockquote text h1 Foo text paragraph bar baz text`() = runTest {
         // given
         val textFlow = """
             ># Foo
@@ -102,7 +102,7 @@ class Gfm_05_01_Test {
     }
 
     @Test
-    fun `example 208 - blockquote (text , h1 Foo, text , paragraph bar baz, text )`() = runTest {
+    fun `example 208 - blockquote text h1 Foo text paragraph bar baz text`() = runTest {
         // given
         val textFlow = buildText {
             +"   > # Foo\n"
@@ -164,7 +164,7 @@ class Gfm_05_01_Test {
     }
 
     @Test
-    fun `example 210 - blockquote (text , h1 Foo, text , paragraph bar baz, text )`() = runTest {
+    fun `example 210 - blockquote text h1 Foo text paragraph bar baz text`() = runTest {
         // given
         val textFlow = """
             > # Foo
@@ -197,7 +197,7 @@ class Gfm_05_01_Test {
     }
 
     @Test
-    fun `example 211 - blockquote (text , paragraph bar baz foo, text )`() = runTest {
+    fun `example 211 - blockquote text paragraph bar baz foo text`() = runTest {
         // given
         val textFlow = """
             > bar
@@ -227,7 +227,7 @@ class Gfm_05_01_Test {
     }
 
     @Test
-    fun `example 212 - blockquote (text , paragraph foo, text ), thematic break`() = runTest {
+    fun `example 212 - blockquote text paragraph foo text thematic break`() = runTest {
         // given
         val textFlow = """
             > foo
@@ -258,7 +258,7 @@ class Gfm_05_01_Test {
     // DIVERGENCE: list items are always loose (`<p>` wrapper) per the project-wide
     // always-loose list policy. GFM would emit tight `<li>foo</li>`.
     @Test
-    fun `example 213 - DIVERGENCE - blockquote (ul with 1 item), ul with 1 item`() = runTest {
+    fun `example 213 - DIVERGENCE - blockquote ul with 1 item ul with 1 item`() = runTest {
         // given
         val textFlow = """
             > - foo
@@ -301,7 +301,7 @@ class Gfm_05_01_Test {
     }
 
     @Test
-    fun `example 214 - blockquote (text , indented code block, text ), indented code block`() = runTest {
+    fun `example 214 - blockquote text indented code block text indented code block`() = runTest {
         // given
         val textFlow = buildText {
             +">     foo\n"
@@ -338,7 +338,7 @@ class Gfm_05_01_Test {
     }
 
     @Test
-    fun `example 215 - blockquote (empty fenced code), paragraph foo, empty fenced code`() = runTest {
+    fun `example 215 - blockquote empty fenced code paragraph foo empty fenced code`() = runTest {
         // given
         val textFlow = """
             > ```
@@ -374,7 +374,7 @@ class Gfm_05_01_Test {
     }
 
     @Test
-    fun `example 216 - blockquote (text , paragraph foo - bar, text )`() = runTest {
+    fun `example 216 - blockquote text paragraph foo - bar text`() = runTest {
         // given
         val textFlow = buildText {
             +"> foo\n"
@@ -402,7 +402,7 @@ class Gfm_05_01_Test {
     }
 
     @Test
-    fun `example 217 - blockquote (text )`() = runTest {
+    fun `example 217 - blockquote text`() = runTest {
         // given
         val textFlow = ">".chunkedRandomly().asFlow()
 
@@ -422,7 +422,7 @@ class Gfm_05_01_Test {
     }
 
     @Test
-    fun `example 218 - blockquote (text )`() = runTest {
+    fun `example 218 - blockquote text`() = runTest {
         // given
         val textFlow = buildText {
             +">\n"
@@ -446,7 +446,7 @@ class Gfm_05_01_Test {
     }
 
     @Test
-    fun `example 219 - blockquote (text , paragraph foo, text )`() = runTest {
+    fun `example 219 - blockquote text paragraph foo text`() = runTest {
         // given
         val textFlow = buildText {
             +">\n"
@@ -474,7 +474,7 @@ class Gfm_05_01_Test {
     }
 
     @Test
-    fun `example 220 - blockquote (text , paragraph foo, text ), blockquote (text , paragraph (truncated)`() = runTest {
+    fun `example 220 - blockquote text paragraph foo text blockquote text paragraph truncated`() = runTest {
         // given
         val textFlow = """
             > foo
@@ -510,7 +510,7 @@ class Gfm_05_01_Test {
     }
 
     @Test
-    fun `example 221 - blockquote (text , paragraph foo bar, text )`() = runTest {
+    fun `example 221 - blockquote text paragraph foo bar text`() = runTest {
         // given
         val textFlow = """
             > foo
@@ -538,7 +538,7 @@ class Gfm_05_01_Test {
     }
 
     @Test
-    fun `example 222 - blockquote (text , paragraph foo, text , paragraph bar, text )`() = runTest {
+    fun `example 222 - blockquote text paragraph foo text paragraph bar text`() = runTest {
         // given
         val textFlow = """
             > foo
@@ -570,7 +570,7 @@ class Gfm_05_01_Test {
     }
 
     @Test
-    fun `example 223 - paragraph foo, blockquote (text , paragraph bar, text )`() = runTest {
+    fun `example 223 - paragraph foo blockquote text paragraph bar text`() = runTest {
         // given
         val textFlow = """
             foo
@@ -601,7 +601,7 @@ class Gfm_05_01_Test {
     }
 
     @Test
-    fun `example 224 - blockquote (text , paragraph aaa, text ), thematic break, blockquote ( (truncated)`() = runTest {
+    fun `example 224 - blockquote text paragraph aaa text thematic break blockquote truncated`() = runTest {
         // given
         val textFlow = """
             > aaa
@@ -639,7 +639,7 @@ class Gfm_05_01_Test {
     }
 
     @Test
-    fun `example 225 - blockquote (text , paragraph bar baz, text )`() = runTest {
+    fun `example 225 - blockquote text paragraph bar baz text`() = runTest {
         // given
         val textFlow = """
             > bar
@@ -667,7 +667,7 @@ class Gfm_05_01_Test {
     }
 
     @Test
-    fun `example 226 - blockquote (text , paragraph bar, text ), paragraph baz`() = runTest {
+    fun `example 226 - blockquote text paragraph bar text paragraph baz`() = runTest {
         // given
         val textFlow = """
             > bar
@@ -699,7 +699,7 @@ class Gfm_05_01_Test {
     }
 
     @Test
-    fun `example 227 - blockquote (text , paragraph bar, text ), paragraph baz`() = runTest {
+    fun `example 227 - blockquote text paragraph bar text paragraph baz`() = runTest {
         // given
         val textFlow = """
             > bar
@@ -731,7 +731,7 @@ class Gfm_05_01_Test {
     }
 
     @Test
-    fun `example 228 - blockquote (text , blockquote (text , blockquote (text , paragraph foo (truncated)`() = runTest {
+    fun `example 228 - blockquote text blockquote text blockquote text paragraph foo truncated`() = runTest {
         // given
         val textFlow = """
             > > > foo
@@ -767,7 +767,7 @@ class Gfm_05_01_Test {
     }
 
     @Test
-    fun `example 229 - blockquote (text , blockquote (text , blockquote (text , paragraph foo (truncated)`() = runTest {
+    fun `example 229 - blockquote text blockquote text blockquote text paragraph foo truncated`() = runTest {
         // given
         val textFlow = """
             >>> foo
@@ -805,7 +805,7 @@ class Gfm_05_01_Test {
     }
 
     @Test
-    fun `example 230 - blockquote (text , indented code block, text ), blockquote (text , par (truncated)`() = runTest {
+    fun `example 230 - blockquote text indented code block text blockquote text par truncated`() = runTest {
         // given
         val textFlow = """
             >     code

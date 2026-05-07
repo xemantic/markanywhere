@@ -187,7 +187,7 @@ class Gfm_06_10_Test {
     }
 
     @Test
-    fun `example 642 - paragraph a h#ref=hi`() = runTest {
+    fun `example 642 - paragraph a href=hi`() = runTest {
         // given
         val textFlow = """<a h*#ref="hi">""".chunkedRandomly().asFlow()
 
@@ -367,7 +367,7 @@ class Gfm_06_10_Test {
     }
 
     @Test
-    fun `example 650 - paragraph foo !-- foo --, paragraph foo !-- foo---`() = runTest {
+    fun `example 650 - paragraph foo !-- foo -- paragraph foo !-- foo---`() = runTest {
         // given
         val textFlow = """
             foo <!--> foo -->

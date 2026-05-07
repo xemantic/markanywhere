@@ -34,7 +34,6 @@ import kotlin.test.Test
 @Suppress("ClassName")
 class Gfm_06_09_Test {
 
-    // TODO review
     @Test
     fun `example 622 - paragraph wwwcommonmarkorg`() = runTest {
         // given
@@ -57,7 +56,6 @@ class Gfm_06_09_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 623 - paragraph Visit wwwcommonmarkor`() = runTest {
         // given
@@ -82,7 +80,6 @@ class Gfm_06_09_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 624 - two paragraph Visit wwwcommonmarkors`() = runTest {
         // given
@@ -119,9 +116,8 @@ class Gfm_06_09_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 625 - paragraph wwwgooglecomsearchq, paragraph wwwgooglecomsearchq, paragrap (truncated)`() = runTest {
+    fun `example 625 - paragraph wwwgooglecomsearchq paragraph wwwgooglecomsearchq paragrap truncated`() = runTest {
         // given
         val textFlow = """
             www.google.com/search?q=Markup+(business)
@@ -172,7 +168,6 @@ class Gfm_06_09_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 626 - paragraph wwwgooglecomsearchq`() = runTest {
         // given
@@ -195,7 +190,6 @@ class Gfm_06_09_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 627 - two paragraph wwwgooglecomsearchqs`() = runTest {
         // given
@@ -229,7 +223,6 @@ class Gfm_06_09_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 628 - paragraph wwwcommonmarkorghelp`() = runTest {
         // given
@@ -253,9 +246,8 @@ class Gfm_06_09_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 629 - paragraph httpcommonmarkorg, paragraph (Visit httpsencrypte`() = runTest {
+    fun `example 629 - paragraph httpcommonmarkorg paragraph Visit httpsencrypte`() = runTest {
         // given
         val textFlow = """
             http://commonmark.org
@@ -288,9 +280,8 @@ class Gfm_06_09_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 630 - paragraph foo@barbaz`() = runTest {
+    fun `example 630 - paragraph foobarbaz`() = runTest {
         // given
         val textFlow = "foo@bar.baz".chunkedRandomly().asFlow()
 
@@ -311,9 +302,8 @@ class Gfm_06_09_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 631 - paragraph hello@mail+xyzexample`() = runTest {
+    fun `example 631 - paragraph hellomail+xyzexample`() = runTest {
         // given
         val textFlow = "hello@mail+xyz.example isn't valid, but hello+xyz@mail.example is.".chunkedRandomly().asFlow()
 
@@ -336,9 +326,8 @@ class Gfm_06_09_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 632 - paragraph ab-c_d@ab, paragraph ab-c_d@ab, paragraph ab-c_d@ab-, paragr (truncated)`() = runTest {
+    fun `example 632 - paragraph ab-c_dab paragraph ab-c_dab paragraph ab-c_dab- paragr truncated`() = runTest {
         // given
         val textFlow = """
             a.b-c_d@a.b
@@ -382,9 +371,8 @@ class Gfm_06_09_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 633 - paragraph mailtofoo@barbaz, paragraph mailtoab-c_d@ab, paragraph mailt (truncated)`() = runTest {
+    fun `example 633 - paragraph mailtofoobarbaz paragraph mailtoab-c_dab paragraph mailt truncated`() = runTest {
         // given
         val textFlow = """
             mailto:foo@bar.baz
@@ -462,9 +450,8 @@ class Gfm_06_09_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 634 - paragraph xmppfoo@barbaztxt, paragraph xmppfoo@barbaztxt@bin, paragrap (truncated)`() = runTest {
+    fun `example 634 - paragraph xmppfoobarbaztxt paragraph xmppfoobarbaztxtbin paragrap truncated`() = runTest {
         // given
         val textFlow = """
             xmpp:foo@bar.baz/txt
@@ -503,9 +490,8 @@ class Gfm_06_09_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 635 - paragraph xmppfoo@barbaztxtbin`() = runTest {
+    fun `example 635 - paragraph xmppfoobarbaztxtbin`() = runTest {
         // given
         val textFlow = "xmpp:foo@bar.baz/txt/bin".chunkedRandomly().asFlow()
 

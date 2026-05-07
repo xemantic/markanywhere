@@ -35,7 +35,6 @@ import kotlin.test.Test
 @Suppress("ClassName")
 class Gfm_06_06_Test {
 
-    // TODO review
     @Test
     fun `example 494 - paragraph link`() = runTest {
         // given
@@ -58,7 +57,6 @@ class Gfm_06_06_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 495 - paragraph link`() = runTest {
         // given
@@ -81,7 +79,6 @@ class Gfm_06_06_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 496 - paragraph link`() = runTest {
         // given
@@ -104,7 +101,6 @@ class Gfm_06_06_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 497 - paragraph link`() = runTest {
         // given
@@ -127,9 +123,8 @@ class Gfm_06_06_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 498 - paragraph link(my uri)`() = runTest {
+    fun `example 498 - paragraph linkmy uri`() = runTest {
         // given
         val textFlow = "[link](/my uri)".chunkedRandomly().asFlow()
 
@@ -148,7 +143,6 @@ class Gfm_06_06_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 499 - paragraph link`() = runTest {
         // given
@@ -171,9 +165,8 @@ class Gfm_06_06_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 500 - paragraph link(foo bar)`() = runTest {
+    fun `example 500 - paragraph linkfoo bar`() = runTest {
         // given
         val textFlow = """
             [link](foo
@@ -196,9 +189,12 @@ class Gfm_06_06_Test {
          */
     }
 
-    // TODO review
+    // DIVERGENCE: multi-line link parsing not supported (CLAUDE.md), and
+    // inline HTML re-detection on abort does not fire — the captured label
+    // source replays as literal text rather than being re-fed through the
+    // inline char processor.
     @Test
-    fun `example 501 - paragraph link()`() = runTest {
+    fun `example 501 - DIVERGENCE - paragraph link`() = runTest {
         // given
         val textFlow = """
             [link](<foo
@@ -211,10 +207,7 @@ class Gfm_06_06_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"[link]("
-                "foo"("bar" to "") {
-                    +")"
-                }
+                +"[link](<foo\nbar>)"
             }
         }
         // GFM expected:
@@ -224,7 +217,6 @@ class Gfm_06_06_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 502 - paragraph a`() = runTest {
         // given
@@ -247,9 +239,8 @@ class Gfm_06_06_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 503 - paragraph link(foo)`() = runTest {
+    fun `example 503 - paragraph linkfoo`() = runTest {
         // given
         val textFlow = buildText {
             +"[link](<foo\\>)\n"
@@ -270,9 +261,12 @@ class Gfm_06_06_Test {
          */
     }
 
-    // TODO review
+    // DIVERGENCE: see example 501 — multi-line link parsing not supported
+    // and inline HTML re-detection on abort does not fire, so the entire
+    // multi-line source flows as literal paragraph text. GFM would recognise
+    // the third line's `<b>` as inline HTML.
     @Test
-    fun `example 504 - paragraph a(b)c a(b)c a(`() = runTest {
+    fun `example 504 - DIVERGENCE - paragraph abc abc a`() = runTest {
         // given
         val textFlow = """
             [a](<b)c
@@ -286,10 +280,7 @@ class Gfm_06_06_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"[a](<b)c\n[a](<b)c>\n[a]("
-                "b" {
-                    +"c)"
-                }
+                +"[a](<b)c\n[a](<b)c>\n[a](<b>c)"
             }
         }
         // GFM expected:
@@ -300,7 +291,6 @@ class Gfm_06_06_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 505 - paragraph link`() = runTest {
         // given
@@ -325,7 +315,6 @@ class Gfm_06_06_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 506 - paragraph link`() = runTest {
         // given
@@ -348,7 +337,6 @@ class Gfm_06_06_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 507 - paragraph link`() = runTest {
         // given
@@ -373,7 +361,6 @@ class Gfm_06_06_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 508 - paragraph link`() = runTest {
         // given
@@ -396,7 +383,6 @@ class Gfm_06_06_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 509 - paragraph link`() = runTest {
         // given
@@ -421,7 +407,6 @@ class Gfm_06_06_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 510 - three paragraph links`() = runTest {
         // given
@@ -462,7 +447,6 @@ class Gfm_06_06_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 511 - paragraph link`() = runTest {
         // given
@@ -487,7 +471,6 @@ class Gfm_06_06_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 512 - paragraph link`() = runTest {
         // given
@@ -510,7 +493,6 @@ class Gfm_06_06_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 513 - paragraph link`() = runTest {
         // given
@@ -533,7 +515,6 @@ class Gfm_06_06_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 514 - paragraph link link link`() = runTest {
         // given
@@ -570,7 +551,6 @@ class Gfm_06_06_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 515 - paragraph link`() = runTest {
         // given
@@ -595,7 +575,6 @@ class Gfm_06_06_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 516 - paragraph link`() = runTest {
         // given
@@ -618,9 +597,8 @@ class Gfm_06_06_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 517 - paragraph link(url title and`() = runTest {
+    fun `example 517 - paragraph linkurl title and`() = runTest {
         // given
         val textFlow = """[link](/url "title "and" title")""".chunkedRandomly().asFlow()
 
@@ -639,7 +617,6 @@ class Gfm_06_06_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 518 - paragraph link`() = runTest {
         // given
@@ -662,9 +639,13 @@ class Gfm_06_06_Test {
          */
     }
 
-    // TODO review
+    // DIVERGENCE: multi-line link parsing not supported (CLAUDE.md) — title
+    // on a separate line from the destination cannot be assembled in the
+    // streaming model. The label aborts and the source replays as literal
+    // text. The 2-space indent in front of `"title"` is consumed by paragraph
+    // continuation indentation handling before the abort replay sees it.
     @Test
-    fun `example 519 - paragraph link`() = runTest {
+    fun `example 519 - DIVERGENCE - paragraph link`() = runTest {
         // given
         val textFlow = buildText {
             +"[link](   /uri\n"
@@ -677,9 +658,7 @@ class Gfm_06_06_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "a"("href" to "/uri", "title" to "title") {
-                    +"link"
-                }
+                +"[link](   /uri\n\"title\"  )"
             }
         }
         // GFM expected:
@@ -688,9 +667,8 @@ class Gfm_06_06_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 520 - paragraph link (uri)`() = runTest {
+    fun `example 520 - paragraph link uri`() = runTest {
         // given
         val textFlow = "[link] (/uri)".chunkedRandomly().asFlow()
 
@@ -709,7 +687,6 @@ class Gfm_06_06_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 521 - paragraph link foo bar`() = runTest {
         // given
@@ -732,9 +709,8 @@ class Gfm_06_06_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 522 - paragraph link bar(uri)`() = runTest {
+    fun `example 522 - paragraph link baruri`() = runTest {
         // given
         val textFlow = "[link] bar](/uri)".chunkedRandomly().asFlow()
 
@@ -779,7 +755,6 @@ class Gfm_06_06_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 524 - paragraph link bar`() = runTest {
         // given
@@ -805,7 +780,7 @@ class Gfm_06_06_Test {
     }
 
     @Test
-    fun `example 525 - DIVERGENCE - link foo bar #`() = runTest {
+    fun `example 525 - DIVERGENCE - link foo bar`() = runTest {
         // given
         val textFlow = "[link *foo **bar** `#`*](/uri)".chunkedRandomly().asFlow()
 
@@ -841,9 +816,12 @@ class Gfm_06_06_Test {
          */
     }
 
-    // TODO review
+    // DIVERGENCE: image-inside-link not supported (CLAUDE.md). The
+    // depth-counter for nested label brackets treats the inner `![…](…)` as
+    // plain content of the outer label. Real fix would require speculative
+    // recursive parsing with unwinding.
     @Test
-    fun `example 526 - empty paragraph`() = runTest {
+    fun `example 526 - DIVERGENCE - empty paragraph`() = runTest {
         // given
         val textFlow = "[![moon](moon.jpg)](/uri)".chunkedRandomly().asFlow()
 
@@ -854,7 +832,7 @@ class Gfm_06_06_Test {
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
                 "a"("href" to "/uri") {
-                    "img"("src" to "moon.jpg", "alt" to "moon") {}
+                    +"![moon](moon.jpg)"
                 }
             }
         }
@@ -915,9 +893,13 @@ class Gfm_06_06_Test {
          */
     }
 
-    // TODO review
+    // DIVERGENCE: nested label brackets are depth-counted, not recursive
+    // (CLAUDE.md "Nested label brackets — depth-counted, not recursive"). The
+    // outer image's alt captures the entire nested content `[[foo](uri1)](uri2)`
+    // verbatim because the depth counter does not speculatively resolve the
+    // inner inline links and absorb their rendered text.
     @Test
-    fun `example 529 - empty paragraph`() = runTest {
+    fun `example 529 - DIVERGENCE - empty paragraph`() = runTest {
         // given
         val textFlow = "![[[foo](uri1)](uri2)](uri3)".chunkedRandomly().asFlow()
 
@@ -927,7 +909,7 @@ class Gfm_06_06_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "img"("src" to "uri3", "alt" to "[foo](uri2)") {}
+                "img"("src" to "uri3", "alt" to "[[foo](uri1)](uri2)") {}
             }
         }
         // GFM expected:
@@ -936,9 +918,20 @@ class Gfm_06_06_Test {
          */
     }
 
-    // TODO review
+    // DIVERGENCE: this is the eager-open / no-retroactive-close emphasis
+    // family from CLAUDE.md, not a label-internal delimiter issue. The outer
+    // `*` precedes `[`; flanking says it `canOpen` (preceded by start, which
+    // is whitespace; followed by `[` punctuation), so `resolveEmphasisRun`
+    // commits `mark em` immediately. The inner `*` inside the label is
+    // correctly flushed as literal at `]` (see `flushInlineLabelClose` and
+    // CLAUDE.md "Delimiter scoping"), so the link's content is `foo*`. But
+    // the outer em never finds a closer — `flushInline` drains the open
+    // stack at paragraph end and force-closes it, wrapping the link.
+    // Spec behavior requires a paragraph-wide delimiter stack (`process_emphasis`)
+    // to discover that no `*` closer follows and emit the opener as literal —
+    // incompatible with append-only streaming.
     @Test
-    fun `example 530 - paragraph foo`() = runTest {
+    fun `example 530 - DIVERGENCE - paragraph foo`() = runTest {
         // given
         val textFlow = "*[foo*](/uri)".chunkedRandomly().asFlow()
 
@@ -948,9 +941,10 @@ class Gfm_06_06_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"*"
-                "a"("href" to "/uri") {
-                    +"foo*"
+                "em" {
+                    "a"("href" to "/uri") {
+                        +"foo*"
+                    }
                 }
             }
         }
@@ -991,7 +985,6 @@ class Gfm_06_06_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 532 - paragraph foo bar baz`() = runTest {
         // given
@@ -1040,9 +1033,8 @@ class Gfm_06_06_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 534 - paragraph foo(uri)`() = runTest {
+    fun `example 534 - paragraph foouri`() = runTest {
         // given
         val textFlow = "[foo`](/uri)`".chunkedRandomly().asFlow()
 
@@ -1566,7 +1558,6 @@ class Gfm_06_06_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 553 - paragraph bar`() = runTest {
         // given
@@ -1595,7 +1586,6 @@ class Gfm_06_06_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 554 - paragraph barfoo!`() = runTest {
         // given
@@ -1620,9 +1610,8 @@ class Gfm_06_06_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 555 - paragraph fooref, paragraph ref uri`() = runTest {
+    fun `example 555 - paragraph fooref paragraph ref uri`() = runTest {
         // given
         val textFlow = """
             [foo][ref[]
@@ -1649,9 +1638,8 @@ class Gfm_06_06_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 556 - paragraph foorefbar, paragraph refbar uri`() = runTest {
+    fun `example 556 - paragraph foorefbar paragraph refbar uri`() = runTest {
         // given
         val textFlow = """
             [foo][ref[bar]]
@@ -1678,9 +1666,8 @@ class Gfm_06_06_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 557 - paragraph foo, paragraph foo url`() = runTest {
+    fun `example 557 - paragraph foo paragraph foo url`() = runTest {
         // given
         val textFlow = """
             [[[foo]]]
@@ -1733,7 +1720,6 @@ class Gfm_06_06_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 559 - paragraph bar`() = runTest {
         // given
@@ -1760,9 +1746,8 @@ class Gfm_06_06_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 560 - paragraph , paragraph uri`() = runTest {
+    fun `example 560 - paragraph paragraph uri`() = runTest {
         // given
         val textFlow = """
             []
@@ -1789,9 +1774,8 @@ class Gfm_06_06_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 561 - paragraph , paragraph uri`() = runTest {
+    fun `example 561 - paragraph paragraph uri`() = runTest {
         // given
         val textFlow = buildText {
             +"[\n"
@@ -2076,7 +2060,6 @@ class Gfm_06_06_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 572 - paragraph foo`() = runTest {
         // given
@@ -2184,7 +2167,6 @@ class Gfm_06_06_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 576 - paragraph foo`() = runTest {
         // given

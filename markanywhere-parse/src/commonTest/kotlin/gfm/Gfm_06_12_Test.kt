@@ -35,7 +35,6 @@ import kotlin.test.Test
 @Suppress("ClassName")
 class Gfm_06_12_Test {
 
-    // TODO review
     @Test
     fun `example 658 - paragraph foo baz`() = runTest {
         // given
@@ -62,7 +61,6 @@ class Gfm_06_12_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 659 - paragraph foo baz`() = runTest {
         // given
@@ -89,7 +87,6 @@ class Gfm_06_12_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 660 - paragraph foo baz`() = runTest {
         // given
@@ -116,7 +113,6 @@ class Gfm_06_12_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 661 - paragraph foo bar`() = runTest {
         // given
@@ -143,7 +139,6 @@ class Gfm_06_12_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 662 - paragraph foo bar`() = runTest {
         // given
@@ -357,7 +352,6 @@ class Gfm_06_12_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 669 - paragraph foo`() = runTest {
         // given
@@ -380,7 +374,6 @@ class Gfm_06_12_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 670 - paragraph foo`() = runTest {
         // given
@@ -403,7 +396,6 @@ class Gfm_06_12_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 671 - h3 foo`() = runTest {
         // given
@@ -426,7 +418,6 @@ class Gfm_06_12_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 672 - h3 foo`() = runTest {
         // given

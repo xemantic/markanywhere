@@ -44,7 +44,7 @@ import kotlin.test.Test
 class Gfm_04_03_Test {
 
     @Test
-    fun `example 50 - DIVERGENCE - 2 paragraphs with em, thematic break`() = runTest {
+    fun `example 50 - DIVERGENCE - 2 paragraphs with em thematic break`() = runTest {
         // given
         val textFlow = """
             Foo *bar*
@@ -111,7 +111,7 @@ class Gfm_04_03_Test {
     }
 
     @Test
-    fun `example 52 - DIVERGENCE - paragraph with leading whitespace, broken em, tab em`() = runTest {
+    fun `example 52 - DIVERGENCE - paragraph with leading whitespace broken em tab em`() = runTest {
         // given
         val textFlow = buildText {
             +"  Foo *bar\n"
@@ -140,7 +140,7 @@ class Gfm_04_03_Test {
     }
 
     @Test
-    fun `example 53 - DIVERGENCE - paragraph, thematic break, paragraph`() = runTest {
+    fun `example 53 - DIVERGENCE - paragraph thematic break paragraph`() = runTest {
         // given
         val textFlow = """
             Foo
@@ -210,7 +210,7 @@ class Gfm_04_03_Test {
     }
 
     @Test
-    fun `example 55 - indented code block, thematic break`() = runTest {
+    fun `example 55 - indented code block thematic break`() = runTest {
         // given
         val textFlow = buildText {
             +"    Foo\n"
@@ -244,7 +244,7 @@ class Gfm_04_03_Test {
     }
 
     @Test
-    fun `example 56 - DIVERGENCE - paragraph Foo, thematic break`() = runTest {
+    fun `example 56 - DIVERGENCE - paragraph Foo thematic break`() = runTest {
         // given
         val textFlow = buildText {
             +"Foo\n"
@@ -292,7 +292,7 @@ class Gfm_04_03_Test {
     }
 
     @Test
-    fun `example 58 - paragraph Foo equal equal, paragraph Foo, thematic break`() = runTest {
+    fun `example 58 - paragraph Foo equal equal paragraph Foo thematic break`() = runTest {
         // given
         val textFlow = """
             Foo
@@ -325,7 +325,7 @@ class Gfm_04_03_Test {
     }
 
     @Test
-    fun `example 59 - DIVERGENCE - paragraph Foo, thematic break`() = runTest {
+    fun `example 59 - DIVERGENCE - paragraph Foo thematic break`() = runTest {
         // given
         val textFlow = buildText {
             +"Foo  \n"
@@ -354,7 +354,7 @@ class Gfm_04_03_Test {
     }
 
     @Test
-    fun `example 60 - DIVERGENCE - paragraph Foo, thematic break`() = runTest {
+    fun `example 60 - DIVERGENCE - paragraph Foo thematic break`() = runTest {
         // given
         val textFlow = """
             Foo\
@@ -383,7 +383,7 @@ class Gfm_04_03_Test {
     }
 
     @Test
-    fun `example 61 - DIVERGENCE - paragraph with code, thematic break, paragraph, paragraph, thematic break, paragraph`() = runTest {
+    fun `example 61 - DIVERGENCE - paragraph with code thematic break paragraph paragraph thematic break paragraph`() = runTest {
         // given
         val textFlow = """
             `Foo
@@ -427,7 +427,7 @@ class Gfm_04_03_Test {
     }
 
     @Test
-    fun `example 62 - blockquote with paragraph Foo, thematic break`() = runTest {
+    fun `example 62 - blockquote with paragraph Foo thematic break`() = runTest {
         // given
         val textFlow = """
             > Foo
@@ -486,7 +486,7 @@ class Gfm_04_03_Test {
     }
 
     @Test
-    fun `example 64 - DIVERGENCE - ul with li with paragraph Foo, thematic break`() = runTest {
+    fun `example 64 - DIVERGENCE - ul with li with paragraph Foo thematic break`() = runTest {
         // given
         val textFlow = """
             - Foo
@@ -517,7 +517,7 @@ class Gfm_04_03_Test {
     }
 
     @Test
-    fun `example 65 - DIVERGENCE - paragraph Foo Bar, thematic break`() = runTest {
+    fun `example 65 - DIVERGENCE - paragraph Foo Bar thematic break`() = runTest {
         // given
         val textFlow = """
             Foo
@@ -543,7 +543,7 @@ class Gfm_04_03_Test {
     }
 
     @Test
-    fun `example 66 - DIVERGENCE - thematic break, paragraph, thematic break, paragraph, thematic break, paragraph`() = runTest {
+    fun `example 66 - DIVERGENCE - thematic break paragraph thematic break paragraph thematic break paragraph`() = runTest {
         // given
         val textFlow = """
             ---
@@ -628,7 +628,7 @@ class Gfm_04_03_Test {
     }
 
     @Test
-    fun `example 69 - DIVERGENCE - ul with li with paragraph foo, thematic break`() = runTest {
+    fun `example 69 - DIVERGENCE - ul with li with paragraph foo thematic break`() = runTest {
         // given
         val textFlow = """
             - foo
@@ -659,7 +659,7 @@ class Gfm_04_03_Test {
     }
 
     @Test
-    fun `example 70 - indented code block foo, thematic break`() = runTest {
+    fun `example 70 - indented code block foo thematic break`() = runTest {
         // given
         val textFlow = buildText {
             +"    foo\n"
@@ -687,7 +687,7 @@ class Gfm_04_03_Test {
     }
 
     @Test
-    fun `example 71 - blockquote with paragraph foo, thematic break`() = runTest {
+    fun `example 71 - blockquote with paragraph foo thematic break`() = runTest {
         // given
         val textFlow = """
             > foo
@@ -716,7 +716,7 @@ class Gfm_04_03_Test {
     }
 
     @Test
-    fun `example 72 - DIVERGENCE - paragraph with escaped greater-than, thematic break`() = runTest {
+    fun `example 72 - DIVERGENCE - paragraph with escaped greater-than thematic break`() = runTest {
         // given
         val textFlow = """
             \> foo
@@ -740,7 +740,7 @@ class Gfm_04_03_Test {
     }
 
     @Test
-    fun `example 73 - DIVERGENCE - paragraph Foo, paragraph bar, thematic break, paragraph baz`() = runTest {
+    fun `example 73 - DIVERGENCE - paragraph Foo paragraph bar thematic break paragraph baz`() = runTest {
         // given
         val textFlow = """
             Foo
@@ -775,7 +775,7 @@ class Gfm_04_03_Test {
     }
 
     @Test
-    fun `example 74 - paragraph Foo bar, thematic break, paragraph baz`() = runTest {
+    fun `example 74 - paragraph Foo bar thematic break paragraph baz`() = runTest {
         // given
         val textFlow = """
             Foo
@@ -809,7 +809,7 @@ class Gfm_04_03_Test {
     }
 
     @Test
-    fun `example 75 - paragraph Foo bar, thematic break, paragraph baz`() = runTest {
+    fun `example 75 - paragraph Foo bar thematic break paragraph baz`() = runTest {
         // given
         val textFlow = """
             Foo

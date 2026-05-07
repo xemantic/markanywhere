@@ -102,7 +102,7 @@ class Gfm_06_02_Test {
     }
 
     @Test
-    fun `example 324 - paragraph &nbsp &x &# &#x &#87`() = runTest {
+    fun `example 324 - paragraph nbsp x x 87`() = runTest {
         // given
         val textFlow = """
             &nbsp &x; &#; &#x;
@@ -130,7 +130,7 @@ class Gfm_06_02_Test {
     }
 
     @Test
-    fun `example 325 - paragraph &copy`() = runTest {
+    fun `example 325 - paragraph copy`() = runTest {
         // given
         val textFlow = "&copy".chunkedRandomly().asFlow()
 
@@ -150,7 +150,7 @@ class Gfm_06_02_Test {
     }
 
     @Test
-    fun `example 326 - paragraph &MadeUpEntity`() = runTest {
+    fun `example 326 - paragraph MadeUpEntity`() = runTest {
         // given
         val textFlow = "&MadeUpEntity;".chunkedRandomly().asFlow()
 
@@ -266,7 +266,7 @@ class Gfm_06_02_Test {
     }
 
     @Test
-    fun `example 331 - paragraph f&ouml&ouml`() = runTest {
+    fun `example 331 - paragraph foumlouml`() = runTest {
         // given
         val textFlow = "`f&ouml;&ouml;`".chunkedRandomly().asFlow()
 

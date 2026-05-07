@@ -34,9 +34,8 @@ import kotlin.test.Test
 @Suppress("ClassName")
 class Gfm_06_14_Test {
 
-    // TODO review
     @Test
-    fun `example 675 - paragraph hello $'there`() = runTest {
+    fun `example 675 - paragraph hello 'there`() = runTest {
         // given
         val textFlow = "hello $.;'there\n".chunkedRandomly().asFlow()
 

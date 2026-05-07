@@ -108,7 +108,7 @@ class Gfm_04_07_Test {
     }
 
     @Test
-    fun `example 163 - DIVERGENCE - special characters in label, parens in url`() = runTest {
+    fun `example 163 - DIVERGENCE - special characters in label parens in url`() = runTest {
         // given
         val textFlow = """
             [Foo*bar\]]:my_(url) 'title (with parens)'
@@ -387,7 +387,7 @@ class Gfm_04_07_Test {
     }
 
     @Test
-    fun `example 172 - DIVERGENCE - forward reference, definition after use`() = runTest {
+    fun `example 172 - DIVERGENCE - forward reference definition after use`() = runTest {
         // given
         val textFlow = """
             [foo]
@@ -415,7 +415,7 @@ class Gfm_04_07_Test {
     }
 
     @Test
-    fun `example 173 - DIVERGENCE - duplicate definitions, first wins`() = runTest {
+    fun `example 173 - DIVERGENCE - duplicate definitions first wins`() = runTest {
         // given
         val textFlow = """
             [foo]
@@ -558,7 +558,7 @@ class Gfm_04_07_Test {
     }
 
     @Test
-    fun `example 179 - title on continuation line, trailing content rejects title`() = runTest {
+    fun `example 179 - title on continuation line trailing content rejects title`() = runTest {
         // given
         val textFlow = """
             [foo]: /url
@@ -746,7 +746,7 @@ class Gfm_04_07_Test {
     }
 
     @Test
-    fun `example 185 - DIVERGENCE - setext underline only, no heading content`() = runTest {
+    fun `example 185 - DIVERGENCE - setext underline only no heading content`() = runTest {
         // given
         val textFlow = """
             [foo]: /url
@@ -855,7 +855,7 @@ class Gfm_04_07_Test {
     }
 
     @Test
-    fun `example 188 - standalone definition, no trailing newline`() = runTest {
+    fun `example 188 - standalone definition no trailing newline`() = runTest {
         // given
         val textFlow = "[foo]: /url".chunkedRandomly().asFlow()
 

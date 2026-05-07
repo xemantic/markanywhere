@@ -35,7 +35,7 @@ import kotlin.test.Test
 class Gfm_06_05_Test {
 
     @Test
-    fun `example 491 - paragraph Hi Hello, there world!`() = runTest {
+    fun `example 491 - paragraph Hi Hello there world!`() = runTest {
         // given
         val textFlow = "~~Hi~~ Hello, ~there~ world!".chunkedRandomly().asFlow()
 
@@ -101,7 +101,7 @@ class Gfm_06_05_Test {
     }
 
     @Test
-    fun `example 493 - paragraph This will ~~~not~~~ str`() = runTest {
+    fun `example 493 - paragraph This will not str`() = runTest {
         // given
         val textFlow = "This will ~~~not~~~ strike.".chunkedRandomly().asFlow()
 

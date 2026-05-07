@@ -36,7 +36,7 @@ import kotlin.test.Test
 class Gfm_04_09_Test {
 
     @Test
-    fun `example 197 - paragraph aaa, h1 aaa`() = runTest {
+    fun `example 197 - paragraph aaa h1 aaa`() = runTest {
         // given
         val textFlow = buildText {
             +"  \n"

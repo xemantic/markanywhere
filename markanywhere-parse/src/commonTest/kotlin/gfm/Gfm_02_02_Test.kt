@@ -41,7 +41,7 @@ import kotlin.test.Test
 class Gfm_02_02_Test {
 
     @Test
-    fun `example 1 - tab can replace four spaces in indented code block, internal tabs preserved`() = runTest {
+    fun `example 1 - tab can replace four spaces in indented code block internal tabs preserved`() = runTest {
         // given
         val textFlow = "\tfoo\tbaz\t\tbim".chunkedRandomly().asFlow()
 
