@@ -408,17 +408,19 @@ class Gfm_06_03_Test {
         val parsed = textFlow.parse()
 
         // then
-        // GFM gives code spans precedence over `[…](…)` link parsing: the
-        // backtick-bounded run `` `link](/foo` `` is a single code span, and the
-        // surrounding `[`/`]` never form a link. Our parser commits to the link
-        // shape on `]( … )` before the code-span delimiter is recognized.
-        // Honoring the priority would require buffering an entire paragraph
-        // before emitting any event — incompatible with streaming output.
+        // After Phase 3a label-content rendering, label content flows through
+        // normal inline parsing — so the backtick run between `` `link `` and
+        // `` `) `` opens a code span before the `]` triggers tentative close.
+        // The code span captures `]` and `(` as content, the label never
+        // completes, and the bracket aborts to literal text. This is closer
+        // to GFM's expected output (code span wins over link priority).
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "a"("href" to "/foo`") {
-                    +"not a `link"
+                +"[not a "
+                "code" {
+                    +"link](/foo"
                 }
+                +")"
             }
         }
         // GFM expected:

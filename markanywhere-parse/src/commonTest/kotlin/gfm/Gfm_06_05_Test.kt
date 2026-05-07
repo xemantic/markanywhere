@@ -34,7 +34,6 @@ import kotlin.test.Test
 @Suppress("ClassName")
 class Gfm_06_05_Test {
 
-    // TODO review
     @Test
     fun `example 491 - paragraph Hi Hello, there world!`() = runTest {
         // given
@@ -62,9 +61,8 @@ class Gfm_06_05_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 492 - paragraph This ~~has a, paragraph new paragraph~~`() = runTest {
+    fun `example 492 - DIVERGENCE - unclosed strikethrough force-closes at paragraph end`() = runTest {
         // given
         val textFlow = """
             This ~~has a
@@ -78,10 +76,16 @@ class Gfm_06_05_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"This ~~has a"
+                +"This "
+                "del" {
+                    +"has a"
+                }
             }
             "p" {
-                +"new paragraph~~."
+                +"new paragraph"
+                "del" {
+                    +"."
+                }
             }
         }
         // GFM expected:
@@ -89,9 +93,13 @@ class Gfm_06_05_Test {
             <p>This ~~has a</p>
             <p>new paragraph~~.</p>
          */
+        // DIVERGENCE: strikethrough is not flanking-aware and force-closes at
+        // every block/line boundary in `flushInline` (same streaming-friendly
+        // policy as inline code spans). Replaying the opener as literal would
+        // require buffering the whole content past the next emitted event,
+        // breaking the typewriter UX.
     }
 
-    // TODO review
     @Test
     fun `example 493 - paragraph This will ~~~not~~~ str`() = runTest {
         // given

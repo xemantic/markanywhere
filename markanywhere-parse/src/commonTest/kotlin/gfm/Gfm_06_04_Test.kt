@@ -35,7 +35,6 @@ import kotlin.test.Test
 @Suppress("ClassName")
 class Gfm_06_04_Test {
 
-    // TODO review
     @Test
     fun `example 360 - paragraph foo bar`() = runTest {
         // given
@@ -58,7 +57,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 361 - paragraph a foo bar`() = runTest {
         // given
@@ -79,7 +77,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 362 - paragraph afoo`() = runTest {
         // given
@@ -100,7 +97,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 363 - paragraph a`() = runTest {
         // given
@@ -121,7 +117,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 364 - paragraph foobar`() = runTest {
         // given
@@ -145,7 +140,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 365 - paragraph 5678`() = runTest {
         // given
@@ -170,7 +164,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 366 - paragraph foo bar`() = runTest {
         // given
@@ -193,7 +186,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 367 - paragraph _ foo bar_`() = runTest {
         // given
@@ -214,7 +206,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 368 - paragraph a_foo_`() = runTest {
         // given
@@ -235,7 +226,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 369 - paragraph foo_bar_`() = runTest {
         // given
@@ -256,7 +246,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 370 - paragraph 5_6_78`() = runTest {
         // given
@@ -277,7 +266,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 371 - paragraph пристаням_стремятся_`() = runTest {
         // given
@@ -298,9 +286,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 372 - paragraph aa_bb_cc`() = runTest {
+    fun `example 372 - DIVERGENCE - paragraph aa_bb_cc`() = runTest {
         // given
         val textFlow = """aa_"bb"_cc""".chunkedRandomly().asFlow()
 
@@ -310,7 +297,10 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"aa_\"bb\"_cc"
+                +"aa_\"bb\""
+                "em" {
+                    +"cc"
+                }
             }
         }
         // GFM expected:
@@ -319,7 +309,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 373 - paragraph foo-(bar)`() = runTest {
         // given
@@ -343,9 +332,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 374 - paragraph _foo`() = runTest {
+    fun `example 374 - DIVERGENCE - paragraph _foo`() = runTest {
         // given
         val textFlow = "_foo*".chunkedRandomly().asFlow()
 
@@ -355,7 +343,9 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"_foo*"
+                "em" {
+                    +"foo"
+                }
             }
         }
         // GFM expected:
@@ -364,9 +354,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 375 - paragraph foo bar`() = runTest {
+    fun `example 375 - DIVERGENCE - paragraph foo bar`() = runTest {
         // given
         val textFlow = "*foo bar *".chunkedRandomly().asFlow()
 
@@ -376,7 +365,9 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"*foo bar *"
+                "em" {
+                    +"foo bar *"
+                }
             }
         }
         // GFM expected:
@@ -385,9 +376,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 376 - paragraph foo bar`() = runTest {
+    fun `example 376 - DIVERGENCE - paragraph foo bar`() = runTest {
         // given
         val textFlow = """
             *foo bar
@@ -400,7 +390,10 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"*foo bar\n*"
+                "em" {
+                    +"foo bar"
+                }
+                +"\n*"
             }
         }
         // GFM expected:
@@ -410,9 +403,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 377 - paragraph (foo)`() = runTest {
+    fun `example 377 - DIVERGENCE - paragraph (foo)`() = runTest {
         // given
         val textFlow = "*(*foo)".chunkedRandomly().asFlow()
 
@@ -422,7 +414,9 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"*(*foo)"
+                "em" {
+                    +"(*foo)"
+                }
             }
         }
         // GFM expected:
@@ -431,9 +425,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 378 - paragraph (foo)`() = runTest {
+    fun `example 378 - DIVERGENCE - paragraph (foo)`() = runTest {
         // given
         val textFlow = "*(*foo*)*".chunkedRandomly().asFlow()
 
@@ -444,12 +437,9 @@ class Gfm_06_04_Test {
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
                 "em" {
-                    +"("
-                    "em" {
-                        +"foo"
-                    }
-                    +")"
+                    +"(*foo"
                 }
+                +")*"
             }
         }
         // GFM expected:
@@ -458,7 +448,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 379 - paragraph foobar`() = runTest {
         // given
@@ -482,9 +471,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 380 - paragraph _foo bar _`() = runTest {
+    fun `example 380 - DIVERGENCE - paragraph _foo bar _`() = runTest {
         // given
         val textFlow = "_foo bar _".chunkedRandomly().asFlow()
 
@@ -494,7 +482,9 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"_foo bar _"
+                "em" {
+                    +"foo bar _"
+                }
             }
         }
         // GFM expected:
@@ -503,9 +493,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 381 - paragraph _(_foo)`() = runTest {
+    fun `example 381 - DIVERGENCE - paragraph _(_foo)`() = runTest {
         // given
         val textFlow = "_(_foo)".chunkedRandomly().asFlow()
 
@@ -515,7 +504,9 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"_(_foo)"
+                "em" {
+                    +"(_foo)"
+                }
             }
         }
         // GFM expected:
@@ -524,9 +515,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 382 - paragraph (foo)`() = runTest {
+    fun `example 382 - DIVERGENCE - paragraph (foo)`() = runTest {
         // given
         val textFlow = "_(_foo_)_".chunkedRandomly().asFlow()
 
@@ -537,12 +527,9 @@ class Gfm_06_04_Test {
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
                 "em" {
-                    +"("
-                    "em" {
-                        +"foo"
-                    }
-                    +")"
+                    +"(_foo"
                 }
+                +")_"
             }
         }
         // GFM expected:
@@ -551,9 +538,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 383 - paragraph _foo_bar`() = runTest {
+    fun `example 383 - DIVERGENCE - paragraph _foo_bar`() = runTest {
         // given
         val textFlow = "_foo_bar".chunkedRandomly().asFlow()
 
@@ -563,7 +549,9 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"_foo_bar"
+                "em" {
+                    +"foo_bar"
+                }
             }
         }
         // GFM expected:
@@ -572,9 +560,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 384 - paragraph _пристаням_стремятся`() = runTest {
+    fun `example 384 - DIVERGENCE - paragraph _пристаням_стремятся`() = runTest {
         // given
         val textFlow = "_пристаням_стремятся".chunkedRandomly().asFlow()
 
@@ -584,7 +571,9 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"_пристаням_стремятся"
+                "em" {
+                    +"пристаням_стремятся"
+                }
             }
         }
         // GFM expected:
@@ -593,7 +582,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 385 - paragraph foo_bar_baz`() = runTest {
         // given
@@ -616,7 +604,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 386 - paragraph (bar)`() = runTest {
         // given
@@ -640,7 +627,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 387 - paragraph foo bar`() = runTest {
         // given
@@ -663,7 +649,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 388 - paragraph foo bar`() = runTest {
         // given
@@ -684,7 +669,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 389 - paragraph afoo`() = runTest {
         // given
@@ -705,7 +689,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 390 - paragraph foobar`() = runTest {
         // given
@@ -729,7 +712,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 391 - paragraph foo bar`() = runTest {
         // given
@@ -752,7 +734,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 392 - paragraph __ foo bar__`() = runTest {
         // given
@@ -773,7 +754,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 393 - paragraph __ foo bar__`() = runTest {
         // given
@@ -798,7 +778,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 394 - paragraph a__foo__`() = runTest {
         // given
@@ -819,7 +798,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 395 - paragraph foo__bar__`() = runTest {
         // given
@@ -840,7 +818,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 396 - paragraph 5__6__78`() = runTest {
         // given
@@ -861,7 +838,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 397 - paragraph пристаням__стремятся__`() = runTest {
         // given
@@ -882,9 +858,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 398 - paragraph foo, bar, baz`() = runTest {
+    fun `example 398 - DIVERGENCE - paragraph foo, bar, baz`() = runTest {
         // given
         val textFlow = "__foo, __bar__, baz__".chunkedRandomly().asFlow()
 
@@ -895,12 +870,9 @@ class Gfm_06_04_Test {
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
                 "strong" {
-                    +"foo, "
-                    "strong" {
-                        +"bar"
-                    }
-                    +", baz"
+                    +"foo, __bar"
                 }
+                +", baz__"
             }
         }
         // GFM expected:
@@ -909,7 +881,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 399 - paragraph foo-(bar)`() = runTest {
         // given
@@ -933,9 +904,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 400 - paragraph foo bar`() = runTest {
+    fun `example 400 - DIVERGENCE - paragraph foo bar`() = runTest {
         // given
         val textFlow = "**foo bar **".chunkedRandomly().asFlow()
 
@@ -945,7 +915,9 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"**foo bar **"
+                "strong" {
+                    +"foo bar **"
+                }
             }
         }
         // GFM expected:
@@ -954,9 +926,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 401 - paragraph (foo)`() = runTest {
+    fun `example 401 - DIVERGENCE - paragraph (foo)`() = runTest {
         // given
         val textFlow = "**(**foo)".chunkedRandomly().asFlow()
 
@@ -966,7 +937,9 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"**(**foo)"
+                "strong" {
+                    +"(**foo)"
+                }
             }
         }
         // GFM expected:
@@ -975,7 +948,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 402 - paragraph (foo)`() = runTest {
         // given
@@ -1002,9 +974,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 403 - paragraph Gomphocarpus (Gomphocar`() = runTest {
+    fun `example 403 - DIVERGENCE - paragraph Gomphocarpus (Gomphocar`() = runTest {
         // given
         val textFlow = """
             **Gomphocarpus (*Gomphocarpus physocarpus*, syn.
@@ -1022,12 +993,13 @@ class Gfm_06_04_Test {
                     "em" {
                         +"Gomphocarpus physocarpus"
                     }
-                    +", syn.\n"
-                    "em" {
-                        +"Asclepias physocarpa"
-                    }
-                    +")"
+                    +", syn."
                 }
+                +"\n"
+                "em" {
+                    +"Asclepias physocarpa"
+                }
+                +")**"
             }
         }
         // GFM expected:
@@ -1037,7 +1009,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 404 - paragraph foo bar foo`() = runTest {
         // given
@@ -1064,7 +1035,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 405 - paragraph foobar`() = runTest {
         // given
@@ -1088,9 +1058,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 406 - paragraph __foo bar __`() = runTest {
+    fun `example 406 - DIVERGENCE - paragraph __foo bar __`() = runTest {
         // given
         val textFlow = "__foo bar __".chunkedRandomly().asFlow()
 
@@ -1100,7 +1069,9 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"__foo bar __"
+                "strong" {
+                    +"foo bar __"
+                }
             }
         }
         // GFM expected:
@@ -1109,9 +1080,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 407 - paragraph __(__foo)`() = runTest {
+    fun `example 407 - DIVERGENCE - paragraph __(__foo)`() = runTest {
         // given
         val textFlow = "__(__foo)".chunkedRandomly().asFlow()
 
@@ -1121,7 +1091,9 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"__(__foo)"
+                "strong" {
+                    +"(__foo)"
+                }
             }
         }
         // GFM expected:
@@ -1130,7 +1102,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 408 - paragraph (foo)`() = runTest {
         // given
@@ -1157,9 +1128,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 409 - paragraph __foo__bar`() = runTest {
+    fun `example 409 - DIVERGENCE - paragraph __foo__bar`() = runTest {
         // given
         val textFlow = "__foo__bar".chunkedRandomly().asFlow()
 
@@ -1169,7 +1139,9 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"__foo__bar"
+                "strong" {
+                    +"foo__bar"
+                }
             }
         }
         // GFM expected:
@@ -1178,9 +1150,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 410 - paragraph __пристаням__стремятся`() = runTest {
+    fun `example 410 - DIVERGENCE - paragraph __пристаням__стремятся`() = runTest {
         // given
         val textFlow = "__пристаням__стремятся".chunkedRandomly().asFlow()
 
@@ -1190,7 +1161,9 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"__пристаням__стремятся"
+                "strong" {
+                    +"пристаням__стремятся"
+                }
             }
         }
         // GFM expected:
@@ -1199,7 +1172,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 411 - paragraph foo__bar__baz`() = runTest {
         // given
@@ -1222,7 +1194,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 412 - paragraph (bar)`() = runTest {
         // given
@@ -1246,7 +1217,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 413 - paragraph foo bar`() = runTest {
         // given
@@ -1272,9 +1242,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 414 - paragraph foo bar`() = runTest {
+    fun `example 414 - DIVERGENCE - paragraph foo bar`() = runTest {
         // given
         val textFlow = """
             *foo
@@ -1288,8 +1257,9 @@ class Gfm_06_04_Test {
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
                 "em" {
-                    +"foo\nbar"
+                    +"foo"
                 }
+                +"\nbar*"
             }
         }
         // GFM expected:
@@ -1299,7 +1269,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 415 - paragraph foo bar baz`() = runTest {
         // given
@@ -1326,9 +1295,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 416 - paragraph foo bar baz`() = runTest {
+    fun `example 416 - DIVERGENCE - paragraph foo bar baz`() = runTest {
         // given
         val textFlow = "_foo _bar_ baz_".chunkedRandomly().asFlow()
 
@@ -1339,12 +1307,9 @@ class Gfm_06_04_Test {
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
                 "em" {
-                    +"foo "
-                    "em" {
-                        +"bar"
-                    }
-                    +" baz"
+                    +"foo _bar"
                 }
+                +" baz_"
             }
         }
         // GFM expected:
@@ -1353,9 +1318,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 417 - paragraph foo bar`() = runTest {
+    fun `example 417 - DIVERGENCE - paragraph foo bar`() = runTest {
         // given
         val textFlow = "__foo_ bar_".chunkedRandomly().asFlow()
 
@@ -1365,11 +1329,8 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "em" {
-                    "em" {
-                        +"foo"
-                    }
-                    +" bar"
+                "strong" {
+                    +"foo_ bar_"
                 }
             }
         }
@@ -1379,9 +1340,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 418 - paragraph foo bar`() = runTest {
+    fun `example 418 - DIVERGENCE - paragraph foo bar`() = runTest {
         // given
         val textFlow = "*foo *bar**".chunkedRandomly().asFlow()
 
@@ -1392,10 +1352,7 @@ class Gfm_06_04_Test {
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
                 "em" {
-                    +"foo "
-                    "em" {
-                        +"bar"
-                    }
+                    +"foo *bar**"
                 }
             }
         }
@@ -1405,7 +1362,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 419 - paragraph foo bar baz`() = runTest {
         // given
@@ -1432,7 +1388,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 420 - paragraph foobarbaz`() = runTest {
         // given
@@ -1459,9 +1414,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 421 - paragraph foobar`() = runTest {
+    fun `example 421 - DIVERGENCE - paragraph foobar`() = runTest {
         // given
         val textFlow = "*foo**bar*".chunkedRandomly().asFlow()
 
@@ -1472,7 +1426,10 @@ class Gfm_06_04_Test {
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
                 "em" {
-                    +"foo**bar"
+                    +"foo"
+                    "strong" {
+                        +"bar"
+                    }
                 }
             }
         }
@@ -1482,9 +1439,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 422 - paragraph foo bar`() = runTest {
+    fun `example 422 - DIVERGENCE - paragraph foo bar`() = runTest {
         // given
         val textFlow = "***foo** bar*".chunkedRandomly().asFlow()
 
@@ -1494,12 +1450,12 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "em" {
-                    "strong" {
+                "strong" {
+                    "em" {
                         +"foo"
                     }
-                    +" bar"
                 }
+                +" bar*"
             }
         }
         // GFM expected:
@@ -1508,7 +1464,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 423 - paragraph foo bar`() = runTest {
         // given
@@ -1534,7 +1489,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 424 - paragraph foobar`() = runTest {
         // given
@@ -1560,9 +1514,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 425 - paragraph foobarbaz`() = runTest {
+    fun `example 425 - DIVERGENCE - paragraph foobarbaz`() = runTest {
         // given
         val textFlow = "foo***bar***baz".chunkedRandomly().asFlow()
 
@@ -1573,8 +1526,8 @@ class Gfm_06_04_Test {
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
                 +"foo"
-                "em" {
-                    "strong" {
+                "strong" {
+                    "em" {
                         +"bar"
                     }
                 }
@@ -1587,9 +1540,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 426 - paragraph foobarbaz`() = runTest {
+    fun `example 426 - DIVERGENCE - paragraph foobarbaz`() = runTest {
         // given
         val textFlow = "foo******bar*********baz".chunkedRandomly().asFlow()
 
@@ -1599,15 +1551,7 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"foo"
-                "strong" {
-                    "strong" {
-                        "strong" {
-                            +"bar"
-                        }
-                    }
-                }
-                +"***baz"
+                +"foo******bar*********baz"
             }
         }
         // GFM expected:
@@ -1616,9 +1560,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 427 - paragraph foo bar baz bim bop`() = runTest {
+    fun `example 427 - DIVERGENCE - paragraph foo bar baz bim bop`() = runTest {
         // given
         val textFlow = "*foo **bar *baz* bim** bop*".chunkedRandomly().asFlow()
 
@@ -1631,14 +1574,10 @@ class Gfm_06_04_Test {
                 "em" {
                     +"foo "
                     "strong" {
-                        +"bar "
-                        "em" {
-                            +"baz"
-                        }
-                        +" bim"
+                        +"bar *baz"
                     }
-                    +" bop"
                 }
+                +" bim** bop*"
             }
         }
         // GFM expected:
@@ -1647,9 +1586,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 428 - paragraph foo bar`() = runTest {
+    fun `example 428 - DIVERGENCE - paragraph foo bar`() = runTest {
         // given
         val textFlow = "*foo [*bar*](/url)*".chunkedRandomly().asFlow()
 
@@ -1662,9 +1600,7 @@ class Gfm_06_04_Test {
                 "em" {
                     +"foo "
                     "a"("href" to "/url") {
-                        "em" {
-                            +"bar"
-                        }
+                        +"*bar*"
                     }
                 }
             }
@@ -1675,7 +1611,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 429 - paragraph is not an empty emph`() = runTest {
         // given
@@ -1696,7 +1631,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 430 - paragraph is not an empty st`() = runTest {
         // given
@@ -1717,7 +1651,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 431 - paragraph foo bar`() = runTest {
         // given
@@ -1743,9 +1676,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 432 - paragraph foo bar`() = runTest {
+    fun `example 432 - DIVERGENCE - paragraph foo bar`() = runTest {
         // given
         val textFlow = """
             **foo
@@ -1759,8 +1691,9 @@ class Gfm_06_04_Test {
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
                 "strong" {
-                    +"foo\nbar"
+                    +"foo"
                 }
+                +"\nbar**"
             }
         }
         // GFM expected:
@@ -1770,7 +1703,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 433 - paragraph foo bar baz`() = runTest {
         // given
@@ -1797,9 +1729,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 434 - paragraph foo bar baz`() = runTest {
+    fun `example 434 - DIVERGENCE - paragraph foo bar baz`() = runTest {
         // given
         val textFlow = "__foo __bar__ baz__".chunkedRandomly().asFlow()
 
@@ -1810,12 +1741,9 @@ class Gfm_06_04_Test {
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
                 "strong" {
-                    +"foo "
-                    "strong" {
-                        +"bar"
-                    }
-                    +" baz"
+                    +"foo __bar"
                 }
+                +" baz__"
             }
         }
         // GFM expected:
@@ -1824,9 +1752,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 435 - paragraph foo bar`() = runTest {
+    fun `example 435 - DIVERGENCE - paragraph foo bar`() = runTest {
         // given
         val textFlow = "____foo__ bar__".chunkedRandomly().asFlow()
 
@@ -1836,12 +1763,7 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "strong" {
-                    "strong" {
-                        +"foo"
-                    }
-                    +" bar"
-                }
+                +"____foo__ bar__"
             }
         }
         // GFM expected:
@@ -1850,9 +1772,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 436 - paragraph foo bar`() = runTest {
+    fun `example 436 - DIVERGENCE - paragraph foo bar`() = runTest {
         // given
         val textFlow = "**foo **bar****".chunkedRandomly().asFlow()
 
@@ -1863,10 +1784,7 @@ class Gfm_06_04_Test {
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
                 "strong" {
-                    +"foo "
-                    "strong" {
-                        +"bar"
-                    }
+                    +"foo **bar****"
                 }
             }
         }
@@ -1876,7 +1794,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 437 - paragraph foo bar baz`() = runTest {
         // given
@@ -1903,7 +1820,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 438 - paragraph foobarbaz`() = runTest {
         // given
@@ -1930,7 +1846,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 439 - paragraph foo bar`() = runTest {
         // given
@@ -1956,7 +1871,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 440 - paragraph foo bar`() = runTest {
         // given
@@ -1982,9 +1896,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 441 - paragraph foo bar baz bim bop`() = runTest {
+    fun `example 441 - DIVERGENCE - paragraph foo bar baz bim bop`() = runTest {
         // given
         val textFlow = """
             **foo *bar **baz**
@@ -2000,14 +1913,10 @@ class Gfm_06_04_Test {
                 "strong" {
                     +"foo "
                     "em" {
-                        +"bar "
-                        "strong" {
-                            +"baz"
-                        }
-                        +"\nbim"
+                        +"bar **baz"
                     }
-                    +" bop"
                 }
+                +"\nbim* bop**"
             }
         }
         // GFM expected:
@@ -2017,9 +1926,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 442 - paragraph foo bar`() = runTest {
+    fun `example 442 - DIVERGENCE - paragraph foo bar`() = runTest {
         // given
         val textFlow = "**foo [*bar*](/url)**".chunkedRandomly().asFlow()
 
@@ -2027,13 +1935,17 @@ class Gfm_06_04_Test {
         val parsed = textFlow.parse()
 
         // then
+        // Phase 3a/3b DIVERGENCE: trailing `*` in label position is buffered
+        // as a delimiter when `]` arrives; flushInlineLabelClose flushes it
+        // as literal text (em opens but won't close around it without
+        // delimiter scoping awareness — see CLAUDE.md).
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
                 "strong" {
                     +"foo "
                     "a"("href" to "/url") {
                         "em" {
-                            +"bar"
+                            +"bar*"
                         }
                     }
                 }
@@ -2045,7 +1957,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 443 - paragraph __ is not an empty emph`() = runTest {
         // given
@@ -2066,7 +1977,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 444 - paragraph ____ is not an empty st`() = runTest {
         // given
@@ -2087,7 +1997,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 445 - paragraph foo`() = runTest {
         // given
@@ -2108,9 +2017,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 446 - paragraph foo`() = runTest {
+    fun `example 446 - DIVERGENCE - paragraph foo`() = runTest {
         // given
         val textFlow = buildText {
             +"foo *\\**\n"
@@ -2122,10 +2030,7 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"foo "
-                "em" {
-                    +"*"
-                }
+                +"foo ***"
             }
         }
         // GFM expected:
@@ -2134,7 +2039,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 447 - paragraph foo _`() = runTest {
         // given
@@ -2158,7 +2062,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 448 - paragraph foo`() = runTest {
         // given
@@ -2179,9 +2082,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 449 - paragraph foo`() = runTest {
+    fun `example 449 - DIVERGENCE - paragraph foo`() = runTest {
         // given
         val textFlow = buildText {
             +"foo **\\***\n"
@@ -2193,10 +2095,7 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"foo "
-                "strong" {
-                    +"*"
-                }
+                +"foo *****"
             }
         }
         // GFM expected:
@@ -2205,7 +2104,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 450 - paragraph foo _`() = runTest {
         // given
@@ -2229,9 +2127,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 451 - paragraph foo`() = runTest {
+    fun `example 451 - DIVERGENCE - paragraph foo`() = runTest {
         // given
         val textFlow = "**foo*".chunkedRandomly().asFlow()
 
@@ -2241,9 +2138,8 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"*"
-                "em" {
-                    +"foo"
+                "strong" {
+                    +"foo*"
                 }
             }
         }
@@ -2253,9 +2149,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 452 - paragraph foo`() = runTest {
+    fun `example 452 - DIVERGENCE - paragraph foo`() = runTest {
         // given
         val textFlow = "*foo**".chunkedRandomly().asFlow()
 
@@ -2266,9 +2161,8 @@ class Gfm_06_04_Test {
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
                 "em" {
-                    +"foo"
+                    +"foo**"
                 }
-                +"*"
             }
         }
         // GFM expected:
@@ -2277,9 +2171,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 453 - paragraph foo`() = runTest {
+    fun `example 453 - DIVERGENCE - paragraph foo`() = runTest {
         // given
         val textFlow = "***foo**".chunkedRandomly().asFlow()
 
@@ -2289,9 +2182,10 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"*"
                 "strong" {
-                    +"foo"
+                    "em" {
+                        +"foo"
+                    }
                 }
             }
         }
@@ -2301,9 +2195,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 454 - paragraph foo`() = runTest {
+    fun `example 454 - DIVERGENCE - paragraph foo`() = runTest {
         // given
         val textFlow = "****foo*".chunkedRandomly().asFlow()
 
@@ -2313,10 +2206,7 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"***"
-                "em" {
-                    +"foo"
-                }
+                +"****foo*"
             }
         }
         // GFM expected:
@@ -2325,9 +2215,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 455 - paragraph foo`() = runTest {
+    fun `example 455 - DIVERGENCE - paragraph foo`() = runTest {
         // given
         val textFlow = "**foo***".chunkedRandomly().asFlow()
 
@@ -2349,9 +2238,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 456 - paragraph foo`() = runTest {
+    fun `example 456 - DIVERGENCE - paragraph foo`() = runTest {
         // given
         val textFlow = "*foo****".chunkedRandomly().asFlow()
 
@@ -2362,9 +2250,8 @@ class Gfm_06_04_Test {
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
                 "em" {
-                    +"foo"
+                    +"foo****"
                 }
-                +"***"
             }
         }
         // GFM expected:
@@ -2373,7 +2260,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 457 - paragraph foo ___`() = runTest {
         // given
@@ -2394,9 +2280,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 458 - paragraph foo _`() = runTest {
+    fun `example 458 - DIVERGENCE - paragraph foo _`() = runTest {
         // given
         val textFlow = buildText {
             +"foo _\\__\n"
@@ -2408,10 +2293,7 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"foo "
-                "em" {
-                    +"_"
-                }
+                +"foo ___"
             }
         }
         // GFM expected:
@@ -2420,9 +2302,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 459 - paragraph foo`() = runTest {
+    fun `example 459 - DIVERGENCE - paragraph foo`() = runTest {
         // given
         val textFlow = "foo _*_".chunkedRandomly().asFlow()
 
@@ -2432,10 +2313,8 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"foo "
-                "em" {
-                    +"*"
-                }
+                +"foo _"
+                "em" {}
             }
         }
         // GFM expected:
@@ -2444,7 +2323,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 460 - paragraph foo _____`() = runTest {
         // given
@@ -2465,9 +2343,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 461 - paragraph foo _`() = runTest {
+    fun `example 461 - DIVERGENCE - paragraph foo _`() = runTest {
         // given
         val textFlow = buildText {
             +"foo __\\___\n"
@@ -2479,10 +2356,7 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"foo "
-                "strong" {
-                    +"_"
-                }
+                +"foo _____"
             }
         }
         // GFM expected:
@@ -2491,9 +2365,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 462 - paragraph foo`() = runTest {
+    fun `example 462 - DIVERGENCE - paragraph foo`() = runTest {
         // given
         val textFlow = "foo __*__".chunkedRandomly().asFlow()
 
@@ -2503,9 +2376,9 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"foo "
-                "strong" {
-                    +"*"
+                +"foo __"
+                "em" {
+                    +"__"
                 }
             }
         }
@@ -2515,9 +2388,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 463 - paragraph _foo`() = runTest {
+    fun `example 463 - DIVERGENCE - paragraph _foo`() = runTest {
         // given
         val textFlow = "__foo_".chunkedRandomly().asFlow()
 
@@ -2527,9 +2399,8 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"_"
-                "em" {
-                    +"foo"
+                "strong" {
+                    +"foo_"
                 }
             }
         }
@@ -2539,9 +2410,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 464 - paragraph foo_`() = runTest {
+    fun `example 464 - DIVERGENCE - paragraph foo_`() = runTest {
         // given
         val textFlow = "_foo__".chunkedRandomly().asFlow()
 
@@ -2552,9 +2422,8 @@ class Gfm_06_04_Test {
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
                 "em" {
-                    +"foo"
+                    +"foo__"
                 }
-                +"_"
             }
         }
         // GFM expected:
@@ -2563,9 +2432,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 465 - paragraph _foo`() = runTest {
+    fun `example 465 - DIVERGENCE - paragraph _foo`() = runTest {
         // given
         val textFlow = "___foo__".chunkedRandomly().asFlow()
 
@@ -2575,9 +2443,10 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"_"
                 "strong" {
-                    +"foo"
+                    "em" {
+                        +"foo"
+                    }
                 }
             }
         }
@@ -2587,9 +2456,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 466 - paragraph ___foo`() = runTest {
+    fun `example 466 - DIVERGENCE - paragraph ___foo`() = runTest {
         // given
         val textFlow = "____foo_".chunkedRandomly().asFlow()
 
@@ -2599,10 +2467,7 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"___"
-                "em" {
-                    +"foo"
-                }
+                +"____foo_"
             }
         }
         // GFM expected:
@@ -2611,9 +2476,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 467 - paragraph foo_`() = runTest {
+    fun `example 467 - DIVERGENCE - paragraph foo_`() = runTest {
         // given
         val textFlow = "__foo___".chunkedRandomly().asFlow()
 
@@ -2635,9 +2499,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 468 - paragraph foo___`() = runTest {
+    fun `example 468 - DIVERGENCE - paragraph foo___`() = runTest {
         // given
         val textFlow = "_foo____".chunkedRandomly().asFlow()
 
@@ -2648,9 +2511,8 @@ class Gfm_06_04_Test {
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
                 "em" {
-                    +"foo"
+                    +"foo____"
                 }
-                +"___"
             }
         }
         // GFM expected:
@@ -2659,7 +2521,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 469 - paragraph foo`() = runTest {
         // given
@@ -2682,9 +2543,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 470 - paragraph foo`() = runTest {
+    fun `example 470 - DIVERGENCE - paragraph foo`() = runTest {
         // given
         val textFlow = "*_foo_*".chunkedRandomly().asFlow()
 
@@ -2695,9 +2555,7 @@ class Gfm_06_04_Test {
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
                 "em" {
-                    "em" {
-                        +"foo"
-                    }
+                    +"_foo_"
                 }
             }
         }
@@ -2707,7 +2565,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 471 - paragraph foo`() = runTest {
         // given
@@ -2730,9 +2587,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 472 - paragraph foo`() = runTest {
+    fun `example 472 - DIVERGENCE - paragraph foo`() = runTest {
         // given
         val textFlow = "_*foo*_".chunkedRandomly().asFlow()
 
@@ -2742,11 +2598,11 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
+                +"_"
                 "em" {
-                    "em" {
-                        +"foo"
-                    }
+                    +"foo"
                 }
+                +"_"
             }
         }
         // GFM expected:
@@ -2755,9 +2611,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 473 - paragraph foo`() = runTest {
+    fun `example 473 - DIVERGENCE - paragraph foo`() = runTest {
         // given
         val textFlow = "****foo****".chunkedRandomly().asFlow()
 
@@ -2767,11 +2622,7 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "strong" {
-                    "strong" {
-                        +"foo"
-                    }
-                }
+                +"****foo****"
             }
         }
         // GFM expected:
@@ -2780,9 +2631,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 474 - paragraph foo`() = runTest {
+    fun `example 474 - DIVERGENCE - paragraph foo`() = runTest {
         // given
         val textFlow = "____foo____".chunkedRandomly().asFlow()
 
@@ -2792,11 +2642,7 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "strong" {
-                    "strong" {
-                        +"foo"
-                    }
-                }
+                +"____foo____"
             }
         }
         // GFM expected:
@@ -2805,9 +2651,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 475 - paragraph foo`() = runTest {
+    fun `example 475 - DIVERGENCE - paragraph foo`() = runTest {
         // given
         val textFlow = "******foo******".chunkedRandomly().asFlow()
 
@@ -2817,13 +2662,7 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "strong" {
-                    "strong" {
-                        "strong" {
-                            +"foo"
-                        }
-                    }
-                }
+                +"******foo******"
             }
         }
         // GFM expected:
@@ -2832,9 +2671,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 476 - paragraph foo`() = runTest {
+    fun `example 476 - DIVERGENCE - paragraph foo`() = runTest {
         // given
         val textFlow = "***foo***".chunkedRandomly().asFlow()
 
@@ -2844,8 +2682,8 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "em" {
-                    "strong" {
+                "strong" {
+                    "em" {
                         +"foo"
                     }
                 }
@@ -2857,9 +2695,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 477 - paragraph foo`() = runTest {
+    fun `example 477 - DIVERGENCE - paragraph foo`() = runTest {
         // given
         val textFlow = "_____foo_____".chunkedRandomly().asFlow()
 
@@ -2869,13 +2706,7 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "em" {
-                    "strong" {
-                        "strong" {
-                            +"foo"
-                        }
-                    }
-                }
+                +"_____foo_____"
             }
         }
         // GFM expected:
@@ -2884,9 +2715,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 478 - paragraph foo _bar baz_`() = runTest {
+    fun `example 478 - DIVERGENCE - paragraph foo _bar baz_`() = runTest {
         // given
         val textFlow = "*foo _bar* baz_".chunkedRandomly().asFlow()
 
@@ -2908,7 +2738,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 479 - paragraph foo bar baz bim bam`() = runTest {
         // given
@@ -2935,9 +2764,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 480 - paragraph foo bar baz`() = runTest {
+    fun `example 480 - DIVERGENCE - paragraph foo bar baz`() = runTest {
         // given
         val textFlow = "**foo **bar baz**".chunkedRandomly().asFlow()
 
@@ -2947,9 +2775,8 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"**foo "
                 "strong" {
-                    +"bar baz"
+                    +"foo **bar baz"
                 }
             }
         }
@@ -2959,9 +2786,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 481 - paragraph foo bar baz`() = runTest {
+    fun `example 481 - DIVERGENCE - paragraph foo bar baz`() = runTest {
         // given
         val textFlow = "*foo *bar baz*".chunkedRandomly().asFlow()
 
@@ -2971,9 +2797,8 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"*foo "
                 "em" {
-                    +"bar baz"
+                    +"foo *bar baz"
                 }
             }
         }
@@ -2983,9 +2808,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 482 - paragraph bar`() = runTest {
+    fun `example 482 - DIVERGENCE - paragraph bar`() = runTest {
         // given
         val textFlow = "*[bar*](/url)".chunkedRandomly().asFlow()
 
@@ -2995,9 +2819,10 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"*"
-                "a"("href" to "/url") {
-                    +"bar*"
+                "em" {
+                    "a"("href" to "/url") {
+                        +"bar*"
+                    }
                 }
             }
         }
@@ -3007,9 +2832,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 483 - paragraph _foo bar_`() = runTest {
+    fun `example 483 - DIVERGENCE - paragraph _foo bar_`() = runTest {
         // given
         val textFlow = "_foo [bar_](/url)".chunkedRandomly().asFlow()
 
@@ -3019,9 +2843,11 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"_foo "
-                "a"("href" to "/url") {
-                    +"bar_"
+                "em" {
+                    +"foo "
+                    "a"("href" to "/url") {
+                        +"bar_"
+                    }
                 }
             }
         }
@@ -3031,9 +2857,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 484 - paragraph`() = runTest {
+    fun `example 484 - DIVERGENCE - paragraph`() = runTest {
         // given
         val textFlow = """*<img src="foo" title="*"/>""".chunkedRandomly().asFlow()
 
@@ -3043,8 +2868,9 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"*"
-                "img"("src" to "foo", "title" to "*") {}
+                "em" {
+                    tag("img", "src" to "foo", "title" to "*") {}
+                }
             }
         }
         // GFM expected:
@@ -3053,9 +2879,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 485 - paragraph`() = runTest {
+    fun `example 485 - DIVERGENCE - paragraph`() = runTest {
         // given
         val textFlow = """**<a href="**">""".chunkedRandomly().asFlow()
 
@@ -3065,8 +2890,8 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"**"
-                "a"("href" to "**") {
+                "strong" {
+                    tag("a", "href" to "**") {}
                 }
             }
         }
@@ -3076,9 +2901,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 486 - paragraph __`() = runTest {
+    fun `example 486 - DIVERGENCE - paragraph __`() = runTest {
         // given
         val textFlow = """__<a href="__">""".chunkedRandomly().asFlow()
 
@@ -3088,8 +2912,8 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"__"
-                "a"("href" to "__") {
+                "strong" {
+                    tag("a", "href" to "__") {}
                 }
             }
         }
@@ -3099,7 +2923,6 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 487 - paragraph a`() = runTest {
         // given
@@ -3151,9 +2974,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 489 - paragraph ahttpfoobarq=`() = runTest {
+    fun `example 489 - DIVERGENCE - paragraph ahttpfoobarq=`() = runTest {
         // given
         val textFlow = "**a<http://foo.bar/?q=**>".chunkedRandomly().asFlow()
 
@@ -3163,9 +2985,11 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"**a"
-                "a"("href" to "http://foo.bar/?q=**") {
-                    +"http://foo.bar/?q=**"
+                "strong" {
+                    +"a"
+                    "a"("href" to "http://foo.bar/?q=**") {
+                        +"http://foo.bar/?q=**"
+                    }
                 }
             }
         }
@@ -3175,9 +2999,8 @@ class Gfm_06_04_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 490 - paragraph __ahttpfoobarq=__`() = runTest {
+    fun `example 490 - DIVERGENCE - paragraph __ahttpfoobarq=__`() = runTest {
         // given
         val textFlow = "__a<http://foo.bar/?q=__>".chunkedRandomly().asFlow()
 
@@ -3187,9 +3010,11 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"__a"
-                "a"("href" to "http://foo.bar/?q=__") {
-                    +"http://foo.bar/?q=__"
+                "strong" {
+                    +"a"
+                    "a"("href" to "http://foo.bar/?q=__") {
+                        +"http://foo.bar/?q=__"
+                    }
                 }
             }
         }

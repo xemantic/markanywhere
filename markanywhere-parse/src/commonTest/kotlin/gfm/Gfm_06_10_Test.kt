@@ -290,7 +290,6 @@ class Gfm_06_10_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 647 - paragraph a href=foo`() = runTest {
         // given
@@ -357,7 +356,6 @@ class Gfm_06_10_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 650 - paragraph foo !-- foo --, paragraph foo !-- foo---`() = runTest {
         // given
@@ -391,7 +389,7 @@ class Gfm_06_10_Test {
     fun `example 651 - paragraph foo`() = runTest {
         // given
         val textFlow = buildText {
-            +"foo <?php echo \$a; ?>\n"
+            +$$"foo <?php echo $a; ?>\n"
         }.chunkedRandomly().asFlow()
 
         // when
@@ -499,7 +497,6 @@ class Gfm_06_10_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 656 - paragraph a href=`() = runTest {
         // given
