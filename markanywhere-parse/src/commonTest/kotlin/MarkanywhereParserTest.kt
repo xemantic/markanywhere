@@ -603,11 +603,11 @@ class MarkanywhereParserTest {
     }
 
     @Test
-    fun `should parse superscript and subscript`() = runTest {
+    fun `should parse superscript`() = runTest {
         // given
-        
+
         val textFlow = """
-            Water is H~2~O and E=mc^2^ is famous.
+            E=mc^2^ is famous.
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
@@ -616,9 +616,7 @@ class MarkanywhereParserTest {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"Water is H"
-                "sub" { +"2" }
-                +"O and E=mc"
+                +"E=mc"
                 "sup" { +"2" }
                 +" is famous."
             }

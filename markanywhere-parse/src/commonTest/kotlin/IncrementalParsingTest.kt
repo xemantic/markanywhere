@@ -200,14 +200,6 @@ class IncrementalParsingTest {
 
             "\n",
 
-            // Subscript
-            "H",
-            "~2",          // subscript opens with content
-            "~",           // subscript closes
-            "O\n",
-
-            "\n",
-
             // Superscript
             "x",
             "^2",          // superscript opens with content
@@ -332,13 +324,6 @@ class IncrementalParsingTest {
                     +"strike"
                 }
                 +"."
-            }
-            "p" {
-                +"H"
-                "sub" {
-                    +"2"
-                }
-                +"O"
             }
             "p" {
                 +"x"

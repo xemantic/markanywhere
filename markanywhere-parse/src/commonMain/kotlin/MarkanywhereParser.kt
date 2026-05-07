@@ -19,12 +19,73 @@ package com.xemantic.markanywhere.parse
 import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.flow.SemanticEventScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.flow
 
 public fun Flow<String>.parse(): Flow<SemanticEvent> = flow {
-    val state = ParserState(scope = SemanticEventScope(collector = this))
+    val redirector = RedirectingCollector(this)
+    val state = ParserState(
+        scope = SemanticEventScope(collector = redirector),
+        redirector = redirector
+    )
     collect { chunk -> state.processChunk(chunk) }
     state.finalize()
+}
+
+/**
+ * A [FlowCollector] that the parser can use to **temporarily divert** emitted
+ * [SemanticEvent]s into an in-memory buffer instead of forwarding them
+ * downstream. Used to implement bounded-label buffering for inline link/image
+ * label content (CommonMark §6.4 / §6.5) — events emitted while parsing
+ * `[…label…]` are captured, then either replayed inside an `<a>` mark on
+ * successful link resolution, or replayed as bare events surrounded by `[` and
+ * `]` text on abort.
+ *
+ * The capture stack supports nesting, although the parser currently uses only
+ * a single level (no nested label rendering: spec §6.4 forbids `[a [b](u)](u)`,
+ * the inner link aborts back to text).
+ */
+internal class RedirectingCollector(
+    private val downstream: FlowCollector<SemanticEvent>
+) : FlowCollector<SemanticEvent> {
+    private val captureStack = ArrayDeque<MutableList<SemanticEvent>>()
+
+    fun startCapture() {
+        captureStack.addLast(mutableListOf())
+    }
+
+    /** Pop and return the events captured since the matching [startCapture]. */
+    fun stopCapture(): List<SemanticEvent> = captureStack.removeLast()
+
+    val isCapturing: Boolean get() = captureStack.isNotEmpty()
+
+    override suspend fun emit(value: SemanticEvent) {
+        if (captureStack.isNotEmpty()) {
+            val buf = captureStack.last()
+            // Merge adjacent text events while capturing — the standard inline
+            // parser emits one Text event per char when chars flow through
+            // char-by-char, and the existing tests expect a single merged Text
+            // event for label content. Doing the merge here keeps replay
+            // identical to the pre-Phase-3a single-text emission shape.
+            val last = buf.lastOrNull()
+            if (last is SemanticEvent.Text && value is SemanticEvent.Text) {
+                buf[buf.size - 1] = SemanticEvent.Text(last.text + value.text)
+                return
+            }
+            buf.add(value)
+        } else {
+            downstream.emit(value)
+        }
+    }
+
+    /**
+     * Replay [events] through [emit]. If a capture is active, events are
+     * appended to it; otherwise they go downstream. Used both on commit
+     * (replay inside `<a>` mark) and on abort (replay as bare events).
+     */
+    suspend fun replay(events: List<SemanticEvent>) {
+        for (e in events) emit(e)
+    }
 }
 
 public class DefaultMarkanywhereParser {
@@ -421,7 +482,8 @@ private val NAMED_ENTITIES: Map<String, String> = mapOf(
     "DifferentialD" to "ⅆ",
     "ClockwiseContourIntegral" to "∲",
     "ngE" to "≧̸",
-    "ouml" to "ö"
+    "ouml" to "ö",
+    "auml" to "ä"
 )
 
 /**
@@ -749,7 +811,8 @@ private fun isCompleteHtmlTagLine(trimmed: String): Boolean {
 }
 
 private class ParserState(
-    private val scope: SemanticEventScope
+    private val scope: SemanticEventScope,
+    private val redirector: RedirectingCollector
 ) {
 
     // Block modes
@@ -987,6 +1050,109 @@ private class ParserState(
     private var inImage = false
     private var imageAlt = StringBuilder()
     private var imageUrl = StringBuilder()
+
+    /**
+     * Inline link/image URL parsing phase. Drives [handleLinkUrlChar] when
+     * `inLinkUrl == true`. Reset to [LinkUrlPhase.PreDest] each time a `](`
+     * or `]( ` boundary fires.
+     */
+    private enum class LinkUrlPhase {
+        /** After `(`, skipping leading ASCII whitespace before the destination. */
+        PreDest,
+        /** Inside `<...>` destination — allows space, rejects `<` / `\n`, accepts backslash escapes. */
+        DestAngle,
+        /** Unbracketed destination — counts balanced parens, rejects raw space/`\n`, accepts backslash escapes. */
+        DestPlain,
+        /** Whitespace between destination and optional title; a closing `)` here finalizes the link. */
+        BetweenDestTitle,
+        /** Inside `"..."` title. */
+        TitleDouble,
+        /** Inside `'...'` title. */
+        TitleSingle,
+        /** Inside `(...)` title — nested unescaped `(` aborts the link (GFM constraint). */
+        TitleParen,
+        /** After title close — only whitespace then the closing `)` is permitted. */
+        AfterTitle
+    }
+    private var linkUrlPhase = LinkUrlPhase.PreDest
+    /** Open-paren depth inside [LinkUrlPhase.DestPlain] for balanced-parens rule. */
+    private var linkParenDepth = 0
+    /** True iff the previous URL/title char was an unescaped `\` — next char is taken literally. */
+    private var linkEscape = false
+    /**
+     * Raw source chars consumed since `(` while in URL-parsing mode — used by
+     * [abortInlineLink] / [abortInlineImage] to replay literal text on a parse
+     * failure (e.g. unmatched destination, malformed title).
+     */
+    private var linkUrlSource = StringBuilder()
+
+    /**
+     * True when the parser is reading the *second* `[…]` of a full or collapsed
+     * reference link/image — `[label][ref]` or `[label][]` — accumulating the
+     * reference label in [linkRefText]. Resolved to a `<a>` / `<img>` on the
+     * closing `]` if the (case-folded, whitespace-collapsed) key is in
+     * [linkDefinitions]; otherwise the entire bracket run replays as text.
+     */
+    private var inLinkRef = false
+    private var linkRefText = StringBuilder()
+
+    /**
+     * Set when an unescaped `]` is seen while parsing a link/image label and
+     * no inline state (code span, math, HTML attr accumulation) is mid-resolution.
+     * The `]` itself is *not* emitted; the next char decides:
+     *   - `(` → inline link (begin URL parsing)
+     *   - `[` → full or collapsed reference (begin ref label)
+     *   - anything else → shortcut reference lookup, or abort to literal text
+     * Replaces the prior `inlineBuffer.endsWith("]")` check, which conflicted
+     * with using `inlineBuffer` to accumulate label-internal delimiter runs.
+     */
+    private var linkLabelTentativeClose = false
+
+    /**
+     * Size of [inlineOpenStack] at the moment `[` (or `![`) opened the current
+     * label. On commit/abort, [flushInlineLabelClose] drains down to this
+     * watermark — closing only inline state (em, strong, code, inline HTML)
+     * that was opened *inside* the label, while leaving any outer state alone.
+     */
+    private var linkLabelOuterStackDepth = 0
+
+    /**
+     * True when the next [processInlineCharImpl] call is the *re-process* leg
+     * of the [pendingDeferredChar] protocol — i.e. the same source char is
+     * being delivered for a second time so that buffered delimiter resolution
+     * can finalize before it consumes the char. Used by the label-mode
+     * dispatcher to skip appending the char to [linkText] / [imageAlt] twice.
+     * Set in [processInlineChar]'s finally block when [pendingDeferredChar]
+     * was set during this call; cleared at the top of the next call.
+     */
+    private var inlineCharIsReprocess = false
+
+    /**
+     * Bracket nesting depth inside the current link/image label. Outer `[`
+     * (or `![`) opens at depth 0; an unescaped `[` *inside* the label
+     * increments, an unescaped `]` decrements. Only a `]` at depth 0 closes
+     * the label (sets [linkLabelTentativeClose]); deeper `]` is content.
+     * Permits CommonMark-correct labels like `[link [foo [bar]]](/uri)`.
+     * Code-span / math / HTML-attr accumulation suppress the depth update —
+     * brackets inside those constructs are content of the inner construct.
+     */
+    private var linkLabelBracketDepth = 0
+
+    /**
+     * Resolved link reference definitions discovered so far. CommonMark §4.7:
+     * `[label]: destination "title"` lines are consumed silently at block boundary
+     * and recorded here, then resolved when `[label]`, `[label][]`, or
+     * `[foo][label]` appears inline. Keys are normalized: trimmed, internal
+     * whitespace collapsed to single space, lowercased (Unicode case-fold).
+     *
+     * STREAMING DIVERGENCE: spec resolves references against ALL definitions in
+     * the document — including those appearing *after* the usage. Our parser is
+     * append-only and cannot retroactively rewrite emitted events, so reference
+     * lookups only see definitions that arrived *before* the usage line. Tests
+     * exercising forward references are marked DIVERGENCE.
+     */
+    private val linkDefinitions = mutableMapOf<String, LinkDefinition>()
+    private data class LinkDefinition(val href: String, val title: String?)
     private var escaped = false
     /** Length of the opening backtick run for the currently-open inline code span (0 if not in code). */
     private var codeRunLength = 0
@@ -1098,7 +1264,12 @@ private class ParserState(
     // Includes `*`, `_` (thematic break vs. emphasis), `\t` (indented code), and
     // ` ` (leading whitespace before any block).
     private fun Char.isBlockStart(): Boolean = when (this) {
-        '#', '`', '~', '-', '>', '|', '$', '<', ' ', '\t', '*', '_' -> true
+        // `[` joins the block-start set so `[label]: dest` link reference definitions
+        // (CommonMark §4.7) can be recognized in `processStart`'s `\n` dispatch.
+        // Cost: paragraphs starting with `[` no longer eagerly emit `<p>` on the
+        // first char — they buffer the line until `\n`. Same trade-off as `>`,
+        // `-`, `*`, etc. which all reserve the line opener for block detection.
+        '#', '`', '~', '-', '>', '|', '$', '<', ' ', '\t', '*', '_', '[' -> true
         else -> isDigit()
     }
 
@@ -1708,6 +1879,13 @@ private class ParserState(
                         beginParagraph(line)
                     }
                 }
+                // Link reference definition (CommonMark §4.7). Recognized as a
+                // single-line shape `[label]: dest` (with optional title) and
+                // consumed silently — produces no events. Multi-line shapes
+                // fall through to paragraph processing (DIVERGENCE).
+                line.trimStart(' ').startsWith("[") && tryParseLinkDefinition(line) -> {
+                    // No-op: definition recorded in linkDefinitions.
+                }
                 // Single line paragraph (kept open for multi-line continuation)
                 else -> beginParagraph(line)
             }
@@ -1877,13 +2055,17 @@ private class ParserState(
                 replaceMode(BlockMode.ParagraphContinuation)
             }
             ' ' -> {
-                if (inlineBuffer.isNotEmpty() || escaped || inEntityRef) {
+                if (inlineBuffer.isNotEmpty() || escaped || inEntityRef ||
+                    linkLabelTentativeClose
+                ) {
                     // Inline state is non-neutral (e.g. an unresolved `***`
-                    // delimiter run, a pending backslash escape, or an in-flight
-                    // entity ref). The space must flow through inline processing
-                    // to drive resolution; re-processing via `pendingDeferredChar`
-                    // will then re-enter this `' '` branch with a clean buffer
-                    // and increment the counter normally.
+                    // delimiter run, a pending backslash escape, an in-flight
+                    // entity ref, or a tentative `]` waiting for the next char
+                    // to resolve a link/ref-shortcut). The space must flow
+                    // through inline processing to drive resolution;
+                    // re-processing via `pendingDeferredChar` will then re-enter
+                    // this `' '` branch with a clean buffer and increment the
+                    // counter normally.
                     if (paragraphTrailingSpaces > 0) {
                         val n = paragraphTrailingSpaces
                         paragraphTrailingSpaces = 0
@@ -4039,6 +4221,10 @@ private class ParserState(
             // tracking that adds complexity for marginal correctness gain on
             // adjacent-delimiter cases. Most cases are well-served by char.
             prevInlineChar = char
+            // If the implementation set `pendingDeferredChar`, the same char will
+            // be delivered again by the chunk-loop's re-process protocol. Mark
+            // that so the next call can skip duplicate label-source accumulation.
+            inlineCharIsReprocess = pendingDeferredChar != null
         }
     }
 
@@ -4050,6 +4236,45 @@ private class ParserState(
             // If we are inside an inline HTML tag accumulation, backslashes are literal.
             if (inlineBuffer.startsWith("<")) {
                 inlineBuffer.append(char)
+                return
+            }
+            // Inside a link/image label (`[label]` or `![alt]` before `]`), an
+            // escaped char must be added to the source accumulator (used as the
+            // ref-lookup key) AND emitted as a text event so it's captured into
+            // the label-event buffer for replay on link commit/abort.
+            if (inLink && !inLinkUrl && !inLinkRef) {
+                if (char in ASCII_PUNCTUATION) {
+                    linkText.append(char)
+                    +char
+                } else {
+                    linkText.append('\\')
+                    linkText.append(char)
+                    +"\\"
+                    +char
+                }
+                return
+            }
+            if (inImage && !inLinkUrl && !inLinkRef) {
+                if (char in ASCII_PUNCTUATION) {
+                    imageAlt.append(char)
+                    +char
+                } else {
+                    imageAlt.append('\\')
+                    imageAlt.append(char)
+                    +"\\"
+                    +char
+                }
+                return
+            }
+            // Inside a reference label (the second `[…]`), an escaped char
+            // belongs to the ref-text accumulator.
+            if (inLinkRef) {
+                if (char in ASCII_PUNCTUATION) {
+                    linkRefText.append(char)
+                } else {
+                    linkRefText.append('\\')
+                    linkRefText.append(char)
+                }
                 return
             }
             if (char in ASCII_PUNCTUATION) {
@@ -4151,97 +4376,161 @@ private class ParserState(
             return
         }
 
-        // Handle image states (check before link since both use inLinkUrl)
-        if (inImage && !inLinkUrl) {
-            when {
-                inlineBuffer.endsWith("]") && char == '(' -> {
-                    inlineBuffer.clear()
-                    inLinkUrl = true
+        // Reading the second `[…]` of `[label][ref]` / `![alt][ref]`
+        // (or the `[]` of `[label][]` / `![alt][]`). Resolves to a
+        // `<a>` / `<img>` on the closing `]` if the key matches a
+        // registered ref definition; otherwise replays as literal text.
+        if (inLinkRef) {
+            handleLinkRefChar(char)
+            return
+        }
+
+        // URL-mode dispatch — image and link share the URL state machine.
+        if (inImage && inLinkUrl) {
+            handleLinkUrlChar(char, isImage = true)
+            return
+        }
+        if (inLink && inLinkUrl) {
+            handleLinkUrlChar(char, isImage = false)
+            return
+        }
+
+        // Label-mode dispatch (link or image, before the closing `]`/`](url)`).
+        // Tentative-close resolution: a previously-seen `]` is now resolved by
+        // the current char. The `linkLabelTentativeClose` flag stays set during
+        // the shortcut lookup so that an abort can replay the `]` literal; it
+        // is cleared on a successful resolution.
+        if ((inLink || inImage) && !inLinkRef && linkLabelTentativeClose) {
+            when (char) {
+                '(' -> {
+                    linkLabelTentativeClose = false
+                    enterLinkUrlPhase()
                 }
-                inlineBuffer.endsWith("]") -> {
-                    // ![alt] not followed by `(`. Abort image parsing,
-                    // replay the literal source, then re-process current char.
-                    abortInlineImage()
+                '[' -> {
+                    linkLabelTentativeClose = false
+                    inLinkRef = true
+                    linkRefText.clear()
+                }
+                else -> {
+                    // Shortcut reference: look up the label as key.
+                    val isImage = inImage
+                    val labelText =
+                        if (isImage) imageAlt.toString() else linkText.toString()
+                    val key = normalizeLinkLabel(applyBackslashEscapes(labelText))
+                    val def = if (key.isNotEmpty()) linkDefinitions[key] else null
+                    if (def != null) {
+                        linkLabelTentativeClose = false
+                        val labelEvents = redirector.stopCapture()
+                        if (isImage) {
+                            val alt = labelEvents.toLabelText().ifEmpty { labelText }
+                            val attrs = if (def.title != null) {
+                                mapOf("src" to def.href, "alt" to alt, "title" to def.title)
+                            } else {
+                                mapOf("src" to def.href, "alt" to alt)
+                            }
+                            "img"(attributes = attrs) {}
+                        } else {
+                            val attrs = if (def.title != null) {
+                                mapOf("href" to def.href, "title" to def.title)
+                            } else {
+                                mapOf("href" to def.href)
+                            }
+                            mark("a", attributes = attrs)
+                            redirector.replay(labelEvents)
+                            unmark("a")
+                        }
+                        resetInlineLinkState()
+                    } else {
+                        // Abort with `]` still in the flag so the replay
+                        // includes the tentative-close bracket.
+                        abortInlineLinkOrImage(isImage)
+                    }
                     pendingDeferredChar = char
                 }
-                char == ']' -> inlineBuffer.append(']')
-                else -> imageAlt.append(char)
             }
             return
         }
 
-        if (inImage) { // inLinkUrl is always true at this point
-            when (char) {
-                ')' -> {
-                    "img"(
-                        "src" to applyBackslashEscapes(imageUrl.toString().trim()),
-                        "alt" to imageAlt.toString()
-                    ) {}
-                    inImage = false
-                    inLinkUrl = false
-                    imageAlt.clear()
-                    imageUrl.clear()
-                }
-                else -> imageUrl.append(char)
-            }
-            return
-        }
-
-        // Handle link states
-        if (inLink && !inLinkUrl) {
-            when {
-                inlineBuffer.endsWith("]") && char == '(' -> {
+        // `]` in label mode (link or image). When inline state is mid-resolution
+        // (inside a code span, math span, or HTML attribute accumulation), the
+        // `]` is content; otherwise it either decrements label bracket depth
+        // (a balanced `]` inside nested brackets) or, at depth 0, becomes the
+        // tentative close marker.
+        //
+        // EXCEPTION: a pending backtick run in `inlineBuffer` is *about* to
+        // open a code span — letting `]` fall through to the standard inline
+        // dispatcher commits the code span open and re-delivers `]` as
+        // content (so `[foo``]``](/uri)` etc. behave per spec).
+        //
+        // KNOWN DIVERGENCE: a pending non-backtick delimiter run (e.g. `*`)
+        // is flushed as literal text by `flushInlineLabelClose`, NOT routed
+        // through the standard delimiter resolver. Routing it through would
+        // let the inner `*` close an *outer* em that was open before the
+        // label, producing unbalanced events. Spec-correct resolution
+        // requires delimiter scoping (label-internal `*` should only see
+        // label-local frames in `inlineOpenStack`) — out of scope here.
+        val backticksPending =
+            inlineBuffer.isNotEmpty() && inlineBuffer.all { it == '`' }
+        if ((inLink || inImage) && !inLinkRef &&
+            char == ']' && !code && !math && !inlineBuffer.startsWith("<") &&
+            !backticksPending
+        ) {
+            if (linkLabelBracketDepth > 0) {
+                // Balanced `]` inside nested brackets — content.
+                linkLabelBracketDepth--
+                if (inImage) imageAlt.append(']') else linkText.append(']')
+                if (inlineBuffer.isNotEmpty()) {
+                    +inlineBuffer.toString()
                     inlineBuffer.clear()
-                    inLinkUrl = true
                 }
-                inlineBuffer.endsWith("]") -> {
-                    // [label] not followed by `(`. Abort link parsing,
-                    // replay the literal source, then re-process current char.
-                    abortInlineLink()
-                    pendingDeferredChar = char
-                }
-                char == ']' -> inlineBuffer.append(']')
-                else -> linkText.append(char)
+                +"]"
+                return
             }
+            // Outer label close.
+            flushInlineLabelClose()
+            linkLabelTentativeClose = true
             return
         }
 
-        if (inLink) { // inLinkUrl is always true at this point
-            when (char) {
-                ')' -> {
-                    val urlPart = linkUrl.toString().trim()
-                    val title = linkTitle.toString().trim()
-                    // Entity / numeric character references are recognized in
-                    // link destinations and titles (GFM §6.2). Decode here, then
-                    // apply backslash escapes (the order matches CommonMark:
-                    // backslash escapes consume an adjacent literal punctuation
-                    // char, while entity refs operate on the source token).
-                    val rawUrl = decodeEntities(urlPart.substringBefore(" \"").trim())
-                    val url = percentEncodeNonAscii(applyBackslashEscapes(rawUrl))
-                    val rawTitle = if (urlPart.contains(" \"")) {
-                        urlPart.substringAfter(" \"").removeSuffix("\"").trim()
-                    } else {
-                        title
-                    }
-                    val extractedTitle = applyBackslashEscapes(decodeEntities(rawTitle))
-                    val attrs = if (extractedTitle.isNotEmpty()) {
-                        mapOf("href" to url, "title" to extractedTitle)
-                    } else {
-                        mapOf("href" to url)
-                    }
-                    "a"(attributes = attrs) {
-                        +linkText.toString()
-                    }
-                    inLink = false
-                    inLinkUrl = false
-                    linkText.clear()
-                    linkUrl.clear()
-                    linkTitle.clear()
-                }
-                else -> linkUrl.append(char)
+        // `[` in label mode increments bracket depth — the inner `[` is content
+        // of the outer label, not a nested link parse. Spec wants `[a [b](u)](u)`
+        // to resolve the inner inline link (and abort the outer); tracking that
+        // requires recursive label parsing, which is out of scope. Treating
+        // `[` as content + balanced-brackets is a contained CommonMark subset
+        // covering `[link [foo [bar]]](/uri)` style labels.
+        if ((inLink || inImage) && !inLinkRef && !inLinkUrl &&
+            char == '[' && !code && !math && !inlineBuffer.startsWith("<")
+        ) {
+            linkLabelBracketDepth++
+            if (inImage) imageAlt.append('[') else linkText.append('[')
+            if (inlineBuffer.isNotEmpty()) {
+                +inlineBuffer.toString()
+                inlineBuffer.clear()
             }
+            +"["
             return
         }
+
+        // Track source chars in linkText/imageAlt for ref lookup. Image alt is
+        // ALSO derived from captured Text events on commit (for the alt attr),
+        // but linkText is needed as the lookup key for shortcut/collapsed refs
+        // because event flattening drops literal `*` etc. that source labels
+        // keep (CommonMark normalizes the *source* label, not rendered text).
+        // The `!inlineCharIsReprocess` guard skips the second delivery of a
+        // char going through the pendingDeferredChar re-process protocol —
+        // otherwise delimiter resolution (e.g. `*` open on `b`) appends `b`
+        // twice (once on first attempt, once on re-process).
+        if (!inlineCharIsReprocess) {
+            if (inLink && !inLinkUrl && !inLinkRef) {
+                linkText.append(char)
+                // Fall through to normal inline parsing below — events captured.
+            } else if (inImage && !inLinkUrl && !inLinkRef) {
+                imageAlt.append(char)
+                // Fall through to normal inline parsing below.
+            }
+        }
+        // The reprocess flag is consumed; clear so the next call starts fresh.
+        inlineCharIsReprocess = false
 
         // Autolinks and inline HTML tags
         if (inlineBuffer.startsWith("<")) {
@@ -4487,6 +4776,7 @@ private class ParserState(
             inlineBuffer.toString() == "!" && char == '[' -> {
                 inlineBuffer.clear()
                 inImage = true
+                openLinkLabelCapture()
             }
             inlineBuffer.toString() == "!" && char != '[' -> {
                 inlineBuffer.clear()
@@ -4500,6 +4790,7 @@ private class ParserState(
                     inlineBuffer.clear()
                 }
                 inLink = true
+                openLinkLabelCapture()
             }
             char == '!' -> {
                 if (inlineBuffer.isNotEmpty()) {
@@ -4588,57 +4879,651 @@ private class ParserState(
     }
 
     /**
-     * Replay an unresolved inline link `[label]` (or `[label](partial_url`) as
-     * literal text and reset link state. Called when the parser determines that
-     * a `[` did not start a real link — either because `[label]` was not
-     * followed by `(`, or because a block boundary (`flushInline`) closed the
-     * paragraph mid-link.
+     * Transition from `[label](` (or `![alt](`) into URL parsing — sets
+     * `inLinkUrl = true` and resets the URL-phase state machine.
      */
-    private suspend fun SemanticEventScope.abortInlineLink() {
-        val replay = StringBuilder()
-        replay.append('[')
-        replay.append(linkText)
-        if (inlineBuffer.endsWith("]")) {
-            replay.append(']')
-            inlineBuffer.deleteAt(inlineBuffer.length - 1)
+    private fun enterLinkUrlPhase() {
+        inLinkUrl = true
+        linkUrlPhase = LinkUrlPhase.PreDest
+        linkParenDepth = 0
+        linkEscape = false
+        linkUrlSource.clear()
+    }
+
+    /**
+     * Begin capturing inline events for the current link/image label. Records
+     * the [inlineOpenStack] watermark so [flushInlineLabelClose] can later
+     * close only inline state opened *during* the label, leaving outer state
+     * intact.
+     */
+    private fun openLinkLabelCapture() {
+        linkLabelOuterStackDepth = inlineOpenStack.size
+        linkLabelBracketDepth = 0
+        redirector.startCapture()
+    }
+
+    /**
+     * Flatten captured label events into a plain-text string. Used both for
+     * (a) ref-resolution lookup keys (with [normalizeLinkLabel] applied
+     * downstream) and (b) the `alt` attribute of `<img>` (CommonMark §6.5
+     * recommends rendering as plain text only). Marks/unmarks contribute
+     * nothing — only [SemanticEvent.Text] payloads are concatenated.
+     */
+    private fun List<SemanticEvent>.toLabelText(): String {
+        val sb = StringBuilder()
+        for (e in this) {
+            if (e is SemanticEvent.Text) sb.append(e.text)
         }
-        if (inLinkUrl) {
-            replay.append('(')
-            replay.append(linkUrl)
+        return sb.toString()
+    }
+
+    /**
+     * Drain inline state opened *inside* the current link/image label down to
+     * [linkLabelOuterStackDepth]. Closes em/strong/inline-HTML/code/strike/
+     * mark/sup that were opened during label parsing, leaving any outer state
+     * (i.e. an em already open *before* the `[`) untouched. Called both on
+     * commit (so the captured event buffer is balanced before replay inside
+     * `<a>`) and on abort (same buffer is replayed as bare events).
+     */
+    private suspend fun SemanticEventScope.flushInlineLabelClose() {
+        if (inEntityRef) abortEntityRef()
+        if (code) {
+            // N=1 close: a buffered single backtick counts as the close marker;
+            // anything longer is content. Otherwise force-close (DIVERGENCE
+            // matching flushInline behavior — see CLAUDE.md).
+            if (codeRunLength == 1) {
+                if (inlineBuffer.length == 1) {
+                    inlineBuffer.clear()
+                } else if (inlineBuffer.isNotEmpty()) {
+                    +inlineBuffer.toString()
+                    inlineBuffer.clear()
+                }
+            } else {
+                var trail = 0
+                while (trail < inlineBuffer.length &&
+                    inlineBuffer[inlineBuffer.length - 1 - trail] == '`'
+                ) trail++
+                if (trail == codeRunLength) {
+                    var content = inlineBuffer.substring(0, inlineBuffer.length - trail)
+                    if (content.startsWith(" ") && content.endsWith(" ") &&
+                        content.length > 1 && content.any { it != ' ' }
+                    ) {
+                        content = content.substring(1, content.length - 1)
+                    }
+                    +content
+                } else if (inlineBuffer.isNotEmpty()) {
+                    +inlineBuffer.toString()
+                }
+                inlineBuffer.clear()
+            }
+            unmark("code")
+            code = false
+            codeRunLength = 0
         }
-        +replay.toString()
+        if (strikethrough) { unmark("del"); strikethrough = false }
+        if (highlight) { unmark("mark"); highlight = false }
+        if (superscript) { unmark("sup"); superscript = false }
+        // Any pending delimiter run in inlineBuffer flushes as literal text
+        // — same fallback the rest of the parser uses when a run can't resolve.
+        if (inlineBuffer.isNotEmpty()) {
+            +inlineBuffer.toString()
+            inlineBuffer.clear()
+        }
+        // Drain inlineOpenStack down to the watermark (LIFO close).
+        while (inlineOpenStack.size > linkLabelOuterStackDepth) {
+            val frame = inlineOpenStack.removeLast()
+            unmark(frame.name, isTagged = frame.isTagged)
+        }
+    }
+
+    /**
+     * Normalize a link reference label per CommonMark §4.7: trim, collapse
+     * internal whitespace runs to a single space, and Unicode-fold case so
+     * that `[Foo bar]` matches `[foo  BAR]`.
+     */
+    private fun normalizeLinkLabel(label: String): String {
+        val sb = StringBuilder(label.length)
+        var sawSpace = false
+        var sawNonSpace = false
+        for (c in label) {
+            if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
+                sawSpace = sawNonSpace
+            } else {
+                if (sawSpace) {
+                    sb.append(' ')
+                    sawSpace = false
+                }
+                sb.append(c)
+                sawNonSpace = true
+            }
+        }
+        return sb.toString().lowercase()
+    }
+
+    /**
+     * Try to recognize [line] as a single-line link reference definition
+     * (CommonMark §4.7). On success, store a normalized [LinkDefinition] in
+     * [linkDefinitions] (first-wins on duplicate labels) and return `true`;
+     * the caller skips the `beginParagraph` fallback.
+     *
+     * STREAMING DIVERGENCE: only single-line definitions are recognized.
+     * Multi-line shapes — `[label]:\n  /url`, `[label]: /url\n  "title"`,
+     * label running across lines — fall through to paragraph processing.
+     */
+    private fun tryParseLinkDefinition(line: String): Boolean {
+        // Up to 3 leading spaces of indent; 4+ would be indented code block.
+        val stripped = line.trimStart(' ')
+        val indent = line.length - stripped.length
+        if (indent > 3) return false
+        if (!stripped.startsWith("[")) return false
+
+        // Scan to matching unescaped `]`. Unescaped `[` inside the label is
+        // not allowed by spec; bail out if we see one.
+        var i = 1
+        val labelEnd: Int
+        while (true) {
+            if (i >= stripped.length) return false
+            val c = stripped[i]
+            if (c == '\\' && i + 1 < stripped.length) { i += 2; continue }
+            if (c == ']') { labelEnd = i; break }
+            if (c == '[') return false
+            i++
+        }
+
+        val labelRaw = stripped.substring(1, labelEnd)
+        // Per spec, the label must have at least one non-whitespace char.
+        if (labelRaw.isBlank()) return false
+
+        if (labelEnd + 1 >= stripped.length || stripped[labelEnd + 1] != ':') return false
+
+        var j = labelEnd + 2
+        while (j < stripped.length && (stripped[j] == ' ' || stripped[j] == '\t')) j++
+        if (j >= stripped.length) return false
+
+        val destResult = parseLinkDefDestination(stripped, j) ?: return false
+        val (rawDest, destEnd) = destResult
+
+        var k = destEnd
+        while (k < stripped.length && (stripped[k] == ' ' || stripped[k] == '\t')) k++
+
+        val title: String?
+        if (k < stripped.length) {
+            // CommonMark §4.7: title must be separated from destination by at
+            // least one whitespace char. Without separation `(baz)` immediately
+            // after `<bar>` is trailing content, not a title — invalidates the
+            // definition.
+            if (k == destEnd) return false
+            val titleResult = parseLinkDefTitle(stripped, k) ?: return false
+            val (rawTitle, titleEnd) = titleResult
+            // Whatever follows the title must be whitespace only.
+            for (t in titleEnd until stripped.length) {
+                if (stripped[t] != ' ' && stripped[t] != '\t') return false
+            }
+            title = applyBackslashEscapes(decodeEntities(rawTitle))
+        } else {
+            title = null
+        }
+
+        // Backslash escapes inside the label decode before normalization so a
+        // definition `[bar\\]` matches a usage `[bar\\]` (both reduce to key
+        // `bar\` after escape + case-fold).
+        val key = normalizeLinkLabel(applyBackslashEscapes(labelRaw))
+        if (key.isEmpty()) return false
+        if (key !in linkDefinitions) {
+            val href = percentEncodeNonAscii(
+                normalizeUrlEscapes(applyBackslashEscapes(decodeEntities(rawDest)))
+            )
+            linkDefinitions[key] = LinkDefinition(href, title)
+        }
+        return true
+    }
+
+    /** Parse a link destination at `s[start..]`. Returns (raw, indexAfter). */
+    private fun parseLinkDefDestination(s: String, start: Int): Pair<String, Int>? {
+        if (start >= s.length) return null
+        if (s[start] == '<') {
+            // Angle-bracketed: closes at first unescaped `>`. Newlines and `<`
+            // are forbidden inside.
+            var i = start + 1
+            val sb = StringBuilder()
+            while (i < s.length) {
+                val c = s[i]
+                if (c == '\\' && i + 1 < s.length) {
+                    sb.append(c); sb.append(s[i + 1]); i += 2; continue
+                }
+                if (c == '>') return sb.toString() to (i + 1)
+                if (c == '<' || c == '\n') return null
+                sb.append(c); i++
+            }
+            return null
+        }
+        // Plain destination: ends at unescaped whitespace or unbalanced `)`.
+        var i = start
+        val sb = StringBuilder()
+        var depth = 0
+        while (i < s.length) {
+            val c = s[i]
+            if (c == '\\' && i + 1 < s.length) {
+                sb.append(c); sb.append(s[i + 1]); i += 2; continue
+            }
+            if (c == ' ' || c == '\t') break
+            if (c == '(') { depth++; sb.append(c); i++; continue }
+            if (c == ')') {
+                if (depth == 0) break
+                depth--; sb.append(c); i++; continue
+            }
+            sb.append(c); i++
+        }
+        if (depth != 0 || sb.isEmpty()) return null
+        return sb.toString() to i
+    }
+
+    /** Parse a link title at `s[start..]`. Returns (raw, indexAfter). */
+    private fun parseLinkDefTitle(s: String, start: Int): Pair<String, Int>? {
+        if (start >= s.length) return null
+        val open = s[start]
+        val close = when (open) { '"' -> '"'; '\'' -> '\''; '(' -> ')'; else -> return null }
+        var i = start + 1
+        val sb = StringBuilder()
+        while (i < s.length) {
+            val c = s[i]
+            if (c == '\\' && i + 1 < s.length) {
+                sb.append(c); sb.append(s[i + 1]); i += 2; continue
+            }
+            if (c == close) return sb.toString() to (i + 1)
+            if (open == '(' && c == '(') return null
+            sb.append(c); i++
+        }
+        return null
+    }
+
+    /**
+     * Drive the URL/title state machine for one char. Shared by inline links
+     * and inline images: [isImage] selects between `linkUrl`/`linkTitle` (link)
+     * and `imageUrl`/`linkTitle` (image — image alt is already in `imageAlt`).
+     *
+     * The machine runs through phases [LinkUrlPhase.PreDest] → (DestAngle | DestPlain)
+     * → BetweenDestTitle → (TitleDouble | TitleSingle | TitleParen) → AfterTitle.
+     * Phase transitions are documented inline; on any malformed transition the
+     * link/image aborts and the consumed source is replayed as literal text.
+     *
+     * Backslash-before-punctuation is captured at accumulation time but the
+     * `\X` pair is preserved literally in the destination/title buffers and
+     * decoded by [applyBackslashEscapes] at finalize time. The [linkEscape]
+     * flag suppresses termination logic for the char immediately after `\`.
+     */
+    private suspend fun SemanticEventScope.handleLinkUrlChar(
+        char: Char,
+        isImage: Boolean
+    ) {
+        linkUrlSource.append(char)
+        val dest = if (isImage) imageUrl else linkUrl
+
+        // Char immediately after an unescaped `\` is taken literally — append to
+        // the active accumulator and clear the flag without consulting termination.
+        if (linkEscape) {
+            linkEscape = false
+            when (linkUrlPhase) {
+                LinkUrlPhase.DestAngle, LinkUrlPhase.DestPlain -> dest.append(char)
+                LinkUrlPhase.TitleDouble, LinkUrlPhase.TitleSingle, LinkUrlPhase.TitleParen ->
+                    linkTitle.append(char)
+                else -> {} // unreachable: \ only sets escape inside dest/title phases
+            }
+            return
+        }
+
+        when (linkUrlPhase) {
+            LinkUrlPhase.PreDest -> when (char) {
+                ' ', '\t' -> {} // skip leading whitespace
+                ')' -> finalizeInlineLink(isImage) // empty destination — `[foo]()`
+                '<' -> linkUrlPhase = LinkUrlPhase.DestAngle
+                '\\' -> {
+                    linkEscape = true
+                    linkUrlPhase = LinkUrlPhase.DestPlain
+                    dest.append('\\')
+                }
+                '(' -> {
+                    linkUrlPhase = LinkUrlPhase.DestPlain
+                    linkParenDepth = 1
+                    dest.append('(')
+                }
+                else -> {
+                    linkUrlPhase = LinkUrlPhase.DestPlain
+                    dest.append(char)
+                }
+            }
+            LinkUrlPhase.DestAngle -> when (char) {
+                '\\' -> {
+                    linkEscape = true
+                    dest.append('\\')
+                }
+                '>' -> linkUrlPhase = LinkUrlPhase.BetweenDestTitle
+                '<' -> abortInlineLinkOrImage(isImage)
+                else -> dest.append(char)
+            }
+            LinkUrlPhase.DestPlain -> when (char) {
+                '\\' -> {
+                    linkEscape = true
+                    dest.append('\\')
+                }
+                '(' -> {
+                    linkParenDepth++
+                    dest.append('(')
+                }
+                ')' -> {
+                    if (linkParenDepth == 0) finalizeInlineLink(isImage)
+                    else {
+                        linkParenDepth--
+                        dest.append(')')
+                    }
+                }
+                ' ', '\t' -> {
+                    // Plain destination ends at first unescaped whitespace; what
+                    // follows must be a title (or the closing `)`).
+                    if (linkParenDepth != 0) abortInlineLinkOrImage(isImage)
+                    else linkUrlPhase = LinkUrlPhase.BetweenDestTitle
+                }
+                else -> dest.append(char)
+            }
+            LinkUrlPhase.BetweenDestTitle -> when (char) {
+                ' ', '\t' -> {}
+                ')' -> finalizeInlineLink(isImage)
+                '"' -> linkUrlPhase = LinkUrlPhase.TitleDouble
+                '\'' -> linkUrlPhase = LinkUrlPhase.TitleSingle
+                '(' -> linkUrlPhase = LinkUrlPhase.TitleParen
+                else -> abortInlineLinkOrImage(isImage)
+            }
+            LinkUrlPhase.TitleDouble -> when (char) {
+                '\\' -> { linkEscape = true; linkTitle.append('\\') }
+                '"' -> linkUrlPhase = LinkUrlPhase.AfterTitle
+                else -> linkTitle.append(char)
+            }
+            LinkUrlPhase.TitleSingle -> when (char) {
+                '\\' -> { linkEscape = true; linkTitle.append('\\') }
+                '\'' -> linkUrlPhase = LinkUrlPhase.AfterTitle
+                else -> linkTitle.append(char)
+            }
+            LinkUrlPhase.TitleParen -> when (char) {
+                '\\' -> { linkEscape = true; linkTitle.append('\\') }
+                ')' -> linkUrlPhase = LinkUrlPhase.AfterTitle
+                '(' -> abortInlineLinkOrImage(isImage)
+                else -> linkTitle.append(char)
+            }
+            LinkUrlPhase.AfterTitle -> when (char) {
+                ' ', '\t' -> {}
+                ')' -> finalizeInlineLink(isImage)
+                else -> abortInlineLinkOrImage(isImage)
+            }
+        }
+    }
+
+    private suspend fun SemanticEventScope.abortInlineLinkOrImage(isImage: Boolean) {
+        if (isImage) abortInlineImage() else abortInlineLink()
+    }
+
+    /**
+     * Read the second `[…]` of a full or collapsed reference link/image
+     * (`[label][ref]` / `[label][]` / `![alt][ref]` / `![alt][]`). The
+     * caller has already consumed `[label][` (or `![alt][`) and set
+     * [inLinkRef] = true. Each char extends [linkRefText] until `]` closes
+     * the reference. On close: a non-empty ref text is the lookup key (full
+     * reference); an empty ref text falls back to the original label/alt
+     * (collapsed reference). On match, emit `<a>` / `<img>`. On miss, replay
+     * the entire source as literal text.
+     *
+     * Bail-out: an inner `[` invalidates the reference (per spec, ref labels
+     * forbid unescaped `[`); replay as literal source.
+     */
+    private suspend fun SemanticEventScope.handleLinkRefChar(char: Char) {
+        val isImage = inImage
+        when (char) {
+            ']' -> {
+                val refRaw = linkRefText.toString()
+                val labelText = if (isImage) imageAlt.toString() else linkText.toString()
+                val key = if (refRaw.isBlank()) {
+                    normalizeLinkLabel(applyBackslashEscapes(labelText))
+                } else {
+                    normalizeLinkLabel(applyBackslashEscapes(refRaw))
+                }
+                val def = if (key.isNotEmpty()) linkDefinitions[key] else null
+                if (def != null) {
+                    // Resolved — replay captured label events inside <a>/<img>.
+                    val labelEvents = redirector.stopCapture()
+                    if (isImage) {
+                        val alt = labelEvents.toLabelText().ifEmpty { labelText }
+                        val attrs = if (def.title != null) {
+                            mapOf("src" to def.href, "alt" to alt, "title" to def.title)
+                        } else {
+                            mapOf("src" to def.href, "alt" to alt)
+                        }
+                        "img"(attributes = attrs) {}
+                    } else {
+                        val attrs = if (def.title != null) {
+                            mapOf("href" to def.href, "title" to def.title)
+                        } else {
+                            mapOf("href" to def.href)
+                        }
+                        mark("a", attributes = attrs)
+                        redirector.replay(labelEvents)
+                        unmark("a")
+                    }
+                    resetInlineLinkState()
+                } else {
+                    // Not resolved — replay label events surrounded by literal
+                    // brackets and the reference label as text.
+                    val labelEvents = redirector.stopCapture()
+                    val prefix = if (isImage) "!" else ""
+                    +"$prefix["
+                    redirector.replay(labelEvents)
+                    +applyBackslashEscapes("][$refRaw]")
+                    resetInlineLinkState()
+                }
+            }
+            '[' -> {
+                // Unescaped `[` invalidates the reference label. Replay source.
+                val labelEvents = redirector.stopCapture()
+                val prefix = if (inImage) "!" else ""
+                +"$prefix["
+                redirector.replay(labelEvents)
+                +applyBackslashEscapes("][${linkRefText}")
+                resetInlineLinkState()
+                pendingDeferredChar = char
+            }
+            else -> linkRefText.append(char)
+        }
+    }
+
+    /**
+     * Commit the in-flight inline link `[label](url "title")` or image
+     * `![alt](src "title")`. Decodes entity refs first then applies backslash
+     * escapes (matches the order in the rest of the parser); URLs additionally
+     * percent-encode URL-unsafe ASCII (e.g. `\` → `%5C`, `"` → `%22`) and any
+     * non-ASCII bytes (UTF-8).
+     *
+     * The label content events captured between `[` and `]` are stopped from
+     * the redirector and replayed *inside* the `<a>` mark for links. For
+     * images, GFM/CommonMark renders `<img alt="…">` with plain-text alt, so
+     * the events are flattened to text via [toLabelText] (markup discarded).
+     * Resets all link state.
+     */
+    private suspend fun SemanticEventScope.finalizeInlineLink(isImage: Boolean) {
+        val rawDest = if (isImage) imageUrl.toString() else linkUrl.toString()
+        val decodedDest = applyBackslashEscapes(decodeEntities(rawDest))
+        val href = percentEncodeNonAscii(normalizeUrlEscapes(decodedDest))
+        val title = applyBackslashEscapes(decodeEntities(linkTitle.toString()))
+        val labelEvents = redirector.stopCapture()
+        if (isImage) {
+            val alt = labelEvents.toLabelText().ifEmpty { imageAlt.toString() }
+            val attrs = if (title.isNotEmpty()) {
+                mapOf("src" to href, "alt" to alt, "title" to title)
+            } else {
+                mapOf("src" to href, "alt" to alt)
+            }
+            "img"(attributes = attrs) {}
+        } else {
+            val attrs = if (title.isNotEmpty()) {
+                mapOf("href" to href, "title" to title)
+            } else {
+                mapOf("href" to href)
+            }
+            mark("a", attributes = attrs)
+            // Replay captured label events *inside* the <a> mark. Capture is
+            // no longer active, so they go straight to the downstream collector.
+            redirector.replay(labelEvents)
+            unmark("a")
+        }
+        resetInlineLinkState()
+    }
+
+    private fun resetInlineLinkState() {
         inLink = false
         inLinkUrl = false
+        inImage = false
+        inLinkRef = false
         linkText.clear()
         linkUrl.clear()
         linkTitle.clear()
+        imageAlt.clear()
+        imageUrl.clear()
+        linkUrlSource.clear()
+        linkRefText.clear()
+        linkUrlPhase = LinkUrlPhase.PreDest
+        linkParenDepth = 0
+        linkEscape = false
+        linkLabelTentativeClose = false
+        linkLabelOuterStackDepth = 0
+        linkLabelBracketDepth = 0
+    }
+
+    /**
+     * Look up [key] in [linkDefinitions] and emit the matching `<a>`/`<img>`
+     * for an in-flight `[label]` (link) or `![alt]` (image) using [labelText]
+     * as the visible link text or alt-text. Returns `true` on a successful
+     * match; the caller is responsible for resetting inline-link state.
+     *
+     * NOTE: link text rendering currently emits the raw label as a single
+     * text event — inline markdown markup inside the label (em / strong /
+     * code / nested image) is not parsed. Same divergence as inline
+     * `[label](url)` in this parser.
+     */
+    private suspend fun SemanticEventScope.emitReferenceMatch(
+        key: String,
+        labelText: String,
+        isImage: Boolean
+    ): Boolean {
+        val def = linkDefinitions[key] ?: return false
+        if (isImage) {
+            val attrs = if (def.title != null) {
+                mapOf("src" to def.href, "alt" to labelText, "title" to def.title)
+            } else {
+                mapOf("src" to def.href, "alt" to labelText)
+            }
+            "img"(attributes = attrs) {}
+        } else {
+            val attrs = if (def.title != null) {
+                mapOf("href" to def.href, "title" to def.title)
+            } else {
+                mapOf("href" to def.href)
+            }
+            "a"(attributes = attrs) {
+                +labelText
+            }
+        }
+        return true
+    }
+
+    /**
+     * Replay an unresolved inline link `[label]` (or `[label](partial_url…`) as
+     * literal text and reset link state. Called when the parser determines that
+     * a `[` did not start a real link — either because `[label]` was not
+     * followed by `(`, or because URL/title parsing hit a malformed transition,
+     * or because a block boundary (`flushInline`) closed the paragraph mid-link.
+     *
+     * Phase 3a behavior: the captured label events are replayed *as-is* (so
+     * inline markup like `[*foo*]` renders the `<em>foo</em>` even when the
+     * brackets stay literal), surrounded by `[` and `]` text events. URL
+     * source after `](` is replayed with backslash escapes applied. HTML tag
+     * detection inside the replay is *not* re-run — that would require
+     * re-feeding through the inline char processor and is currently a
+     * streaming divergence (see Gfm_06_06_Test ex. 501, 504).
+     */
+    private suspend fun SemanticEventScope.abortInlineLink() {
+        // Order matters: flushInlineLabelClose may emit closing marks for
+        // inline state still open inside the label (e.g. an unmatched `<bar>`
+        // HTML opener). Those emissions must enter the capture buffer so the
+        // replay is balanced; doing them after `stopCapture` would leak the
+        // unmark to the downstream collector before the `[` literal.
+        flushInlineLabelClose()
+        val labelEvents = if (redirector.isCapturing) redirector.stopCapture() else emptyList()
+        +"["
+        redirector.replay(labelEvents)
+        if (linkLabelTentativeClose || inLinkUrl) {
+            +"]"
+            linkLabelTentativeClose = false
+        }
+        if (inLinkUrl) {
+            +applyBackslashEscapes("(" + linkUrlSource.toString())
+        }
+        resetInlineLinkState()
     }
 
     /**
      * Image counterpart of [abortInlineLink]. Replays `![alt]` (or
-     * `![alt](partial_url`) as literal text.
+     * `![alt](partial_url…`) as literal text. The label events are replayed
+     * the same way as for links (so inline markup inside the alt label
+     * renders correctly when the image fails to resolve).
      */
     private suspend fun SemanticEventScope.abortInlineImage() {
-        val replay = StringBuilder()
-        replay.append("![")
-        replay.append(imageAlt)
-        if (inlineBuffer.endsWith("]")) {
-            replay.append(']')
-            inlineBuffer.deleteAt(inlineBuffer.length - 1)
+        flushInlineLabelClose()
+        val labelEvents = if (redirector.isCapturing) redirector.stopCapture() else emptyList()
+        +"!["
+        redirector.replay(labelEvents)
+        if (linkLabelTentativeClose || inLinkUrl) {
+            +"]"
+            linkLabelTentativeClose = false
         }
         if (inLinkUrl) {
-            replay.append('(')
-            replay.append(imageUrl)
+            +applyBackslashEscapes("(" + linkUrlSource.toString())
         }
-        +replay.toString()
-        inImage = false
-        inLinkUrl = false
-        imageAlt.clear()
-        imageUrl.clear()
+        resetInlineLinkState()
     }
 
     private suspend fun SemanticEventScope.flushInline() {
-        // Abort any in-flight link/image parse: a block boundary means the
+        // Try shortcut reference resolution for an unresolved `[label]` /
+        // `![alt]` at the block boundary before aborting. The block close means
+        // there's no further char that could turn it into an inline link or
+        // full/collapsed reference, so a registered ref-def match is the last
+        // chance to commit it as a link.
+        if ((inLink || inImage) && !inLinkUrl && !inLinkRef && linkLabelTentativeClose) {
+            val isImage = inImage
+            val labelText = if (isImage) imageAlt.toString() else linkText.toString()
+            val key = normalizeLinkLabel(applyBackslashEscapes(labelText))
+            val def = if (key.isNotEmpty()) linkDefinitions[key] else null
+            if (def != null) {
+                val labelEvents = redirector.stopCapture()
+                if (isImage) {
+                    val alt = labelEvents.toLabelText().ifEmpty { labelText }
+                    val attrs = if (def.title != null) {
+                        mapOf("src" to def.href, "alt" to alt, "title" to def.title)
+                    } else {
+                        mapOf("src" to def.href, "alt" to alt)
+                    }
+                    "img"(attributes = attrs) {}
+                } else {
+                    val attrs = if (def.title != null) {
+                        mapOf("href" to def.href, "title" to def.title)
+                    } else {
+                        mapOf("href" to def.href)
+                    }
+                    mark("a", attributes = attrs)
+                    redirector.replay(labelEvents)
+                    unmark("a")
+                }
+                linkLabelTentativeClose = false
+                resetInlineLinkState()
+            }
+        }
+        // Abort any still-in-flight link/image parse: a block boundary means the
         // bracket run never resolved, so replay it as literal text instead of
         // silently dropping the buffered label.
         if (inLink) abortInlineLink()
