@@ -59,27 +59,35 @@ class IncrementalParsingTest {
         // then: Mark(h1) should be emitted
         assertEmissions(SemanticEvent.Mark("h1"))
 
-        // when: send header text character by character
+        // when: send header text character by character. GFM §6.9 extended
+        // autolink detection buffers text within an inline context until the
+        // next mark/unmark — a single char like `H` could be the prefix of an
+        // email's local-part, so we can't emit it until a word boundary
+        // arrives. The buffered chars then drain together when the heading
+        // closes.
         input.emit("H")
-        // then
-        assertEmissions(SemanticEvent.Text("H"))
+        // then: buffered (might still grow into an autolink)
+        assertEmissions()
         // when
         input.emit("i")
-        // then
-        assertEmissions(SemanticEvent.Text("i"))
+        // then: still buffered
+        assertEmissions()
 
-        // when: send newline - header ends
+        // when: send newline - header ends; buffered text drains and h1 closes
         input.emit("\n")
-        // then: h1 should be closed
-        assertEmissions(SemanticEvent.Unmark("h1"))
-
-        // when: send paragraph text
-        input.emit("T")
-        // then: paragraph should open first
+        // then
         assertEmissions(
-            SemanticEvent.Mark("p"),
-            SemanticEvent.Text("T")
+            SemanticEvent.Text("H"),
+            SemanticEvent.Text("i"),
+            SemanticEvent.Unmark("h1")
         )
+
+        // when: send paragraph text. The `Mark("p")` is a non-text event,
+        // so it's emitted immediately; the following text char is buffered
+        // pending the autolink word-boundary.
+        input.emit("T")
+        // then
+        assertEmissions(SemanticEvent.Mark("p"))
 
         // when: complete input
         collectJob.cancel()

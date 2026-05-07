@@ -23,13 +23,15 @@ import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.flow
 
 public fun Flow<String>.parse(): Flow<SemanticEvent> = flow {
-    val redirector = RedirectingCollector(this)
+    val autolinker = AutolinkCollector(this)
+    val redirector = RedirectingCollector(autolinker)
     val state = ParserState(
         scope = SemanticEventScope(collector = redirector),
         redirector = redirector
     )
     collect { chunk -> state.processChunk(chunk) }
     state.finalize()
+    autolinker.finalize()
 }
 
 /**
@@ -345,6 +347,19 @@ private fun stripIndentCols(line: String, cols: Int, startCol: Int = 0): String 
 // CommonMark HTML block type 1 start tags
 private val HTML_BLOCK_TYPE1_TAGS = setOf(
     "pre", "script", "style", "textarea"
+)
+
+/**
+ * GFM §6.11 Disallowed Raw HTML extension: tag names that must be rendered
+ * as literal text rather than as `mark`/`unmark` events. The check is
+ * case-insensitive (`<XMP>` is equivalent to `<xmp>`). Several names are
+ * already filtered upstream because they're in [HTML_BLOCK_TYPE1_TAGS] or
+ * [HTML_BLOCK_TYPE6_TAGS] — listing them here is redundant but harmless;
+ * `xmp`, `noembed`, `plaintext` are the names not covered elsewhere.
+ */
+private val GFM_DISALLOWED_TAGS = setOf(
+    "title", "textarea", "style", "xmp", "iframe",
+    "noembed", "noframes", "script", "plaintext"
 )
 
 // CommonMark HTML block type 6 block-level tag names
@@ -784,15 +799,24 @@ private fun tokenizeHtmlLine(line: String): List<HtmlToken> {
         if (line[i] == '<') {
             val open = tryParseOpenTag(line, i)
             if (open != null) {
-                flushText()
-                tokens.add(open.second)
+                if (open.second.name.lowercase() in GFM_DISALLOWED_TAGS) {
+                    // GFM §6.11: emit the source as text instead of a tag.
+                    text.append(line, i, open.first)
+                } else {
+                    flushText()
+                    tokens.add(open.second)
+                }
                 i = open.first
                 continue
             }
             val close = tryParseCloseTag(line, i)
             if (close != null) {
-                flushText()
-                tokens.add(close.second)
+                if (close.second.name.lowercase() in GFM_DISALLOWED_TAGS) {
+                    text.append(line, i, close.first)
+                } else {
+                    flushText()
+                    tokens.add(close.second)
+                }
                 i = close.first
                 continue
             }
@@ -1077,6 +1101,13 @@ private class ParserState(
     // counter — space chars increment it and are deferred (not emitted) until a
     // non-space char flushes them as text or `\n` finalizes the count.
     private var paragraphTrailingSpaces: Int = 0
+    // True when the most recently processed paragraph line ended with `\<newline>`
+    // (GFM §6.13 hard line break via backslash). On continuation, behaves like
+    // ≥2 trailing spaces and produces a `<br/>` (alongside the existing
+    // [paragraphTrailingSpaces] = 2 setting). On paragraph close (no
+    // continuation), emits the `\` as literal text — GFM example 669 expects
+    // `<p>foo\</p>`, never a dangling `<br/>` followed by nothing.
+    private var paragraphTrailingBackslash: Boolean = false
     private val indentedCodeDeferredBlanks = mutableListOf<String>()
     // True while replaying lines that we already proved cannot start a table
     // (TableHeaderPending rejection branch). Suppresses the `|`-line table
@@ -2059,6 +2090,13 @@ private class ParserState(
                 // pendingSpaces holds trailing whitespace and any closing-#
                 // candidate; both are discarded at line end.
                 mode.pendingSpaces.clear()
+                // GFM example 671: a `\<newline>` at the end of a heading
+                // closes the heading with the `\` rendered as literal text
+                // (no `<br/>` — headings are single-line and never continue).
+                if (escaped) {
+                    +"\\"
+                    escaped = false
+                }
                 flushInline()
                 unmark("h${mode.level}")
                 replaceMode(BlockMode.Start)
@@ -2111,9 +2149,12 @@ private class ParserState(
                 if (escaped) {
                     // Backslash immediately before `\n` is a hard line break (GFM §6.7).
                     // Reuse the trailing-space tally so `emitParagraphLineBreak` produces
-                    // `<br/>` once the next line confirms continuation.
+                    // `<br/>` once the next line confirms continuation. Also flag the
+                    // backslash so paragraph-close paths can emit it as literal text
+                    // (`<p>foo\</p>`, GFM example 669).
                     escaped = false
                     paragraphTrailingSpaces = 2
+                    paragraphTrailingBackslash = true
                 }
                 flushInline()
                 lineBuffer.clear()
@@ -2170,8 +2211,35 @@ private class ParserState(
         val content = leftTrimmed.trimEnd(' ')
         paragraphTrailingSpaces = leftTrimmed.length - content.length
         processInlineContent(content)
+        captureLineEndBackslash()
         flushInline()
         replaceMode(BlockMode.ParagraphContinuation)
+    }
+
+    /**
+     * Returns true when [char] is a valid first char inside an inline math
+     * span (`$char…$`). The conservative set is letters, `\` (LaTeX command),
+     * and `{` (group opener) — exclusions like digits ("$5", currency),
+     * whitespace, and punctuation ($... GFM §6.14 ex 675) keep `$` as
+     * literal text in those contexts.
+     */
+    private fun isMathOpenChar(char: Char): Boolean =
+        char.isLetter() || char == '\\' || char == '{'
+
+    /**
+     * GFM §6.7 hard line break via `\<newline>`: when [processInlineContent]
+     * finishes with [escaped] set, the line ended with a literal `\`. Promote
+     * it to the same hard-break tally as `≥2 trailing spaces` so the next
+     * line's [emitParagraphLineBreak] produces `<br/>`, and flag the
+     * backslash so a paragraph-close path emits it as literal text instead
+     * (GFM example 669 `<p>foo\</p>`).
+     */
+    private fun captureLineEndBackslash() {
+        if (escaped) {
+            escaped = false
+            paragraphTrailingSpaces = 2
+            paragraphTrailingBackslash = true
+        }
     }
 
     /**
@@ -2203,12 +2271,14 @@ private class ParserState(
             // GFM treats a whitespace-only line as a blank line (§4.9). At top level
             // this closes the paragraph; inside a blockquote the same close happens
             // here and the outer blockquote machinery preserves the blockquote frame.
+            flushPendingTrailingBackslash()
             unmark("p")
             replaceMode(BlockMode.Start)
             paragraphTrailingSpaces = 0
             return
         }
         if (lineInterruptsParagraph(line)) {
+            flushPendingTrailingBackslash()
             unmark("p")
             replaceMode(BlockMode.Start)
             paragraphTrailingSpaces = 0
@@ -2237,9 +2307,15 @@ private class ParserState(
             unmark(tag.name, isTagged = true)
         } else {
             processInlineContent(stripped)
+            captureLineEndBackslash()
             flushInline()
         }
-        paragraphTrailingSpaces = newTrailing
+        if (paragraphTrailingBackslash) {
+            // captureLineEndBackslash overrode newTrailing — keep the hard-break
+            // tally it set instead of clobbering with the trimEnd count.
+        } else {
+            paragraphTrailingSpaces = newTrailing
+        }
         replaceMode(BlockMode.ParagraphContinuation)
     }
 
@@ -2255,7 +2331,24 @@ private class ParserState(
             unmark("br")
         }
         paragraphTrailingSpaces = 0
+        // Continuation absorbed the `\<newline>` as a hard break — clear the
+        // pending-backslash flag without emitting the literal `\` (the `<br/>`
+        // already replaces it).
+        paragraphTrailingBackslash = false
         +"\n"
+    }
+
+    /**
+     * Emit a trailing `\` as literal text on a paragraph-close path that ends
+     * with `\<newline>` and no continuation (GFM example 669: `<p>foo\</p>`).
+     * Caller must invoke this *before* `unmark("p")` so the text lives inside
+     * the paragraph.
+     */
+    private suspend fun SemanticEventScope.flushPendingTrailingBackslash() {
+        if (paragraphTrailingBackslash) {
+            +"\\"
+            paragraphTrailingBackslash = false
+        }
     }
 
     /**
@@ -4148,6 +4241,9 @@ private class ParserState(
         suspend fun flushPending() {
             if (pending.isNotEmpty()) { +pending.toString(); pending.clear() }
         }
+        // [tokenizeHtmlLine] already returns disallowed tags (GFM §6.11) as
+        // `HtmlToken.Text` so they pass through as plain text without ever
+        // becoming a `mark`/`unmark` pair here.
         val tokens = tokenizeHtmlLine(line)
         for (tok in tokens) {
             when (tok) {
@@ -4621,7 +4717,8 @@ private class ParserState(
                         val open = tryParseOpenTag(full, 0)
                         val close = if (open == null) tryParseCloseTag(full, 0) else null
                         if (open != null && open.first == full.length &&
-                            open.second.name.lowercase() !in INLINE_HTML_BLOCK_ELEMENTS
+                            open.second.name.lowercase() !in INLINE_HTML_BLOCK_ELEMENTS &&
+                            open.second.name.lowercase() !in GFM_DISALLOWED_TAGS
                         ) {
                             val tag = open.second
                             mark(tag.name, isTagged = true, attributes = tag.attributes)
@@ -4631,7 +4728,8 @@ private class ParserState(
                                 inlineOpenStack.addLast(InlineOpenFrame(tag.name, isTagged = true))
                             }
                         } else if (close != null && close.first == full.length &&
-                            close.second.name.lowercase() !in INLINE_HTML_BLOCK_ELEMENTS
+                            close.second.name.lowercase() !in INLINE_HTML_BLOCK_ELEMENTS &&
+                            close.second.name.lowercase() !in GFM_DISALLOWED_TAGS
                         ) {
                             // Match against the most recent open whose name equals (case-insensitive).
                             // `closeInlineDownTo` pops every inline frame above the match —
@@ -4826,18 +4924,30 @@ private class ParserState(
                     inlineBuffer.append('=')
                 }
             }
+            // Inline math (`$…$`): defer the open decision until we see the
+            // next char. A bare `$` followed by punctuation, whitespace, or
+            // a digit is *not* a math opener (GFM §6.14 example 675 keeps
+            // `hello $.;'there` as plain text; GitHub-style math also treats
+            // `$5` as currency, never math). Open only when followed by a
+            // letter, `\` (LaTeX command), or `{` (group). Buffer-resolution
+            // branches below handle the dispatch on the next char.
+            inlineBuffer.toString() == "$" && isMathOpenChar(char) -> {
+                inlineBuffer.clear()
+                mark("math")
+                math = true
+                pendingDeferredChar = char
+            }
+            inlineBuffer.toString() == "$" && !isMathOpenChar(char) -> {
+                +"$"
+                inlineBuffer.clear()
+                pendingDeferredChar = char
+            }
             char == '$' -> {
                 if (inlineBuffer.isNotEmpty()) {
                     +inlineBuffer.toString()
                     inlineBuffer.clear()
                 }
-                if (math) {
-                    unmark("math")
-                    math = false
-                } else {
-                    mark("math")
-                    math = true
-                }
+                inlineBuffer.append('$')
             }
             // Exclamation buffer checks (before char == '[' for image syntax)
             inlineBuffer.toString() == "!" && char == '[' -> {
@@ -5712,6 +5822,7 @@ private class ParserState(
                 }
                 Paragraph -> {
                     flushInline()
+                    flushPendingTrailingBackslash()
                     unmark("p")
                     replaceMode(Start)
                     paragraphTrailingSpaces = 0
@@ -5721,6 +5832,7 @@ private class ParserState(
                         val line = lineBuffer.toString()
                         lineBuffer.clear()
                         if (lineInterruptsParagraph(line)) {
+                            flushPendingTrailingBackslash()
                             unmark("p")
                             replaceMode(Start)
                             paragraphTrailingSpaces = 0
@@ -5732,6 +5844,7 @@ private class ParserState(
                         processInlineContent(line.trimEnd(' '))
                         flushInline()
                     }
+                    flushPendingTrailingBackslash()
                     unmark("p")
                     replaceMode(Start)
                     paragraphTrailingSpaces = 0

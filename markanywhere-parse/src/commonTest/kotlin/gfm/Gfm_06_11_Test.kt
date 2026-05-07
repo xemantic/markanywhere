@@ -35,7 +35,6 @@ import kotlin.test.Test
 @Suppress("ClassName")
 class Gfm_06_11_Test {
 
-    // TODO review
     @Test
     fun `example 657 - paragraph title style, blockquote (text xmp is disallowed X)`() = runTest {
         // given
@@ -53,13 +52,13 @@ class Gfm_06_11_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "strong" {
+                tag("strong") {
                     +" <title> <style> "
                     "em" {
                     }
                 }
             }
-            "blockquote" {
+            tag("blockquote") {
                 +"\n  <xmp> is disallowed.  <XMP> is also disallowed.\n"
             }
         }

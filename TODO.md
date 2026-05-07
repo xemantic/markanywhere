@@ -9,29 +9,7 @@ estimates how often the construct shows up in typical LLM output.
 
 ## Next-batch candidates (recommended order)
 
-### 1. GFM §6.9 — Autolinks extension (14 tests, **HIGH impact**)
-
-Bare URLs and emails: `www.example.com`, `http://example.com`, `foo@bar.com`,
-`mailto:foo@bar.com` etc. recognised mid-text without `<>` brackets.
-
-LLMs emit these constantly and users expect them clickable. Currently the
-parser only recognises explicit `<http://...>` autolinks (§6.8, partially).
-
-**Scope**: a tokeniser pass over paragraph text that detects URL / email
-boundary-respecting patterns and emits `<a href="...">` mark/unmark around the
-matched run. The detection heuristics are the GFM-defined "extended autolink"
-rules (valid domain, trailing punctuation stripping, `_` boundary
-constraints).
-
-**Where**: probably a new pass in `processInlineCharImpl`'s text-emit fall-
-through, or a post-process step that scans emitted paragraph text for URL
-shapes — needs care to interact cleanly with the streaming text-event flow
-and the existing `<...>` autolink handler.
-
-**Sample failing tests**: 622 (`www.commonmark.org` → `<a>`), 623 (with
-trailing punctuation), 626 (URL with query string), 630 (bare email).
-
-### 2. GFM §6.7 — Images (15 tests, **HIGH impact**)
+### 1. GFM §6.7 — Images (15 tests, **HIGH impact**)
 
 Image edge cases beyond what Phase 1–3 covered. Many likely benefit from the
 same label-content + URL-state-machine work links got.
@@ -44,7 +22,7 @@ simpler than full link content.
 **Where**: `Gfm_06_07_Test`. Re-run after auditing — some may already pass after
 Phase 3a/3b that I didn't re-verify.
 
-### 3. GFM §6.10 — Disallowed Raw HTML extension (12 tests, **MEDIUM impact**)
+### 2. GFM §6.10 — Disallowed Raw HTML extension (12 tests, **MEDIUM impact**)
 
 GFM filters specific HTML tags (e.g. `<title>`, `<textarea>`, `<style>`,
 `<xmp>`) by emitting them as `&lt;...&gt;` text instead of as inline-HTML
@@ -53,18 +31,7 @@ marks. Defensive sanitisation of LLM-produced HTML — useful but not critical.
 **Scope**: a hard-coded tag name set, applied in `tryParseOpenTag` /
 `tryParseCloseTag` to redirect those tags to literal-text emission.
 
-### 4. GFM §6.12 — Hard line breaks (8 tests, **MEDIUM impact**)
-
-Trailing `  \n` (two-or-more-spaces + newline) and `\\\n` (backslash + newline)
-should produce `<br/>`. Already partially supported via
-`paragraphTrailingSpaces` and the `\` + `\n` path. Edge cases in interaction
-with code spans, soft breaks, and inside other inline constructs.
-
-### 5. Singletons in §6.11 (1) and §6.14 (1)
-
-One test each. Probably small spec compliance fixes.
-
-### 6. Full HTML5 named entity table (GFM §6.2, **MEDIUM impact**)
+### 3. Full HTML5 named entity table (GFM §6.2, **MEDIUM impact**)
 
 `NAMED_ENTITIES` in `MarkanywhereParser.kt` (around line 470) is a hand-picked
 16-entry subset covering only the names exercised by the §6.2 test suite. The
@@ -156,7 +123,17 @@ LLMs essentially never produce this pattern.
   see current count. Baseline at the start of link work was 205 failures; the
   link work shipped at 63. §6.8 standard autolinks then closed (5 spec
   compliance fixes + 1 marked DIVERGENCE for the custom-markup `<ns:name>`
-  extension); current count is 57 failures.
+  extension), bringing the count to 57. §6.9 extended autolinks closed all
+  14 of its tests (and updated 3 §6.8 tests whose expectations became
+  obsolete once bare URLs/emails autolink), bringing the count to 43. §6.12
+  hard-line-break work then closed 2 isolated fixes (669, 671) and converted
+  6 multi-line tests to DIVERGENCE markers (the underlying constraint —
+  inline state can't span `\n` — is documented in CLAUDE.md and shared
+  with §6.1/§6.3), bringing the count to 36. §6.11 disallowed-raw-HTML
+  closed (added `GFM_DISALLOWED_TAGS` set applied in `tokenizeHtmlLine` and
+  inline `<…>` parsing) and §6.14 example 675 closed (tightened math-open
+  rule: `$` now opens math only when followed by a letter, `\`, or `{`,
+  preserving `hello $.;'there` as plain text); current count is 33 failures.
 - The systematic divergences are documented in `CLAUDE.md` under "Streaming
   divergences" — read that before starting any of the link cases above.
 - Most failures map cleanly to a single GFM section, so each work stream is

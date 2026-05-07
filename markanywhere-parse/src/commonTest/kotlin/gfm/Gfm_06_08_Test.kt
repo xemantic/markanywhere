@@ -355,7 +355,10 @@ class Gfm_06_08_Test {
          */
     }
 
-    // TODO review
+    // CommonMark §6.8 expects no link (the `< … >` form fails the autolink
+    // shape because of the surrounding spaces). With GFM §6.9 extended
+    // autolinks active, the bare `http://foo.bar` is recognised because it
+    // sits between whitespace boundaries.
     @Test
     fun `example 617 - paragraph httpfoobar`() = runTest {
         // given
@@ -367,10 +370,14 @@ class Gfm_06_08_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"< http://foo.bar >"
+                +"< "
+                "a"("href" to "http://foo.bar") {
+                    +"http://foo.bar"
+                }
+                +" >"
             }
         }
-        // GFM expected:
+        // GFM expected (CommonMark §6.8, no extended autolinks):
         /*
             <p>&lt; http://foo.bar &gt;</p>
          */
@@ -421,7 +428,9 @@ class Gfm_06_08_Test {
          */
     }
 
-    // TODO review
+    // CommonMark §6.8 expects no autolink (only the `<URL>` form is
+    // recognised). With GFM §6.9 extended autolinks active, a bare URL
+    // beginning with `http://` is wrapped in `<a>`.
     @Test
     fun `example 620 - paragraph httpexamplecom`() = runTest {
         // given
@@ -433,16 +442,19 @@ class Gfm_06_08_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"http://example.com"
+                "a"("href" to "http://example.com") {
+                    +"http://example.com"
+                }
             }
         }
-        // GFM expected:
+        // GFM expected (CommonMark §6.8, no extended autolinks):
         /*
             <p>http://example.com</p>
          */
     }
 
-    // TODO review
+    // CommonMark §6.8 expects no autolink for a bare email. With GFM §6.9
+    // extended autolinks active, the address is wrapped in `<a href="mailto:…">`.
     @Test
     fun `example 621 - paragraph foo@barexamplecom`() = runTest {
         // given
@@ -454,10 +466,12 @@ class Gfm_06_08_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"foo@bar.example.com"
+                "a"("href" to "mailto:foo@bar.example.com") {
+                    +"foo@bar.example.com"
+                }
             }
         }
-        // GFM expected:
+        // GFM expected (CommonMark §6.8, no extended autolinks):
         /*
             <p>foo@bar.example.com</p>
          */

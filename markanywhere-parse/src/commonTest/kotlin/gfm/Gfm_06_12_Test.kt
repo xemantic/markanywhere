@@ -170,9 +170,14 @@ class Gfm_06_12_Test {
          */
     }
 
-    // TODO review
+    // DIVERGENCE: GFM expects emphasis to span the hard line break so the
+    // closing `*` on the next line still pairs with the opener (`<em>foo<br/>
+    // bar</em>`). The streaming parser force-closes every inline state at
+    // each `\n` (CLAUDE.md "Inline state cannot span line breaks"), so em
+    // closes at the boundary, the `<br/>` is emitted as a sibling, and the
+    // unmatched `*` on the second line falls through as literal text.
     @Test
-    fun `example 663 - paragraph foo bar`() = runTest {
+    fun `example 663 - DIVERGENCE - paragraph foo bar`() = runTest {
         // given
         val textFlow = buildText {
             +"*foo  \n"
@@ -187,9 +192,9 @@ class Gfm_06_12_Test {
             "p" {
                 "em" {
                     +"foo"
-                    "br" {}
-                    +"\nbar"
                 }
+                "br" {}
+                +"\nbar*"
             }
         }
         // GFM expected:
@@ -199,9 +204,11 @@ class Gfm_06_12_Test {
          */
     }
 
-    // TODO review
+    // DIVERGENCE: see example 663 — `\<newline>` hard break inside `*…*`
+    // produces the same shape as `  \n` because emphasis closes at the
+    // line boundary in the streaming model.
     @Test
-    fun `example 664 - paragraph foo bar`() = runTest {
+    fun `example 664 - DIVERGENCE - paragraph foo bar`() = runTest {
         // given
         val textFlow = """
             *foo\
@@ -216,9 +223,9 @@ class Gfm_06_12_Test {
             "p" {
                 "em" {
                     +"foo"
-                    "br" {}
-                    +"\nbar"
                 }
+                "br" {}
+                +"\nbar*"
             }
         }
         // GFM expected:
@@ -228,9 +235,13 @@ class Gfm_06_12_Test {
          */
     }
 
-    // TODO review
+    // DIVERGENCE: code-span content can't span `\n` in the streaming model
+    // (CLAUDE.md "Inline state cannot span line breaks"). `<code>` closes at
+    // the line boundary; the `<br/>` (≥2 trailing spaces) emits as a sibling
+    // and `span\`` flows as paragraph content with the unmatched backtick
+    // staying literal.
     @Test
-    fun `example 665 - paragraph code span`() = runTest {
+    fun `example 665 - DIVERGENCE - paragraph code span`() = runTest {
         // given
         val textFlow = buildText {
             +"`code  \n"
@@ -244,8 +255,10 @@ class Gfm_06_12_Test {
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
                 "code" {
-                    +"code   span"
+                    +"code"
                 }
+                "br" {}
+                +"\nspan`"
             }
         }
         // GFM expected:
@@ -254,9 +267,13 @@ class Gfm_06_12_Test {
          */
     }
 
-    // TODO review
+    // DIVERGENCE: see example 665. Backslash inside a code span is *literal*
+    // (GFM §6.3) and remains in the buffered content, so the close-at-`\n`
+    // path emits `code\` as the inline-code body. Note: the `\<newline>`
+    // hard-break promotion does NOT fire here because backslashes are not
+    // tracked as escape state inside an open code span.
     @Test
-    fun `example 666 - paragraph code span`() = runTest {
+    fun `example 666 - DIVERGENCE - paragraph code span`() = runTest {
         // given
         val textFlow = """
             `code\
@@ -270,8 +287,9 @@ class Gfm_06_12_Test {
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
                 "code" {
-                    +"code\\ span"
+                    +"code\\"
                 }
+                +"\nspan`"
             }
         }
         // GFM expected:
@@ -280,9 +298,13 @@ class Gfm_06_12_Test {
          */
     }
 
-    // TODO review
+    // DIVERGENCE: an inline HTML tag with attributes that span `\n` is not
+    // assembled — `<` accumulates an inline-buffer that the line-boundary
+    // flushInline drains as literal text. The `≥2 trailing spaces` still
+    // fires the hard-break (`<br/>` between the two halves of the source
+    // tag).
     @Test
-    fun `example 667 - empty paragraph`() = runTest {
+    fun `example 667 - DIVERGENCE - empty paragraph`() = runTest {
         // given
         val textFlow = buildText {
             +"<a href=\"foo  \n"
@@ -295,20 +317,24 @@ class Gfm_06_12_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "a"("href" to "foo  \nbar") {
-                }
+                +"<a href=\"foo"
+                "br" {}
+                +"\nbar\">"
             }
         }
         // GFM expected:
         /*
-            <p><a href="foo  
+            <p><a href="foo
             bar"></p>
          */
     }
 
-    // TODO review
+    // DIVERGENCE: see example 667 — multi-line HTML tag is not assembled.
+    // Here the `\<newline>` inside the attribute value is content, not a
+    // hard-break candidate, because escape tracking is per-paragraph (not
+    // per-attribute), and the inline buffer keeps the `<` raw.
     @Test
-    fun `example 668 - empty paragraph`() = runTest {
+    fun `example 668 - DIVERGENCE - empty paragraph`() = runTest {
         // given
         val textFlow = """
             <a href="foo\
@@ -321,8 +347,7 @@ class Gfm_06_12_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "a"("href" to "foo\\\nbar") {
-                }
+                +"<a href=\"foo\\\nbar\">"
             }
         }
         // GFM expected:
