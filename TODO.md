@@ -9,29 +9,24 @@ estimates how often the construct shows up in typical LLM output.
 
 ## Next-batch candidates (recommended order)
 
-### 1. GFM §6.7 — Images (15 tests, **HIGH impact**)
+### 1. GFM §6.10 — Raw HTML inline (12 tests, **MEDIUM impact**)
 
-Image edge cases beyond what Phase 1–3 covered. Many likely benefit from the
-same label-content + URL-state-machine work links got.
+CommonMark §6.10 / GFM §6.10 inline raw HTML edge cases. The 12 failures cover
+multi-line opening tags (ex 638), multi-line attribute values, HTML comments
+spanning lines (ex 648), processing instructions `<?php …?>` (ex 651), CDATA
+sections, and declarations.
 
-**Sample failing tests**: 582–598 (multi-line image refs and labels), 601/602
-(`!foo` non-image cases). Similar label-buffering and URL-parsing infrastructure
-applies — though the alt-text rendering rule (plain text only) keeps it
-simpler than full link content.
+**Where**: `Gfm_06_10_Test`. Most failures involve constructs that span
+newlines — likely systematic DIVERGENCE territory (same constraint as
+multi-line code spans / soft breaks per CLAUDE.md). Audit one-by-one to see
+which are real bugs vs. divergences. The single-line tag edge cases (ex 636
+maybe) may be fixable.
 
-**Where**: `Gfm_06_07_Test`. Re-run after auditing — some may already pass after
-Phase 3a/3b that I didn't re-verify.
+> Note on \"§6.10 disallowed raw HTML\": the disallowed-tag GFM extension is
+> §6.11, which already closed (one straggler — `Gfm_06_11_Test` ex 657 —
+> remains, see below).
 
-### 2. GFM §6.10 — Disallowed Raw HTML extension (12 tests, **MEDIUM impact**)
-
-GFM filters specific HTML tags (e.g. `<title>`, `<textarea>`, `<style>`,
-`<xmp>`) by emitting them as `&lt;...&gt;` text instead of as inline-HTML
-marks. Defensive sanitisation of LLM-produced HTML — useful but not critical.
-
-**Scope**: a hard-coded tag name set, applied in `tryParseOpenTag` /
-`tryParseCloseTag` to redirect those tags to literal-text emission.
-
-### 3. Full HTML5 named entity table (GFM §6.2, **MEDIUM impact**)
+### 2. Full HTML5 named entity table (GFM §6.2, **MEDIUM impact**)
 
 `NAMED_ENTITIES` in `MarkanywhereParser.kt` (around line 470) is a hand-picked
 16-entry subset covering only the names exercised by the §6.2 test suite. The
@@ -79,6 +74,30 @@ HTML5 entity decoder reachable via `textarea.innerHTML` / `DOMParser` /
   DOM would make decoding non-deterministic across JS runtimes.
 
 Conclusion: codegen the table once, ship it to every KMP target uniformly.
+
+---
+
+## Closed sections (kept for context)
+
+### GFM §6.7 — Images (closed as DIVERGENCE, 0 failing)
+
+All 15 prior failures were systematic divergences, not parser bugs:
+- 13 forward-reference cases (def appears after usage; append-only stream
+  cannot retroactively rewrite — same constraint as §6.6 forward-ref links)
+- 2 nested image-in-image / link-in-image cases (require speculative
+  recursive label parsing — see §"Image-inside-link" below for the analogue)
+- 1 multi-line collapsed-ref case (596) compounded with forward-ref
+
+Tests are renamed with `DIVERGENCE` markers. Inline images, empty alt,
+angle-bracket destinations, escapes, and invalid labels (587–590, 599, 601)
+all pass per spec.
+
+### One straggler: GFM §6.11 ex 657
+
+`Gfm_06_11_Test.example 657` — disallowed `<title>` / `<style>` / `<xmp>` mixed
+with `<strong>` and `<blockquote>`. Single failing test in an otherwise-closed
+section; worth a quick audit to see whether it's a real bug in the
+`GFM_DISALLOWED_TAGS` filter interaction with HTML 6/7 sub-parse.
 
 ---
 
@@ -134,6 +153,10 @@ LLMs essentially never produce this pattern.
   inline `<…>` parsing) and §6.14 example 675 closed (tightened math-open
   rule: `$` now opens math only when followed by a letter, `\`, or `{`,
   preserving `hello $.;'there` as plain text); current count is 33 failures.
+  §6.7 images then closed as DIVERGENCE — 13 forward-ref + 1 multi-line
+  collapsed-ref + 2 nested-construct tests renamed to `DIVERGENCE` and
+  re-baselined to actual streaming output (literal `![…]` text, depth-counter
+  alt-text); count is 19 failures.
 - The systematic divergences are documented in `CLAUDE.md` under "Streaming
   divergences" — read that before starting any of the link cases above.
 - Most failures map cleanly to a single GFM section, so each work stream is

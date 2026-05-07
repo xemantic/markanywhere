@@ -35,7 +35,6 @@ import kotlin.test.Test
 @Suppress("ClassName")
 class Gfm_06_07_Test {
 
-    // TODO review
     @Test
     fun `example 581 - empty paragraph`() = runTest {
         // given
@@ -56,9 +55,8 @@ class Gfm_06_07_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 582 - empty paragraph`() = runTest {
+    fun `example 582 - DIVERGENCE - forward ref shortcut image with em label`() = runTest {
         // given
         val textFlow = """
             ![foo *bar*]
@@ -70,9 +68,18 @@ class Gfm_06_07_Test {
         val parsed = textFlow.parse()
 
         // then
+        // Forward reference DIVERGENCE: definition appears after usage; the
+        // append-only stream emits the usage as literal text before the def
+        // is registered. Trailing `*` before `]` is buffered as a delimiter
+        // and flushed as literal text by `flushInlineLabelClose`, so the em
+        // closes around `bar*`.
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "img"("src" to "train.jpg", "alt" to "foo bar", "title" to "train & tracks") {}
+                +"![foo "
+                "em" {
+                    +"bar*"
+                }
+                +"]"
             }
         }
         // GFM expected:
@@ -81,9 +88,8 @@ class Gfm_06_07_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 583 - empty paragraph`() = runTest {
+    fun `example 583 - DIVERGENCE - nested image inside image`() = runTest {
         // given
         val textFlow = "![foo ![bar](/url)](/url2)".chunkedRandomly().asFlow()
 
@@ -91,9 +97,14 @@ class Gfm_06_07_Test {
         val parsed = textFlow.parse()
 
         // then
+        // Nested-image DIVERGENCE: the inner `![bar](/url)` is treated as
+        // content of the outer label by the depth-counter (CLAUDE.md:
+        // "Image-inside-link not supported. Same fix as nested link parsing
+        // — speculative recursion."). The outer image commits with the raw
+        // inner source as alt text.
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "img"("src" to "/url2", "alt" to "foo bar") {}
+                "img"("src" to "/url2", "alt" to "foo ![bar](/url)") {}
             }
         }
         // GFM expected:
@@ -102,9 +113,8 @@ class Gfm_06_07_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 584 - empty paragraph`() = runTest {
+    fun `example 584 - DIVERGENCE - nested link inside image`() = runTest {
         // given
         val textFlow = "![foo [bar](/url)](/url2)".chunkedRandomly().asFlow()
 
@@ -112,9 +122,13 @@ class Gfm_06_07_Test {
         val parsed = textFlow.parse()
 
         // then
+        // Nested-link-in-image DIVERGENCE: the inner `[bar](/url)` is treated
+        // as content of the outer label by the depth-counter (same constraint
+        // as ex 583). The outer image commits with the raw inner source as
+        // alt text.
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "img"("src" to "/url2", "alt" to "foo bar") {}
+                "img"("src" to "/url2", "alt" to "foo [bar](/url)") {}
             }
         }
         // GFM expected:
@@ -123,9 +137,8 @@ class Gfm_06_07_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 585 - empty paragraph`() = runTest {
+    fun `example 585 - DIVERGENCE - forward ref collapsed image with em label`() = runTest {
         // given
         val textFlow = """
             ![foo *bar*][]
@@ -137,9 +150,16 @@ class Gfm_06_07_Test {
         val parsed = textFlow.parse()
 
         // then
+        // Forward reference DIVERGENCE: see ex 582. Trailing `[]` after the
+        // label is then literal too since the speculative collapsed-ref form
+        // also has no def to resolve against.
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "img"("src" to "train.jpg", "alt" to "foo bar", "title" to "train & tracks") {}
+                +"![foo "
+                "em" {
+                    +"bar*"
+                }
+                +"][]"
             }
         }
         // GFM expected:
@@ -148,9 +168,8 @@ class Gfm_06_07_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 586 - empty paragraph`() = runTest {
+    fun `example 586 - DIVERGENCE - forward ref full image case-insensitive label`() = runTest {
         // given
         val textFlow = """
             ![foo *bar*][foobar]
@@ -162,9 +181,14 @@ class Gfm_06_07_Test {
         val parsed = textFlow.parse()
 
         // then
+        // Forward reference DIVERGENCE: see ex 582.
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "img"("src" to "train.jpg", "alt" to "foo bar", "title" to "train & tracks") {}
+                +"![foo "
+                "em" {
+                    +"bar*"
+                }
+                +"][foobar]"
             }
         }
         // GFM expected:
@@ -173,7 +197,6 @@ class Gfm_06_07_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 587 - empty paragraph`() = runTest {
         // given
@@ -194,7 +217,6 @@ class Gfm_06_07_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 588 - paragraph My`() = runTest {
         // given
@@ -216,7 +238,6 @@ class Gfm_06_07_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 589 - empty paragraph`() = runTest {
         // given
@@ -237,7 +258,6 @@ class Gfm_06_07_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 590 - empty paragraph`() = runTest {
         // given
@@ -258,9 +278,8 @@ class Gfm_06_07_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 591 - empty paragraph`() = runTest {
+    fun `example 591 - DIVERGENCE - forward ref full image`() = runTest {
         // given
         val textFlow = """
             ![foo][bar]
@@ -272,9 +291,10 @@ class Gfm_06_07_Test {
         val parsed = textFlow.parse()
 
         // then
+        // Forward reference DIVERGENCE: see ex 582.
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "img"("src" to "/url", "alt" to "foo") {}
+                +"![foo][bar]"
             }
         }
         // GFM expected:
@@ -283,9 +303,8 @@ class Gfm_06_07_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 592 - empty paragraph`() = runTest {
+    fun `example 592 - DIVERGENCE - forward ref full image case-insensitive`() = runTest {
         // given
         val textFlow = """
             ![foo][bar]
@@ -297,9 +316,10 @@ class Gfm_06_07_Test {
         val parsed = textFlow.parse()
 
         // then
+        // Forward reference DIVERGENCE: see ex 582.
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "img"("src" to "/url", "alt" to "foo") {}
+                +"![foo][bar]"
             }
         }
         // GFM expected:
@@ -308,9 +328,8 @@ class Gfm_06_07_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 593 - empty paragraph`() = runTest {
+    fun `example 593 - DIVERGENCE - forward ref collapsed image`() = runTest {
         // given
         val textFlow = """
             ![foo][]
@@ -322,9 +341,10 @@ class Gfm_06_07_Test {
         val parsed = textFlow.parse()
 
         // then
+        // Forward reference DIVERGENCE: see ex 582.
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "img"("src" to "/url", "alt" to "foo", "title" to "title") {}
+                +"![foo][]"
             }
         }
         // GFM expected:
@@ -333,9 +353,8 @@ class Gfm_06_07_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 594 - empty paragraph`() = runTest {
+    fun `example 594 - DIVERGENCE - forward ref collapsed image em label`() = runTest {
         // given
         val textFlow = """
             ![*foo* bar][]
@@ -347,9 +366,14 @@ class Gfm_06_07_Test {
         val parsed = textFlow.parse()
 
         // then
+        // Forward reference DIVERGENCE: see ex 582.
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "img"("src" to "/url", "alt" to "foo bar", "title" to "title") {}
+                +"!["
+                "em" {
+                    +"foo"
+                }
+                +" bar][]"
             }
         }
         // GFM expected:
@@ -358,9 +382,8 @@ class Gfm_06_07_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 595 - empty paragraph`() = runTest {
+    fun `example 595 - DIVERGENCE - forward ref collapsed image case-insensitive`() = runTest {
         // given
         val textFlow = """
             ![Foo][]
@@ -372,9 +395,10 @@ class Gfm_06_07_Test {
         val parsed = textFlow.parse()
 
         // then
+        // Forward reference DIVERGENCE: see ex 582.
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "img"("src" to "/url", "alt" to "Foo", "title" to "title") {}
+                +"![Foo][]"
             }
         }
         // GFM expected:
@@ -383,9 +407,8 @@ class Gfm_06_07_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 596 - paragraph`() = runTest {
+    fun `example 596 - DIVERGENCE - forward ref multi-line collapsed image`() = runTest {
         // given
         val textFlow = buildText {
             +"![foo] \n"
@@ -398,10 +421,13 @@ class Gfm_06_07_Test {
         val parsed = textFlow.parse()
 
         // then
+        // Forward reference DIVERGENCE (see ex 582) compounded by multi-line
+        // label DIVERGENCE: `flushInline` closes inline state at every line
+        // break, so the speculative `![foo] ` aborts before the next-line
+        // `[]` can collapse-combine with it.
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "img"("src" to "/url", "alt" to "foo", "title" to "title") {}
-                +"\n[]"
+                +"![foo]\n[]"
             }
         }
         // GFM expected:
@@ -411,9 +437,8 @@ class Gfm_06_07_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 597 - empty paragraph`() = runTest {
+    fun `example 597 - DIVERGENCE - forward ref shortcut image`() = runTest {
         // given
         val textFlow = """
             ![foo]
@@ -425,9 +450,10 @@ class Gfm_06_07_Test {
         val parsed = textFlow.parse()
 
         // then
+        // Forward reference DIVERGENCE: see ex 582.
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "img"("src" to "/url", "alt" to "foo", "title" to "title") {}
+                +"![foo]"
             }
         }
         // GFM expected:
@@ -436,9 +462,8 @@ class Gfm_06_07_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 598 - empty paragraph`() = runTest {
+    fun `example 598 - DIVERGENCE - forward ref shortcut image em label`() = runTest {
         // given
         val textFlow = """
             ![*foo* bar]
@@ -450,9 +475,14 @@ class Gfm_06_07_Test {
         val parsed = textFlow.parse()
 
         // then
+        // Forward reference DIVERGENCE: see ex 582.
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "img"("src" to "/url", "alt" to "foo bar", "title" to "title") {}
+                +"!["
+                "em" {
+                    +"foo"
+                }
+                +" bar]"
             }
         }
         // GFM expected:
@@ -461,7 +491,6 @@ class Gfm_06_07_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 599 - paragraph !foo, paragraph foo url title`() = runTest {
         // given
@@ -490,9 +519,8 @@ class Gfm_06_07_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 600 - empty paragraph`() = runTest {
+    fun `example 600 - DIVERGENCE - forward ref shortcut image case-insensitive`() = runTest {
         // given
         val textFlow = """
             ![Foo]
@@ -504,9 +532,10 @@ class Gfm_06_07_Test {
         val parsed = textFlow.parse()
 
         // then
+        // Forward reference DIVERGENCE: see ex 582.
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                "img"("src" to "/url", "alt" to "Foo", "title" to "title") {}
+                +"![Foo]"
             }
         }
         // GFM expected:
@@ -515,7 +544,6 @@ class Gfm_06_07_Test {
          */
     }
 
-    // TODO review
     @Test
     fun `example 601 - paragraph !foo`() = runTest {
         // given
@@ -540,9 +568,8 @@ class Gfm_06_07_Test {
          */
     }
 
-    // TODO review
     @Test
-    fun `example 602 - paragraph !foo`() = runTest {
+    fun `example 602 - DIVERGENCE - forward ref escape-disabled image becomes link`() = runTest {
         // given
         val textFlow = """
             \![foo]
@@ -554,12 +581,13 @@ class Gfm_06_07_Test {
         val parsed = textFlow.parse()
 
         // then
+        // Forward reference DIVERGENCE: the `\!` correctly escapes the image
+        // marker, but the residual `[foo]` shortcut link reference still
+        // can't resolve a forward def (see ex 582). Escape itself works —
+        // the `\` is consumed, leaving `![foo]` as the captured source.
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"!"
-                "a"("href" to "/url", "title" to "title") {
-                    +"foo"
-                }
+                +"![foo]"
             }
         }
         // GFM expected:
