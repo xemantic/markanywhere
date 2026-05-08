@@ -1,6 +1,6 @@
 # markanywhere
 
-Stream Markdown or Markup document formats as interchangeable hierarchical streams of events
+Incremental Markdown parser that emits streams of semantic events, plus tools to manipulate them — designed for real-time rendering of streamed LLM output.
 
 [<img alt="Maven Central Version" src="https://img.shields.io/maven-central/v/com.xemantic.markanywhere/markanywhere">](https://central.sonatype.com/artifact/com.xemantic.markanywhere/markanywhere)
 [<img alt="GitHub Release Date" src="https://img.shields.io/github/release-date/xemantic/markanywhere">](https://github.com/xemantic/markanywhere/releases)
@@ -19,21 +19,104 @@ Stream Markdown or Markup document formats as interchangeable hierarchical strea
 [<img alt="discord users online" src="https://img.shields.io/discord/811561179280965673">](https://discord.gg/vQktqqN2Vn)
 [![Bluesky](https://img.shields.io/badge/Bluesky-0285FF?logo=bluesky&logoColor=fff)](https://bsky.app/profile/xemantic.com)
 
-## TL;DR
+## Use cases
 
-```markdown
-# Very important expression of machine cognition
+### Markdown Parsing
 
-Hi, this is your LLM speaking.
+```kotlin
+val markdown = """
+# Hello
 
-<thinking>
-OK, maybe I am too informal. **I will change the tone**.
-</thinking>
+A *streaming* parser.
+"""
 
-Dear user of this system ...
+flowOf(markdown).parse().collect {
+    println(it)
+}
 ```
 
-So Markdown, but sometimes there is Markup inside, and it is streaming. How to tackle this.
+Will print:
+
+```text
+{"type":"mark","name":"h1"}
+{"type":"text","text":"Hello"}
+{"type":"unmark","name":"h1"}
+{"type":"mark","name":"p"}
+{"type":"text","text":"A"}
+{"type":"text","text":" "}
+{"type":"mark","name":"em"}
+{"type":"text","text":"streaming"}
+{"type":"unmark","name":"em"}
+{"type":"text","text":" "}
+{"type":"text","text":"parser."}
+{"type":"unmark","name":"p"}
+```
+
+The stream is append-only: each event is emitted as soon as the parser commits to it, so `<h1>` opens before `Hello` arrives and `<em>` opens the moment the `*` resolves.
+
+### Rendering Markdown as HTML
+
+```kotlin
+println(flowOf(markdown).parse().render())
+```
+
+Will print:
+
+```text
+<h1>
+  Hello
+</h1>
+<p>
+  A <em>streaming</em> parser.
+</p>
+```
+
+### Rendering Markdown as DOM (Kotlin JS)
+
+```kotlin
+val markdownFlow = flowOf(markdown)
+document.body!!.appendSemanticEvents(
+    markdownFlow.parse()
+)
+```
+
+Renders equivalent HTML into the browser's DOM tree.
+
+Note: Typically `markdownFlow: Flow<String>` represents a Markdown text stream, for example from LLM inference.
+
+### Transforming the event stream
+
+```kotlin
+val emphasizeToStrong = Transformer {
+    match("em") {
+        "strong" {
+            children()
+        }
+    }
+}
+
+println(
+    flowOf(markdown)
+        .parse()
+        .transform(emphasizeToStrong)
+        .render()
+)
+```
+
+Will print:
+
+```text
+<h1>
+  Hello
+</h1>
+<p>
+  A <strong>streaming</strong> parser.
+</p>
+```
+
+The `Transformer` DSL rewrites the event stream on the fly — match marks by name (or expression), emit replacement marks, wrap or unwrap nested content, or rewrite text. Transformations compose, so the same pipeline can normalize HTML to Markdown, redact spans, or route `<thinking>` blocks to a separate sink.
+
+If you have transformed XML trees with XSLT, the model should feel familiar — `match { ... }` plays the role of an XSLT template, `children()` mirrors `<xsl:apply-templates/>`, and emitted marks/text replace `<xsl:element>` / `<xsl:text>`. The difference: it operates on a streaming event flow rather than a buffered document tree, and the source is Markdown (or mixed Markdown + HTML) rather than XML.
 
 ## Elaborate rationale
 
