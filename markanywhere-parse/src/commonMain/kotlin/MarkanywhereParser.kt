@@ -2842,7 +2842,7 @@ private class ParserState(
                 mode.blankSeen = false
                 return
             }
-            if (stripped.isNotEmpty()) +stripped
+            +"$stripped\n"
             mode.blankSeen = false
             return
         }
