@@ -53,11 +53,9 @@ class SemanticEventsExtractorTest {
         extractor should {
             have(succeeded)
             have(!isExtracting)
-            extractedEvents.asFlow() sameAs semanticEvents {
-                tagged {
-                    "foo:bar"("buzz" to "42") {
-                        +"""println("Hello World")"""
-                    }
+            extractedEvents.asFlow() sameAs semanticEvents(tagged = true) {
+                "foo:bar"("buzz" to "42") {
+                    +"""println("Hello World")"""
                 }
             }
             have(attributes == mapOf("buzz" to "42"))
@@ -128,11 +126,9 @@ class SemanticEventsExtractorTest {
             have(succeeded)
             have(!isExtracting)
             have(attributes == null)
-            extractedEvents.asFlow() sameAs semanticEvents {
-                tagged {
-                    "foo:bar" {
-                        +"content"
-                    }
+            extractedEvents.asFlow() sameAs semanticEvents(tagged = true) {
+                "foo:bar" {
+                    +"content"
                 }
             }
             content sameAs "content"

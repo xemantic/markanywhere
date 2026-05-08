@@ -84,6 +84,40 @@ Renders equivalent HTML into the browser's DOM tree.
 
 Note: Typically `markdownFlow: Flow<String>` represents a Markdown text stream, for example from LLM inference.
 
+### Transforming the event stream
+
+```kotlin
+val emphasizeToStrong = Transformer {
+    match("em") {
+        "strong" {
+            children()
+        }
+    }
+}
+
+println(
+    flowOf(markdown)
+        .parse()
+        .transform(emphasizeToStrong)
+        .render()
+)
+```
+
+Will print:
+
+```text
+<h1>
+  Hello
+</h1>
+<p>
+  A <strong>streaming</strong> parser.
+</p>
+```
+
+The `Transformer` DSL rewrites the event stream on the fly — match marks by name (or expression), emit replacement marks, wrap or unwrap nested content, or rewrite text. Transformations compose, so the same pipeline can normalize HTML to Markdown, redact spans, or route `<thinking>` blocks to a separate sink.
+
+If you have transformed XML trees with XSLT, the model should feel familiar — `match { ... }` plays the role of an XSLT template, `children()` mirrors `<xsl:apply-templates/>`, and emitted marks/text replace `<xsl:element>` / `<xsl:text>`. The difference: it operates on a streaming event flow rather than a buffered document tree, and the source is Markdown (or mixed Markdown + HTML) rather than XML.
+
 ## Elaborate rationale
 
 We use language to convey meaning, and we use text to express language. The document-whether scroll, codex, or book-established a paradigm for how text is preserved as a packaged unit. Documents also introduced formatting: visual and structural conventions that signal the intent behind particular fragments of text within a larger context.
