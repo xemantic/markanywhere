@@ -36,7 +36,7 @@ class ElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 "h1" {
                     +"Title"
@@ -63,7 +63,7 @@ class ElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 "h1"("id" to "main-title", "class" to "header") {
                     +"Title"
@@ -89,7 +89,7 @@ class ElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 +"Hello, World!"
             }
@@ -105,7 +105,7 @@ class ElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 "p" {
                     +"Lorem ipsum"
@@ -123,7 +123,7 @@ class ElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 "p" {
                     +"Some "
@@ -147,7 +147,7 @@ class ElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 "article" {
                     "header" {
@@ -174,7 +174,7 @@ class ElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 "p" {
                     +"First"
@@ -198,7 +198,7 @@ class ElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 "p" {
                     +"This is "
@@ -224,7 +224,7 @@ class ElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 "ul" {
                     "li" {
@@ -250,7 +250,7 @@ class ElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 "ol" {
                     "li" {
@@ -273,7 +273,7 @@ class ElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 "ul" {
                     "li" {
@@ -304,7 +304,7 @@ class ElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 "span" {}
             }
@@ -320,7 +320,7 @@ class ElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 +"Start "
                 "b" {
@@ -342,7 +342,7 @@ class ElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 "table" {
                     "thead" {
@@ -379,7 +379,7 @@ class ElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 "pre" {
                     "code" {
@@ -399,7 +399,7 @@ class ElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 "p" {
                     +"Use the "
@@ -421,7 +421,7 @@ class ElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 "blockquote" {
                     "p" {
@@ -441,7 +441,7 @@ class ElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 "blockquote" {
                     "p" {
@@ -466,7 +466,7 @@ class ElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 "dl" {
                     "dt" {
@@ -495,7 +495,7 @@ class ElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 "h1" { +"H1" }
                 "h2" { +"H2" }
@@ -516,7 +516,7 @@ class ElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 "p" {
                     +"This is "
@@ -540,7 +540,7 @@ class ElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 "figure" {
                     "img"("src" to "image.png", "alt" to "An image") {}
@@ -561,7 +561,7 @@ class ElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 "details" {
                     "summary" {
@@ -584,7 +584,7 @@ class ElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 "p" {
                     +"H"
@@ -605,7 +605,7 @@ class ElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 "p" {
                     +"This is "
@@ -627,7 +627,7 @@ class ElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 "p" {
                     +"This is "
@@ -647,7 +647,7 @@ class ElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 "p" {
                     +"Press "
@@ -669,7 +669,7 @@ class ElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 "p" {
                     +"The "
@@ -689,7 +689,7 @@ class ElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 "p" {
                     +"Published on "
@@ -708,7 +708,7 @@ class ElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 "p" {
                     +"As stated in "
@@ -727,7 +727,7 @@ class ElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 "p" {
                     +"He said "
@@ -746,7 +746,7 @@ class ElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 "p" {
                     +"The output "
@@ -767,7 +767,7 @@ class ElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 "p" {
                     +"Main text "
@@ -786,7 +786,7 @@ class ElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 "p" {
                     +"Price: "
@@ -805,7 +805,7 @@ class ElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 "p" {
                     +"Hello 世界! 🌍 Привет мир"
@@ -823,7 +823,7 @@ class ElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then - semantic events contain unescaped text (escaping done on render)
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 "p" {
                     +"""Use <div> and <span> tags & escape "quotes""""
@@ -841,7 +841,7 @@ class ElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then - attribute value is unescaped
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 "a"("href" to "https://example.com?foo=1&bar=2") {
                     +"Link"
@@ -859,7 +859,7 @@ class ElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then - attribute value contains unescaped quotes
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 "div"("data-json" to """{"key": "value"}""") {
                     +"Content"
@@ -877,7 +877,7 @@ class ElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 "p" {
                     +"1 < 2 and 3 > 2"
@@ -895,7 +895,7 @@ class ElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 "p" {
                     "strong" { +"bold" }
@@ -914,7 +914,7 @@ class ElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 "ul" {
                     "li" {
@@ -941,7 +941,7 @@ class ElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 "h1" { +"Document Title" }
                 "p" {

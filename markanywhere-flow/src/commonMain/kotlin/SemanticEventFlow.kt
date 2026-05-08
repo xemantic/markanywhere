@@ -21,23 +21,39 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.flow
 
+@DslMarker
+public annotation class SemanticEventDsl
+
 /**
  * Creates [Flow] of [SemanticEvent]s.
  *
  * Convenient for testing.
  */
 public fun semanticEvents(
-    produceTags: Boolean = false,
+    tagged: Boolean = false,
     block: suspend SemanticEventScope.() -> Unit
 ): Flow<SemanticEvent> = flow {
-    SemanticEventScope(produceTags, this).block()
+    SemanticEventScope(tagged, this).block()
 }
 
+@SemanticEventDsl
 public class SemanticEventScope(
-    public val produceTags: Boolean = false,
+    public val tagged: Boolean = false,
     @PublishedApi
     internal val collector: FlowCollector<SemanticEvent>,
 ) {
+
+    public suspend inline fun tagged(
+        crossinline block: suspend SemanticEventScope.() -> Unit
+    ) {
+        SemanticEventScope(tagged = true, collector).block()
+    }
+
+    public suspend inline fun untagged(
+        crossinline block: suspend SemanticEventScope.() -> Unit
+    ) {
+        SemanticEventScope(tagged = false, collector).block()
+    }
 
     public suspend inline operator fun String.unaryPlus() {
         text(this)
@@ -48,10 +64,22 @@ public class SemanticEventScope(
     }
 
     public suspend inline operator fun String.invoke(
+        attributes: Map<String, String>? = null,
+        crossinline block: suspend SemanticEventScope.() -> Unit
+    ) {
+        mark(this, attributes = attributes)
+        block()
+        unmark(this)
+    }
+
+    public suspend inline operator fun String.invoke(
         vararg attributes: Pair<String, String>,
         crossinline block: suspend SemanticEventScope.() -> Unit
     ) {
-        invoke(attributes.toMap(), block)
+        invoke(
+            attributes = attributes.toMap().ifEmpty { null },
+            block
+        )
     }
 
     public suspend fun text(
@@ -64,42 +92,33 @@ public class SemanticEventScope(
 
     public suspend inline fun mark(
         name: String,
-        isTag: Boolean = produceTags,
+        isTagged: Boolean = tagged,
         vararg attributes: Pair<String, String>,
     ) {
-        mark(name, isTag, attributes.toMap())
+        mark(name, isTagged, attributes.toMap().ifEmpty { null })
     }
 
     public suspend fun mark(
         name: String,
-        isTag: Boolean = produceTags,
+        isTagged: Boolean = tagged,
         attributes: Map<String, String>? = null
     ) {
         collector.emit(
             SemanticEvent.Mark(
                 name = name,
                 attributes = attributes,
-                isTag = isTag
+                isTagged = isTagged
             )
         )
     }
 
     public suspend fun unmark(
         name: String,
-        isTag: Boolean = produceTags
+        isTagged: Boolean = tagged
     ) {
         collector.emit(
-            SemanticEvent.Unmark(name, isTag)
+            SemanticEvent.Unmark(name, isTagged)
         )
-    }
-
-    public suspend inline operator fun String.invoke(
-        attributes: Map<String, String>? = null,
-        crossinline block: suspend SemanticEventScope.() -> Unit
-    ) {
-        mark(this, attributes = attributes)
-        block()
-        unmark(this)
     }
 
     public suspend inline fun tag(
@@ -107,9 +126,9 @@ public class SemanticEventScope(
         attributes: Map<String, String>? = null,
         crossinline block: suspend SemanticEventScope.() -> Unit
     ) {
-        mark(name, isTag = true, attributes)
+        mark(name, isTagged = true, attributes)
         block()
-        unmark(name, isTag = true)
+        unmark(name, isTagged = true)
     }
 
     public suspend inline fun tag(
@@ -117,7 +136,7 @@ public class SemanticEventScope(
         vararg attributes: Pair<String, String>,
         crossinline block: suspend SemanticEventScope.() -> Unit
     ) {
-        tag(name, attributes.toMap(), block)
+        tag(name, attributes.toMap().ifEmpty { null }, block)
     }
 
 }

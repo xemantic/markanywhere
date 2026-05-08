@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Kazimierz Pogoda / Xemantic
+ * Copyright 2025-2026 Kazimierz Pogoda / Xemantic
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -78,21 +78,21 @@ class SemanticEventFlowTest {
     }
 
     @Test
-    fun `should emit mark event with isTag true`() = runTest {
+    fun `should emit mark event with isTagged true`() = runTest {
         // when
         val events = semanticEvents {
-            mark("em", isTag = true)
+            mark("em", isTagged = true)
         }
 
         // then
-        events.toJsonLines() sameAs """{"type":"mark","name":"em","isTag":true}"""
+        events.toJsonLines() sameAs """{"type":"mark","name":"em","tagged":true}"""
     }
 
     @Test
     fun `should emit mark event with attributes`() = runTest {
         // when
         val events = semanticEvents {
-            mark("a", isTag = false, "href" to "https://example.com", "title" to "Example")
+            mark("a", isTagged = false, "href" to "https://example.com", "title" to "Example")
         }
 
         // then
@@ -111,14 +111,14 @@ class SemanticEventFlowTest {
     }
 
     @Test
-    fun `should emit unmark event with isTag true`() = runTest {
+    fun `should emit unmark event with isTagged true`() = runTest {
         // when
         val events = semanticEvents {
-            unmark("em", isTag = true)
+            unmark("em", isTagged = true)
         }
 
         // then
-        events.toJsonLines() sameAs """{"type":"unmark","name":"em","isTag":true}"""
+        events.toJsonLines() sameAs """{"type":"unmark","name":"em","tagged":true}"""
     }
 
     @Test
@@ -156,7 +156,7 @@ class SemanticEventFlowTest {
     }
 
     @Test
-    fun `should emit tag events with isTag true using tag function`() = runTest {
+    fun `should emit tag events with isTagged true using tag function`() = runTest {
         // when
         val events = semanticEvents {
             tag("div") {
@@ -166,9 +166,9 @@ class SemanticEventFlowTest {
 
         // then
         events.toJsonLines() sameAs """
-            {"type":"mark","name":"div","isTag":true}
+            {"type":"mark","name":"div","tagged":true}
             {"type":"text","text":"content"}
-            {"type":"unmark","name":"div","isTag":true}
+            {"type":"unmark","name":"div","tagged":true}
         """.trimIndent()
     }
 
@@ -183,16 +183,16 @@ class SemanticEventFlowTest {
 
         // then
         events.toJsonLines() sameAs """
-            {"type":"mark","name":"div","isTag":true,"attributes":{"class":"container","id":"main"}}
+            {"type":"mark","name":"div","tagged":true,"attributes":{"class":"container","id":"main"}}
             {"type":"text","text":"content"}
-            {"type":"unmark","name":"div","isTag":true}
+            {"type":"unmark","name":"div","tagged":true}
         """.trimIndent()
     }
 
     @Test
-    fun `should use produceTags flag for default isTag value`() = runTest {
+    fun `should use produceTags flag for default isTagged value`() = runTest {
         // when
-        val events = semanticEvents(produceTags = true) {
+        val events = semanticEvents(tagged = true) {
             mark("span")
             +"text"
             unmark("span")
@@ -200,9 +200,72 @@ class SemanticEventFlowTest {
 
         // then
         events.toJsonLines() sameAs """
-            {"type":"mark","name":"span","isTag":true}
+            {"type":"mark","name":"span","tagged":true}
             {"type":"text","text":"text"}
-            {"type":"unmark","name":"span","isTag":true}
+            {"type":"unmark","name":"span","tagged":true}
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should switch to tagged scope using tagged function`() = runTest {
+        // when
+        val events = semanticEvents {
+            tagged {
+                "span" {
+                    +"text"
+                }
+            }
+        }
+
+        // then
+        events.toJsonLines() sameAs """
+            {"type":"mark","name":"span","tagged":true}
+            {"type":"text","text":"text"}
+            {"type":"unmark","name":"span","tagged":true}
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should switch to untagged scope using untagged function`() = runTest {
+        // when
+        val events = semanticEvents(tagged = true) {
+            untagged {
+                "em" {
+                    +"text"
+                }
+            }
+        }
+
+        // then
+        events.toJsonLines() sameAs """
+            {"type":"mark","name":"em"}
+            {"type":"text","text":"text"}
+            {"type":"unmark","name":"em"}
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should mix tagged and untagged scopes`() = runTest {
+        // when
+        val events = semanticEvents {
+            tagged {
+                "div" {
+                    untagged {
+                        "em" {
+                            +"text"
+                        }
+                    }                    
+                }
+            }
+        }
+
+        // then
+        events.toJsonLines() sameAs """
+            {"type":"mark","name":"div","tagged":true}
+            {"type":"mark","name":"em"}
+            {"type":"text","text":"text"}
+            {"type":"unmark","name":"em"}
+            {"type":"unmark","name":"div","tagged":true}
         """.trimIndent()
     }
 

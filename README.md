@@ -54,6 +54,8 @@ The `SemanticEvent` can be a:
 - `Mark` (e.g. `<em>` tag, with optional attributes)
 - `Unmark` (e.g. `</div>`, indicating that previously opened mark is closed)
 
+`Mark` and `Unmark` carry an `isTagged` flag distinguishing the origin of the event: `true` when it comes from an actual HTML/XML tag in the source, `false` when it is derived from Markdown syntax (e.g. `*text*` yields an `em` mark with `isTagged = false`, while `<em>text</em>` yields `isTagged = true`). The same `SemanticEvent` stream can therefore represent pure Markdown, pure HTML/XML (everything `isTagged = true`), or HTML embedded in Markdown — with the distinction preserved end-to-end so downstream renderers can treat each origin appropriately.
+
 See the [SemanticEvent](markanywhere-api/src/commonMain/kotlin/SemanticEvents.kt) definition.
 
 ## Usage

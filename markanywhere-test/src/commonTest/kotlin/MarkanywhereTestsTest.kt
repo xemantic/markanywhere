@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Kazimierz Pogoda / Xemantic
+ * Copyright 2025-2026 Kazimierz Pogoda / Xemantic
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -320,12 +320,12 @@ class MarkanywhereTestsTest {
     @Test
     fun `should pass when comparing flows with isTag flag`() = runTest {
         // given
-        val actual = semanticEvents(produceTags = true) {
+        val actual = semanticEvents(tagged = true) {
             "div" {
                 +"Content"
             }
         }
-        val expected = semanticEvents(produceTags = true) {
+        val expected = semanticEvents(tagged = true) {
             "div" {
                 +"Content"
             }
@@ -338,12 +338,12 @@ class MarkanywhereTestsTest {
     @Test
     fun `should fail when isTag flag differs`() = runTest {
         // given
-        val actual = semanticEvents(produceTags = true) {
+        val actual = semanticEvents(tagged = true) {
             "div" {
                 +"Content"
             }
         }
-        val expected = semanticEvents(produceTags = false) {
+        val expected = semanticEvents(tagged = false) {
             "div" {
                 +"Content"
             }
@@ -360,11 +360,11 @@ class MarkanywhereTestsTest {
             +++ actual
             @@ -1,3 +1,3 @@
             -{"type":"mark","name":"div"}
-            +{"type":"mark","name":"div","isTag":true}
+            +{"type":"mark","name":"div","tagged":true}
              {"type":"text","text":"Content"}
             -{"type":"unmark","name":"div"}
             \ No newline at end of file
-            +{"type":"unmark","name":"div","isTag":true}
+            +{"type":"unmark","name":"div","tagged":true}
             \ No newline at end of file
 
         """.trimIndent()

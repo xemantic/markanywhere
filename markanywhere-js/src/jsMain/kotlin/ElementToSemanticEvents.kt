@@ -25,7 +25,7 @@ import org.w3c.dom.Text
 import org.w3c.dom.asList
 
 public fun Element.toSemanticEvents(): Flow<SemanticEvent> = semanticEvents(
-    produceTags = true
+    tagged = true
 ) {
     flowChildren(element = this@toSemanticEvents)
 }

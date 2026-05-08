@@ -34,7 +34,7 @@ class SvgElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 "svg"("viewBox" to "0 0 100 100", "xmlns" to "http://www.w3.org/2000/svg") {
                     "defs" {
@@ -75,7 +75,7 @@ class SvgElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 "svg"("xmlns" to "http://www.w3.org/2000/svg") {
                     "defs" {
@@ -105,7 +105,7 @@ class SvgElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 "svg"("xmlns" to "http://www.w3.org/2000/svg") {
                     "defs" {
@@ -132,7 +132,7 @@ class SvgElementToSemanticEventsTest {
         val events = document.body!!.toSemanticEvents()
 
         // then
-        events sameAs semanticEvents(produceTags = true) {
+        events sameAs semanticEvents(tagged = true) {
             "body" {
                 "svg"("xmlns" to "http://www.w3.org/2000/svg", "width" to "200", "height" to "200") {
                     "foreignObject"("x" to "10", "y" to "10", "width" to "180", "height" to "180") {

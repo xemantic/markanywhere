@@ -106,31 +106,37 @@ public suspend fun Flow<SemanticEvent>.render(): String = buildText {
 
                 is SemanticEvent.Text -> {
                     if (event.text != "") {
-                        val text = if (customMarkupCount > 0 || rawTextCount > 0) {
-                            event.text  // Don't escape inside custom markup or raw text elements
+                        if (level == 0) {
+                            // Raw HTML at level 0 - output as-is without escaping
+                            +event.text
+                            atLineStart = event.text.endsWith('\n')
                         } else {
-                            event.text.escapeHtml()
-                        }
-                        if (preCount == 0 && customMarkupCount == 0 && rawTextCount == 0) {
-                            // Handle newlines in text by re-indenting after each newline
-                            val lines = text.split('\n')
-                            lines.forEachIndexed { index, line ->
-                                if (index > 0) {
-                                    +"\n"
-                                    atLineStart = true
-                                }
-                                if (line.isNotEmpty()) {
-                                    if (atLineStart) {
-                                        +indentation
-                                    }
-                                    +line
-                                    atLineStart = false
-                                }
+                            val text = if (customMarkupCount > 0 || rawTextCount > 0) {
+                                event.text  // Don't escape inside custom markup or raw text elements
+                            } else {
+                                event.text.escapeHtml()
                             }
-                        } else {
-                            // Inside pre or custom markup - output text as-is without indentation
-                            +text
-                            atLineStart = false
+                            if (preCount == 0 && customMarkupCount == 0 && rawTextCount == 0) {
+                                // Handle newlines in text by re-indenting after each newline
+                                val lines = text.split('\n')
+                                lines.forEachIndexed { index, line ->
+                                    if (index > 0) {
+                                        +"\n"
+                                        atLineStart = true
+                                    }
+                                    if (line.isNotEmpty()) {
+                                        if (atLineStart) {
+                                            +indentation
+                                        }
+                                        +line
+                                        atLineStart = false
+                                    }
+                                }
+                            } else {
+                                // Inside pre or custom markup - output text as-is without indentation
+                                +text
+                                atLineStart = false
+                            }
                         }
                     }
                 }

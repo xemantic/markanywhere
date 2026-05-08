@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Kazimierz Pogoda / Xemantic
+ * Copyright 2025-2026 Kazimierz Pogoda / Xemantic
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -164,7 +164,7 @@ class SemanticEventSerializationRoundtripTest {
     @Test
     fun `should round-trip serialize Mark SemanticEvent with isTag true`() {
         // given
-        val original = SemanticEvent.Mark(name = "br", isTag = true)
+        val original = SemanticEvent.Mark(name = "br", isTagged = true)
 
         // when
         val json = original.toString()
@@ -179,7 +179,7 @@ class SemanticEventSerializationRoundtripTest {
         // given
         val original = SemanticEvent.Mark(
             name = "img",
-            isTag = true,
+            isTagged = true,
             attributes = mapOf("src" to "image.png", "alt" to "An image")
         )
 
@@ -194,7 +194,7 @@ class SemanticEventSerializationRoundtripTest {
     @Test
     fun `should round-trip serialize Unmark SemanticEvent with isTag true`() {
         // given
-        val original = SemanticEvent.Unmark(name = "br", isTag = true)
+        val original = SemanticEvent.Unmark(name = "br", isTagged = true)
 
         // when
         val json = original.toString()
@@ -207,7 +207,7 @@ class SemanticEventSerializationRoundtripTest {
     @Test
     fun `should round-trip serialize Unmark SemanticEvent with isTag false`() {
         // given
-        val original = SemanticEvent.Unmark(name = "p", isTag = false)
+        val original = SemanticEvent.Unmark(name = "p", isTagged = false)
 
         // when
         val json = original.toString()

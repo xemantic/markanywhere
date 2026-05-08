@@ -2,16 +2,16 @@
 kotlinTarget = "2.3"
 javaTarget = "17"
 
-kotlin = "2.3.10"
+kotlin = "2.3.21"
 
-kotlinxSerialization = "1.10.0"
+kotlinxSerialization = "1.11.0"
 kotlinxCoroutines = "1.10.2"
-xemanticKotlinTest = "1.17.3"
+xemanticKotlinTest = "1.17.5"
 xemanticKotlinCore = "0.6.4"
-jetbrainsAnnotations = "26.0.2-1"
+jetbrainsAnnotations = "26.1.0"
 
-versionsPlugin = "0.53.0"
-dokkaPlugin = "2.1.0"
+versionsPlugin = "0.54.0"
+dokkaPlugin = "2.2.0"
 mavenPublishPlugin = "0.36.0"
 jreleaserPlugin = "1.20.0"
 binaryCompatibilityValidatorPlugin = "0.18.1"
