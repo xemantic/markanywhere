@@ -693,6 +693,99 @@ class MarkanywhereParserTest {
     }
 
     @Test
+    fun `should parse display math block inside list item`() = runTest {
+        // given
+        val textFlow = """
+            - intro
+
+              $$
+              E = mc^2
+              $$
+
+              outro
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ul" {
+                "li" {
+                    "p" { +"intro" }
+                    "math"("display" to "block") {
+                        +"E = mc^2"
+                    }
+                    "p" { +"outro" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should parse display math block as only content of list item`() = runTest {
+        // given
+        val textFlow = """
+            - $$
+              x^2
+              $$
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ul" {
+                "li" {
+                    "math"("display" to "block") {
+                        +"x^2"
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should parse display math blocks in multiple list items`() = runTest {
+        // given
+        val textFlow = """
+            - item 1
+
+              $$
+              a + b
+              $$
+
+            - item 2
+
+              $$
+              c + d
+              $$
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ul" {
+                "li" {
+                    "p" { +"item 1" }
+                    "math"("display" to "block") {
+                        +"a + b"
+                    }
+                }
+                "li" {
+                    "p" { +"item 2" }
+                    "math"("display" to "block") {
+                        +"c + d"
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
     fun `should parse horizontal rule`() = runTest {
         // given
         
