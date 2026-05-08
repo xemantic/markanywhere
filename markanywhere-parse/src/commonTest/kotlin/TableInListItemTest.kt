@@ -184,6 +184,108 @@ class TableInListItemTest {
     }
 
     @Test
+    fun `back-to-back pipe lines without separator merge into one paragraph`() = runTest {
+        // given: the second `|`-line is not a valid separator. Top-level
+        // `processStart` flushes both lines as a single `<p>` (suppressed
+        // table re-detection); the list path achieves the same result via
+        // `lineInterruptsParagraph` returning false for `|`-lines, so the
+        // replayed second line falls through to lazy-paragraph continuation
+        // rather than re-entering table detection.
+        val textFlow = /* language=markdown */ """
+            - before
+
+              | a | b |
+              | x | y |
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ul" {
+                "li" {
+                    "p" {
+                        +"before"
+                    }
+                    "p" {
+                        +"| a | b |\n| x | y |"
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `pending table header drains as paragraph at end of list block`() = runTest {
+        // given: header line followed by EOF — no second line to confirm the
+        // separator. Exercises the `popListContexts` drain path (vs. the
+        // pending-resolution drain path covered by the abort test above).
+        val textFlow = /* language=markdown */ """
+            - before
+
+              | a | b |
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ul" {
+                "li" {
+                    "p" {
+                        +"before"
+                    }
+                    "p" {
+                        +"| a | b |"
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `ordered list item contains a table`() = runTest {
+        // given: same shape as the unordered case but with an ordered list —
+        // verifies the table state on `ListContext` is independent of the
+        // marker style.
+        val textFlow = /* language=markdown */ """
+            1. before
+
+               | a | b |
+               | - | - |
+               | 1 | 2 |
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ol" {
+                "li" {
+                    "p" { +"before" }
+                    "table" {
+                        "thead" {
+                            "tr" {
+                                "th" { +"a" }
+                                "th" { +"b" }
+                            }
+                        }
+                        "tbody" {
+                            "tr" {
+                                "td" { +"1" }
+                                "td" { +"2" }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
     fun `table with alignments inside list item`() = runTest {
         // given
         val textFlow = /* language=markdown */ """

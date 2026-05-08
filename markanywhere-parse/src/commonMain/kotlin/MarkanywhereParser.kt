@@ -173,10 +173,11 @@ private class ListContext(
      */
     var hasContent: Boolean = false,
     /**
-     * Buffered table header line awaiting separator confirmation on the next
-     * line (GFM §4.10 nested inside §5.2). Stored as the original list-item
-     * line *with container indent intact* so abort-replay through
-     * `processListBlock` reproduces the original input shape.
+     * Buffered (indent-stripped) table header line awaiting separator
+     * confirmation on the next line (GFM §4.10 nested inside §5.2). Null
+     * when no header is pending. On separator mismatch the header is drained
+     * inline as paragraph text by `drainListPendingTableHeader`; only the
+     * current (rejected) line is replayed through `processListBlock`.
      */
     var tableHeaderPending: String? = null,
     /** True while a `<table>` is currently open in the active item. */
@@ -2653,7 +2654,10 @@ private class ParserState(
         val top = mode.stack.lastOrNull() ?: return
         val pending = top.tableHeaderPending ?: return
         top.tableHeaderPending = null
-        val text = pending.trimStart().trimEnd()
+        // Call sites store the indent-stripped header (which begins with `|`),
+        // so leading whitespace is impossible — only trailing whitespace from
+        // the source line might still be present.
+        val text = pending.trimEnd()
         if (text.isEmpty()) return
         if (!top.paragraphOpen) {
             mark("p")
