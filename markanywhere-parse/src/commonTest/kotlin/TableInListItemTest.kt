@@ -246,6 +246,93 @@ class TableInListItemTest {
     }
 
     @Test
+    fun `table inside nested list item`() = runTest {
+        // given: outer item holds a single nested list whose item contains a
+        // table. Verifies that table state on `ListContext` is per-instance —
+        // the inner context's `tableHeaderPending`/`tableOpen` must not leak
+        // to the outer context.
+        val textFlow = /* language=markdown */ """
+            - outer
+              - | a | b |
+                | - | - |
+                | 1 | 2 |
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ul" {
+                "li" {
+                    "p" { +"outer" }
+                    "ul" {
+                        "li" {
+                            "table" {
+                                "thead" {
+                                    "tr" {
+                                        "th" { +"a" }
+                                        "th" { +"b" }
+                                    }
+                                }
+                                "tbody" {
+                                    "tr" {
+                                        "td" { +"1" }
+                                        "td" { +"2" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `ATX heading inside list item closes an open table`() = runTest {
+        // given: a paragraph-interrupter (`## …`) arriving while a table is
+        // open closes the table and emits the heading inside the same `<li>`.
+        // Exercises the `endsTable` fall-through in `processListBlock`'s
+        // `tableOpen` branch.
+        val textFlow = /* language=markdown */ """
+            - intro
+
+              | a | b |
+              | - | - |
+              | 1 | 2 |
+              ## After table
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ul" {
+                "li" {
+                    "p" { +"intro" }
+                    "table" {
+                        "thead" {
+                            "tr" {
+                                "th" { +"a" }
+                                "th" { +"b" }
+                            }
+                        }
+                        "tbody" {
+                            "tr" {
+                                "td" { +"1" }
+                                "td" { +"2" }
+                            }
+                        }
+                    }
+                    "h2" { +"After table" }
+                }
+            }
+        }
+    }
+
+    @Test
     fun `ordered list item contains a table`() = runTest {
         // given: same shape as the unordered case but with an ordered list —
         // verifies the table state on `ListContext` is independent of the

@@ -2545,7 +2545,14 @@ private class ParserState(
         // Table header as the first content of a list item (`- | a | b |`).
         // Defer paragraph-opening until the next line either confirms a
         // separator (committing the table) or aborts (drained as paragraph
-        // by `drainListPendingTableHeader`).
+        // by `drainListPendingTableHeader`). `suppressTableDetection` matters
+        // when top-level `TableHeaderPending` rejects a header and replays
+        // the lines (e.g. `- | a | b |` happens to be both a list marker and
+        // a `|`-line) — without the flag we'd buffer again here and loop.
+        // The list-internal abort-replay path (within `processListBlock`)
+        // does not set this flag because the replayed line lazy-continues
+        // the just-drained paragraph instead of re-entering detection — see
+        // `back-to-back pipe lines without separator merge into one paragraph`.
         if (trimmed.startsWith("|") && !suppressTableDetection) {
             ctx.tableHeaderPending = trimmed
             return
@@ -2659,6 +2666,10 @@ private class ParserState(
         // the source line might still be present.
         val text = pending.trimEnd()
         if (text.isEmpty()) return
+        check(text.first() == '|') {
+            "ListContext.tableHeaderPending must be indent-stripped " +
+                "(begins with `|`); got: '${text.take(20)}'"
+        }
         if (!top.paragraphOpen) {
             mark("p")
             top.paragraphOpen = true
