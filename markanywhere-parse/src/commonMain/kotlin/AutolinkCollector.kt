@@ -87,7 +87,7 @@ internal class AutolinkCollector(
             is SemanticEvent.Unmark -> {
                 drain()
                 charBeforeWord = null
-                if (value.name.lowercase() in SUPPRESS_NAMES) suppressDepth--
+                if (value.name.lowercase() in SUPPRESS_NAMES && suppressDepth > 0) suppressDepth--
                 downstream.emit(value)
             }
         }
@@ -475,39 +475,36 @@ private fun findUrlEnd(word: String, start: Int): Int {
  * punct, etc.
  */
 private fun stripTrailingUrl(raw: String): Pair<String, String> {
-    var body = raw
-    val suffix = StringBuilder()
+    var end = raw.length
     var changed = true
     while (changed) {
         changed = false
-        val ent = trailingEntityLength(body)
+        val ent = trailingEntityLength(raw, end)
         if (ent > 0) {
-            suffix.insert(0, body.substring(body.length - ent))
-            body = body.substring(0, body.length - ent)
+            end -= ent
             changed = true
             continue
         }
-        if (body.isNotEmpty() && body.last() in TRAILING_URL_PUNCT) {
-            suffix.insert(0, body.last())
-            body = body.substring(0, body.length - 1)
+        if (end > 0 && raw[end - 1] in TRAILING_URL_PUNCT) {
+            end--
             changed = true
             continue
         }
-        if (body.isNotEmpty() && body.last() == ')') {
+        if (end > 0 && raw[end - 1] == ')') {
             var opens = 0
             var closes = 0
-            for (c in body) {
+            for (i in 0 until end) {
+                val c = raw[i]
                 if (c == '(') opens++ else if (c == ')') closes++
             }
             if (closes > opens) {
-                suffix.insert(0, ')')
-                body = body.substring(0, body.length - 1)
+                end--
                 changed = true
                 continue
             }
         }
     }
-    return body to suffix.toString()
+    return raw.substring(0, end) to raw.substring(end)
 }
 
 /**
@@ -517,15 +514,13 @@ private fun stripTrailingUrl(raw: String): Pair<String, String> {
  * do not apply (the address shape forbids `&xxx;` / `(`/`)` anyway).
  */
 private fun stripTrailingMailtoOrXmpp(raw: String): Pair<String, String> {
-    var body = raw
-    val suffix = StringBuilder()
-    while (body.isNotEmpty() &&
-        (body.last() in TRAILING_URL_PUNCT || body.last() == '/')
+    var end = raw.length
+    while (end > 0 &&
+        (raw[end - 1] in TRAILING_URL_PUNCT || raw[end - 1] == '/')
     ) {
-        suffix.insert(0, body.last())
-        body = body.substring(0, body.length - 1)
+        end--
     }
-    return body to suffix.toString()
+    return raw.substring(0, end) to raw.substring(end)
 }
 
 /**
@@ -533,26 +528,24 @@ private fun stripTrailingMailtoOrXmpp(raw: String): Pair<String, String> {
  * `?!.,:*_~` (the spec calls out trailing `.`).
  */
 private fun stripTrailingEmail(raw: String): Pair<String, String> {
-    var body = raw
-    val suffix = StringBuilder()
-    while (body.isNotEmpty() && body.last() in TRAILING_URL_PUNCT) {
-        suffix.insert(0, body.last())
-        body = body.substring(0, body.length - 1)
+    var end = raw.length
+    while (end > 0 && raw[end - 1] in TRAILING_URL_PUNCT) {
+        end--
     }
-    return body to suffix.toString()
+    return raw.substring(0, end) to raw.substring(end)
 }
 
 /**
  * Returns the length of a trailing `&[A-Za-z0-9]+;` HTML entity reference
- * in [s], or 0 if none. Used by [stripTrailingUrl].
+ * in `s[0, end)`, or 0 if none. Used by [stripTrailingUrl].
  */
-private fun trailingEntityLength(s: String): Int {
-    if (s.isEmpty() || s.last() != ';') return 0
-    var i = s.length - 2
+private fun trailingEntityLength(s: String, end: Int): Int {
+    if (end <= 0 || s[end - 1] != ';') return 0
+    var i = end - 2
     while (i >= 0 && s[i].isAsciiAlphanumeric()) i--
     if (i < 0 || s[i] != '&') return 0
-    if (i == s.length - 2) return 0  // `&;` with no body
-    return s.length - i
+    if (i == end - 2) return 0  // `&;` with no body
+    return end - i
 }
 
 /**
