@@ -882,6 +882,59 @@ class MarkanywhereParserTest {
     }
 
     @Test
+    fun `should auto-close unclosed display math block at list end`() = runTest {
+        // given
+        val textFlow = /* language=markdown */"""
+            - $$
+              x^2
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ul" {
+                "li" {
+                    "math"("display" to "block") {
+                        +"x^2\n"
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should parse display math block inside nested list item`() = runTest {
+        // given
+        val textFlow = /* language=markdown */"""
+            - outer
+              - $$
+                x^2
+                $$
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ul" {
+                "li" {
+                    "p" { +"outer" }
+                    "ul" {
+                        "li" {
+                            "math"("display" to "block") {
+                                +"x^2\n"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
     fun `should parse horizontal rule`() = runTest {
         // given
         
