@@ -693,6 +693,248 @@ class MarkanywhereParserTest {
     }
 
     @Test
+    fun `should parse display math block inside list item`() = runTest {
+        // given
+        val textFlow = /* language=markdown */"""
+            - intro
+
+              $$
+              E = mc^2
+              $$
+
+              outro
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ul" {
+                "li" {
+                    "p" { +"intro" }
+                    "math"("display" to "block") {
+                        +"E = mc^2\n"
+                    }
+                    "p" { +"outro" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should parse display math block as only content of list item`() = runTest {
+        // given
+        val textFlow = /* language=markdown */"""
+            - $$
+              x^2
+              $$
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ul" {
+                "li" {
+                    "math"("display" to "block") {
+                        +"x^2\n"
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should parse display math blocks in multiple list items`() = runTest {
+        // given
+        val textFlow = /* language=markdown */"""
+            - item 1
+
+              $$
+              a + b
+              $$
+
+            - item 2
+
+              $$
+              c + d
+              $$
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ul" {
+                "li" {
+                    "p" { +"item 1" }
+                    "math"("display" to "block") {
+                        +"a + b\n"
+                    }
+                }
+                "li" {
+                    "p" { +"item 2" }
+                    "math"("display" to "block") {
+                        +"c + d\n"
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should preserve newlines in multi-line display math inside list item`() = runTest {
+        // given
+        val textFlow = /* language=markdown */"""
+            - $$
+              a + b
+              c + d
+              $$
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ul" {
+                "li" {
+                    "math"("display" to "block") {
+                        +"a + b\nc + d\n"
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should preserve blank lines in display math inside list item`() = runTest {
+        // given
+        val textFlow = /* language=markdown */"""
+            - $$
+              a + b
+
+              c + d
+              $$
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ul" {
+                "li" {
+                    "math"("display" to "block") {
+                        +"a + b\n\nc + d\n"
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should parse empty display math block inside list item`() = runTest {
+        // given
+        val textFlow = /* language=markdown */"""
+            - $$
+              $$
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ul" {
+                "li" {
+                    "math"("display" to "block") {}
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should parse display math block inside ordered list item`() = runTest {
+        // given
+        val textFlow = /* language=markdown */"""
+            1. $$
+               x^2 + y^2
+               $$
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ol" {
+                "li" {
+                    "math"("display" to "block") {
+                        +"x^2 + y^2\n"
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should auto-close unclosed display math block at list end`() = runTest {
+        // given
+        val textFlow = /* language=markdown */"""
+            - $$
+              x^2
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ul" {
+                "li" {
+                    "math"("display" to "block") {
+                        +"x^2\n"
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should parse display math block inside nested list item`() = runTest {
+        // given
+        val textFlow = /* language=markdown */"""
+            - outer
+              - $$
+                x^2
+                $$
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ul" {
+                "li" {
+                    "p" { +"outer" }
+                    "ul" {
+                        "li" {
+                            "math"("display" to "block") {
+                                +"x^2\n"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
     fun `should parse horizontal rule`() = runTest {
         // given
         

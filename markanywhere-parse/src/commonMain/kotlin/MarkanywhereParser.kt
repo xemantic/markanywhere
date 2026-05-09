@@ -167,6 +167,8 @@ private class ListContext(
     /** Marker char (`` ` `` or `~`) and length of the open fenced block, if any. */
     var fencedMarker: Char = ' ',
     var fencedLength: Int = 0,
+    /** True while a display-math `<math display="block">` block is currently open in the active item. */
+    var mathBlockOpen: Boolean = false,
     /** True while a `<blockquote>` is currently open in the active item. */
     var blockquoteOpen: Boolean = false,
     /** True while the inner `<p>` of an open blockquote is currently open. */
@@ -2532,6 +2534,13 @@ private class ParserState(
             ctx.fencedLength = fence.length
             return
         }
+        // Display math as first content of a list item (e.g. `- $$`). Subsequent
+        // lines stream through `processListBlock`'s `ctx.mathBlockOpen` branch.
+        if (trimmed == "$$") {
+            mark("math", attributes = mapOf("display" to "block"))
+            ctx.mathBlockOpen = true
+            return
+        }
         // Blockquote as first content of a list item (e.g. `1. > X`). Open the
         // inner `<blockquote>` and its `<p>`; subsequent `>`-prefixed lines (or
         // lazy-continuation lines) extend the same paragraph via the
@@ -2622,6 +2631,15 @@ private class ParserState(
             unmark("code")
             unmark("pre")
             top.fencedCodeOpen = false
+        }
+    }
+
+    /** Close any open display-math block in the top context. */
+    private suspend fun SemanticEventScope.closeListMathBlockIfOpen(mode: BlockMode.ListBlock) {
+        val top = mode.stack.lastOrNull() ?: return
+        if (top.mathBlockOpen) {
+            unmark("math")
+            top.mathBlockOpen = false
         }
     }
 
@@ -2768,6 +2786,7 @@ private class ParserState(
             closeListParagraphIfOpen(mode)
             closeListCodeIfOpen(mode)
             closeListFencedCodeIfOpen(mode)
+            closeListMathBlockIfOpen(mode)
             closeListBlockquoteIfOpen(mode)
             unmark("li")
             val ctx = mode.stack.removeLast()
@@ -2816,6 +2835,7 @@ private class ParserState(
             // line literally — emit straight away (GFM §5.4 example 298).
             if (top != null && top.codeBlockOpen) top.codeBlankLines++
             else if (top != null && top.fencedCodeOpen) +"\n"
+            else if (top != null && top.mathBlockOpen) +"\n"
             mode.blankSeen = true
             return
         }
@@ -2878,6 +2898,7 @@ private class ParserState(
                     closeListParagraphIfOpen(mode)
                     closeListCodeIfOpen(mode)
                     closeListFencedCodeIfOpen(mode)
+                    closeListMathBlockIfOpen(mode)
                     closeListBlockquoteIfOpen(mode)
                     unmark("li")
                     mark("li")
@@ -2907,6 +2928,7 @@ private class ParserState(
             closeListParagraphIfOpen(mode)
             closeListCodeIfOpen(mode)
             closeListFencedCodeIfOpen(mode)
+            closeListMathBlockIfOpen(mode)
             closeListBlockquoteIfOpen(mode)
             startListItemFromMarker(mode, stripped, parentContentCol = containerContentCol)
             return
@@ -2974,6 +2996,18 @@ private class ParserState(
         if (ctx.fencedCodeOpen) {
             if (isFenceClose(stripped, ctx.fencedMarker, ctx.fencedLength)) {
                 closeListFencedCodeIfOpen(mode)
+                mode.blankSeen = false
+                return
+            }
+            +"$stripped\n"
+            mode.blankSeen = false
+            return
+        }
+
+        // Math block continuation: route every line through until the closing `$$`.
+        if (ctx.mathBlockOpen) {
+            if (stripped.trim() == "$$") {
+                closeListMathBlockIfOpen(mode)
                 mode.blankSeen = false
                 return
             }
@@ -3061,6 +3095,15 @@ private class ParserState(
                     if (content.isNotEmpty()) processInlineContent(content)
                     flushInline()
                 }
+                ctx.hasContent = true
+                mode.blankSeen = false
+                return
+            }
+            if (stripped.trim() == "$$") {
+                closeListParagraphIfOpen(mode)
+                closeListBlockquoteIfOpen(mode)
+                mark("math", attributes = mapOf("display" to "block"))
+                ctx.mathBlockOpen = true
                 ctx.hasContent = true
                 mode.blankSeen = false
                 return
