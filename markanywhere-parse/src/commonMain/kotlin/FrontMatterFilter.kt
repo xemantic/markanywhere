@@ -167,7 +167,7 @@ internal class FrontMatterFilter(
         }
         if (start > 0) {
             directDownstream.emit(SemanticEvent.Text(body.substring(0, start)))
-            body.delete(0, start)
+            body.deleteRange(0, start)
         }
     }
 
