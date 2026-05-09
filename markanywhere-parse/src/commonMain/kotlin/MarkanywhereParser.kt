@@ -23,13 +23,19 @@ import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.flow
 
 public fun Flow<String>.parse(): Flow<SemanticEvent> = flow {
-    val autolinker = AutolinkCollector(this)
+    val outer: FlowCollector<SemanticEvent> = this
+    val autolinker = AutolinkCollector(outer)
     val redirector = RedirectingCollector(autolinker)
     val state = ParserState(
         scope = SemanticEventScope(collector = redirector),
         redirector = redirector
     )
-    collect { chunk -> state.processChunk(chunk) }
+    val frontMatter = FrontMatterFilter(
+        directDownstream = outer,
+        processInner = { chunk -> state.processChunk(chunk) }
+    )
+    collect { chunk -> frontMatter.feed(chunk) }
+    frontMatter.finalize()
     state.finalize()
     autolinker.finalize()
 }
@@ -173,7 +179,21 @@ private class ListContext(
      * followed by a continuation line ends the list (an empty item followed
      * by a blank line ends the list — GFM §5.2 example 258).
      */
-    var hasContent: Boolean = false
+    var hasContent: Boolean = false,
+    /**
+     * Buffered (indent-stripped) table header line awaiting separator
+     * confirmation on the next line (GFM §4.10 nested inside §5.2). Null
+     * when no header is pending. On separator mismatch the header is drained
+     * inline as paragraph text by `drainListPendingTableHeader`; only the
+     * current (rejected) line is replayed through `processListBlock`.
+     */
+    var tableHeaderPending: String? = null,
+    /** True while a `<table>` is currently open in the active item. */
+    var tableOpen: Boolean = false,
+    /** True once `<tbody>` has been emitted for the open table. */
+    var tableBodyOpened: Boolean = false,
+    var tableColumnCount: Int = 0,
+    var tableAlignments: List<String?> = emptyList()
 )
 
 /**
@@ -2537,6 +2557,21 @@ private class ParserState(
             flushInline()
             return
         }
+        // Table header as the first content of a list item (`- | a | b |`).
+        // Defer paragraph-opening until the next line either confirms a
+        // separator (committing the table) or aborts (drained as paragraph
+        // by `drainListPendingTableHeader`). `suppressTableDetection` matters
+        // when top-level `TableHeaderPending` rejects a header and replays
+        // the lines (e.g. `- | a | b |` happens to be both a list marker and
+        // a `|`-line) — without the flag we'd buffer again here and loop.
+        // The list-internal abort-replay path (within `processListBlock`)
+        // does not set this flag because the replayed line lazy-continues
+        // the just-drained paragraph instead of re-entering detection — see
+        // `back-to-back pipe lines without separator merge into one paragraph`.
+        if (trimmed.startsWith("|") && !suppressTableDetection) {
+            ctx.tableHeaderPending = trimmed
+            return
+        }
         mark("p")
         ctx.paragraphOpen = true
         emitItemFirstContent(trimmed)
@@ -2623,6 +2658,118 @@ private class ParserState(
     }
 
     /**
+     * Close any open `<table>` in the top context (header-only tables emit no
+     * `<tbody>`, mirroring the top-level `closeTableBody`). Pending unresolved
+     * table header lines are drained separately by [drainListPendingTableHeader].
+     */
+    private suspend fun SemanticEventScope.closeListTableIfOpen(mode: BlockMode.ListBlock) {
+        val top = mode.stack.lastOrNull() ?: return
+        if (top.tableOpen) {
+            if (top.tableBodyOpened) unmark("tbody")
+            unmark("table")
+            top.tableOpen = false
+            top.tableBodyOpened = false
+            top.tableAlignments = emptyList()
+            top.tableColumnCount = 0
+        }
+    }
+
+    /**
+     * Render an unresolved [ListContext.tableHeaderPending] as paragraph text.
+     * Used when the header line never saw a confirming separator (next line
+     * was something else, or the item closed before a second line arrived).
+     * The pending field is always cleared, even when the stored content was
+     * empty, so the abort-replay caller cannot loop on a stuck pending state.
+     */
+    private suspend fun SemanticEventScope.drainListPendingTableHeader(mode: BlockMode.ListBlock) {
+        val top = mode.stack.lastOrNull() ?: return
+        val pending = top.tableHeaderPending ?: return
+        top.tableHeaderPending = null
+        // Call sites store the indent-stripped header (which begins with `|`),
+        // so leading whitespace is impossible — only trailing whitespace from
+        // the source line might still be present.
+        val text = pending.trimEnd()
+        if (text.isEmpty()) return
+        check(text.first() == '|') {
+            "ListContext.tableHeaderPending must be indent-stripped " +
+                "(begins with `|`); got: '${text.take(20)}'"
+        }
+        if (!top.paragraphOpen) {
+            mark("p")
+            top.paragraphOpen = true
+        } else {
+            +"\n"
+        }
+        processInlineContent(text)
+        flushInline()
+        top.hasContent = true
+    }
+
+    /**
+     * Try to commit a `<table>` inside [ctx] using the buffered header line
+     * and [nextLine] as the candidate separator. Returns true on commit
+     * (pending cleared, `<table>`/`<thead>` emitted, `tableOpen` set) or
+     * false on abort (pending left intact for the caller to drain).
+     */
+    private suspend fun SemanticEventScope.tryCommitListTable(
+        mode: BlockMode.ListBlock,
+        ctx: ListContext,
+        nextLine: String
+    ): Boolean {
+        val headerStripped = ctx.tableHeaderPending ?: return false
+        val containerContentCol = ctx.contentCol
+        val nextIndent = leadingIndentCols(nextLine)
+        if (nextIndent < containerContentCol) return false
+        val nextStripped = if (containerContentCol > 0)
+            stripIndentCols(nextLine, containerContentCol, startCol = 0)
+        else nextLine
+        if (nextStripped.isBlank()) return false
+        val headerCells = splitTableCells(headerStripped.trimEnd())
+        val alignments = parseSeparatorAlignments(nextStripped.trimEnd(), headerCells.size)
+            ?: return false
+        ctx.tableHeaderPending = null
+        closeListParagraphIfOpen(mode)
+        closeListBlockquoteIfOpen(mode)
+        mark("table")
+        mark("thead")
+        "tr" {
+            emitTableCells(headerCells, isHeader = true, alignments = alignments)
+        }
+        unmark("thead")
+        ctx.tableOpen = true
+        ctx.tableColumnCount = headerCells.size
+        ctx.tableAlignments = alignments
+        ctx.tableBodyOpened = false
+        ctx.hasContent = true
+        mode.blankSeen = false
+        return true
+    }
+
+    /**
+     * Emit a single body row for [ctx]'s open table, opening `<tbody>` lazily
+     * on the first row (so a header-only table closes without an empty
+     * `<tbody>`, mirroring the top-level `closeTableBody` invariant).
+     */
+    private suspend fun SemanticEventScope.emitListTableBodyRow(
+        ctx: ListContext,
+        line: String
+    ) {
+        if (!ctx.tableBodyOpened) {
+            mark("tbody")
+            ctx.tableBodyOpened = true
+        }
+        val cells = splitTableCells(line)
+        "tr" {
+            emitTableCells(
+                cells,
+                isHeader = false,
+                alignments = ctx.tableAlignments,
+                columnCount = ctx.tableColumnCount
+            )
+        }
+    }
+
+    /**
      * Pop list contexts of [mode] until the stack size equals [downTo], emitting
      * `</li>` and `</ul>`/`</ol>` for each popped level. Closes any open `<p>` or
      * code block on the topmost context as part of closing the active item.
@@ -2632,6 +2779,10 @@ private class ParserState(
         downTo: Int
     ) {
         while (mode.stack.size > downTo) {
+            // Drain any unresolved table header before closing — it must surface
+            // as paragraph text rather than disappear with the popped context.
+            drainListPendingTableHeader(mode)
+            closeListTableIfOpen(mode)
             closeListParagraphIfOpen(mode)
             closeListCodeIfOpen(mode)
             closeListFencedCodeIfOpen(mode)
@@ -2654,10 +2805,28 @@ private class ParserState(
         val line = lineBuffer.toString()
         lineBuffer.clear()
 
+        // Resolve any pending table header from the previous line first. On
+        // commit, the table is emitted in-place. On abort, the header drains
+        // as paragraph text and the current line replays through this same
+        // mode — `tableHeaderPending` is null at that point so no recursion.
+        val pendingCtx = mode.stack.lastOrNull()
+        if (pendingCtx?.tableHeaderPending != null) {
+            if (tryCommitListTable(mode, pendingCtx, line)) return
+            drainListPendingTableHeader(mode)
+            replay(line)
+            process('\n')
+            return
+        }
+
         // Blank line: close any open paragraph (lazy code-block lines only emit on
         // resumption). Mark the list as having seen a blank — used to decide whether
         // a subsequent indented continuation opens a new paragraph.
         if (line.isBlank()) {
+            // A blank line inside an open table closes it (mirrors the top-level
+            // TableBody behaviour where `line.isEmpty()` ends the table).
+            if (pendingCtx?.tableOpen == true) {
+                closeListTableIfOpen(mode)
+            }
             closeListParagraphIfOpen(mode)
             val top = mode.stack.lastOrNull()
             // Defer blank-line emission for an open indented code block until more
@@ -2862,6 +3031,22 @@ private class ParserState(
             closeListCodeIfOpen(mode)
         }
 
+        // Table body continuation. Mirrors `processTableBody`: a `|`-prefixed
+        // line is always a row, a non-`|` line is a row only when it doesn't
+        // interrupt a paragraph (heading, blockquote, fence, hr, html block —
+        // those break the table and fall through).
+        if (ctx.tableOpen) {
+            val rowStripped = stripped.trimEnd()
+            val endsTable = !rowStripped.startsWith("|") && lineInterruptsParagraph(rowStripped)
+            if (!endsTable) {
+                emitListTableBodyRow(ctx, rowStripped)
+                ctx.hasContent = true
+                mode.blankSeen = false
+                return
+            }
+            closeListTableIfOpen(mode)
+        }
+
         if (innerIndent >= 4 && (mode.blankSeen || !ctx.paragraphOpen)) {
             // Open a new indented code block within the current item.
             closeListParagraphIfOpen(mode)
@@ -2920,6 +3105,19 @@ private class ParserState(
                 mark("math", attributes = mapOf("display" to "block"))
                 ctx.mathBlockOpen = true
                 ctx.hasContent = true
+                mode.blankSeen = false
+                return
+            }
+            // Table header (provisional, GFM §4.10 nested inside §5.2). Don't
+            // emit yet — buffer the stripped line and let the next call resolve
+            // it via `tryCommitListTable`. Identical contract to `processStart`'s
+            // top-level `BlockMode.TableHeaderPending`, except the buffered
+            // header lives on `ListContext` so the existing list dispatch loop
+            // remains the top-of-stack handler.
+            if (stripped.startsWith("|") && !suppressTableDetection) {
+                closeListParagraphIfOpen(mode)
+                closeListBlockquoteIfOpen(mode)
+                ctx.tableHeaderPending = stripped
                 mode.blankSeen = false
                 return
             }
