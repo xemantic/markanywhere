@@ -409,4 +409,25 @@ class FrontMatterTest {
             "p" { +"After." }
         }
     }
+
+    @Test
+    fun `should not treat dashes with trailing space as closer`() = runTest {
+        // given — closer comparison is byte-exact (matches Jekyll/Hugo). A
+        // `--- ` line with a trailing space is body content, not the closer.
+        // Explicit concatenation guards against editor auto-strip of the
+        // trailing space in the source.
+        val source = "---\ntitle: test\n--- \nstill body\n---\nAfter."
+        val textFlow = source.chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "frontmatter"("format" to "yaml") {
+                +"title: test\n--- \nstill body\n"
+            }
+            "p" { +"After." }
+        }
+    }
 }
