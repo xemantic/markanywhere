@@ -23,13 +23,19 @@ import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.flow
 
 public fun Flow<String>.parse(): Flow<SemanticEvent> = flow {
-    val autolinker = AutolinkCollector(this)
+    val outer: FlowCollector<SemanticEvent> = this
+    val autolinker = AutolinkCollector(outer)
     val redirector = RedirectingCollector(autolinker)
     val state = ParserState(
         scope = SemanticEventScope(collector = redirector),
         redirector = redirector
     )
-    collect { chunk -> state.processChunk(chunk) }
+    val frontMatter = FrontMatterFilter(
+        directDownstream = outer,
+        processInner = { chunk -> state.processChunk(chunk) }
+    )
+    collect { chunk -> frontMatter.feed(chunk) }
+    frontMatter.finalize()
     state.finalize()
     autolinker.finalize()
 }
