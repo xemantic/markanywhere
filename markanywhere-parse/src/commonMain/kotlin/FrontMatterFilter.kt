@@ -41,6 +41,18 @@ import kotlinx.coroutines.flow.FlowCollector
  * - **On EOF without a closer** (after a hit): force-closes the open
  *   `frontmatter` mark. This mirrors how unmatched code-span openers behave
  *   — the streaming invariant forbids retracting an emitted `mark`.
+ *
+ * Line endings (`\r\n`, `\r`, `\n`) are normalized to `\n` at the entry of
+ * [feed], so opener / closer detection works regardless of source platform.
+ *
+ * **Known limitations** (matching Jekyll/Hugo behaviour):
+ * - An unindented `---` / `+++` line anywhere in the body is treated as the
+ *   closer; content that needs to contain such a line at the left margin
+ *   must indent it by at least one space.
+ * - A TOML dotted key on line 2 (`a.b = "value"`) does not match the line-2
+ *   discriminator (`.` is not in the identifier char class), so the document
+ *   silently falls back to a thematic break. Use a `[section]` header or a
+ *   plain `key = value` first for auto-detection.
  */
 internal class FrontMatterFilter(
     private val directDownstream: FlowCollector<SemanticEvent>,
@@ -55,18 +67,60 @@ internal class FrontMatterFilter(
     private var format: String = ""
     private var closerLine: String = ""
 
+    // Tracks how far into `body` we already scanned for `\n` without finding
+    // one — the resume index for the next call to `drainBodyToCloser`. Without
+    // this, a long front-matter line arriving in tiny chunks would be O(n²)
+    // (each call re-scans from index 0 looking for the same missing `\n`).
+    private var bodyScanOffset: Int = 0
+
+    // Cross-chunk `\r\n` handling: when a chunk ends with `\r`, we already
+    // emit `\n` in its place and set this flag so the next chunk's leading
+    // `\n` (the second half of the CRLF pair) is swallowed.
+    private var pendingCr: Boolean = false
+
     suspend fun feed(chunk: String) {
+        val normalized = normalizeLineEndings(chunk)
         when (mode) {
             Detecting -> {
-                prelude.append(chunk)
+                prelude.append(normalized)
                 tryDecide(eof = false)
             }
             InBody -> {
-                body.append(chunk)
+                body.append(normalized)
                 drainBodyToCloser()
             }
-            AfterClose -> processInner(chunk)
+            AfterClose -> processInner(normalized)
         }
+    }
+
+    // Normalize `\r\n` / `\r` to `\n`. Mirrors `ParserState.preprocessChunk`
+    // (which is private and runs on the AfterClose pass-through path), but
+    // we need it here for opener/closer detection too — the `Detecting` and
+    // `InBody` paths bypass `processInner` entirely.
+    private fun normalizeLineEndings(chunk: String): String {
+        if (!pendingCr && chunk.indexOf('\r') < 0) return chunk
+        val sb = StringBuilder(chunk.length)
+        var i = 0
+        if (pendingCr) {
+            pendingCr = false
+            if (chunk[0] == '\n') i++
+        }
+        while (i < chunk.length) {
+            val c = chunk[i]
+            if (c == '\r') {
+                sb.append('\n')
+                i++
+                if (i < chunk.length) {
+                    if (chunk[i] == '\n') i++
+                } else {
+                    pendingCr = true
+                }
+            } else {
+                sb.append(c)
+                i++
+            }
+        }
+        return sb.toString()
     }
 
     suspend fun finalize() {
@@ -145,34 +199,43 @@ internal class FrontMatterFilter(
     }
 
     private suspend fun drainBodyToCloser() {
-        var start = 0
+        var lineStart = 0
+        var scanFrom = bodyScanOffset
         while (true) {
-            val nl = body.indexOf('\n', start)
+            val nl = body.indexOf('\n', scanFrom)
             if (nl < 0) break
-            val line = body.substring(start, nl)
+            val line = body.substring(lineStart, nl)
             if (line == closerLine) {
-                if (start > 0) {
-                    directDownstream.emit(SemanticEvent.Text(body.substring(0, start)))
+                if (lineStart > 0) {
+                    directDownstream.emit(SemanticEvent.Text(body.substring(0, lineStart)))
                 }
                 directDownstream.emit(
                     SemanticEvent.Unmark(name = FRONTMATTER, isTagged = false)
                 )
                 val rest = body.substring(nl + 1)
                 body.clear()
+                bodyScanOffset = 0
                 mode = Mode.AfterClose
                 if (rest.isNotEmpty()) processInner(rest)
                 return
             }
-            start = nl + 1
+            lineStart = nl + 1
+            scanFrom = nl + 1
         }
-        if (start > 0) {
-            directDownstream.emit(SemanticEvent.Text(body.substring(0, start)))
-            body.deleteRange(0, start)
+        if (lineStart > 0) {
+            directDownstream.emit(SemanticEvent.Text(body.substring(0, lineStart)))
+            body.deleteRange(0, lineStart)
         }
+        // Everything currently in `body` has been scanned for `\n` with none
+        // found beyond `lineStart`; resume future scans from the new tail.
+        bodyScanOffset = body.length
     }
 
     private suspend fun finalizeInBody() {
         val residual = body.toString()
+        // A bare `---` / `+++` at EOF without a trailing `\n` is treated as
+        // the structural closer arriving without its terminator — drop it
+        // rather than emit it as body text.
         if (residual != closerLine && residual.isNotEmpty()) {
             directDownstream.emit(SemanticEvent.Text(residual))
         }

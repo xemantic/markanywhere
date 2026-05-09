@@ -329,4 +329,84 @@ class FrontMatterTest {
             "p" { +"Body." }
         }
     }
+
+    @Test
+    fun `should parse YAML front matter with CRLF line endings`() = runTest {
+        // given — a Windows-formatted document. `\r\n` must normalize to `\n`
+        // so opener / closer line-equality comparisons still work.
+        val textFlow =
+            "---\r\ntitle: Hello\r\nauthor: Alice\r\n---\r\nBody paragraph."
+                .chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "frontmatter"("format" to "yaml") {
+                +"title: Hello\nauthor: Alice\n"
+            }
+            "p" { +"Body paragraph." }
+        }
+    }
+
+    @Test
+    fun `should treat bare opener without trailing newline as thematic break`() = runTest {
+        // given — a document consisting solely of `---` (no `\n`). The opener
+        // never completes, so at EOF the prelude replays as content and the
+        // regular parser emits a thematic break.
+        val textFlow = listOf("---").asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "hr" {}
+        }
+    }
+
+    @Test
+    fun `should close front matter when closer at EOF has no trailing newline`() = runTest {
+        // given — closer arrives without a terminating `\n`. The `finalizeInBody`
+        // residual guard treats a bare `---` / `+++` at EOF as the structural
+        // close, dropping it instead of emitting it as body text.
+        val textFlow =
+            "---\ntitle: Hello\n---".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "frontmatter"("format" to "yaml") {
+                +"title: Hello\n"
+            }
+        }
+    }
+
+    @Test
+    fun `should not treat four-dash line in body as closer`() = runTest {
+        // given — closer comparison is exact line equality, so `----` (or any
+        // longer dash run) inside the body is content, not the closer.
+        val textFlow = """
+            ---
+            title: test
+            ----
+            still body
+            ---
+            After.
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "frontmatter"("format" to "yaml") {
+                +"title: test\n----\nstill body\n"
+            }
+            "p" { +"After." }
+        }
+    }
 }
