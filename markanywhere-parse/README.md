@@ -26,6 +26,79 @@ only when the expectation models an embedded HTML/XML construct.
 See [the project root README](../README.md) for the broader rationale behind the
 `SemanticEvent` model.
 
+## Extensions beyond GFM
+
+The parser supports several features beyond the GFM spec:
+
+### Highlight (`==text==`)
+
+Double-equals delimiters emit `<mark>`:
+
+```markdown
+This is ==highlighted== text.
+```
+
+→ `<p>This is <mark>highlighted</mark> text.</p>`
+
+### Superscript (`^text^`)
+
+Caret delimiters emit `<sup>`:
+
+```markdown
+E=mc^2^
+```
+
+→ `<p>E=mc<sup>2</sup></p>`
+
+### Inline math (`$…$`)
+
+Single-dollar delimiters emit `<math>`. Opening only triggers when the character after `$` is a letter, `\`, or `{` — so bare currency (`$5`) and punctuation (`$.;'`) stay as plain text:
+
+```markdown
+Einstein's $E=mc^2$ equation.
+```
+
+→ `<p>Einstein's <math>E=mc^2</math> equation.</p>`
+
+### Display math (`$$…$$`)
+
+A `$$` fence on its own line opens a `<math display="block">` block:
+
+````markdown
+$$
+\frac{a}{b} = c
+$$
+````
+
+→ `<math display="block">\frac{a}{b} = c</math>`
+
+### Front matter (YAML / TOML)
+
+A `---` (YAML) or `+++` (TOML) fence at the very start of the document, when followed by a recognisable key on the second line, is captured as a `frontmatter` block rather than passed to the Markdown parser:
+
+```markdown
+---
+title: My Post
+date: 2026-05-10
+---
+
+Normal Markdown content here.
+```
+
+→ `Mark("frontmatter", attributes={"format": "yaml"})` + text content + `Unmark("frontmatter")`, followed by the regular document events.
+
+### Namespaced custom tags (`<ns:tag …>`)
+
+Any `<namespace:tagname attr="value">` / `</namespace:tagname>` pair in the source passes through as `Mark`/`Unmark` events with `isTagged = true` and fully parsed attributes. This lets you embed custom structured markup in a Markdown document without any parser changes — your downstream renderer handles the semantics:
+
+```html
+<myapp:card title="Getting started">
+Normal **Markdown** content inside the card.
+</myapp:card>
+```
+
+→ `Mark("myapp:card", isTagged=true, attributes={"title": "Getting started"})` … content events … `Unmark("myapp:card", isTagged=true)`
+
 ## Divergences from GFM
 
 `markanywhere-parse` is a streaming parser whose primary use case is rendering
