@@ -329,4 +329,143 @@ class HtmlBlockInListItemTest {
         }
     }
 
+    @Test
+    fun `marker-shaped and thematic-break content inside html block streams as raw text`() = runTest {
+        // given: a `- foo` line and a `---` line inside an open `<div>` —
+        // both shapes that would otherwise open a sibling list / end the
+        // current list. Exercises the early-out in `processListBlock`.
+        val textFlow = /* language=markdown */ """
+            - intro
+
+              <div>
+              - not a new list item
+              ---
+              </div>
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ul" {
+                "li" {
+                    "p" { +"intro" }
+                    tag("div") {
+                        +"\n- not a new list item\n---\n"
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `under-indented line force-closes html block and ends list`() = runTest {
+        // given: the `tail` line sits at column 0, below the item's content
+        // column. The HTML block force-closes (events stay balanced) and the
+        // line replays at top level as its own paragraph.
+        val textFlow = /* language=markdown */ """
+            - intro
+
+              <div>
+              inside
+            tail
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ul" {
+                "li" {
+                    "p" { +"intro" }
+                    tag("div") {
+                        +"\ninside\n"
+                    }
+                }
+            }
+            "p" { +"tail" }
+        }
+    }
+
+    @Test
+    fun `type 3 processing instruction inside list item`() = runTest {
+        // given
+        val textFlow = /* language=markdown */ """
+            - intro
+
+              <?php echo 1; ?>
+
+              after
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then: type 2-5 emits raw text, no mark/unmark pair.
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ul" {
+                "li" {
+                    "p" { +"intro" }
+                    +"<?php echo 1; ?>\n"
+                    "p" { +"after" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `type 4 declaration inside list item`() = runTest {
+        // given
+        val textFlow = /* language=markdown */ """
+            - intro
+
+              <!DOCTYPE html>
+
+              after
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ul" {
+                "li" {
+                    "p" { +"intro" }
+                    +"<!DOCTYPE html>\n"
+                    "p" { +"after" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `type 5 CDATA inside list item`() = runTest {
+        // given: closing `]]>` on the second content line — exercises the
+        // multi-line streaming path through `streamListHtmlBlockLine` for
+        // type 2-5 blocks.
+        val textFlow = /* language=markdown */ """
+            - intro
+
+              <![CDATA[
+              raw bytes
+              ]]>
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ul" {
+                "li" {
+                    "p" { +"intro" }
+                    +"<![CDATA[\nraw bytes\n]]>\n"
+                }
+            }
+        }
+    }
+
 }

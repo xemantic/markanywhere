@@ -2821,6 +2821,10 @@ private class ParserState(
     ): Boolean {
         val type = detectHtmlBlockType(line)
         if (type == 0) return false
+        // Set early so all early-out paths (unparseable root tag for type 1/6/7)
+        // still mark the item as having content — the source line is emitted
+        // either way.
+        ctx.hasContent = true
         when (type) {
             1 -> {
                 val rootTag = type1RootTagOf(line) ?: run {
@@ -2868,7 +2872,6 @@ private class ParserState(
                 }
             }
         }
-        ctx.hasContent = true
         return true
     }
 
@@ -3533,9 +3536,14 @@ private class ParserState(
             // HTML block (CommonMark §4.6) at an item block boundary. Same
             // architectural pattern as the table-header branch above: state
             // lives on `ListContext` rather than pushing a frame onto
-            // `blockModeStack` (see `ListContext.htmlBlock`).
+            // `blockModeStack` (see `ListContext.htmlBlock`). Closes mirror
+            // the table-detection preamble for defensive consistency, even
+            // though fenced code / math should already be closed before
+            // reaching `atBlockBoundary` via the blank-line handler.
             if (detectHtmlBlockType(stripped) > 0) {
                 closeListParagraphIfOpen(mode)
+                closeListFencedCodeIfOpen(mode)
+                closeListMathBlockIfOpen(mode)
                 closeListBlockquoteIfOpen(mode)
                 tryEnterListHtmlBlock(ctx, stripped)
                 mode.blankSeen = false
