@@ -442,6 +442,69 @@ class HtmlBlockInListItemTest {
     }
 
     @Test
+    fun `type 1 pre block with multi-line opener inside list item DIVERGENCE`() = runTest {
+        // given: `<pre` on the marker line, attribute on the next line, `>`
+        // closes the opener. Exercises the buffered-opener path in the type-1
+        // branch of `streamListHtmlBlockLine` — `firstLineBuffer` accumulates
+        // across calls until `tryFinishListHtmlBlock1FirstLine` finds the `>`.
+        val textFlow = /* language=markdown */ """
+            - <pre
+              class="x">
+              body
+              </pre>
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then: DIVERGENCE — same as top-level type 1: no leading `\n` after
+        // the opener (the `\n` between `<pre` and `class="x">` is consumed by
+        // the first-line parser and not emitted as content).
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ul" {
+                "li" {
+                    tag("pre", "class" to "x") {
+                        +"body\n"
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `multiple consecutive html blocks in same list item`() = runTest {
+        // given: two type-6 blocks separated by a blank line. After the first
+        // `</div>` closes (`ctx.htmlBlock = null`), the second `<div>` opener
+        // at the next block boundary must enter a fresh `ListHtmlBlockState`.
+        val textFlow = /* language=markdown */ """
+            - <div>
+              first
+              </div>
+
+              <div>
+              second
+              </div>
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ul" {
+                "li" {
+                    tag("div") {
+                        +"\nfirst\n"
+                    }
+                    tag("div") {
+                        +"\nsecond\n"
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
     fun `type 5 CDATA inside list item`() = runTest {
         // given: closing `]]>` on the second content line — exercises the
         // multi-line streaming path through `streamListHtmlBlockLine` for
