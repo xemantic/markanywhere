@@ -918,8 +918,10 @@ class Gfm_04_06_Test {
          */
     }
 
-    // DIVERGENCE: list-item `<div>` is treated as paragraph content; the
-    // streaming list-item path always wraps content in `<p>`.
+    // DIVERGENCE: GFM leaves `<div>` unclosed (the HTML block ends at the
+    // item boundary without a matching close tag). Our streaming model emits
+    // a force-closed `</div>` so the semantic event stream stays balanced;
+    // see `closeListHtmlBlockIfOpen` in the list-item HTML path.
     @Test
     fun `example 144 - DIVERGENCE - ul with 2 items`() = runTest {
         // given
@@ -935,9 +937,7 @@ class Gfm_04_06_Test {
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "ul" {
                 "li" {
-                    "p" {
-                        +"<div>"
-                    }
+                    tag("div") { +"\n" }
                 }
                 "li" {
                     "p" {
