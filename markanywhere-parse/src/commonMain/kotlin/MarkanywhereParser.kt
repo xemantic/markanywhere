@@ -205,7 +205,25 @@ private class ListContext(
      * on a blank line — they stay in raw-text streaming mode so the list
      * dispatcher keeps its container-indent-stripping role.
      */
-    var htmlBlock: ListHtmlBlockState? = null
+    var htmlBlock: ListHtmlBlockState? = null,
+    /**
+     * Tag name of an open custom markup block (`<ns:name …>`) inside the
+     * active list item. Null when none is open. Mirrors the top-level
+     * `BlockMode.CustomMarkup(tagName)` frame but lives on the list context
+     * (same architectural pattern as `tableHeaderPending` / `htmlBlock`):
+     * pushing a `CustomMarkup` frame above `ListBlock` would knock the list
+     * dispatcher off the top-of-stack slot and break per-line container-
+     * indent stripping.
+     *
+     * The detection is line-based: the opener is a whole line, content
+     * lines are emitted as text (joined by `\n`), and the closer is a line
+     * exactly equal to `</tagName>` (after `trimEnd`). [customMarkupHasContent]
+     * tracks whether any content line has been emitted yet, so the leading
+     * `\n` join is skipped before the first content (matches the top-level
+     * `customMarkupSkipFirstNewline` behaviour).
+     */
+    var customMarkupTagName: String? = null,
+    var customMarkupHasContent: Boolean = false
 )
 
 /**
@@ -2608,6 +2626,13 @@ private class ParserState(
         if (tryEnterListHtmlBlock(ctx, trimmed)) {
             return
         }
+        // Custom markup (`<ns:name …>`) as the first content of a list item.
+        // Subsequent lines stream through `processListBlock`'s
+        // `ctx.customMarkupTagName != null` branch until the matching
+        // `</tagName>` closing line.
+        if (tryEnterListCustomMarkup(ctx, trimmed)) {
+            return
+        }
         mark("p")
         ctx.paragraphOpen = true
         emitItemFirstContent(trimmed)
@@ -3154,6 +3179,75 @@ private class ParserState(
     }
 
     /**
+     * Try to open a custom markup block (`<ns:name …>`) inside the active
+     * list item using [line] (already indent-stripped). Returns true and emits
+     * `mark(tagName, isTagged = true)` on success. Mirrors the top-level
+     * detection in `processStart` (line-shape `<…>` not starting with `</`),
+     * but stores the open-tag name on [ctx] instead of pushing a frame.
+     */
+    private suspend fun SemanticEventScope.tryEnterListCustomMarkup(
+        ctx: ListContext,
+        line: String
+    ): Boolean {
+        if (!line.startsWith("<") || line.startsWith("</") || !line.endsWith(">")) {
+            return false
+        }
+        val parsed = parseCustomMarkupOpeningTag(line) ?: return false
+        val (tagName, attributes) = parsed
+        mark(tagName, isTagged = true, attributes = attributes)
+        ctx.customMarkupTagName = tagName
+        ctx.customMarkupHasContent = false
+        ctx.hasContent = true
+        return true
+    }
+
+    /**
+     * Stream a single content line of an open list-internal custom markup
+     * block. A line equal to `</tagName>` (after `trimEnd`) closes the block
+     * and emits `unmark`. Otherwise the line is emitted as text content,
+     * joined to prior content lines by `\n` (no leading `\n` before the very
+     * first content line — matches the top-level `customMarkupSkipFirstNewline`
+     * behaviour).
+     *
+     * A blank line (`line == ""`) flips [ctx.customMarkupHasContent] to true
+     * so the next content line gets a leading `\n`, and the block stays open
+     * — same DIVERGENCE rationale as `streamListHtmlBlockLine`.
+     */
+    private suspend fun SemanticEventScope.streamListCustomMarkupLine(
+        ctx: ListContext,
+        line: String
+    ) {
+        val tagName = ctx.customMarkupTagName ?: return
+        if (line.trimEnd() == "</$tagName>") {
+            unmark(tagName, isTagged = true)
+            ctx.customMarkupTagName = null
+            ctx.customMarkupHasContent = false
+            return
+        }
+        if (ctx.customMarkupHasContent) {
+            if (line.isEmpty()) +"\n"
+            else +"\n$line"
+        } else {
+            if (line.isNotEmpty()) +line
+            ctx.customMarkupHasContent = true
+        }
+    }
+
+    /**
+     * Force-close any open list-internal custom markup block. Used when the
+     * active item closes before the matching `</tagName>` line arrives.
+     */
+    private suspend fun SemanticEventScope.closeListCustomMarkupIfOpen(
+        mode: BlockMode.ListBlock
+    ) {
+        val top = mode.stack.lastOrNull() ?: return
+        val tagName = top.customMarkupTagName ?: return
+        unmark(tagName, isTagged = true)
+        top.customMarkupTagName = null
+        top.customMarkupHasContent = false
+    }
+
+    /**
      * Pop list contexts of [mode] until the stack size equals [downTo], emitting
      * `</li>` and `</ul>`/`</ol>` for each popped level. Closes any open `<p>` or
      * code block on the topmost context as part of closing the active item.
@@ -3168,6 +3262,7 @@ private class ParserState(
             drainListPendingTableHeader(mode)
             closeListTableIfOpen(mode)
             closeListHtmlBlockIfOpen(mode)
+            closeListCustomMarkupIfOpen(mode)
             closeListParagraphIfOpen(mode)
             closeListCodeIfOpen(mode)
             closeListFencedCodeIfOpen(mode)
@@ -3215,6 +3310,14 @@ private class ParserState(
                 streamListHtmlBlockLine(pendingCtx, "")
                 return
             }
+            // Same rationale as the htmlBlock branch above: blank lines inside
+            // an open custom markup block are content (a `\n` separator between
+            // content lines), not block boundaries — the block stays open until
+            // the matching `</tagName>` line.
+            if (pendingCtx?.customMarkupTagName != null) {
+                streamListCustomMarkupLine(pendingCtx, "")
+                return
+            }
             // A blank line inside an open table closes it (mirrors the top-level
             // TableBody behaviour where `line.isEmpty()` ends the table).
             if (pendingCtx?.tableOpen == true) {
@@ -3250,6 +3353,20 @@ private class ParserState(
                 return
             }
             closeListHtmlBlockIfOpen(mode)
+        }
+
+        // Custom markup continuation: same precedence rationale as the htmlBlock
+        // branch above. A line satisfying the item's indent streams as content
+        // (or closes the block when it equals `</tagName>`); an under-indented
+        // line force-closes the block and falls through to normal handling.
+        if (activeCtx?.customMarkupTagName != null) {
+            if (indent >= activeCtx.contentCol) {
+                val cmStripped = stripIndentCols(line, activeCtx.contentCol, startCol = 0)
+                streamListCustomMarkupLine(activeCtx, cmStripped)
+                mode.blankSeen = false
+                return
+            }
+            closeListCustomMarkupIfOpen(mode)
         }
 
         // Find the deepest context whose contentCol is satisfied by this line's indent.
@@ -3311,6 +3428,7 @@ private class ParserState(
                     closeListMathBlockIfOpen(mode)
                     closeListBlockquoteIfOpen(mode)
                     closeListHtmlBlockIfOpen(mode)
+                    closeListCustomMarkupIfOpen(mode)
                     unmark("li")
                     mark("li")
                     ctx.hasContent = false
@@ -3342,6 +3460,7 @@ private class ParserState(
             closeListMathBlockIfOpen(mode)
             closeListBlockquoteIfOpen(mode)
             closeListHtmlBlockIfOpen(mode)
+            closeListCustomMarkupIfOpen(mode)
             startListItemFromMarker(mode, stripped, parentContentCol = containerContentCol)
             return
         }
@@ -3548,6 +3667,30 @@ private class ParserState(
                 tryEnterListHtmlBlock(ctx, stripped)
                 mode.blankSeen = false
                 return
+            }
+            // Custom markup opening tag (`<ns:name …>`) at an item block
+            // boundary. State lives on `ListContext.customMarkupTagName`,
+            // following the same pattern as table-header / htmlBlock above —
+            // pushing a `BlockMode.CustomMarkup` frame would knock `ListBlock`
+            // off the top of the dispatch stack and break per-line
+            // container-indent stripping. Subsequent indented lines stream
+            // through the `customMarkupTagName != null` branch above.
+            if (stripped.startsWith("<") && !stripped.startsWith("</")
+                && stripped.endsWith(">")) {
+                val parsed = parseCustomMarkupOpeningTag(stripped)
+                if (parsed != null) {
+                    closeListParagraphIfOpen(mode)
+                    closeListFencedCodeIfOpen(mode)
+                    closeListMathBlockIfOpen(mode)
+                    closeListBlockquoteIfOpen(mode)
+                    val (tagName, attributes) = parsed
+                    mark(tagName, isTagged = true, attributes = attributes)
+                    ctx.customMarkupTagName = tagName
+                    ctx.customMarkupHasContent = false
+                    ctx.hasContent = true
+                    mode.blankSeen = false
+                    return
+                }
             }
         }
 
