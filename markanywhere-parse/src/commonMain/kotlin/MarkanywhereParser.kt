@@ -193,8 +193,38 @@ private class ListContext(
     /** True once `<tbody>` has been emitted for the open table. */
     var tableBodyOpened: Boolean = false,
     var tableColumnCount: Int = 0,
-    var tableAlignments: List<String?> = emptyList()
+    var tableAlignments: List<String?> = emptyList(),
+    /**
+     * In-progress HTML block (CommonMark §4.6) opened inside the active list
+     * item. Null when no HTML block is open. Mirrors the top-level
+     * `BlockMode.HtmlBlock1` / `BlockMode.HtmlBlock2to5` / `BlockMode.HtmlBlock6or7`
+     * frames, but lives on the list context (instead of pushing onto
+     * `blockModeStack`) so the list dispatcher remains the top-of-stack
+     * handler — same trade-off as `tableOpen`/`tableHeaderPending`.
+     * DIVERGENCE: list-internal HTML 6/7 blocks do NOT enter sub-parse mode
+     * on a blank line — they stay in raw-text streaming mode so the list
+     * dispatcher keeps its container-indent-stripping role.
+     */
+    var htmlBlock: ListHtmlBlockState? = null
 )
+
+/**
+ * State for an HTML block (CommonMark §4.6) currently open inside a list item.
+ * [type] is the detected block type (1, 2, 3, 4, 5, 6 or 7). For type 1, 6, 7
+ * [rootTagName] is the lowercased root tag, [openTags] tracks nested still-open
+ * tags (root first), and [firstLineBuffer] holds the opening-tag chars until
+ * the first `>` is seen (null once parsed). For type 2-5 [closingSeq] is the
+ * sequence that ends the block (`-->`, `?>`, `>`, `]]>`).
+ */
+private class ListHtmlBlockState(
+    val type: Int,
+    val rootTagName: String = "",
+    val rootIsClosingTag: Boolean = false,
+    val closingSeq: String = ""
+) {
+    val openTags: MutableList<String> = mutableListOf()
+    var firstLineBuffer: StringBuilder? = StringBuilder()
+}
 
 /**
  * Parse a GFM list marker at the start of [line]. Allows up to 3 leading spaces
@@ -2572,6 +2602,12 @@ private class ParserState(
             ctx.tableHeaderPending = trimmed
             return
         }
+        // HTML block (CommonMark §4.6) as the first content of a list item.
+        // Subsequent lines stream through `processListBlock`'s `ctx.htmlBlock`
+        // branch until the matching root close tag (or closing sequence).
+        if (tryEnterListHtmlBlock(ctx, trimmed)) {
+            return
+        }
         mark("p")
         ctx.paragraphOpen = true
         emitItemFirstContent(trimmed)
@@ -2770,6 +2806,354 @@ private class ParserState(
     }
 
     /**
+     * Try to enter a CommonMark §4.6 HTML block as the next sub-block of [ctx].
+     * Returns true on success ([ctx.htmlBlock] set when the block stays open
+     * across more than one source line, or null when the block closed on the
+     * same line). Returns false when [line] is not an HTML-block opener.
+     *
+     * Routes by detected type (1, 2-5, 6/7) and reuses the same line-emission
+     * shape as the top-level helpers — without `replaceMode` / `pushMode`,
+     * since list-internal HTML state lives on [ctx] (see [ListHtmlBlockState]).
+     */
+    private suspend fun SemanticEventScope.tryEnterListHtmlBlock(
+        ctx: ListContext,
+        line: String
+    ): Boolean {
+        val type = detectHtmlBlockType(line)
+        if (type == 0) return false
+        // Set early so all early-out paths (unparseable root tag for type 1/6/7)
+        // still mark the item as having content — the source line is emitted
+        // either way.
+        ctx.hasContent = true
+        when (type) {
+            1 -> {
+                val rootTag = type1RootTagOf(line) ?: run {
+                    +"$line\n"
+                    return true
+                }
+                val state = ListHtmlBlockState(type = 1, rootTagName = rootTag)
+                ctx.htmlBlock = state
+                state.firstLineBuffer!!.append(line)
+                if (!tryFinishListHtmlBlock1FirstLine(ctx, state)) {
+                    // No `>` on the first line: append `\n` and keep buffering.
+                    state.firstLineBuffer!!.append('\n')
+                }
+            }
+            2, 3, 4, 5 -> {
+                val seq = when (type) {
+                    2 -> "-->"
+                    3 -> "?>"
+                    4 -> ">"
+                    5 -> "]]>"
+                    else -> error("unreachable")
+                }
+                +"$line\n"
+                if (!lineContainsClosingSeq(line, seq)) {
+                    ctx.htmlBlock = ListHtmlBlockState(
+                        type = type,
+                        closingSeq = seq
+                    )
+                }
+            }
+            6, 7 -> {
+                val (rootName, isClose) = type6or7RootTagOf(line) ?: run {
+                    +"$line\n"
+                    return true
+                }
+                val state = ListHtmlBlockState(
+                    type = type,
+                    rootTagName = rootName,
+                    rootIsClosingTag = isClose
+                )
+                ctx.htmlBlock = state
+                state.firstLineBuffer!!.append(line)
+                if (!tryFinishListHtmlBlock6or7FirstLine(ctx, state)) {
+                    state.firstLineBuffer!!.append('\n')
+                }
+            }
+        }
+        return true
+    }
+
+    /**
+     * Stream a single content line of a list-internal HTML block. The block
+     * may close on this line; callers should re-check [ctx.htmlBlock] after.
+     * DIVERGENCE from the top-level type 6/7 path: blank lines emit `\n` and
+     * stay in raw-text mode (no sub-parse) because pushing a fresh `Start`
+     * frame above `ListBlock` would knock the list dispatcher out of the
+     * top-of-stack slot, losing per-line container-indent stripping.
+     */
+    private suspend fun SemanticEventScope.streamListHtmlBlockLine(
+        ctx: ListContext,
+        line: String
+    ) {
+        val state = ctx.htmlBlock ?: return
+        when (state.type) {
+            1 -> {
+                val firstLineBuffer = state.firstLineBuffer
+                if (firstLineBuffer != null) {
+                    firstLineBuffer.append(line)
+                    if (!tryFinishListHtmlBlock1FirstLine(ctx, state)) {
+                        firstLineBuffer.append('\n')
+                    }
+                    return
+                }
+                emitListHtmlBlock1ContentLine(ctx, state, line)
+            }
+            2, 3, 4, 5 -> {
+                +"$line\n"
+                if (lineContainsClosingSeq(line, state.closingSeq)) {
+                    ctx.htmlBlock = null
+                }
+            }
+            6, 7 -> {
+                val firstLineBuffer = state.firstLineBuffer
+                if (firstLineBuffer != null) {
+                    firstLineBuffer.append(line)
+                    if (!tryFinishListHtmlBlock6or7FirstLine(ctx, state)) {
+                        firstLineBuffer.append('\n')
+                    }
+                    return
+                }
+                streamListHtmlBlock6or7ContentLine(ctx, state, line)
+            }
+        }
+    }
+
+    /**
+     * Emit a single content line for a list-internal type-1 HTML block,
+     * mirroring [emitHtmlBlock1ContentLine] but writing close-state to
+     * [ctx.htmlBlock] instead of `replaceMode(Start)`.
+     */
+    private suspend fun SemanticEventScope.emitListHtmlBlock1ContentLine(
+        ctx: ListContext,
+        state: ListHtmlBlockState,
+        line: String
+    ) {
+        val closingPattern = "</${state.rootTagName}"
+        val lowerLine = line.lowercase()
+        val closeIndex = lowerLine.indexOf(closingPattern)
+        if (closeIndex < 0) {
+            +"$line\n"
+            return
+        }
+        val afterName = closeIndex + closingPattern.length
+        var i = afterName
+        while (i < line.length && (line[i] == ' ' || line[i] == '\t')) i++
+        if (i >= line.length || line[i] != '>') {
+            +"$line\n"
+            return
+        }
+        val closeEnd = i + 1
+        val before = line.substring(0, closeIndex)
+        if (before.isNotEmpty()) {
+            val beforeTokens = tokenizeHtmlLine(before)
+            val text = StringBuilder()
+            for (tok in beforeTokens) {
+                when (tok) {
+                    is HtmlToken.Text -> text.append(tok.content)
+                    is HtmlToken.CloseTag -> {
+                        if (text.isNotEmpty()) { +text.toString(); text.clear() }
+                        val tokLower = tok.name.lowercase()
+                        if (state.openTags.isNotEmpty() &&
+                            state.openTags.last().lowercase() == tokLower
+                        ) {
+                            state.openTags.removeLast()
+                        }
+                        unmarkHtml(tok.name)
+                    }
+                    is HtmlToken.OpenTag -> {
+                        if (text.isNotEmpty()) { +text.toString(); text.clear() }
+                        markHtml(tok.name, tok.attributes)
+                        if (tok.selfClosing) unmarkHtml(tok.name)
+                        else state.openTags.add(normalizeHtmlName(tok.name))
+                    }
+                }
+            }
+            if (text.isNotEmpty()) +text.toString()
+        }
+        while (state.openTags.size > 1) unmarkHtml(state.openTags.removeLast())
+        if (state.openTags.isNotEmpty()) unmarkHtml(state.openTags.removeLast())
+        val trailing = line.substring(closeEnd)
+        if (trailing.isNotEmpty()) +"$trailing\n"
+        ctx.htmlBlock = null
+    }
+
+    /**
+     * Once the type-1 first-line buffer holds a line with `>`, parse the
+     * opening tag(s), emit marks, and stream any remainder. Mirrors
+     * [tryFinishHtmlBlock1FirstLine] but updates [ctx.htmlBlock] state.
+     */
+    private suspend fun SemanticEventScope.tryFinishListHtmlBlock1FirstLine(
+        ctx: ListContext,
+        state: ListHtmlBlockState
+    ): Boolean {
+        val buf = state.firstLineBuffer ?: return true
+        val source = buf.toString()
+        val ltIndex = source.indexOf('<')
+        if (ltIndex < 0) return false
+        val leading = source.substring(0, ltIndex)
+        var idx = ltIndex
+        val opens = mutableListOf<HtmlToken.OpenTag>()
+        var foundRoot = false
+        while (idx < source.length && source[idx] == '<') {
+            val open = tryParseOpenTag(source, idx) ?: break
+            opens.add(open.second)
+            if (open.second.name.lowercase() == state.rootTagName) foundRoot = true
+            idx = open.first
+        }
+        if (!foundRoot) return false
+        if (leading.isNotEmpty()) +leading
+        for (tag in opens) {
+            markHtml(tag.name, tag.attributes)
+            state.openTags.add(normalizeHtmlName(tag.name))
+        }
+        state.firstLineBuffer = null
+        val remainder = source.substring(idx)
+        if (remainder.isNotEmpty()) {
+            emitListHtmlBlock1ContentLine(ctx, state, remainder)
+        }
+        return true
+    }
+
+    /**
+     * Stream a single content line of a list-internal type-6/7 HTML block,
+     * mirroring [streamHtmlBlock6or7ContentLine] but with no sub-parse
+     * transition (see DIVERGENCE on [ListContext.htmlBlock]).
+     */
+    private suspend fun SemanticEventScope.streamListHtmlBlock6or7ContentLine(
+        ctx: ListContext,
+        state: ListHtmlBlockState,
+        line: String
+    ) {
+        if (state.rootIsClosingTag) {
+            +"$line\n"
+            return
+        }
+        if (line.isEmpty()) {
+            +"\n"
+            return
+        }
+        val rootCloseIdx = findRootCloseTagIndex(line, state.rootTagName)
+        if (rootCloseIdx < 0) {
+            emitListHtmlBlock6or7ContentTokens(line, state, trailingNewline = true)
+            return
+        }
+        val before = line.substring(0, rootCloseIdx)
+        if (before.isNotEmpty()) {
+            emitListHtmlBlock6or7ContentTokens(before, state, trailingNewline = false)
+        }
+        var p = rootCloseIdx + 2 + state.rootTagName.length
+        while (p < line.length && (line[p] == ' ' || line[p] == '\t')) p++
+        val closeEnd = p + 1
+        while (state.openTags.size > 1) unmarkHtml(state.openTags.removeLast())
+        if (state.openTags.isNotEmpty()) unmarkHtml(state.openTags.removeLast())
+        val trailing = line.substring(closeEnd)
+        if (trailing.isNotEmpty()) +"$trailing\n"
+        ctx.htmlBlock = null
+    }
+
+    /**
+     * Once the type-6/7 first-line buffer holds a complete opening (or
+     * closing) tag, emit marks for any open tag(s), then stream any remainder
+     * as content. Mirrors [tryFinishHtmlBlock6or7FirstLine].
+     */
+    private suspend fun SemanticEventScope.tryFinishListHtmlBlock6or7FirstLine(
+        ctx: ListContext,
+        state: ListHtmlBlockState
+    ): Boolean {
+        val buf = state.firstLineBuffer ?: return true
+        val source = buf.toString()
+        var i = 0
+        while (i < source.length && source[i] == ' ') i++
+        if (i >= source.length || source[i] != '<') return false
+        val open = tryParseOpenTag(source, i)
+        val close = if (open == null) tryParseCloseTag(source, i) else null
+        if (open == null && close == null) return false
+        state.firstLineBuffer = null
+        if (state.rootIsClosingTag) {
+            +"$source\n"
+            return true
+        }
+        val leading = source.substring(0, i)
+        if (leading.isNotEmpty()) +leading
+        var idx = i
+        while (idx < source.length && source[idx] == '<') {
+            val nextOpen = tryParseOpenTag(source, idx) ?: break
+            markHtml(nextOpen.second.name, nextOpen.second.attributes)
+            if (nextOpen.second.selfClosing) {
+                unmarkHtml(nextOpen.second.name)
+            } else {
+                state.openTags.add(normalizeHtmlName(nextOpen.second.name))
+            }
+            idx = nextOpen.first
+        }
+        val remainder = source.substring(idx)
+        if (remainder.isEmpty()) {
+            +"\n"
+        } else {
+            streamListHtmlBlock6or7ContentLine(ctx, state, remainder)
+        }
+        return true
+    }
+
+    /**
+     * Tokenize [line] for a list-internal type-6/7 block, emitting nested
+     * open/close marks plus text. Adds a trailing `\n` when [trailingNewline].
+     */
+    private suspend fun SemanticEventScope.emitListHtmlBlock6or7ContentTokens(
+        line: String,
+        state: ListHtmlBlockState,
+        trailingNewline: Boolean
+    ) {
+        val pending = StringBuilder()
+        suspend fun flushPending() {
+            if (pending.isNotEmpty()) { +pending.toString(); pending.clear() }
+        }
+        val tokens = tokenizeHtmlLine(line)
+        for (tok in tokens) {
+            when (tok) {
+                is HtmlToken.Text -> pending.append(tok.content)
+                is HtmlToken.OpenTag -> {
+                    flushPending()
+                    markHtml(tok.name, tok.attributes)
+                    if (tok.selfClosing) unmarkHtml(tok.name)
+                    else state.openTags.add(normalizeHtmlName(tok.name))
+                }
+                is HtmlToken.CloseTag -> {
+                    flushPending()
+                    val tokLower = tok.name.lowercase()
+                    if (state.openTags.isNotEmpty() &&
+                        state.openTags.last().lowercase() == tokLower
+                    ) {
+                        state.openTags.removeLast()
+                    }
+                    unmarkHtml(tok.name)
+                }
+            }
+        }
+        if (trailingNewline) pending.append('\n')
+        if (pending.isNotEmpty()) +pending.toString()
+    }
+
+    /**
+     * Force-close any open list-internal HTML block. Drains [openTags] (in
+     * LIFO) and the still-buffered first-line opener (emitted as raw text so
+     * an unclosed `<pre` doesn't disappear). Used when the active item closes
+     * before the block's natural close tag / closing sequence arrives.
+     */
+    private suspend fun SemanticEventScope.closeListHtmlBlockIfOpen(
+        mode: BlockMode.ListBlock
+    ) {
+        val top = mode.stack.lastOrNull() ?: return
+        val state = top.htmlBlock ?: return
+        val buf = state.firstLineBuffer
+        if (buf != null && buf.isNotEmpty()) +"$buf\n"
+        while (state.openTags.isNotEmpty()) unmarkHtml(state.openTags.removeLast())
+        top.htmlBlock = null
+    }
+
+    /**
      * Pop list contexts of [mode] until the stack size equals [downTo], emitting
      * `</li>` and `</ul>`/`</ol>` for each popped level. Closes any open `<p>` or
      * code block on the topmost context as part of closing the active item.
@@ -2783,6 +3167,7 @@ private class ParserState(
             // as paragraph text rather than disappear with the popped context.
             drainListPendingTableHeader(mode)
             closeListTableIfOpen(mode)
+            closeListHtmlBlockIfOpen(mode)
             closeListParagraphIfOpen(mode)
             closeListCodeIfOpen(mode)
             closeListFencedCodeIfOpen(mode)
@@ -2822,6 +3207,14 @@ private class ParserState(
         // resumption). Mark the list as having seen a blank — used to decide whether
         // a subsequent indented continuation opens a new paragraph.
         if (line.isBlank()) {
+            // A blank line inside an open HTML block streams as content (the block
+            // stays open) and does not flip `blankSeen`, so the following non-blank
+            // line still routes into the HTML content path. Mirrors the top-level
+            // type-6/7 raw-text behaviour minus the sub-parse transition.
+            if (pendingCtx?.htmlBlock != null) {
+                streamListHtmlBlockLine(pendingCtx, "")
+                return
+            }
             // A blank line inside an open table closes it (mirrors the top-level
             // TableBody behaviour where `line.isEmpty()` ends the table).
             if (pendingCtx?.tableOpen == true) {
@@ -2841,6 +3234,23 @@ private class ParserState(
         }
 
         val indent = leadingIndentCols(line)
+
+        // HTML block continuation takes precedence over marker / thematic-break
+        // detection on lines that satisfy the active item's indent: inside an
+        // HTML block, content like `- foo` or `---` must stream as raw text
+        // rather than open a sibling list / close the list. An under-indented
+        // line force-closes the HTML block and falls through to the normal
+        // handling (mirrors how an under-indented line ends a fenced block).
+        val activeCtx = mode.stack.lastOrNull()
+        if (activeCtx?.htmlBlock != null) {
+            if (indent >= activeCtx.contentCol) {
+                val htmlStripped = stripIndentCols(line, activeCtx.contentCol, startCol = 0)
+                streamListHtmlBlockLine(activeCtx, htmlStripped)
+                mode.blankSeen = false
+                return
+            }
+            closeListHtmlBlockIfOpen(mode)
+        }
 
         // Find the deepest context whose contentCol is satisfied by this line's indent.
         // If `indent < stack[0].contentCol` AND the line is not itself a marker at a
@@ -2900,6 +3310,7 @@ private class ParserState(
                     closeListFencedCodeIfOpen(mode)
                     closeListMathBlockIfOpen(mode)
                     closeListBlockquoteIfOpen(mode)
+                    closeListHtmlBlockIfOpen(mode)
                     unmark("li")
                     mark("li")
                     ctx.hasContent = false
@@ -2930,6 +3341,7 @@ private class ParserState(
             closeListFencedCodeIfOpen(mode)
             closeListMathBlockIfOpen(mode)
             closeListBlockquoteIfOpen(mode)
+            closeListHtmlBlockIfOpen(mode)
             startListItemFromMarker(mode, stripped, parentContentCol = containerContentCol)
             return
         }
@@ -3118,6 +3530,22 @@ private class ParserState(
                 closeListParagraphIfOpen(mode)
                 closeListBlockquoteIfOpen(mode)
                 ctx.tableHeaderPending = stripped
+                mode.blankSeen = false
+                return
+            }
+            // HTML block (CommonMark §4.6) at an item block boundary. Same
+            // architectural pattern as the table-header branch above: state
+            // lives on `ListContext` rather than pushing a frame onto
+            // `blockModeStack` (see `ListContext.htmlBlock`). Closes mirror
+            // the table-detection preamble for defensive consistency, even
+            // though fenced code / math should already be closed before
+            // reaching `atBlockBoundary` via the blank-line handler.
+            if (detectHtmlBlockType(stripped) > 0) {
+                closeListParagraphIfOpen(mode)
+                closeListFencedCodeIfOpen(mode)
+                closeListMathBlockIfOpen(mode)
+                closeListBlockquoteIfOpen(mode)
+                tryEnterListHtmlBlock(ctx, stripped)
                 mode.blankSeen = false
                 return
             }
