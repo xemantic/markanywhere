@@ -118,6 +118,79 @@ The `Transformer` DSL rewrites the event stream on the fly — match marks by na
 
 If you have transformed XML trees with XSLT, the model should feel familiar — `match { ... }` plays the role of an XSLT template, `children()` mirrors `<xsl:apply-templates/>`, and emitted marks/text replace `<xsl:element>` / `<xsl:text>`. The difference: it operates on a streaming event flow rather than a buffered document tree, and the source is Markdown (or mixed Markdown + HTML) rather than XML.
 
+## Supported Markdown features
+
+### GFM baseline
+
+| Feature | Syntax |
+|---------|--------|
+| ATX headings | `# H1` … `###### H6` |
+| Paragraphs | plain text blocks |
+| Hard line break | two trailing spaces or `\` before newline |
+| Thematic break | `---` / `***` / `___` |
+| Fenced code block | ` ```lang ` … ` ``` ` |
+| Indented code block | 4-space indent |
+| Block quote | `> text` |
+| Unordered list | `- item` / `* item` / `+ item` |
+| Ordered list | `1. item` |
+| Task list | `- [x] done` / `- [ ] todo` |
+| Table | `\| col \| col \|` with separator row |
+| Inline code | `` `code` `` |
+| Strong | `**bold**` or `__bold__` |
+| Emphasis | `*italic*` or `_italic_` |
+| Strikethrough | `~~text~~` |
+| Inline link | `[text](url)` / `[text](url "title")` |
+| Inline image | `![alt](src)` |
+| Autolink | `<https://example.com>` / `<user@example.com>` |
+| Extended autolink | `www.example.com` / `https://…` (GFM §6.9) |
+| Raw HTML (block) | HTML type 1–7 blocks pass through |
+| Raw HTML (inline) | `<tag attr="val">…</tag>` |
+| Entity references | `&amp;` / `&#42;` / `&#x2A;` |
+| Backslash escapes | `\*` → literal `*` |
+| Link reference definitions | `[label]: url "title"` (back-references only — see [divergences](markanywhere-parse/README.md)) |
+
+### Extensions beyond GFM
+
+| Feature | Syntax | Output element |
+|---------|--------|---------------|
+| Highlight | `==text==` | `<mark>` |
+| Superscript | `^text^` | `<sup>` |
+| Inline math | `$E=mc^2$` | `<math>` |
+| Display math | `$$`…`$$` on own lines | `<math display="block">` |
+| Front matter | `---`/`+++` fence at document start | `<frontmatter format="yaml|toml">` |
+| Namespaced tags | `<ns:tag attr="val">` | `Mark(name="ns:tag", isTagged=true)` |
+
+**Namespaced tags** let you embed arbitrary custom markup in a Markdown document. Any `<namespace:tagname …>` / `</namespace:tagname>` pair passes through as `Mark`/`Unmark` events with `isTagged = true` and parsed attributes — your renderer handles them however it wants. This covers use cases like custom card components, alert boxes, or any domain-specific block type without requiring new parser syntax.
+
+### GFM features not supported
+
+| Feature | Reason |
+|---------|--------|
+| Setext headings (`===` / `---` underline) | Requires one-line look-ahead to distinguish from paragraph + thematic break |
+| Forward reference links (`[text][label]` before `[label]: url`) | Definition must precede usage — the append-only stream cannot revisit emitted events |
+| Tight vs. loose lists | Tight/loose can only be decided after the full list closes |
+| Mid-paragraph tables | Tables only start at a fresh block boundary |
+| Multi-line inline constructs | `flushInline` force-closes inline state (code/em/strong/etc.) at every line/block boundary |
+| Image inside link (`[![alt](src)](url)`) | Nested inline constructs require speculative recursive parsing |
+| Nested inline links (`[foo [bar](/u)](/u)`) | Inner link is treated as label content; spec requires parser unwinding |
+| Multi-line link parsing | Link destination, title, or label spanning newlines is not supported |
+
+See [markanywhere-parse/README.md](markanywhere-parse/README.md) for a full list of divergences and their rationale.
+
+## Modules
+
+| Module | Purpose |
+|--------|---------|
+| `markanywhere-api` | `SemanticEvent` sealed type — the only interface between modules |
+| `markanywhere-parse` | Streaming parser: `Flow<String>` → `Flow<SemanticEvent>` |
+| `markanywhere-render` | HTML renderer: `Flow<SemanticEvent>` → HTML string |
+| `markanywhere-transform` | DSL for rewriting event streams on the fly |
+| `markanywhere-flow` | Utilities for composing and splitting event flows |
+| `markanywhere-extract` | Utilities for extracting structured data from event streams |
+| `markanywhere-js` | Kotlin/JS DOM renderer |
+
+You can depend only on `markanywhere-parse` and consume the `Flow<SemanticEvent>` with your own renderer — the API surface is a single three-variant sealed class. The `markanywhere-transform` module additionally lets you intercept and rewrite events before they reach any renderer.
+
 ## Elaborate rationale
 
 We use language to convey meaning, and we use text to express language. The document-whether scroll, codex, or book-established a paradigm for how text is preserved as a packaged unit. Documents also introduced formatting: visual and structural conventions that signal the intent behind particular fragments of text within a larger context.
