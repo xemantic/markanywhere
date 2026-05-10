@@ -157,7 +157,7 @@ If you have transformed XML trees with XSLT, the model should feel familiar — 
 | Superscript | `^text^` | `<sup>` |
 | Inline math | `$E=mc^2$` | `<math>` |
 | Display math | `$$`…`$$` on own lines | `<math display="block">` |
-| Front matter | `---`/`+++` fence at document start | `<frontmatter format="yaml\|toml">` |
+| Front matter | `---`/`+++` fence at document start | `<frontmatter format="yaml|toml">` |
 | Namespaced tags | `<ns:tag attr="val">` | `Mark(name="ns:tag", isTagged=true)` |
 
 **Namespaced tags** let you embed arbitrary custom markup in a Markdown document. Any `<namespace:tagname …>` / `</namespace:tagname>` pair passes through as `Mark`/`Unmark` events with `isTagged = true` and parsed attributes — your renderer handles them however it wants. This covers use cases like custom card components, alert boxes, or any domain-specific block type without requiring new parser syntax.
@@ -167,9 +167,13 @@ If you have transformed XML trees with XSLT, the model should feel familiar — 
 | Feature | Reason |
 |---------|--------|
 | Setext headings (`===` / `---` underline) | Requires one-line look-ahead to distinguish from paragraph + thematic break |
-| Reference-style links (`[text][label]`) | Forward references require buffering the whole document |
+| Forward reference links (`[text][label]` before `[label]: url`) | Definition must precede usage — the append-only stream cannot revisit emitted events |
 | Tight vs. loose lists | Tight/loose can only be decided after the full list closes |
 | Mid-paragraph tables | Tables only start at a fresh block boundary |
+| Multi-line inline constructs | `flushInline` force-closes inline state (code/em/strong/etc.) at every line/block boundary |
+| Image inside link (`[![alt](src)](url)`) | Nested inline constructs require speculative recursive parsing |
+| Nested inline links (`[foo [bar](/u)](/u)`) | Inner link is treated as label content; spec requires parser unwinding |
+| Multi-line link parsing | Link destination, title, or label spanning newlines is not supported |
 
 See [markanywhere-parse/README.md](markanywhere-parse/README.md) for a full list of divergences and their rationale.
 

@@ -74,7 +74,7 @@ $$
 
 ### Front matter (YAML / TOML)
 
-A `---` (YAML) or `+++` (TOML) fence at the very start of the document, when followed by a recognisable key on the second line, is captured as a `frontmatter` block rather than passed to the Markdown parser:
+A `---` (YAML) or `+++` (TOML) fence at the very start of the document is captured as a `frontmatter` block when the second line looks like a valid key — `word:` (or `word : value`) for YAML, or `word =` / `[section]` for TOML. If the second line does not match, the fence falls through to a thematic break or paragraph as normal Markdown:
 
 ```markdown
 ---
@@ -136,17 +136,19 @@ thematic break (for `-`) or as ordinary paragraph content (for `=`).
 A side benefit: the `---` ambiguity between a setext underline and a thematic
 break disappears — `---` always means thematic break.
 
-### Link reference definitions are not supported (GFM §4.7, §6.3)
+### Forward reference links not supported (GFM §4.7)
 
-GFM allows defining a label once with `[label]: url "title"` and referencing it
-elsewhere via `[text][label]`, `[label][]`, or `[label]`. Definitions may appear
-*anywhere* in the document, including after the references that use them. Strict
-support requires buffering every potential reference until end-of-document so it
-can be resolved against late-arriving definitions.
+GFM allows `[label]: url "title"` definitions to appear *anywhere* in the
+document, including after the references that use them. Resolving forward
+references requires buffering the entire document so that a usage emitted
+before its definition can be retroactively rewritten — incompatible with the
+append-only stream.
 
-Only inline links are supported: `[text](url)` and `[text](url "title")`. Both
-reference-style links and reference-style images (`![alt][ref]`) emit their
-source text as literal characters.
+Back-references **do** work: a `[text][label]` / `[label][]` / `[label]`
+shortcut that appears *after* its definition resolves correctly. Only
+single-line definition shapes are recognized (multi-line label, dest on next
+line, or multi-line title are not). A usage that appears before its definition,
+or a multi-line definition shape, emits its source text as literal characters.
 
 ### Lists are always rendered as loose (GFM §5.3)
 
