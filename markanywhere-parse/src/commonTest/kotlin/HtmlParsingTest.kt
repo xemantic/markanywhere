@@ -71,7 +71,7 @@ class HtmlParsingTest {
      * scope (no mark was emitted) and happily wraps the URL in `<a>`.
      */
     @Test
-    fun `CSS url() inside style nested in outer HTML 6 block is not autolinked`() = runTest {
+    fun `CSS url inside style nested in outer HTML 6 block is not autolinked`() = runTest {
         // given
         val src = "<div>\n<style>@font-face{src:url(https://example.com/x.woff2)}</style>\n</div>\n"
 
