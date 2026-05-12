@@ -17,6 +17,7 @@
 package com.xemantic.markanywhere.parse
 
 import com.xemantic.markanywhere.SemanticEvent
+import com.xemantic.markanywhere.parse.AutolinkCollector.Companion.SUPPRESS_NAMES
 import kotlinx.coroutines.flow.FlowCollector
 
 /**
@@ -67,10 +68,22 @@ internal class AutolinkCollector(
      */
     private var suppressDepth = 0
 
+    /**
+     * Suppression depth for HTML block 6/7 raw-text streaming (CommonMark
+     * §4.6). Disallowed tags (§6.11) like `<style>` and `<script>` inside
+     * such blocks are filtered by `tokenizeHtmlLine` and reach this collector
+     * as plain text — no enclosing `mark`/`unmark` is emitted, so the
+     * standard [suppressDepth] mechanism never activates. The parser
+     * increments [htmlRawTextDepth] on entry to an opening-tag-rooted
+     * HTML 6/7 frame's raw-text phase, and decrements on exit (root close,
+     * transition to sub-parse on blank line, or finalize cleanup).
+     */
+    var htmlRawTextDepth: Int = 0
+
     override suspend fun emit(value: SemanticEvent) {
         when (value) {
             is SemanticEvent.Text -> {
-                if (suppressDepth > 0) {
+                if (suppressDepth > 0 || htmlRawTextDepth > 0) {
                     drain()
                     charBeforeWord = null
                     downstream.emit(value)
@@ -125,7 +138,7 @@ internal class AutolinkCollector(
 
         var pos = 0
         for (span in spans) {
-            emitRange(events, starts, full, pos, span.urlStart)
+            emitRange(events, starts, pos, span.urlStart)
             downstream.emit(
                 SemanticEvent.Mark(
                     name = "a",
@@ -136,20 +149,19 @@ internal class AutolinkCollector(
             downstream.emit(SemanticEvent.Unmark(name = "a"))
             pos = span.urlEnd
         }
-        emitRange(events, starts, full, pos, full.length)
+        emitRange(events, starts, pos, full.length)
         if (full.isNotEmpty()) charBeforeWord = full.last()
     }
 
     /**
-     * Emit the text range `[from, to)` of [full] downstream, preserving
-     * the original event shapes from [events]: a fully covered event is
-     * emitted as-is (re-using the event instance); a partial cover emits
-     * a fresh `Text` with the substring.
+     * Emit the concatenated-buffer range `[from, to)` downstream, preserving
+     * the original event shapes from [events] (located via [starts]): a fully
+     * covered event is emitted as-is (re-using the event instance); a partial
+     * cover emits a fresh `Text` with the substring.
      */
     private suspend fun emitRange(
         events: List<SemanticEvent.Text>,
         starts: IntArray,
-        full: String,
         from: Int,
         to: Int
     ) {
@@ -389,7 +401,6 @@ private fun scanEmail(s: String, start: Int): String? {
     val atIdx = i
     if (s[atIdx - 1] == '.') return null  // local-part can't end with `.`
     i++
-    val domainStart = i
     val segments = mutableListOf<IntRange>()
     var segStart = i
     while (i < s.length) {
@@ -411,7 +422,7 @@ private fun scanEmail(s: String, start: Int): String? {
     if (segments.size < 2) return null
     for ((idx, range) in segments.withIndex()) {
         val len = range.last - range.first + 1
-        if (len < 1 || len > 63) return null
+        if (len !in 1..63) return null
         val first = s[range.first]
         val last = s[range.last]
         if (first == '-' || last == '-') return null
@@ -420,7 +431,6 @@ private fun scanEmail(s: String, start: Int): String? {
             for (k in range) if (s[k] == '_') return null
         }
     }
-    if (domainStart >= s.length || !s[domainStart].isDomainSegmentChar()) return null
     val emailEnd = segments.last().last + 1
     return s.substring(start, emailEnd)
 }
