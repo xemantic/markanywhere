@@ -434,7 +434,9 @@ class HtmlBlockInListItemTest {
             "ul" {
                 "li" {
                     "p" { +"intro" }
-                    +"<!DOCTYPE html>\n"
+                    tag("doctype") {
+                        +"html"
+                    }
                     "p" { +"after" }
                 }
             }

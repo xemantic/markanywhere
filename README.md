@@ -159,6 +159,7 @@ If you have transformed XML trees with XSLT, the model should feel familiar — 
 | Display math | `$$`…`$$` on own lines | `<math display="block">` |
 | Front matter | `---`/`+++` fence at document start | `<frontmatter format="yaml|toml">` |
 | Namespaced tags | `<ns:tag attr="val">` | `Mark(name="ns:tag", isTagged=true)` |
+| DOCTYPE declaration | `<!DOCTYPE html>` (case-insensitive) | `Mark(name="doctype", isTagged=true)` |
 
 **Namespaced tags** let you embed arbitrary custom markup in a Markdown document. Any `<namespace:tagname …>` / `</namespace:tagname>` pair passes through as `Mark`/`Unmark` events with `isTagged = true` and parsed attributes — your renderer handles them however it wants. This covers use cases like custom card components, alert boxes, or any domain-specific block type without requiring new parser syntax.
 
