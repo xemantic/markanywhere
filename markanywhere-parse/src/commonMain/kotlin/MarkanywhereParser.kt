@@ -28,7 +28,8 @@ public fun Flow<String>.parse(): Flow<SemanticEvent> = flow {
     val redirector = RedirectingCollector(autolinker)
     val state = ParserState(
         scope = SemanticEventScope(collector = redirector),
-        redirector = redirector
+        redirector = redirector,
+        autolinker = autolinker
     )
     val frontMatter = FrontMatterFilter(
         directDownstream = outer,
@@ -725,6 +726,22 @@ private fun normalizeHtmlName(name: String): String {
     return if (lower in HTML5_ELEMENTS) lower else name
 }
 
+/**
+ * HTML5 void elements (no content, no closing tag — always treated as
+ * self-closing). Real-world HTML omits `/>` on these (`<meta charset="…">`
+ * not `<meta charset="…"/>`), so the parser must auto-close them on `mark`
+ * to keep the event stream balanced. Names compared case-insensitively
+ * after lowering.
+ */
+private val HTML5_VOID_ELEMENTS: Set<String> = setOf(
+    "area", "base", "br", "col", "embed", "hr", "img", "input",
+    "keygen", "link", "meta", "param", "source", "track", "wbr"
+)
+
+/** True when this open tag must auto-emit `unmark` immediately. */
+private fun HtmlToken.OpenTag.isSelfClosingOrVoid(): Boolean =
+    selfClosing || name.lowercase() in HTML5_VOID_ELEMENTS
+
 private sealed interface HtmlToken {
     data class OpenTag(
         val name: String,
@@ -849,14 +866,29 @@ private fun tokenizeHtmlLine(line: String): List<HtmlToken> {
         if (line[i] == '<') {
             val open = tryParseOpenTag(line, i)
             if (open != null) {
-                if (open.second.name.lowercase() in GFM_DISALLOWED_TAGS) {
-                    // GFM §6.11: emit the source as text instead of a tag.
-                    text.append(line, i, open.first)
+                val openLower = open.second.name.lowercase()
+                if (openLower in GFM_DISALLOWED_TAGS) {
+                    // GFM §6.11: the disallowed tag itself becomes literal text.
+                    // Additionally — to keep the body opaque to HTML detection
+                    // (a `<script>var s = "<a>"` shape must not open a nested
+                    // `<a>` mark) — scan ahead on this line for the matching
+                    // `</name>`. If found, the whole span (open + body + close)
+                    // emits as one text run. If not (multi-line shape), only the
+                    // opener is text — subsequent lines flow back through normal
+                    // tokenization. The multi-line case is left to a follow-up.
+                    val matchEnd = findDisallowedCloseOnLine(line, open.first, openLower)
+                    if (matchEnd >= 0) {
+                        text.append(line, i, matchEnd)
+                        i = matchEnd
+                    } else {
+                        text.append(line, i, open.first)
+                        i = open.first
+                    }
                 } else {
                     flushText()
                     tokens.add(open.second)
+                    i = open.first
                 }
-                i = open.first
                 continue
             }
             val close = tryParseCloseTag(line, i)
@@ -876,6 +908,37 @@ private fun tokenizeHtmlLine(line: String): List<HtmlToken> {
     }
     flushText()
     return tokens
+}
+
+/**
+ * Find the end index (past `>`) of `</[lowerName]>` in [line] starting at
+ * [startIdx], with optional whitespace before the `>`. Returns -1 if no
+ * such close tag appears on the line. Used by [tokenizeHtmlLine] to make
+ * the body of a GFM §6.11 disallowed tag opaque on a single line.
+ */
+private fun findDisallowedCloseOnLine(
+    line: String,
+    startIdx: Int,
+    lowerName: String
+): Int {
+    val pattern = "</$lowerName"
+    val lower = line.lowercase()
+    var idx = lower.indexOf(pattern, startIdx)
+    while (idx >= 0) {
+        val afterName = idx + pattern.length
+        // The char after `</name` must be whitespace or `>` so we don't match
+        // a prefix like `</scripty>` against `script`.
+        if (afterName < line.length) {
+            val c = line[afterName]
+            if (c == '>' || c == ' ' || c == '\t') {
+                var j = afterName
+                while (j < line.length && (line[j] == ' ' || line[j] == '\t')) j++
+                if (j < line.length && line[j] == '>') return j + 1
+            }
+        }
+        idx = lower.indexOf(pattern, idx + 1)
+    }
+    return -1
 }
 
 /**
@@ -952,7 +1015,8 @@ private fun isCompleteHtmlTagLine(trimmed: String): Boolean {
 
 private class ParserState(
     private val scope: SemanticEventScope,
-    private val redirector: RedirectingCollector
+    private val redirector: RedirectingCollector,
+    private val autolinker: AutolinkCollector
 ) {
 
     // Block modes
@@ -2979,18 +3043,12 @@ private class ParserState(
                     is HtmlToken.Text -> text.append(tok.content)
                     is HtmlToken.CloseTag -> {
                         if (text.isNotEmpty()) { +text.toString(); text.clear() }
-                        val tokLower = tok.name.lowercase()
-                        if (state.openTags.isNotEmpty() &&
-                            state.openTags.last().lowercase() == tokLower
-                        ) {
-                            state.openTags.removeLast()
-                        }
-                        unmarkHtml(tok.name)
+                        emitMatchingClose(tok.name, state.openTags)
                     }
                     is HtmlToken.OpenTag -> {
                         if (text.isNotEmpty()) { +text.toString(); text.clear() }
                         markHtml(tok.name, tok.attributes)
-                        if (tok.selfClosing) unmarkHtml(tok.name)
+                        if (tok.isSelfClosingOrVoid()) unmarkHtml(tok.name)
                         else state.openTags.add(normalizeHtmlName(tok.name))
                     }
                 }
@@ -3106,7 +3164,7 @@ private class ParserState(
         while (idx < source.length && source[idx] == '<') {
             val nextOpen = tryParseOpenTag(source, idx) ?: break
             markHtml(nextOpen.second.name, nextOpen.second.attributes)
-            if (nextOpen.second.selfClosing) {
+            if (nextOpen.second.isSelfClosingOrVoid()) {
                 unmarkHtml(nextOpen.second.name)
             } else {
                 state.openTags.add(normalizeHtmlName(nextOpen.second.name))
@@ -3142,18 +3200,12 @@ private class ParserState(
                 is HtmlToken.OpenTag -> {
                     flushPending()
                     markHtml(tok.name, tok.attributes)
-                    if (tok.selfClosing) unmarkHtml(tok.name)
+                    if (tok.isSelfClosingOrVoid()) unmarkHtml(tok.name)
                     else state.openTags.add(normalizeHtmlName(tok.name))
                 }
                 is HtmlToken.CloseTag -> {
                     flushPending()
-                    val tokLower = tok.name.lowercase()
-                    if (state.openTags.isNotEmpty() &&
-                        state.openTags.last().lowercase() == tokLower
-                    ) {
-                        state.openTags.removeLast()
-                    }
-                    unmarkHtml(tok.name)
+                    emitMatchingClose(tok.name, state.openTags)
                 }
             }
         }
@@ -4611,6 +4663,29 @@ private class ParserState(
     }
 
     /**
+     * Emit balanced close events for the HTML close tag named [closeName],
+     * draining [openTags] LIFO down to (and including) the deepest matching
+     * open. If no match is found, the close is **dropped silently** — per
+     * the HTML5 parser spec ("an end tag whose tag name is not in the stack
+     * of open elements is a parse error; ignore the token"), this keeps the
+     * downstream event stream balanced for the common real-world case where
+     * source HTML has stray closes that don't pair with anything on the
+     * current frame's open stack.
+     */
+    private suspend fun SemanticEventScope.emitMatchingClose(
+        closeName: String,
+        openTags: MutableList<String>
+    ) {
+        val lower = closeName.lowercase()
+        val matchIdx = openTags.indexOfLast { it.lowercase() == lower }
+        if (matchIdx < 0) return
+        while (openTags.size > matchIdx + 1) {
+            unmarkHtml(openTags.removeLast())
+        }
+        unmarkHtml(openTags.removeLast())
+    }
+
+    /**
      * Enter an HTML block (CommonMark 4.6) given the first source line (already buffered).
      * Dispatches by detected block type and seeds the per-type state.
      */
@@ -4653,11 +4728,31 @@ private class ParserState(
                 // may push a fresh `Start` frame on top, and the matching root close
                 // tag pops back to whatever was underneath.
                 pushMode(mode)
+                // Opening-tag root enters raw-text streaming — suppress extended
+                // autolinks until raw-text exits (close / sub-parse transition).
+                // See [leaveRawHtmlBlock] for the matching decrement.
+                if (!isClose) autolinker.htmlRawTextDepth++
                 // Buffer the first line into firstLineBuffer for tag-completion checks.
                 mode.firstLineBuffer!!.append(line)
                 tryFinishHtmlBlock6or7FirstLine(mode)
             }
             else -> +"$line\n"
+        }
+    }
+
+    /**
+     * Decrement [autolinker]'s HTML raw-text suppression counter when an
+     * opening-tag-rooted [BlockMode.HtmlBlock6or7] frame leaves its raw-text
+     * phase — by closing, by transitioning to sub-parse on a blank line, or
+     * by finalize/EOF cleanup. Idempotent: uses [BlockMode.ChildMode.SubParse]
+     * as a sentinel so callers may invoke at any exit point without tracking
+     * which transition already fired.
+     */
+    private fun leaveRawHtmlBlock(mode: BlockMode.HtmlBlock6or7) {
+        if (mode.rootIsClosingTag) return
+        if (mode.childMode == BlockMode.ChildMode.RawText) {
+            autolinker.htmlRawTextDepth--
+            mode.childMode = BlockMode.ChildMode.SubParse
         }
     }
 
@@ -4718,47 +4813,59 @@ private class ParserState(
             return
         }
         val closeEnd = i + 1
-        // Tokenize content before the root close to recognize any nested inner close tags.
+        // GFM §4.6: type-1 block bodies are raw text — open tags inside the body
+        // (`var s = "<div>foo</div>"` in `<script>`, `a::before{content:"<x>"}`
+        // in `<style>`) must NOT open nested marks. But the opener-chain
+        // mechanism in [tryFinishHtmlBlock1FirstLine] does open contiguous tags
+        // (e.g. `<pre><code>`), so we still recognise close tags inside the body
+        // that match the current top of `mode.openTags` and pop them at the
+        // right position. Non-matching closes and any open tags inside the body
+        // pass through as literal text.
         val before = line.substring(0, closeIndex)
         if (before.isNotEmpty()) {
-            val beforeTokens = tokenizeHtmlLine(before)
-            val text = StringBuilder()
-            for (tok in beforeTokens) {
-                when (tok) {
-                    is HtmlToken.Text -> text.append(tok.content)
-                    is HtmlToken.CloseTag -> {
-                        if (text.isNotEmpty()) { +text.toString(); text.clear() }
-                        val tokLower = tok.name.lowercase()
-                        if (mode.openTags.isNotEmpty() &&
-                            mode.openTags.last().lowercase() == tokLower
-                        ) {
-                            mode.openTags.removeLast()
+            val pendingText = StringBuilder()
+            var j = 0
+            while (j < before.length) {
+                if (before[j] == '<') {
+                    val tokClose = tryParseCloseTag(before, j)
+                    if (tokClose != null && mode.openTags.isNotEmpty() &&
+                        mode.openTags.last().lowercase() == tokClose.second.name.lowercase()
+                    ) {
+                        if (pendingText.isNotEmpty()) {
+                            +pendingText.toString(); pendingText.clear()
                         }
-                        unmarkHtml(tok.name)
-                    }
-                    is HtmlToken.OpenTag -> {
-                        if (text.isNotEmpty()) { +text.toString(); text.clear() }
-                        markHtml(tok.name, tok.attributes)
-                        if (tok.selfClosing) unmarkHtml(tok.name)
-                        else mode.openTags.add(normalizeHtmlName(tok.name))
+                        mode.openTags.removeLast()
+                        unmarkHtml(tokClose.second.name)
+                        j = tokClose.first
+                        continue
                     }
                 }
+                pendingText.append(before[j])
+                j++
             }
-            if (text.isNotEmpty()) +text.toString()
+            if (pendingText.isNotEmpty()) +pendingText.toString()
         }
-        // Close any nested still-open tags then the root.
+        // Close any tags still open then the root.
         while (mode.openTags.size > 1) {
             unmarkHtml(mode.openTags.removeLast())
         }
         if (mode.openTags.isNotEmpty()) {
             unmarkHtml(mode.openTags.removeLast())
         }
-        // Trailing content after the close becomes a top-level text event with newline.
+        // Trailing content after the close: re-run HTML block detection so
+        // adjacent type-1 blocks on the same line (e.g. `</script><style>...`)
+        // open a fresh block instead of flowing as paragraph text. Non-HTML
+        // trailing content keeps the historical behaviour (emitted as a raw
+        // text event with newline — no paragraph wrapping).
         val trailing = line.substring(closeEnd)
-        if (trailing.isNotEmpty()) {
-            +"$trailing\n"
-        }
         replaceMode(BlockMode.Start)
+        if (trailing.isNotEmpty()) {
+            if (detectHtmlBlockType(trailing) > 0) {
+                enterHtmlBlock(trailing)
+            } else {
+                +"$trailing\n"
+            }
+        }
     }
 
     /**
@@ -4897,8 +5004,14 @@ private class ParserState(
         var idx = i
         while (idx < source.length && source[idx] == '<') {
             val nextOpen = tryParseOpenTag(source, idx) ?: break
+            if (nextOpen.second.name.lowercase() in GFM_DISALLOWED_TAGS) {
+                // GFM §6.11: stop the opener chain here. The disallowed tag and
+                // everything after it route through `streamHtmlBlock6or7ContentLine`,
+                // where `tokenizeHtmlLine` returns the tag source as literal text.
+                break
+            }
             markHtml(nextOpen.second.name, nextOpen.second.attributes)
-            if (nextOpen.second.selfClosing) {
+            if (nextOpen.second.isSelfClosingOrVoid()) {
                 unmarkHtml(nextOpen.second.name)
             } else {
                 mode.openTags.add(normalizeHtmlName(nextOpen.second.name))
@@ -4935,7 +5048,7 @@ private class ParserState(
             // The matching root close tag is then handled by the close-tag check
             // at the top of `processStart`'s `\n` handler.
             +"\n"
-            mode.childMode = BlockMode.ChildMode.SubParse
+            leaveRawHtmlBlock(mode)
             pushMode(BlockMode.Start)
             return
         }
@@ -4956,6 +5069,7 @@ private class ParserState(
         if (mode.openTags.isNotEmpty()) unmarkHtml(mode.openTags.removeLast())
         val trailing = line.substring(closeEnd)
         if (trailing.isNotEmpty()) +"$trailing\n"
+        leaveRawHtmlBlock(mode)
         // Pop the HTML frame; the enclosing context resumes (typically `Start`).
         popMode()
     }
@@ -4991,6 +5105,7 @@ private class ParserState(
             if (mode.openTags.isNotEmpty()) unmarkHtml(mode.openTags.removeLast())
             val trailing = line.substring(closeEnd)
             if (trailing.isNotEmpty()) +"$trailing\n"
+            leaveRawHtmlBlock(mode)
             popMode()
             return true
         }
@@ -5014,7 +5129,7 @@ private class ParserState(
             if (mode.openTags.isNotEmpty()) {
                 unmarkHtml(mode.openTags.removeLast())
             }
-            mode.childMode = BlockMode.ChildMode.SubParse
+            leaveRawHtmlBlock(mode)
             pushMode(BlockMode.Start)
             return true
         }
@@ -5043,18 +5158,12 @@ private class ParserState(
                 is HtmlToken.OpenTag -> {
                     flushPending()
                     markHtml(tok.name, tok.attributes)
-                    if (tok.selfClosing) unmarkHtml(tok.name)
+                    if (tok.isSelfClosingOrVoid()) unmarkHtml(tok.name)
                     else mode.openTags.add(normalizeHtmlName(tok.name))
                 }
                 is HtmlToken.CloseTag -> {
                     flushPending()
-                    val tokLower = tok.name.lowercase()
-                    if (mode.openTags.isNotEmpty() &&
-                        mode.openTags.last().lowercase() == tokLower
-                    ) {
-                        mode.openTags.removeLast()
-                    }
-                    unmarkHtml(tok.name)
+                    emitMatchingClose(tok.name, mode.openTags)
                 }
             }
         }
@@ -5081,18 +5190,12 @@ private class ParserState(
                 is HtmlToken.OpenTag -> {
                     flushPending()
                     markHtml(tok.name, tok.attributes)
-                    if (tok.selfClosing) unmarkHtml(tok.name)
+                    if (tok.isSelfClosingOrVoid()) unmarkHtml(tok.name)
                     else mode.openTags.add(normalizeHtmlName(tok.name))
                 }
                 is HtmlToken.CloseTag -> {
                     flushPending()
-                    val tokLower = tok.name.lowercase()
-                    if (mode.openTags.isNotEmpty() &&
-                        mode.openTags.last().lowercase() == tokLower
-                    ) {
-                        mode.openTags.removeLast()
-                    }
-                    unmarkHtml(tok.name)
+                    emitMatchingClose(tok.name, mode.openTags)
                 }
             }
         }
@@ -5514,7 +5617,7 @@ private class ParserState(
                         ) {
                             val tag = open.second
                             mark(tag.name, isTagged = true, attributes = tag.attributes)
-                            if (tag.selfClosing) {
+                            if (tag.isSelfClosingOrVoid()) {
                                 unmark(tag.name, isTagged = true)
                             } else {
                                 inlineOpenStack.addLast(InlineOpenFrame(tag.name, isTagged = true))
@@ -6816,6 +6919,7 @@ private class ParserState(
                         }
                         // Phase-1 fallback emitted the buffered opener as text; pop
                         // back to the enclosing frame.
+                        leaveRawHtmlBlock(mode)
                         popMode()
                         continue
                     }
@@ -6830,6 +6934,7 @@ private class ParserState(
                     while (mode.openTags.isNotEmpty()) {
                         unmarkHtml(mode.openTags.removeLast())
                     }
+                    leaveRawHtmlBlock(mode)
                     popMode()
                 }
             }
