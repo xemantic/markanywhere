@@ -386,6 +386,27 @@ class DoctypeTest {
     }
 
     @Test
+    fun `should interrupt paragraph with DOCTYPE`() = runTest {
+        // given: CommonMark HTML block types 1-6 (DOCTYPE is type 4) can
+        // interrupt an open paragraph without a preceding blank line.
+        val textFlow = buildText {
+            +"some text\n"
+            +"<!DOCTYPE html>\n"
+        }.chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" { +"some text" }
+            tag("doctype") {
+                +"html"
+            }
+        }
+    }
+
+    @Test
     fun `should pass DOCTYPE through fenced code block as raw text`() = runTest {
         // given: inside a fenced code block, no constructs are parsed — content
         // streams verbatim. The DOCTYPE recognition is suppressed because the

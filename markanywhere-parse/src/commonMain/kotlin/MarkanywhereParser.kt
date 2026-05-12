@@ -917,10 +917,17 @@ private const val DOCTYPE_PREFIX_LENGTH = "<!DOCTYPE".length
 
 /**
  * True if [line] is the opener of a DOCTYPE declaration (a structurally
- * distinguished subset of HTML block type 4). Allows up to 3 leading spaces,
- * matches `<!DOCTYPE` case-insensitively, and requires the next char (if any)
- * to be a space, tab, or `>`. The caller should have already confirmed the
- * line is type 4 — this is a narrower predicate.
+ * distinguished subset of HTML block type 4). Matches `<!DOCTYPE`
+ * case-insensitively, and requires the next char (if any) to be a space,
+ * tab, or `>`.
+ *
+ * The 3-leading-spaces limit for HTML blocks is enforced by callers — see
+ * [detectHtmlBlockType], which rejects `leadingSpaces > 3` before calling
+ * this predicate with a pre-trimmed line. Inside [detectHtmlBlockType] this
+ * function plays two roles: it acts as the type-4 detector for the
+ * lowercase `<!doctype …>` form (CommonMark restricts type 4 to uppercase),
+ * and it gates the structural DOCTYPE path for the uppercase form already
+ * recognised as type 4.
  */
 private fun isDoctypeLine(line: String): Boolean {
     val trimmed = line.trimStart(' ')
@@ -5074,6 +5081,13 @@ private class ParserState(
      * is seen the block closes (emits `unmark`); any trailing chars after
      * `>` are emitted as a top-level text event with `\n`. Unclosed DOCTYPE
      * at EOF is force-closed by the [finalize] drain.
+     *
+     * DIVERGENCE from GFM type-4: a blank line inside the declaration does
+     * not close the block — it streams as `"\n"` content and the block stays
+     * open until `>` or EOF. Same rationale as the HTML 6/7 blank-line
+     * divergence: append-only emission cannot retract the already-emitted
+     * `mark("doctype")`. Multi-line DOCTYPE with an embedded blank line is
+     * malformed in practice, so the cost is theoretical.
      */
     private suspend fun SemanticEventScope.processDoctypeBlock(char: Char) {
         if (char != '\n') {
