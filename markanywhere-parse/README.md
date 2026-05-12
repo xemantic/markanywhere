@@ -87,6 +87,18 @@ Normal Markdown content here.
 
 → `Mark("frontmatter", attributes={"format": "yaml"})` + text content + `Unmark("frontmatter")`, followed by the regular document events.
 
+### DOCTYPE declaration (`<!DOCTYPE …>`)
+
+A CommonMark §4.6 type-4 declaration that case-insensitively starts with `<!DOCTYPE` is emitted structurally as a `doctype` mark instead of the GFM raw-HTML pass-through:
+
+```html
+<!DOCTYPE html>
+```
+
+→ `Mark("doctype", isTagged=true)` + `Text("html")` + `Unmark("doctype", isTagged=true)`
+
+The content text is everything between `<!DOCTYPE` and the closing `>`, with the whitespace run immediately after the keyword stripped (so `<!DOCTYPE   html>` and `<!DOCTYPE\thtml>` both yield `"html"`). Multi-line declarations preserve continuation-line whitespace verbatim, joined by `\n`. Generic type-4 declarations that are not DOCTYPE (e.g. `<!ENTITY …>`) still pass through as raw text.
+
 ### Namespaced custom tags (`<ns:tag …>`)
 
 Any `<namespace:tagname attr="value">` / `</namespace:tagname>` pair in the source passes through as `Mark`/`Unmark` events with `isTagged = true` and fully parsed attributes. This lets you embed custom structured markup in a Markdown document without any parser changes — your downstream renderer handles the semantics:

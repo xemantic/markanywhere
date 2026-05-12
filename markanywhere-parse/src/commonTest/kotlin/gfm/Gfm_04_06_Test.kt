@@ -1117,7 +1117,12 @@ class Gfm_04_06_Test {
          */
     }
 
-    // DIVERGENCE: type-4 (declaration like `<!DOCTYPE>`) emits as raw text.
+    // DIVERGENCE: type-4 (declaration like `<!DOCTYPE>`) is parsed as a
+    // structural `mark("doctype")` + content text + `unmark`, rather than the
+    // GFM raw-HTML pass-through. This is a markanywhere extension — the
+    // declaration-name keyword is well-defined enough to expose semantically,
+    // and downstream consumers (renderers, HTML-aware transformers) often
+    // need to recognise it explicitly.
     @Test
     fun `example 150 - DIVERGENCE - doctype`() = runTest {
         // given
@@ -1128,7 +1133,9 @@ class Gfm_04_06_Test {
 
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
-            +"<!DOCTYPE html>\n"
+            tag("doctype") {
+                +"html"
+            }
         }
         // GFM expected:
         /*

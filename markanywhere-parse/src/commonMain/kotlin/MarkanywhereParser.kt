@@ -233,13 +233,16 @@ private class ListContext(
  * [rootTagName] is the lowercased root tag, [openTags] tracks nested still-open
  * tags (root first), and [firstLineBuffer] holds the opening-tag chars until
  * the first `>` is seen (null once parsed). For type 2-5 [closingSeq] is the
- * sequence that ends the block (`-->`, `?>`, `>`, `]]>`).
+ * sequence that ends the block (`-->`, `?>`, `>`, `]]>`). [isDoctype] flags
+ * the structural DOCTYPE subset of type 4 — those emit `mark("doctype")` +
+ * content + `unmark` rather than raw text.
  */
 private class ListHtmlBlockState(
     val type: Int,
     val rootTagName: String = "",
     val rootIsClosingTag: Boolean = false,
-    val closingSeq: String = ""
+    val closingSeq: String = "",
+    val isDoctype: Boolean = false
 ) {
     val openTags: MutableList<String> = mutableListOf()
     var firstLineBuffer: StringBuilder? = StringBuilder()
@@ -910,6 +913,33 @@ private fun tokenizeHtmlLine(line: String): List<HtmlToken> {
     return tokens
 }
 
+private const val DOCTYPE_PREFIX_LENGTH = "<!DOCTYPE".length
+
+/**
+ * True if [line] is the opener of a DOCTYPE declaration (a structurally
+ * distinguished subset of HTML block type 4). Matches `<!DOCTYPE`
+ * case-insensitively, and requires the next char (if any) to be a space,
+ * tab, or `>`.
+ *
+ * The 3-leading-spaces limit for HTML blocks is enforced by callers — see
+ * [detectHtmlBlockType], which rejects `leadingSpaces > 3` before calling
+ * this predicate with a pre-trimmed line. Inside [detectHtmlBlockType] this
+ * function plays two roles: it acts as the type-4 detector for the
+ * lowercase `<!doctype …>` form (CommonMark restricts type 4 to uppercase),
+ * and it gates the structural DOCTYPE path for the uppercase form already
+ * recognised as type 4.
+ */
+private fun isDoctypeLine(line: String): Boolean {
+    val trimmed = line.trimStart(' ')
+    if (trimmed.length < DOCTYPE_PREFIX_LENGTH) return false
+    if (!trimmed.regionMatches(0, "<!DOCTYPE", 0, DOCTYPE_PREFIX_LENGTH, ignoreCase = true)) {
+        return false
+    }
+    if (trimmed.length == DOCTYPE_PREFIX_LENGTH) return true
+    val next = trimmed[DOCTYPE_PREFIX_LENGTH]
+    return next == ' ' || next == '\t' || next == '>'
+}
+
 /**
  * Find the end index (past `>`) of `</[lowerName]>` in [line] starting at
  * [startIdx], with optional whitespace before the `>`. Returns -1 if no
@@ -972,6 +1002,13 @@ private fun detectHtmlBlockType(line: String): Int {
 
     // Type 4: <! followed by uppercase ASCII letter
     if (trimmed.length >= 3 && trimmed[0] == '<' && trimmed[1] == '!' && trimmed[2] in 'A'..'Z') return 4
+
+    // markanywhere extension: lowercase `<!doctype …>` is also recognised as
+    // type 4 so it routes through the DOCTYPE structural path. CommonMark
+    // restricts type 4 to uppercase declarations, but DOCTYPE in HTML5 is
+    // explicitly case-insensitive (HTML Living Standard §13.1.3) and the
+    // semantic value is identical regardless of case.
+    if (isDoctypeLine(trimmed)) return 4
 
     // Type 5: <![CDATA[
     if (trimmed.startsWith("<![CDATA[")) return 5
@@ -1106,6 +1143,18 @@ private class ParserState(
 
         /** Types 2–5 (comment / PI / declaration / CDATA): emit each line as raw text. */
         data class HtmlBlock2to5(val closingSequence: String) : BlockMode
+
+        /**
+         * DOCTYPE declaration (subset of type-4): emitted structurally as
+         * `mark("doctype", isTagged = true)` + content text + `unmark`. The
+         * content is everything between `<!DOCTYPE` (case-insensitive) and the
+         * closing `>`, with the whitespace run immediately after `<!DOCTYPE`
+         * stripped on the opener line; subsequent lines (multi-line DOCTYPE)
+         * preserve their leading whitespace verbatim, joined by `\n`. The
+         * close arrives on the first `>` — anything after `>` on that line
+         * flows as a top-level text event with a trailing `\n`.
+         */
+        data object Doctype : BlockMode
 
         /**
          * Types 6/7 (block-level / type-7 tag). Streamed incrementally — the opening
@@ -1914,6 +1963,7 @@ private class ParserState(
             is CustomMarkup -> processCustomMarkup(char, mode.tagName)
             is HtmlBlock1 -> processHtmlBlock1(char, mode)
             is HtmlBlock2to5 -> processHtmlBlock2to5(char, mode)
+            Doctype -> processDoctypeBlock(char)
             is HtmlBlock6or7 -> processHtmlBlock6or7(char, mode)
         }
 
@@ -2929,6 +2979,10 @@ private class ParserState(
                 }
             }
             2, 3, 4, 5 -> {
+                if (type == 4 && isDoctypeLine(line)) {
+                    enterListDoctypeBlock(ctx, line)
+                    return true
+                }
                 val seq = when (type) {
                     2 -> "-->"
                     3 -> "?>"
@@ -2990,6 +3044,10 @@ private class ParserState(
                 emitListHtmlBlock1ContentLine(ctx, state, line)
             }
             2, 3, 4, 5 -> {
+                if (state.isDoctype) {
+                    streamListDoctypeLine(ctx, line)
+                    return
+                }
                 +"$line\n"
                 if (lineContainsClosingSeq(line, state.closingSeq)) {
                     ctx.htmlBlock = null
@@ -3224,10 +3282,66 @@ private class ParserState(
     ) {
         val top = mode.stack.lastOrNull() ?: return
         val state = top.htmlBlock ?: return
+        if (state.isDoctype) {
+            unmark("doctype", isTagged = true)
+            top.htmlBlock = null
+            return
+        }
         val buf = state.firstLineBuffer
         if (buf != null && buf.isNotEmpty()) +"$buf\n"
         while (state.openTags.isNotEmpty()) unmarkHtml(state.openTags.removeLast())
         top.htmlBlock = null
+    }
+
+    /**
+     * Open a DOCTYPE block inside the active list item. Mirrors the top-level
+     * [enterDoctypeBlock] but stores in-flight state on [ctx.htmlBlock] (as a
+     * [ListHtmlBlockState] with [ListHtmlBlockState.isDoctype] = true) instead
+     * of replacing the block mode.
+     */
+    private suspend fun SemanticEventScope.enterListDoctypeBlock(
+        ctx: ListContext,
+        line: String
+    ) {
+        val trimmed = line.trimStart(' ')
+        val afterPrefix = trimmed.substring(DOCTYPE_PREFIX_LENGTH)
+        mark("doctype", isTagged = true)
+        val gtIndex = afterPrefix.indexOf('>')
+        if (gtIndex >= 0) {
+            val content = afterPrefix.substring(0, gtIndex).trimStart(' ', '\t')
+            if (content.isNotEmpty()) +content
+            unmark("doctype", isTagged = true)
+            val trailing = afterPrefix.substring(gtIndex + 1)
+            if (trailing.isNotEmpty()) +"$trailing\n"
+        } else {
+            val content = afterPrefix.trimStart(' ', '\t')
+            if (content.isNotEmpty()) +content
+            ctx.htmlBlock = ListHtmlBlockState(type = 4, isDoctype = true)
+        }
+    }
+
+    /**
+     * Stream a single content line of an open list-internal DOCTYPE block.
+     * Mirrors [processDoctypeBlock]'s `\n` branch but clears [ctx.htmlBlock]
+     * (rather than replacing the block mode) when the closing `>` arrives.
+     * Continuation lines are prefixed with `\n` so consecutive lines join
+     * verbatim — same rationale as [processDoctypeBlock].
+     */
+    private suspend fun SemanticEventScope.streamListDoctypeLine(
+        ctx: ListContext,
+        line: String
+    ) {
+        val gtIndex = line.indexOf('>')
+        if (gtIndex < 0) {
+            +"\n$line"
+            return
+        }
+        val before = line.substring(0, gtIndex)
+        if (before.isNotEmpty()) +"\n$before"
+        unmark("doctype", isTagged = true)
+        val trailing = line.substring(gtIndex + 1)
+        if (trailing.isNotEmpty()) +"$trailing\n"
+        ctx.htmlBlock = null
     }
 
     /**
@@ -4704,6 +4818,10 @@ private class ParserState(
                 processHtmlBlock1('\n', mode)
             }
             2, 3, 4, 5 -> {
+                if (type == 4 && isDoctypeLine(line)) {
+                    enterDoctypeBlock(line)
+                    return
+                }
                 val closingSeq = when (type) {
                     2 -> "-->"
                     3 -> "?>"
@@ -4925,6 +5043,70 @@ private class ParserState(
         if (lineContainsClosingSeq(line, mode.closingSequence)) {
             replaceMode(BlockMode.Start)
         }
+    }
+
+    /**
+     * Open a DOCTYPE block from its first source [line]. Emits
+     * `mark("doctype", isTagged = true)`, then the content between `<!DOCTYPE`
+     * and `>` (or end-of-line) as text, stripping the whitespace run
+     * immediately after `<!DOCTYPE`. On same-line close, also emits the
+     * matching `unmark` and any trailing text after `>` (with a `\n`).
+     * Otherwise enters [BlockMode.Doctype] so subsequent lines stream as
+     * text content until the closing `>`.
+     */
+    private suspend fun SemanticEventScope.enterDoctypeBlock(line: String) {
+        val trimmed = line.trimStart(' ')
+        val afterPrefix = trimmed.substring(DOCTYPE_PREFIX_LENGTH)
+        mark("doctype", isTagged = true)
+        val gtIndex = afterPrefix.indexOf('>')
+        if (gtIndex >= 0) {
+            val content = afterPrefix.substring(0, gtIndex).trimStart(' ', '\t')
+            if (content.isNotEmpty()) +content
+            unmark("doctype", isTagged = true)
+            val trailing = afterPrefix.substring(gtIndex + 1)
+            if (trailing.isNotEmpty()) +"$trailing\n"
+            replaceMode(BlockMode.Start)
+        } else {
+            val content = afterPrefix.trimStart(' ', '\t')
+            if (content.isNotEmpty()) +content
+            replaceMode(BlockMode.Doctype)
+        }
+    }
+
+    /**
+     * Process a character inside a multi-line DOCTYPE block. Each continuation
+     * line's text is prefixed with `\n` so consecutive content lines are
+     * joined verbatim (the opener line's text has no trailing `\n` to avoid
+     * a spurious newline if the input ends with no further content). When `>`
+     * is seen the block closes (emits `unmark`); any trailing chars after
+     * `>` are emitted as a top-level text event with `\n`. Unclosed DOCTYPE
+     * at EOF is force-closed by the [finalize] drain.
+     *
+     * DIVERGENCE from GFM type-4: a blank line inside the declaration does
+     * not close the block — it streams as `"\n"` content and the block stays
+     * open until `>` or EOF. Same rationale as the HTML 6/7 blank-line
+     * divergence: append-only emission cannot retract the already-emitted
+     * `mark("doctype")`. Multi-line DOCTYPE with an embedded blank line is
+     * malformed in practice, so the cost is theoretical.
+     */
+    private suspend fun SemanticEventScope.processDoctypeBlock(char: Char) {
+        if (char != '\n') {
+            lineBuffer.append(char)
+            return
+        }
+        val line = lineBuffer.toString()
+        lineBuffer.clear()
+        val gtIndex = line.indexOf('>')
+        if (gtIndex < 0) {
+            +"\n$line"
+            return
+        }
+        val before = line.substring(0, gtIndex)
+        if (before.isNotEmpty()) +"\n$before"
+        unmark("doctype", isTagged = true)
+        val trailing = line.substring(gtIndex + 1)
+        if (trailing.isNotEmpty()) +"$trailing\n"
+        replaceMode(BlockMode.Start)
     }
 
     /**
@@ -6905,6 +7087,14 @@ private class ParserState(
                         +"${lineBuffer.toString()}\n"
                         lineBuffer.clear()
                     }
+                    replaceMode(Start)
+                }
+                Doctype -> {
+                    if (lineBuffer.isNotEmpty()) {
+                        +"\n${lineBuffer.toString()}"
+                        lineBuffer.clear()
+                    }
+                    unmark("doctype", isTagged = true)
                     replaceMode(Start)
                 }
                 is HtmlBlock6or7 -> {
