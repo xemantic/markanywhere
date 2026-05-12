@@ -27,10 +27,7 @@ import kotlin.test.Test
  * Minimal repros for problematic places found while running the parser
  * against a real-world HTML document (BBC News front page). Each test
  * isolates one pattern where the contents of `<script>` or `<style>` (or
- * their surrounding HTML 6/7 structure) end up misinterpreted.
- *
- * All expectations below describe the **correct** behavior; expect each
- * test to currently FAIL until the corresponding bug is fixed.
+ * their surrounding HTML 6/7 structure) were previously misinterpreted.
  */
 class HtmlParsingTest {
 
