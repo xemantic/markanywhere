@@ -2750,8 +2750,7 @@ private class ParserState(
         // Link reference definition (CommonMark §4.7) as the first content of
         // a list item (`- [foo]: /url`). Same contract as the top-level path:
         // single-line shape only, registered in `linkDefinitions`, no events.
-        if (trimmed.trimStart(' ').startsWith("[")
-            && tryParseLinkDefinition(trimmed)) {
+        if (tryParseLinkDefinition(trimmed)) {
             return
         }
         mark("p")
@@ -3871,8 +3870,7 @@ private class ParserState(
             // (registered in `linkDefinitions`, no events emitted). Same
             // streaming divergences as the top-level path — multi-line shapes
             // and forward references are not supported.
-            if (stripped.trimStart(' ').startsWith("[")
-                && tryParseLinkDefinition(stripped)) {
+            if (tryParseLinkDefinition(stripped)) {
                 mode.blankSeen = false
                 return
             }
