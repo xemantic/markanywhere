@@ -188,6 +188,56 @@ class LinkRefDefInListItemTest {
     }
 
     @Test
+    fun `definition as first content of list item resolves a later use`() = runTest {
+        // given: the definition is the marker line itself — no intro paragraph
+        // before it. Routed via `emitItemFirstLine` rather than the in-item
+        // `atBlockBoundary` branch.
+        val textFlow = /* language=markdown */ """
+            - [foo]: /url "title"
+
+              See [foo].
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ul" {
+                "li" {
+                    "p" {
+                        +"See "
+                        "a"("href" to "/url", "title" to "title") {
+                            +"foo"
+                        }
+                        +"."
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `definition-only list item produces an empty li`() = runTest {
+        // given: a list item whose only content is a link reference definition.
+        // GFM consumes the def silently — the `<li>` exists but has no visible
+        // content.
+        val textFlow = /* language=markdown */ """
+            - [foo]: /url
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ul" {
+                "li" {}
+            }
+        }
+    }
+
+    @Test
     fun `definition in nested list item resolves use within same item`() = runTest {
         // given
         val textFlow = /* language=markdown */ """

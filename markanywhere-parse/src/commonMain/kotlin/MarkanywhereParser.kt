@@ -2747,6 +2747,13 @@ private class ParserState(
         if (tryEnterListCustomMarkup(ctx, trimmed)) {
             return
         }
+        // Link reference definition (CommonMark §4.7) as the first content of
+        // a list item (`- [foo]: /url`). Same contract as the top-level path:
+        // single-line shape only, registered in `linkDefinitions`, no events.
+        if (trimmed.trimStart(' ').startsWith("[")
+            && tryParseLinkDefinition(trimmed)) {
+            return
+        }
         mark("p")
         ctx.paragraphOpen = true
         emitItemFirstContent(trimmed)
