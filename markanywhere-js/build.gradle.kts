@@ -37,6 +37,7 @@ kotlin {
             jsTest {
                 dependencies {
                     implementation(project(":markanywhere-test"))
+                    implementation(project(":markanywhere-parse"))
                     implementation(libs.kotlinx.coroutines.test)
                     implementation(libs.kotlin.test)
                     implementation(libs.xemantic.kotlin.test)
