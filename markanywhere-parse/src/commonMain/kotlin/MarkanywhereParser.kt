@@ -3858,6 +3858,17 @@ private class ParserState(
                     return
                 }
             }
+            // Link reference definition (CommonMark §4.7) at an item block
+            // boundary. Mirrors the top-level detection in `processStart`:
+            // single-line shape `[label]: dest "title"` is consumed silently
+            // (registered in `linkDefinitions`, no events emitted). Same
+            // streaming divergences as the top-level path — multi-line shapes
+            // and forward references are not supported.
+            if (stripped.trimStart(' ').startsWith("[")
+                && tryParseLinkDefinition(stripped)) {
+                mode.blankSeen = false
+                return
+            }
         }
 
         // Blockquote inside list item. A `>`-prefixed line at a block boundary opens

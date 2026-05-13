@@ -749,7 +749,7 @@ class Gfm_05_04_Test {
     }
 
     @Test
-    fun `example 297 - DIVERGENCE - ul with 3 items`() = runTest {
+    fun `example 297 - ul with 3 items`() = runTest {
         // given
         val textFlow = buildText {
             +"- a\n"
@@ -763,9 +763,8 @@ class Gfm_05_04_Test {
         val parsed = textFlow.parse()
 
         // then
-        // DIVERGENCE: GFM treats `[ref]: /url` as a link reference definition
-        // and emits no visible output. We don't track link reference definitions,
-        // so the line is rendered as a second paragraph inside the second item.
+        // `[ref]: /url` is recognized as a link reference definition at the
+        // second item's block boundary and consumed silently — matches GFM.
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "ul" {
                 "li" {
@@ -776,9 +775,6 @@ class Gfm_05_04_Test {
                 "li" {
                     "p" {
                         +"b"
-                    }
-                    "p" {
-                        +"[ref]: /url"
                     }
                 }
                 "li" {
