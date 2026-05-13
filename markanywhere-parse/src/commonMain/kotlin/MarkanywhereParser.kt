@@ -2747,6 +2747,12 @@ private class ParserState(
         if (tryEnterListCustomMarkup(ctx, trimmed)) {
             return
         }
+        // Link reference definition (CommonMark §4.7) as the first content of
+        // a list item (`- [foo]: /url`). Same contract as the top-level path:
+        // single-line shape only, registered in `linkDefinitions`, no events.
+        if (tryParseLinkDefinition(trimmed)) {
+            return
+        }
         mark("p")
         ctx.paragraphOpen = true
         emitItemFirstContent(trimmed)
@@ -3857,6 +3863,16 @@ private class ParserState(
                     mode.blankSeen = false
                     return
                 }
+            }
+            // Link reference definition (CommonMark §4.7) at an item block
+            // boundary. Mirrors the top-level detection in `processStart`:
+            // single-line shape `[label]: dest "title"` is consumed silently
+            // (registered in `linkDefinitions`, no events emitted). Same
+            // streaming divergences as the top-level path — multi-line shapes
+            // and forward references are not supported.
+            if (tryParseLinkDefinition(stripped)) {
+                mode.blankSeen = false
+                return
             }
         }
 
