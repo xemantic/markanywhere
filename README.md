@@ -120,6 +120,8 @@ If you have transformed XML trees with XSLT, the model should feel familiar — 
 
 ## Supported Markdown features
 
+GFM is the dialect LLMs were trained on, which is why we take it as the baseline — not as a conformance target. The parser diverges where spec-correct behaviour would force buffering past the next emitted event (which would break streaming, the whole point of the library), and those divergent shapes are ones LLMs effectively never emit. The long-term aim is a separate spec, anchored on this parser, defined to fit the streaming model rather than the document model.
+
 ### GFM baseline
 
 | Feature | Syntax |
