@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Kazimierz Pogoda / Xemantic
+ * Copyright 2025-2026 Kazimierz Pogoda / Xemantic
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
+package com.xemantic.markanywhere.js
+
 import com.xemantic.markanywhere.flow.semanticEvents
-import com.xemantic.markanywhere.js.toSemanticEvents
 import com.xemantic.markanywhere.test.sameAs
 import kotlinx.browser.document
 import kotlinx.coroutines.test.runTest

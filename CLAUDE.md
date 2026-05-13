@@ -218,6 +218,7 @@ lookahead), it's likely worth doing.
 - For semantic event flow testing, use the overloaded `sameAs` infix on `Flow<SemanticEvent>` (defined in `markanywhere-test`) against a `semanticEvents { ... }` builder — this is event-stream comparison, unrelated to HTML.
 - For asserting rendered HTML output (e.g. in `markanywhere-render` tests), use `sameAsHtml` (not the generic string `sameAs`) — provides syntax highlighting in the IDE.
 - GFM example test naming convention: `example N - <description>` for spec-conformant tests, `example N - DIVERGENCE - <description>` when the parser intentionally diverges from GFM. Keep `DIVERGENCE` in the name even when updating expectations to match the divergent behavior.
+- When asserting on a boolean expression (counts, equality between two nullables, `contains`, etc.), use `assert(expr)` from `com.xemantic.kotlin.test.assert` — it is power-assert-instrumented in the convention plugin, so a failure prints the full expression with subvalues. Do NOT fall back to `kotlin.test.assertEquals` / `assertTrue` / `assertNotNull` — they discard that information. Reserve the `sameAs` family for `String?` receivers (rendered HTML, attribute values, namespace URIs) and `Flow<SemanticEvent>` event-stream comparison; everything else goes through `assert(...)`.
 
 ## Anti-patterns to avoid
 
