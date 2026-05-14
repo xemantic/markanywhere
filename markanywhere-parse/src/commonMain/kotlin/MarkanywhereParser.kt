@@ -5551,6 +5551,17 @@ private class ParserState(
                 inlineBuffer.append('\\')
                 return
             }
+            // A pending `$` opener whose next char is `\` is a math opener
+            // (LaTeX command, e.g. `$\int x$`). `isMathOpenChar('\\')` is true,
+            // so defer to the math-open path rather than flushing `$` as literal
+            // and consuming `\` as a backslash escape.
+            if (inlineBuffer.toString() == "$") {
+                inlineBuffer.clear()
+                mark("math")
+                math = true
+                pendingDeferredChar = char
+                return
+            }
             if (inlineBuffer.isNotEmpty()) {
                 +inlineBuffer.toString()
                 inlineBuffer.clear()

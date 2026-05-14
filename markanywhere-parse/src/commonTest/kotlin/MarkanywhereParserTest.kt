@@ -647,7 +647,7 @@ class MarkanywhereParserTest {
     @Test
     fun `should parse inline math`() = runTest {
         // given
-        
+
         val textFlow = $$"""
             The equation $E = mc^2$ is famous.
         """.trimIndent().chunkedRandomly().asFlow()
@@ -661,6 +661,108 @@ class MarkanywhereParserTest {
                 +"The equation "
                 "math" { +"E = mc^2" }
                 +" is famous."
+            }
+        }
+    }
+
+    @Test
+    fun `should parse two inline math expressions in same paragraph`() = runTest {
+        // given
+        val textFlow = $$"""
+            Inline: $E = mc^2$ and $\int_0^\infty e^{-x^2}\,dx = \tfrac{\sqrt{\pi}}{2}$
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                +"Inline: "
+                "math" { +"E = mc^2" }
+                +" and "
+                "math" { +"""\int_0^\infty e^{-x^2}\,dx = \tfrac{\sqrt{\pi}}{2}""" }
+            }
+        }
+    }
+
+    @Test
+    fun `should open inline math when content starts with a LaTeX command`() = runTest {
+        // given
+        val textFlow = $$"""
+            See $\int x\,dx$ here.
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                +"See "
+                "math" { +"""\int x\,dx""" }
+                +" here."
+            }
+        }
+    }
+
+    @Test
+    fun `should not confuse caret-runs inside inline math with sup`() = runTest {
+        // given
+        val textFlow = $$"""
+            **Third item** — with math: $\sum_{i=1}^{n} i = \frac{n(n+1)}{2}$
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "strong" { +"Third item" }
+                +" — with math: "
+                "math" { +"""\sum_{i=1}^{n} i = \frac{n(n+1)}{2}""" }
+            }
+        }
+    }
+
+    @Test
+    fun `should close inline math before trailing sentence punctuation`() = runTest {
+        // given
+        val textFlow = $$"""
+            **Third item** — with math: $\sum_{i=1}^{n} i = \frac{n(n+1)}{2}$.
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "strong" { +"Third item" }
+                +" — with math: "
+                "math" { +"""\sum_{i=1}^{n} i = \frac{n(n+1)}{2}""" }
+                +"."
+            }
+        }
+    }
+
+    @Test
+    fun `should parse two inline math expressions both starting with LaTeX commands`() = runTest {
+        // given
+        val textFlow = $$"""
+            $\frac{a}{b}$ and $\sqrt{c}$
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "math" { +"""\frac{a}{b}""" }
+                +" and "
+                "math" { +"""\sqrt{c}""" }
             }
         }
     }
