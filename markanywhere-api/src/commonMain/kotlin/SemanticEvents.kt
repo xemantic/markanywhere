@@ -116,3 +116,36 @@ public sealed interface SemanticEvent {
 private fun SemanticEvent.toJson() = markanywhereJson.encodeToString<SemanticEvent>(
     value = this
 )
+
+public operator fun SemanticEvent.Mark.plus(
+    value: String
+): SemanticEvent.Mark {
+    val added = value.split(' ', '\t', '\n', '\r').filter { it.isNotEmpty() }
+    if (added.isEmpty()) return this
+    val current = attributes?.get("class")
+        ?.split(' ', '\t', '\n', '\r')
+        ?.filter { it.isNotEmpty() }
+        ?: emptyList()
+    val merged = current + added.filterNot { it in current }
+    if (merged.size == current.size && attributes?.containsKey("class") == true) return this
+    val newAttributes = (attributes ?: emptyMap()) + ("class" to merged.joinToString(" "))
+    return copy(attributes = newAttributes)
+}
+
+public operator fun SemanticEvent.Mark.minus(
+    value: String
+): SemanticEvent.Mark {
+    val removed = value.split(' ', '\t', '\n', '\r').filter { it.isNotEmpty() }
+    if (removed.isEmpty()) return this
+    val attrs = attributes ?: return this
+    val classValue = attrs["class"] ?: return this
+    val current = classValue.split(' ', '\t', '\n', '\r').filter { it.isNotEmpty() }
+    val remaining = current.filterNot { it in removed }
+    if (remaining.size == current.size) return this
+    val newAttributes = if (remaining.isEmpty()) {
+        attrs - "class"
+    } else {
+        attrs + ("class" to remaining.joinToString(" "))
+    }
+    return copy(attributes = newAttributes)
+}
