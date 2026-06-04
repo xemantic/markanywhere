@@ -16,6 +16,7 @@
 
 package com.xemantic.markanywhere
 
+import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import org.intellij.lang.annotations.Language
@@ -53,9 +54,13 @@ public sealed interface SemanticEvent {
         public override val name: String,
         @SerialName("tagged")
         public override val isTagged: Boolean = false,
-        public val attributes: Map<String, String>? = null
+        @EncodeDefault(EncodeDefault.Mode.NEVER)
+        public val attributes: Map<String, String> = emptyMap()
     ) : SemanticEvent, Marked {
         override fun toString(): String = toJson()
+        public operator fun get(
+            attribute: String
+        ): String? = attributes[attribute]
     }
 
     @Serializable
