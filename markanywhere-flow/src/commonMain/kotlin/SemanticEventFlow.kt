@@ -64,7 +64,7 @@ public class SemanticEventScope(
     }
 
     public suspend inline operator fun String.invoke(
-        attributes: Map<String, String>? = null,
+        attributes: Map<String, String> = emptyMap(),
         crossinline block: suspend SemanticEventScope.() -> Unit
     ) {
         mark(this, attributes = attributes)
@@ -77,7 +77,7 @@ public class SemanticEventScope(
         crossinline block: suspend SemanticEventScope.() -> Unit
     ) {
         invoke(
-            attributes = attributes.toMap().ifEmpty { null },
+            attributes = attributes.toMap(),
             block
         )
     }
@@ -95,13 +95,13 @@ public class SemanticEventScope(
         isTagged: Boolean = tagged,
         vararg attributes: Pair<String, String>,
     ) {
-        mark(name, isTagged, attributes.toMap().ifEmpty { null })
+        mark(name, isTagged, attributes.toMap())
     }
 
     public suspend fun mark(
         name: String,
         isTagged: Boolean = tagged,
-        attributes: Map<String, String>? = null
+        attributes: Map<String, String> = emptyMap()
     ) {
         collector.emit(
             SemanticEvent.Mark(
@@ -123,7 +123,7 @@ public class SemanticEventScope(
 
     public suspend inline fun tag(
         name: String,
-        attributes: Map<String, String>? = null,
+        attributes: Map<String, String> = emptyMap(),
         crossinline block: suspend SemanticEventScope.() -> Unit
     ) {
         mark(name, isTagged = true, attributes)
@@ -136,7 +136,7 @@ public class SemanticEventScope(
         vararg attributes: Pair<String, String>,
         crossinline block: suspend SemanticEventScope.() -> Unit
     ) {
-        tag(name, attributes.toMap().ifEmpty { null }, block)
+        tag(name, attributes.toMap(), block)
     }
 
 }
