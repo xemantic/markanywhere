@@ -25,6 +25,29 @@ import kotlin.test.Test
 class AppendSemanticEventsTest {
 
     @Test
+    fun `should append the README DOM example`() = runTest {
+        // given - the event structure parsed from the running example in the
+        //   project README "Rendering Markdown as DOM" section
+        val div = document.createElement("div")
+        val events = semanticEvents {
+            "h1" { +"Hello" }
+            "p" {
+                +"A "
+                "em" { +"streaming" }
+                +" parser, "
+                tag("b") { +"live" }
+                +"."
+            }
+        }
+
+        // when
+        div.appendSemanticEvents(events)
+
+        // then
+        div.innerHTML sameAs "<h1>Hello</h1><p>A <em>streaming</em> parser, <b>live</b>.</p>"
+    }
+
+    @Test
     fun `should append simple text to element`() = runTest {
         // given
         val div = document.createElement("div")

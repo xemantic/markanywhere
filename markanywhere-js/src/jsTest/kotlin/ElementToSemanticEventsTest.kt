@@ -965,4 +965,227 @@ class ElementToSemanticEventsTest {
         }
     }
 
+    @Test
+    fun `should capture aria-hidden subtree by default`() = runTest {
+        // given
+        document.body!!.innerHTML =
+            """<p>visible</p><p aria-hidden="true">hidden</p>"""
+
+        // when
+        val events = document.body!!.toSemanticEvents()
+
+        // then
+        events sameAs semanticEvents(tagged = true) {
+            "body" {
+                "p" { +"visible" }
+                "p"("aria-hidden" to "true") { +"hidden" }
+            }
+        }
+    }
+
+    @Test
+    fun `should skip aria-hidden subtree when respecting accessibility`() = runTest {
+        // given
+        document.body!!.innerHTML =
+            """<p>visible</p><p aria-hidden="true">hidden<em>nested</em></p>"""
+
+        // when
+        val events = document.body!!.toSemanticEvents(respectAccessibility = true)
+
+        // then
+        events sameAs semanticEvents(tagged = true) {
+            "body" {
+                "p" { +"visible" }
+            }
+        }
+    }
+
+    @Test
+    fun `should skip display none subtree when respecting accessibility`() = runTest {
+        // given
+        document.body!!.innerHTML =
+            """<p>visible</p><p style="display:none">hidden</p>"""
+
+        // when
+        val events = document.body!!.toSemanticEvents(respectAccessibility = true)
+
+        // then
+        events sameAs semanticEvents(tagged = true) {
+            "body" {
+                "p" { +"visible" }
+            }
+        }
+    }
+
+    @Test
+    fun `should skip visibility hidden subtree when respecting accessibility`() = runTest {
+        // given
+        document.body!!.innerHTML =
+            """<p>visible</p><p style="visibility:hidden">hidden</p>"""
+
+        // when
+        val events = document.body!!.toSemanticEvents(respectAccessibility = true)
+
+        // then
+        events sameAs semanticEvents(tagged = true) {
+            "body" {
+                "p" { +"visible" }
+            }
+        }
+    }
+
+    @Test
+    fun `should resolve aria-labelledby into an accessible name when respecting accessibility`() = runTest {
+        // given - the button's only name comes from a separate element by id
+        document.body!!.innerHTML =
+            """<button aria-labelledby="lbl"></button><span id="lbl">Download PDF</span>"""
+
+        // when
+        val events = document.body!!.toSemanticEvents(respectAccessibility = true)
+
+        // then - the referenced text is resolved into a synthetic aria-label
+        events sameAs semanticEvents(tagged = true) {
+            "body" {
+                "button"("aria-labelledby" to "lbl", "aria-label" to "Download PDF") { }
+                "span"("id" to "lbl") { +"Download PDF" }
+            }
+        }
+    }
+
+    @Test
+    fun `should not resolve aria-labelledby without the accessibility flag`() = runTest {
+        // given
+        document.body!!.innerHTML =
+            """<button aria-labelledby="lbl"></button><span id="lbl">Download PDF</span>"""
+
+        // when - raw capture leaves the id reference unresolved
+        val events = document.body!!.toSemanticEvents()
+
+        // then
+        events sameAs semanticEvents(tagged = true) {
+            "body" {
+                "button"("aria-labelledby" to "lbl") { }
+                "span"("id" to "lbl") { +"Download PDF" }
+            }
+        }
+    }
+
+    @Test
+    fun `should not override an explicit aria-label`() = runTest {
+        // given - own aria-label takes precedence over labelledby
+        document.body!!.innerHTML =
+            """<button aria-label="Save" aria-labelledby="lbl"></button><span id="lbl">Other</span>"""
+
+        // when
+        val events = document.body!!.toSemanticEvents(respectAccessibility = true)
+
+        // then
+        events sameAs semanticEvents(tagged = true) {
+            "body" {
+                "button"("aria-label" to "Save", "aria-labelledby" to "lbl") { }
+                "span"("id" to "lbl") { +"Other" }
+            }
+        }
+    }
+
+    @Test
+    fun `should unwrap a layout table when respecting accessibility`() = runTest {
+        // given - role=presentation forces Chrome to expose it as a layout table
+        document.body!!.innerHTML =
+            """<table role="presentation"><tbody><tr><td><p>Left</p></td><td><p>Right</p></td></tr></tbody></table>"""
+
+        // when - the table/tbody/tr/td wrappers are dropped, content promoted
+        val events = document.body!!.toSemanticEvents(respectAccessibility = true)
+
+        // then
+        events sameAs semanticEvents(tagged = true) {
+            "body" {
+                "p" { +"Left" }
+                "p" { +"Right" }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep a data table when respecting accessibility`() = runTest {
+        // given - <th> cells make Chrome classify this as a data table
+        document.body!!.innerHTML = """
+            <table><thead><tr><th>Header 1</th><th>Header 2</th></tr></thead><tbody><tr><td>Cell 1</td><td>Cell 2</td></tr></tbody></table>
+        """.trimIndent()
+
+        // when
+        val events = document.body!!.toSemanticEvents(respectAccessibility = true)
+
+        // then - structure is preserved intact
+        events sameAs semanticEvents(tagged = true) {
+            "body" {
+                "table" {
+                    "thead" {
+                        "tr" {
+                            "th" { +"Header 1" }
+                            "th" { +"Header 2" }
+                        }
+                    }
+                    "tbody" {
+                        "tr" {
+                            "td" { +"Cell 1" }
+                            "td" { +"Cell 2" }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep a layout table intact without the accessibility flag`() = runTest {
+        // given - same presentation table, but raw 1:1 capture
+        document.body!!.innerHTML =
+            """<table role="presentation"><tbody><tr><td><p>Left</p></td></tr></tbody></table>"""
+
+        // when - no respectAccessibility, so computedRole is never consulted
+        val events = document.body!!.toSemanticEvents()
+
+        // then - the table structure survives verbatim
+        events sameAs semanticEvents(tagged = true) {
+            "body" {
+                "table"("role" to "presentation") {
+                    "tbody" {
+                        "tr" {
+                            "td" {
+                                "p" { +"Left" }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should re-evaluate a data table nested inside a layout table`() = runTest {
+        // given - outer layout table wrapping an inner real data table
+        document.body!!.innerHTML =
+            """<table role="presentation"><tbody><tr><td><table><tbody><tr><th>H</th></tr><tr><td>D</td></tr></tbody></table></td></tr></tbody></table>"""
+
+        // when - the outer table unwraps, the inner data table is preserved
+        val events = document.body!!.toSemanticEvents(respectAccessibility = true)
+
+        // then
+        events sameAs semanticEvents(tagged = true) {
+            "body" {
+                "table" {
+                    "tbody" {
+                        "tr" {
+                            "th" { +"H" }
+                        }
+                        "tr" {
+                            "td" { +"D" }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
 }
