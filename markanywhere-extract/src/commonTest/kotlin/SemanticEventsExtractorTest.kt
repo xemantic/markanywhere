@@ -125,7 +125,7 @@ class SemanticEventsExtractorTest {
         extractor should {
             have(succeeded)
             have(!isExtracting)
-            have(attributes == null)
+            have(attributes == emptyMap<String, String>())
             extractedEvents.asFlow() sameAs semanticEvents(tagged = true) {
                 "foo:bar" {
                     +"content"
@@ -159,7 +159,7 @@ class SemanticEventsExtractorTest {
         extractor should {
             have(succeeded)
             have(!isExtracting)
-            have(attributes == null)
+            have(attributes == emptyMap<String, String>())
             extractedEvents.asFlow() sameAs semanticEvents(tagged = true) {
                 "foo:bar" {}
             }
@@ -191,7 +191,7 @@ class SemanticEventsExtractorTest {
         extractor should {
             have(succeeded)
             have(!isExtracting)
-            have(attributes == null)
+            have(attributes == emptyMap<String, String>())
             extractedEvents.asFlow() sameAs semanticEvents(tagged = true) {
                 "foo:bar" {
                     +"line1"
@@ -243,7 +243,7 @@ class SemanticEventsExtractorTest {
         extractor should {
             have(succeeded)
             have(!isExtracting)
-            have(attributes == null)
+            have(attributes == emptyMap<String, String>())
             // NOTE: The text chunking reflects how the parser incrementally detects
             // potential closing tags - when '<' is seen, it buffers until it can
             // determine if it's the closing tag or not.
@@ -307,7 +307,7 @@ class SemanticEventsExtractorTest {
         extractor should {
             have(succeeded)
             have(!isExtracting)
-            have(attributes == null)
+            have(attributes == emptyMap<String, String>())
             extractedEvents.asFlow() sameAs semanticEvents(tagged = true) {
                 "foo:bar" {
                     +"first content"
