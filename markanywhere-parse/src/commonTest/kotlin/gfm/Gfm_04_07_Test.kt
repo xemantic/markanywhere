@@ -16,7 +16,7 @@
 
 package com.xemantic.markanywhere.parse.gfm
 
-import com.xemantic.kotlin.core.text.buildText
+import com.xemantic.kotlin.core.text.unaryPlus
 import com.xemantic.kotlin.test.text.chunkedRandomly
 import com.xemantic.markanywhere.flow.mergeAdjacentText
 import com.xemantic.markanywhere.flow.semanticEvents
@@ -76,7 +76,7 @@ class Gfm_04_07_Test {
     @Test
     fun `example 162 - DIVERGENCE - indented definition with url and title on separate lines`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"   [foo]: \n"
             +"      /url  \n"
             +"           'the title'  \n"
@@ -586,7 +586,7 @@ class Gfm_04_07_Test {
     @Test
     fun `example 180 - DIVERGENCE - four-space indent makes it a code block`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"    [foo]: /url \"title\"\n"
             +"\n"
             +"[foo]\n"
@@ -778,7 +778,7 @@ class Gfm_04_07_Test {
     @Test
     fun `example 186 - DIVERGENCE - multiple definitions and references`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"[foo]: /foo-url \"foo\"\n"
             +"[bar]: /bar-url\n"
             +"  \"bar\"\n"

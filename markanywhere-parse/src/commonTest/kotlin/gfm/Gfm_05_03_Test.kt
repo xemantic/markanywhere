@@ -16,7 +16,7 @@
 
 package com.xemantic.markanywhere.parse.gfm
 
-import com.xemantic.kotlin.core.text.buildText
+import com.xemantic.kotlin.core.text.unaryPlus
 import com.xemantic.kotlin.test.text.chunkedRandomly
 import com.xemantic.markanywhere.flow.mergeAdjacentText
 import com.xemantic.markanywhere.flow.semanticEvents
@@ -80,7 +80,7 @@ class Gfm_05_03_Test {
     @Test
     fun `example 280 - DIVERGENCE - ul with 2 items`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"- [x] foo\n"
             +"  - [ ] bar\n"
             +"  - [x] baz\n"

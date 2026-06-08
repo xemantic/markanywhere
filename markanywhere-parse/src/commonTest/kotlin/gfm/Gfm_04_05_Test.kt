@@ -16,7 +16,7 @@
 
 package com.xemantic.markanywhere.parse.gfm
 
-import com.xemantic.kotlin.core.text.buildText
+import com.xemantic.kotlin.core.text.unaryPlus
 import com.xemantic.kotlin.test.text.chunkedRandomly
 import com.xemantic.markanywhere.flow.mergeAdjacentText
 import com.xemantic.markanywhere.flow.semanticEvents
@@ -38,7 +38,7 @@ class Gfm_04_05_Test {
     @Test
     fun `example 89 - fenced code block`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"```\n"
             +"<\n"
             +" >\n"
@@ -67,7 +67,7 @@ class Gfm_04_05_Test {
     @Test
     fun `example 90 - fenced code block with tildes`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"~~~\n"
             +"<\n"
             +" >\n"
@@ -326,7 +326,7 @@ class Gfm_04_05_Test {
     @Test
     fun `example 99 - fenced code block with blank lines preserved`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"```\n"
             +"\n"
             +"  \n"
@@ -378,7 +378,7 @@ class Gfm_04_05_Test {
     @Test
     fun `example 101 - fenced code block 1-space indented opening fence`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +" ```\n"
             +" aaa\n"
             +"aaa\n"
@@ -407,7 +407,7 @@ class Gfm_04_05_Test {
     @Test
     fun `example 102 - fenced code block 2-space indented opening fence`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"  ```\n"
             +"aaa\n"
             +"  aaa\n"
@@ -438,7 +438,7 @@ class Gfm_04_05_Test {
     @Test
     fun `example 103 - fenced code block 3-space indented opening fence`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"   ```\n"
             +"   aaa\n"
             +"    aaa\n"
@@ -469,7 +469,7 @@ class Gfm_04_05_Test {
     @Test
     fun `example 104 - 4-space indent makes indented code block not fence`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"    ```\n"
             +"    aaa\n"
             +"    ```\n"
@@ -498,7 +498,7 @@ class Gfm_04_05_Test {
     @Test
     fun `example 105 - fenced code block 2-space indented closing fence`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"```\n"
             +"aaa\n"
             +"  ```\n"
@@ -525,7 +525,7 @@ class Gfm_04_05_Test {
     @Test
     fun `example 106 - fenced code block mixed-indent open and close`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"   ```\n"
             +"aaa\n"
             +"  ```\n"
@@ -552,7 +552,7 @@ class Gfm_04_05_Test {
     @Test
     fun `example 107 - fenced code block 4-space indented closing fence is content`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"```\n"
             +"aaa\n"
             +"    ```\n"
@@ -715,7 +715,7 @@ class Gfm_04_05_Test {
     @Test
     fun `example 112 - fenced code block with language ruby`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"```ruby\n"
             +"def foo(x)\n"
             +"  return 3\n"
@@ -746,7 +746,7 @@ class Gfm_04_05_Test {
     @Test
     fun `example 113 - tilde fence with language and extra info string`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"~~~~    ruby startline=3 $%@#$\n"
             +"def foo(x)\n"
             +"  return 3\n"

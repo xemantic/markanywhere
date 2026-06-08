@@ -16,7 +16,7 @@
 
 package com.xemantic.markanywhere.parse.gfm
 
-import com.xemantic.kotlin.core.text.buildText
+import com.xemantic.kotlin.core.text.unaryPlus
 import com.xemantic.kotlin.test.text.chunkedRandomly
 import com.xemantic.markanywhere.flow.mergeAdjacentText
 import com.xemantic.markanywhere.flow.semanticEvents
@@ -38,7 +38,7 @@ class Gfm_06_01_Test {
     @Test
     fun `example 308 - escapes for all ASCII punctuation`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"\\!\\\"\\#\\\$\\%\\&\\'\\(\\)\\*\\+\\,\\-\\.\\/\\:\\;\\<\\=\\>\\?\\@\\[\\\\\\]\\^\\_\\`\\{\\|\\}\\~\n"
         }.chunkedRandomly().asFlow()
 
@@ -60,7 +60,7 @@ class Gfm_06_01_Test {
     @Test
     fun `example 309 - backslash before non-punctuation stays literal`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"\\\t\\A\\a\\ \\3\\φ\\«\n"
         }.chunkedRandomly().asFlow()
 
@@ -120,7 +120,7 @@ class Gfm_06_01_Test {
     @Test
     fun `example 311 - escaped backslash before emphasis`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"\\\\*emphasis*\n"
         }.chunkedRandomly().asFlow()
 
@@ -171,7 +171,7 @@ class Gfm_06_01_Test {
     @Test
     fun `example 313 - backslashes in code span are literal`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"`` \\[\\` ``\n"
         }.chunkedRandomly().asFlow()
 
@@ -195,7 +195,7 @@ class Gfm_06_01_Test {
     @Test
     fun `example 314 - backslashes in indented code block are literal`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"    \\[\\]\n"
         }.chunkedRandomly().asFlow()
 
@@ -247,7 +247,7 @@ class Gfm_06_01_Test {
     @Test
     fun `example 316 - autolink URL escape is percent-encoded`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"<http://example.com?find=\\*>\n"
         }.chunkedRandomly().asFlow()
 
@@ -271,7 +271,7 @@ class Gfm_06_01_Test {
     @Test
     fun `example 317 - backslashes in raw HTML are literal`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"<a href=\"/bar\\/)\">\n"
         }.chunkedRandomly().asFlow()
 
@@ -293,7 +293,7 @@ class Gfm_06_01_Test {
     @Test
     fun `example 318 - backslash escapes in link URL and title`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"[foo](/bar\\* \"ti\\*tle\")\n"
         }.chunkedRandomly().asFlow()
 

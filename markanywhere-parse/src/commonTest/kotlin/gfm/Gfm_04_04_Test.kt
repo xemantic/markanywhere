@@ -16,7 +16,7 @@
 
 package com.xemantic.markanywhere.parse.gfm
 
-import com.xemantic.kotlin.core.text.buildText
+import com.xemantic.kotlin.core.text.unaryPlus
 import com.xemantic.kotlin.test.text.chunkedRandomly
 import com.xemantic.markanywhere.flow.mergeAdjacentText
 import com.xemantic.markanywhere.flow.semanticEvents
@@ -38,7 +38,7 @@ class Gfm_04_04_Test {
     @Test
     fun `example 77 - indented code block`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"    a simple\n"
             +"      indented code block\n"
         }.chunkedRandomly().asFlow()
@@ -65,7 +65,7 @@ class Gfm_04_04_Test {
     @Test
     fun `example 78 - ul with 1 item`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"  - foo\n"
             +"\n"
             +"    bar\n"
@@ -106,7 +106,7 @@ class Gfm_04_04_Test {
     @Test
     fun `example 79 - DIVERGENCE - ol with nested ul`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"1.  foo\n"
             +"\n"
             +"    - bar\n"
@@ -148,7 +148,7 @@ class Gfm_04_04_Test {
     @Test
     fun `example 80 - indented code block`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"    <a/>\n"
             +"    *hi*\n"
             +"\n"
@@ -179,7 +179,7 @@ class Gfm_04_04_Test {
     @Test
     fun `example 81 - indented code block`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"    chunk1\n"
             +"\n"
             +"    chunk2\n"
@@ -216,7 +216,7 @@ class Gfm_04_04_Test {
     @Test
     fun `example 82 - indented code block`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"    chunk1\n"
             +"      \n"
             +"      chunk2\n"
@@ -245,7 +245,7 @@ class Gfm_04_04_Test {
     @Test
     fun `example 83 - paragraph Foo bar`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"Foo\n"
             +"    bar\n"
         }.chunkedRandomly().asFlow()
@@ -269,7 +269,7 @@ class Gfm_04_04_Test {
     @Test
     fun `example 84 - indented code block paragraph bar`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"    foo\n"
             +"bar\n"
         }.chunkedRandomly().asFlow()
@@ -304,7 +304,7 @@ class Gfm_04_04_Test {
     @Test
     fun `example 85 - DIVERGENCE - h1 indented code paragraph hr indented code hr`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"# Heading\n"
             +"    foo\n"
             +"Heading\n"
@@ -352,7 +352,7 @@ class Gfm_04_04_Test {
     @Test
     fun `example 86 - indented code block`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"        foo\n"
             +"    bar\n"
         }.chunkedRandomly().asFlow()
@@ -379,7 +379,7 @@ class Gfm_04_04_Test {
     @Test
     fun `example 87 - indented code block`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"\n"
             +"    \n"
             +"    foo\n"
@@ -407,7 +407,7 @@ class Gfm_04_04_Test {
     @Test
     fun `example 88 - indented code block`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"    foo  \n"
         }.chunkedRandomly().asFlow()
 

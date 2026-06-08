@@ -16,7 +16,7 @@
 
 package com.xemantic.markanywhere.parse.gfm
 
-import com.xemantic.kotlin.core.text.buildText
+import com.xemantic.kotlin.core.text.unaryPlus
 import com.xemantic.kotlin.test.text.chunkedRandomly
 import com.xemantic.markanywhere.flow.mergeAdjacentText
 import com.xemantic.markanywhere.flow.semanticEvents
@@ -2020,7 +2020,7 @@ class Gfm_06_04_Test {
     @Test
     fun `example 446 - DIVERGENCE - paragraph foo`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"foo *\\**\n"
         }.chunkedRandomly().asFlow()
 
@@ -2085,7 +2085,7 @@ class Gfm_06_04_Test {
     @Test
     fun `example 449 - DIVERGENCE - paragraph foo`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"foo **\\***\n"
         }.chunkedRandomly().asFlow()
 
@@ -2283,7 +2283,7 @@ class Gfm_06_04_Test {
     @Test
     fun `example 458 - DIVERGENCE - paragraph foo _`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"foo _\\__\n"
         }.chunkedRandomly().asFlow()
 
@@ -2346,7 +2346,7 @@ class Gfm_06_04_Test {
     @Test
     fun `example 461 - DIVERGENCE - paragraph foo _`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"foo __\\___\n"
         }.chunkedRandomly().asFlow()
 

@@ -16,7 +16,7 @@
 
 package com.xemantic.markanywhere.parse.gfm
 
-import com.xemantic.kotlin.core.text.buildText
+import com.xemantic.kotlin.core.text.unaryPlus
 import com.xemantic.kotlin.test.text.chunkedRandomly
 import com.xemantic.markanywhere.flow.mergeAdjacentText
 import com.xemantic.markanywhere.flow.semanticEvents
@@ -104,7 +104,7 @@ class Gfm_05_01_Test {
     @Test
     fun `example 208 - blockquote text h1 Foo text paragraph bar baz text`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"   > # Foo\n"
             +"   > bar\n"
             +" > baz\n"
@@ -137,7 +137,7 @@ class Gfm_05_01_Test {
     @Test
     fun `example 209 - indented code block`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"    > # Foo\n"
             +"    > bar\n"
             +"    > baz\n"
@@ -303,7 +303,7 @@ class Gfm_05_01_Test {
     @Test
     fun `example 214 - blockquote text indented code block text indented code block`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +">     foo\n"
             +"    bar\n"
         }.chunkedRandomly().asFlow()
@@ -376,7 +376,7 @@ class Gfm_05_01_Test {
     @Test
     fun `example 216 - blockquote text paragraph foo - bar text`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"> foo\n"
             +"    - bar\n"
         }.chunkedRandomly().asFlow()
@@ -424,7 +424,7 @@ class Gfm_05_01_Test {
     @Test
     fun `example 218 - blockquote text`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +">\n"
             +">  \n"
             +"> \n"
@@ -448,7 +448,7 @@ class Gfm_05_01_Test {
     @Test
     fun `example 219 - blockquote text paragraph foo text`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +">\n"
             +"> foo\n"
             +">  \n"

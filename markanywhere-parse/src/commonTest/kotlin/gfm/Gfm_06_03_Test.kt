@@ -16,7 +16,7 @@
 
 package com.xemantic.markanywhere.parse.gfm
 
-import com.xemantic.kotlin.core.text.buildText
+import com.xemantic.kotlin.core.text.unaryPlus
 import com.xemantic.kotlin.test.text.chunkedRandomly
 import com.xemantic.markanywhere.flow.mergeAdjacentText
 import com.xemantic.markanywhere.flow.semanticEvents
@@ -208,7 +208,7 @@ class Gfm_06_03_Test {
     @Test
     fun `example 345 - DIVERGENCE - multi-line code span does not pair across lines`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"``\n"
             +"foo\n"
             +"bar  \n"
@@ -240,7 +240,7 @@ class Gfm_06_03_Test {
     @Test
     fun `example 346 - DIVERGENCE - multi-line code span does not pair across lines`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"``\n"
             +"foo \n"
             +"``\n"
@@ -266,7 +266,7 @@ class Gfm_06_03_Test {
     @Test
     fun `example 347 - DIVERGENCE - multi-line code span force-closes at line boundary`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"`foo   bar \n"
             +"baz`\n"
         }.chunkedRandomly().asFlow()
@@ -298,7 +298,7 @@ class Gfm_06_03_Test {
     @Test
     fun `example 348 - paragraph foobar`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"`foo\\`bar`\n"
         }.chunkedRandomly().asFlow()
 

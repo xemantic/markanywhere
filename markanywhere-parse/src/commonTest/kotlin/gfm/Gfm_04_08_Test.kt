@@ -16,7 +16,7 @@
 
 package com.xemantic.markanywhere.parse.gfm
 
-import com.xemantic.kotlin.core.text.buildText
+import com.xemantic.kotlin.core.text.unaryPlus
 import com.xemantic.kotlin.test.text.chunkedRandomly
 import com.xemantic.markanywhere.flow.mergeAdjacentText
 import com.xemantic.markanywhere.flow.semanticEvents
@@ -127,7 +127,7 @@ class Gfm_04_08_Test {
     @Test
     fun `example 192 - paragraph aaa bbb`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"  aaa\n"
             +" bbb\n"
         }.chunkedRandomly().asFlow()
@@ -151,7 +151,7 @@ class Gfm_04_08_Test {
     @Test
     fun `example 193 - paragraph aaa bbb ccc`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"aaa\n"
             +"             bbb\n"
             +"                                       ccc\n"
@@ -177,7 +177,7 @@ class Gfm_04_08_Test {
     @Test
     fun `example 194 - paragraph aaa bbb`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"   aaa\n"
             +"bbb\n"
         }.chunkedRandomly().asFlow()
@@ -201,7 +201,7 @@ class Gfm_04_08_Test {
     @Test
     fun `example 195 - indented code block paragraph bbb`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"    aaa\n"
             +"bbb\n"
         }.chunkedRandomly().asFlow()
@@ -231,7 +231,7 @@ class Gfm_04_08_Test {
     @Test
     fun `example 196 - paragraph aaa bbb`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"aaa     \n"
             +"bbb     \n"
         }.chunkedRandomly().asFlow()
