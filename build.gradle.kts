@@ -20,6 +20,7 @@ import com.vanniktech.maven.publish.MavenPublishBaseExtension
 
 plugins {
     alias(libs.plugins.versions)
+    alias(libs.plugins.version.catalog.update)
     alias(libs.plugins.dokka)
     //alias(libs.plugins.jreleaser)
     alias(libs.plugins.kotlin.multiplatform) apply false
@@ -118,6 +119,16 @@ subprojects {
         }
     }
 
+}
+
+versionCatalogUpdate {
+    // preserve the manual, logically-grouped ordering of libs.versions.toml
+    sortByKey = false
+    keep {
+        // kotlinTarget / javaTarget are plain version constants with no version.ref
+        versions = setOf("kotlinTarget", "javaTarget", "asm")
+        keepUnusedVersions = false
+    }
 }
 
 //val releaseAnnouncementSubject = """🚀 ${rootProject.name} $version has been released!"""
