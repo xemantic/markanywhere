@@ -885,6 +885,7 @@ class Gfm_05_02_Test {
          */
     }
 
+    @Test
     fun `example 254 - DIVERGENCE - ul with 1 item paragraph bar`() = runTest {
         // given
         val textFlow = buildString {
