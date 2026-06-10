@@ -18,6 +18,7 @@ package com.xemantic.markanywhere.flow
 
 import com.xemantic.kotlin.test.assert
 import com.xemantic.kotlin.test.sameAs
+import com.xemantic.markanywhere.SemanticEvent
 import kotlinx.coroutines.flow.count
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -292,6 +293,66 @@ class SemanticEventFlowTest {
             {"type":"text","text":"!"}
             {"type":"unmark","name":"p"}
         """.trimIndent()
+    }
+
+    @Test
+    fun `should emit a pre-built event verbatim using emit`() = runTest {
+        // when
+        val events = semanticEvents {
+            emit(SemanticEvent.Text("hello"))
+        }
+
+        // then
+        events.toJsonLines() sameAs """{"type":"text","text":"hello"}"""
+    }
+
+    @Test
+    fun `should emit a pre-built mark verbatim preserving its tagging and attributes`() = runTest {
+        // when - the enclosing default is untagged, but emit must not override the
+        //   event's own isTagged / attributes
+        val events = semanticEvents {
+            emit(SemanticEvent.Mark("a", isTagged = true, attributes = mapOf("href" to "/x")))
+        }
+
+        // then
+        events.toJsonLines() sameAs """{"type":"mark","name":"a","tagged":true,"attributes":{"href":"/x"}}"""
+    }
+
+    @Test
+    fun `should emit a collection of pre-built events verbatim in order using emit`() = runTest {
+        // given - a captured subtree, balanced and carrying its own tagging
+        val captured = listOf(
+            SemanticEvent.Mark("span", isTagged = true),
+            SemanticEvent.Text("icon"),
+            SemanticEvent.Unmark("span", isTagged = true),
+        )
+
+        // when - replayed inside an untagged wrapper
+        val events = semanticEvents {
+            "p" {
+                emit(captured)
+            }
+        }
+
+        // then - the wrapper is untagged, the replayed span keeps its tagging
+        events.toJsonLines() sameAs """
+            {"type":"mark","name":"p"}
+            {"type":"mark","name":"span","tagged":true}
+            {"type":"text","text":"icon"}
+            {"type":"unmark","name":"span","tagged":true}
+            {"type":"unmark","name":"p"}
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should emit nothing for an empty collection using emit`() = runTest {
+        // when
+        val events = semanticEvents {
+            emit(emptyList())
+        }
+
+        // then
+        assert(events.count() == 0)
     }
 
     @Test

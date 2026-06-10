@@ -30,7 +30,7 @@ import kotlinx.coroutines.flow.Flow
  */
 public suspend fun Flow<SemanticEvent>.toJsonLines(): String = buildText {
     collect { event ->
-        +event.toString()
+        +event.toJson()
         +"\n"
     }
     trimLastNewLine()

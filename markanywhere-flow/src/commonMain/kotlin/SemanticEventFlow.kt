@@ -121,6 +121,26 @@ public class SemanticEventScope(
         )
     }
 
+    /**
+     * Emits a pre-built [SemanticEvent] verbatim.
+     *
+     * Unlike [text] / [mark] / [unmark], this does **not** derive
+     * [SemanticEvent.Mark.isTagged] from the enclosing [tagged] default — the
+     * event is forwarded exactly as given. Useful for replaying a captured or
+     * buffered subtree (e.g. inside a stream transformer) without losing the
+     * original tagging or attributes.
+     */
+    public suspend fun emit(event: SemanticEvent) {
+        collector.emit(event)
+    }
+
+    /**
+     * Emits each of [events] verbatim, in iteration order. See [emit].
+     */
+    public suspend fun emit(events: Iterable<SemanticEvent>) {
+        events.forEach { collector.emit(it) }
+    }
+
     public suspend inline fun tag(
         name: String,
         attributes: Map<String, String> = emptyMap(),
