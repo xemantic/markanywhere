@@ -17,7 +17,6 @@
 package com.xemantic.markanywhere.html.icons
 
 import com.xemantic.kotlin.test.assert
-import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.test.sameAs
 import com.xemantic.markanywhere.transform.transformMatchingMarks
@@ -95,12 +94,4 @@ class BootstrapTest {
         assert(BootstrapIconResolver(mark("span", "badge badge-oj")) == null)
     }
 
-    private fun mark(
-        name: String,
-        classes: String
-    ): SemanticEvent.Mark = SemanticEvent.Mark(
-        name = name,
-        attributes = mapOf("class" to classes),
-        isTagged = true
-    )
 }
