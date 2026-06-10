@@ -27,20 +27,7 @@ class SemanticEventSerializationRoundtripTest {
         val original = SemanticEvent.Mark("p")
 
         // when
-        val json = original.toString()
-        val deserialized = SemanticEvent.fromJson(json)
-
-        // then
-        assert(original == deserialized)
-    }
-
-    @Test
-    fun `should round-trip serialize Mark SemanticEvent with null attributes`() {
-        // given
-        val original = SemanticEvent.Mark(name = "p", attributes = null)
-
-        // when
-        val json = original.toString()
+        val json = original.toJson()
         val deserialized = SemanticEvent.fromJson(json)
 
         // then
@@ -53,7 +40,7 @@ class SemanticEventSerializationRoundtripTest {
         val original = SemanticEvent.Mark(name = "p", attributes = emptyMap())
 
         // when
-        val json = original.toString()
+        val json = original.toJson()
         val deserialized = SemanticEvent.fromJson(json)
 
         // then
@@ -69,7 +56,7 @@ class SemanticEventSerializationRoundtripTest {
         )
 
         // when
-        val json = original.toString()
+        val json = original.toJson()
         val deserialized = SemanticEvent.fromJson(json)
 
         // then
@@ -89,7 +76,7 @@ class SemanticEventSerializationRoundtripTest {
         )
 
         // when
-        val json = original.toString()
+        val json = original.toJson()
         val deserialized = SemanticEvent.fromJson(json)
 
         // then
@@ -102,7 +89,7 @@ class SemanticEventSerializationRoundtripTest {
         val original = SemanticEvent.Text("Hello World")
 
         // when
-        val json = original.toString()
+        val json = original.toJson()
         val deserialized = SemanticEvent.fromJson(json)
 
         // then
@@ -115,7 +102,7 @@ class SemanticEventSerializationRoundtripTest {
         val original = SemanticEvent.Text(text = "")
 
         // when
-        val json = original.toString()
+        val json = original.toJson()
         val deserialized = SemanticEvent.fromJson(json)
 
         // then
@@ -128,7 +115,7 @@ class SemanticEventSerializationRoundtripTest {
         val original = SemanticEvent.Text("Hello \"World\"\nNew line\tTab")
 
         // when
-        val json = original.toString()
+        val json = original.toJson()
         val deserialized = SemanticEvent.fromJson(json)
 
         // then
@@ -141,7 +128,7 @@ class SemanticEventSerializationRoundtripTest {
         val original = SemanticEvent.Text("Hello \"World\" & <foo> 👋")
 
         // when
-        val json = original.toString()
+        val json = original.toJson()
         val deserialized = SemanticEvent.fromJson(json)
 
         // then
@@ -154,7 +141,7 @@ class SemanticEventSerializationRoundtripTest {
         val original = SemanticEvent.Unmark("p")
 
         // when
-        val json = original.toString()
+        val json = original.toJson()
         val deserialized = SemanticEvent.fromJson(json)
 
         // then
@@ -167,7 +154,7 @@ class SemanticEventSerializationRoundtripTest {
         val original = SemanticEvent.Mark(name = "br", isTagged = true)
 
         // when
-        val json = original.toString()
+        val json = original.toJson()
         val deserialized = SemanticEvent.fromJson(json)
 
         // then
@@ -184,7 +171,7 @@ class SemanticEventSerializationRoundtripTest {
         )
 
         // when
-        val json = original.toString()
+        val json = original.toJson()
         val deserialized = SemanticEvent.fromJson(json)
 
         // then
@@ -197,7 +184,7 @@ class SemanticEventSerializationRoundtripTest {
         val original = SemanticEvent.Unmark(name = "br", isTagged = true)
 
         // when
-        val json = original.toString()
+        val json = original.toJson()
         val deserialized = SemanticEvent.fromJson(json)
 
         // then
@@ -210,7 +197,7 @@ class SemanticEventSerializationRoundtripTest {
         val original = SemanticEvent.Unmark(name = "p", isTagged = false)
 
         // when
-        val json = original.toString()
+        val json = original.toJson()
         val deserialized = SemanticEvent.fromJson(json)
 
         // then

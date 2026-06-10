@@ -1,5 +1,5 @@
 /*
- * Copyright 2025-2026 Kazimierz Pogoda / Xemantic
+ * Copyright 2026 Kazimierz Pogoda / Xemantic
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,260 +16,103 @@
 
 package com.xemantic.markanywhere
 
-import com.xemantic.kotlin.test.sameAsJson
+import com.xemantic.kotlin.test.assert
 import kotlin.test.Test
 
 class SemanticEventToStringTest {
 
     @Test
-    fun `should omit null attributes in JSON output`() {
-        // given
-        val event = SemanticEvent.Mark("div")
-
-        // when
-        val json = event.toString()
-
-        // then
-        json sameAsJson """
-            {
-              "type": "mark",
-              "name": "div"
-            }
-        """.trimIndent()
-    }
-
-    @Test
-    fun `should omit empty attributes in JSON output`() {
-        // given
-        val event = SemanticEvent.Mark(name = "div", attributes = emptyMap())
-
-        // when
-        val json = event.toString()
-
-        // then
-        json sameAsJson """
-            {
-              "type": "mark",
-              "name": "div",
-              "attributes": {}
-            }
-        """.trimIndent()
-    }
-
-    @Test
-    fun `should include single attribute in JSON output`() {
-        // given
-        val event = SemanticEvent.Mark(
-            name = "link",
-            attributes = mapOf("href" to "https://example.com")
-        )
-
-        // when
-        val json = event.toString()
-
-        // then
-        json sameAsJson """
-            {
-              "type": "mark",
-              "name": "link",
-              "attributes": {
-                "href": "https://example.com"
-              }
-            }
-        """.trimIndent()
-    }
-
-    @Test
-    fun `should include multiple attributes in JSON output`() {
-        // given
-        val event = SemanticEvent.Mark(
-            name = "link",
-            attributes = mapOf(
-                "href" to "https://example.com",
-                "title" to "Example Site",
-                "target" to "_blank"
-            )
-        )
-
-        // when
-        val json = event.toString()
-
-        // then
-        json sameAsJson """
-            {
-              "type": "mark",
-              "name": "link",
-              "attributes": {
-                "href": "https://example.com",
-                "title": "Example Site",
-                "target": "_blank"
-              }
-            }
-        """.trimIndent()
-    }
-
-    @Test
-    fun `should serialize Text SemanticEvent to JSON`() {
+    fun `should render Text event as data class string`() {
         // given
         val event = SemanticEvent.Text("Hello World")
 
         // when
-        val json = event.toString()
+        val string = event.toString()
 
         // then
-        json sameAsJson """
-            {
-              "type": "text",
-              "text": "Hello World"
-            }
-        """.trimIndent()
+        assert(string == "Text(text=Hello World)")
     }
 
     @Test
-    fun `should serialize Text SemanticEvent with empty string to JSON`() {
+    fun `should render Text event with empty string as data class string`() {
         // given
         val event = SemanticEvent.Text(text = "")
 
         // when
-        val json = event.toString()
+        val string = event.toString()
 
         // then
-        json sameAsJson """
-            {
-              "type": "text",
-              "text": ""
-            }
-        """.trimIndent()
+        assert(string == "Text(text=)")
     }
 
     @Test
-    fun `should serialize Text SemanticEvent with special characters to JSON`() {
+    fun `should render Mark event with defaults as data class string`() {
         // given
-        val event = SemanticEvent.Text("Hello \"World\"\nNew line\tTab")
+        val event = SemanticEvent.Mark("div")
 
         // when
-        val json = event.toString()
+        val string = event.toString()
 
         // then
-        json sameAsJson """
-            {
-              "type": "text",
-              "text": "Hello \"World\"\nNew line\tTab"
-            }
-        """.trimIndent()
+        assert(string == "Mark(name=div, isTagged=false, attributes={})")
     }
 
     @Test
-    fun `should serialize Unmark SemanticEvent to JSON`() {
-        // given
-        val event = SemanticEvent.Unmark("p")
-
-        // when
-        val json = event.toString()
-
-        // then
-        json sameAsJson """
-            {
-              "type": "unmark",
-              "name": "p"
-            }
-        """.trimIndent()
-    }
-
-    @Test
-    fun `should omit isTagged when false in Mark JSON output`() {
-        // given
-        val event = SemanticEvent.Mark(name = "div", isTagged = false)
-
-        // when
-        val json = event.toString()
-
-        // then
-        json sameAsJson """
-            {
-              "type": "mark",
-              "name": "div"
-            }
-        """.trimIndent()
-    }
-
-    @Test
-    fun `should include isTagged when true in Mark JSON output`() {
+    fun `should render tagged Mark event as data class string`() {
         // given
         val event = SemanticEvent.Mark(name = "br", isTagged = true)
 
         // when
-        val json = event.toString()
+        val string = event.toString()
 
         // then
-        json sameAsJson """
-            {
-              "type": "mark",
-              "name": "br",
-              "tagged": true
-            }
-        """.trimIndent()
+        assert(string == "Mark(name=br, isTagged=true, attributes={})")
     }
 
     @Test
-    fun `should include isTagged and attributes in Mark JSON output`() {
+    fun `should render Mark event with attributes as data class string`() {
         // given
         val event = SemanticEvent.Mark(
-            name = "img",
+            name = "a",
             isTagged = true,
-            attributes = mapOf("src" to "image.png", "alt" to "An image")
+            attributes = mapOf(
+                "href" to "https://example.com",
+                "title" to "Example Site"
+            )
         )
 
         // when
-        val json = event.toString()
+        val string = event.toString()
 
         // then
-        json sameAsJson """
-            {
-              "type": "mark",
-              "name": "img",
-              "tagged": true,
-              "attributes": {
-                "src": "image.png",
-                "alt": "An image"
-              }
-            }
-        """.trimIndent()
+        assert(
+            string == "Mark(name=a, isTagged=true, " +
+                "attributes={href=https://example.com, title=Example Site})"
+        )
     }
 
     @Test
-    fun `should omit isTagged when false in Unmark JSON output`() {
+    fun `should render Unmark event with defaults as data class string`() {
         // given
-        val event = SemanticEvent.Unmark(name = "p", isTagged = false)
+        val event = SemanticEvent.Unmark("p")
 
         // when
-        val json = event.toString()
+        val string = event.toString()
 
         // then
-        json sameAsJson """
-            {
-              "type": "unmark",
-              "name": "p"
-            }
-        """.trimIndent()
+        assert(string == "Unmark(name=p, isTagged=false)")
     }
 
     @Test
-    fun `should include isTagged when true in Unmark JSON output`() {
+    fun `should render tagged Unmark event as data class string`() {
         // given
         val event = SemanticEvent.Unmark(name = "br", isTagged = true)
 
         // when
-        val json = event.toString()
+        val string = event.toString()
 
         // then
-        json sameAsJson """
-            {
-              "type": "unmark",
-              "name": "br",
-              "tagged": true
-            }
-        """.trimIndent()
+        assert(string == "Unmark(name=br, isTagged=true)")
     }
 
 }
