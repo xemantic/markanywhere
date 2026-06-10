@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Kazimierz Pogoda / Xemantic
+ * Copyright 2025-2026 Kazimierz Pogoda / Xemantic
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,8 +16,10 @@
 
 package com.xemantic.markanywhere.flow
 
-import com.xemantic.kotlin.core.text.buildText
+import com.xemantic.kotlin.core.text.trimLastNewLine
+import com.xemantic.kotlin.core.text.unaryPlus
 import com.xemantic.markanywhere.SemanticEvent
+import com.xemantic.markanywhere.toJson
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -28,7 +30,7 @@ import kotlinx.coroutines.flow.Flow
  * This function is useful for testing, where produced string can be
  * asserted against expectation string.
  */
-public suspend fun Flow<SemanticEvent>.toJsonLines(): String = buildText {
+public suspend fun Flow<SemanticEvent>.toJsonLines(): String = buildString {
     collect { event ->
         +event.toJson()
         +"\n"
