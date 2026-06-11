@@ -111,7 +111,7 @@ class MarkClassListTest {
     }
 
     @Test
-    fun `should split on tab, line feed, form feed and carriage return`() {
+    fun `should split on tab and line feed and form feed and carriage return`() {
         // given
         val formFeed = Char(0x0C)
         val mark = markWithClass("a\tb\nc${formFeed}d\re")
