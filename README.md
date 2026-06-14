@@ -27,7 +27,7 @@ Incremental Markdown parser that emits streams of semantic events, plus tools to
 val markdown = """
 # Hello
 
-A *streaming* parser.
+A *streaming* parser, <b>live</b>.
 """
 
 flowOf(markdown).parse().collect {
@@ -47,12 +47,18 @@ Will print:
 {"type":"mark","name":"em"}
 {"type":"text","text":"streaming"}
 {"type":"unmark","name":"em"}
+{"type":"text","text":" parser,"}
 {"type":"text","text":" "}
-{"type":"text","text":"parser."}
+{"type":"mark","name":"b","tagged":true}
+{"type":"text","text":"live"}
+{"type":"unmark","name":"b","tagged":true}
+{"type":"text","text":"."}
 {"type":"unmark","name":"p"}
 ```
 
-The stream is append-only: each event is emitted as soon as the parser commits to it, so `<h1>` opens before `Hello` arrives and `<em>` opens the moment the `*` resolves.
+The stream is append-only: each event is emitted as soon as the parser commits to it, so `<h1>` opens before `Hello` arrives and `<em>` opens the moment the `*` resolves. The Markdown `*streaming*` and the literal `<b>` tag produce the same kind of `mark`/`unmark` events — the only difference is `"tagged":true`, flagging the `b` as real HTML in the source rather than Markdown-derived (the `em`, being Markdown, omits it).
+
+> Backed by the first test in [`MarkanywhereParserTest`](markanywhere-parse/src/commonTest/kotlin/MarkanywhereParserTest.kt) — `should parse the README parsing example`.
 
 ### Rendering Markdown as HTML
 
@@ -67,9 +73,11 @@ Will print:
   Hello
 </h1>
 <p>
-  A <em>streaming</em> parser.
+  A <em>streaming</em> parser, <b>live</b>.
 </p>
 ```
+
+> Backed by the first test in [`SemanticEventsRenderingTest`](markanywhere-render/src/commonTest/kotlin/SemanticEventsRenderingTest.kt) — `should render the README HTML example`.
 
 ### Rendering Markdown as DOM (Kotlin JS)
 
@@ -84,21 +92,29 @@ Renders equivalent HTML into the browser's DOM tree.
 
 Note: Typically `markdownFlow: Flow<String>` represents a Markdown text stream, for example from LLM inference.
 
+> Backed by the first test in [`AppendSemanticEventsTest`](markanywhere-js/src/jsTest/kotlin/AppendSemanticEventsTest.kt) — `should append the README DOM example`.
+
 ### Transforming the event stream
 
+Each reusable rule set is an extension on `TransformerBuilder` — think of one as an XSLT stylesheet you can compose with others:
+
 ```kotlin
-val emphasizeToStrong = Transformer {
-    match("em") {
-        "strong" {
-            children()
-        }
-    }
+fun TransformerBuilder.demoteHeadings() {
+    match("h1") { "h2" { children() } } // re-emit <h1> as <h2>, keeping its content
+}
+
+fun TransformerBuilder.emphasizeToStrong() {
+    match("em") { "strong" { children() } } // re-emit <em> as <strong>
 }
 
 println(
     flowOf(markdown)
         .parse()
-        .transform(emphasizeToStrong)
+        .transform {
+            demoteHeadings()
+            emphasizeToStrong()
+            passthrough() // copy every other mark and its text verbatim
+        }
         .render()
 )
 ```
@@ -106,17 +122,58 @@ println(
 Will print:
 
 ```text
-<h1>
+<h2>
   Hello
-</h1>
+</h2>
 <p>
-  A <strong>streaming</strong> parser.
+  A <strong>streaming</strong> parser, <b>live</b>.
 </p>
 ```
 
-The `Transformer` DSL rewrites the event stream on the fly — match marks by name (or expression), emit replacement marks, wrap or unwrap nested content, or rewrite text. Transformations compose, so the same pipeline can normalize HTML to Markdown, redact spans, or route `<thinking>` blocks to a separate sink.
+Each `match` is like an XSLT template: it selects marks by name (`"em"`), by the `"*"` wildcard, or by a predicate over the mark's attributes (`match({ name == "p" && this["role"] == "note" })`), and emits replacement marks and text in their place. `children()` mirrors `<xsl:apply-templates/>` — it descends into the matched subtree, and only there: an unmatched mark stops traversal unless a `"*"` rule opts into transparent descent. Raw text survives at exactly one place — a `matchText { +it }` rule — so `children()` alone never leaks text. Rules are tried in registration order with the first match winning, which is why the specific rules above sit ahead of `passthrough()`, the catch-all that copies every remaining mark (preserving its `isTagged` origin) and its text verbatim — here the literal `<b>` flows through untouched while the Markdown `*streaming*` is rewritten to `<strong>`.
 
-If you have transformed XML trees with XSLT, the model should feel familiar — `match { ... }` plays the role of an XSLT template, `children()` mirrors `<xsl:apply-templates/>`, and emitted marks/text replace `<xsl:element>` / `<xsl:text>`. The difference: it operates on a streaming event flow rather than a buffered document tree, and the source is Markdown (or mixed Markdown + HTML) rather than XML.
+Because the rule sets are plain extension functions, they compose — `transform { demoteHeadings(); emphasizeToStrong(); passthrough() }`. The block also runs per collection, so stateful rule sets stay correct when a flow is collected more than once: a sequence counter, text captured for an `afterClose { … }` summary emitted once the subtree closes, or a mode-scoped sub-pipeline (`children(mode = "capture")` routing a subtree to its own set of rules). The same machinery normalizes HTML down to Markdown (`simplifyHtml()` in `markanywhere-html`), redacts spans, or routes a tagged block to a separate sink.
+
+> Backed by the first test in [`TransformerTest`](markanywhere-transform/src/commonTest/kotlin/TransformerTest.kt) — `should transform the README example`. The remaining tests there exercise each DSL feature mentioned above.
+
+### Asserting event streams in tests
+
+The same `semanticEvents { }` builder used to feed the renderer also describes an **expected** stream, so a parser/transformer test reads like the output it asserts:
+
+```kotlin
+@Test
+fun `should parse the greeting`() = runTest {
+    // given
+    val markdownFlow = flowOf(markdown)
+    
+    // when
+    val events = markdownFlow.parse()
+        
+    // then
+    events.mergeAdjacentText() sameAs semanticEvents {
+        "h1" { +"Hello" }
+        "p" {
+            +"A "
+            "em" { +"streaming" }
+            +" parser, "
+            tag("b") { +"live" }
+            +"."
+        }
+    }
+}
+```
+
+- `semanticEvents { }` builds a `Flow<SemanticEvent>` from a tree-shaped DSL: `"name" { … }` opens a Markdown-derived mark, `tag("name") { … }` opens an HTML-tagged one (`isTagged = true`), and `+"…"` emits text.
+- `sameAs` is a `suspend infix` that compares two event flows by serializing each to JSON lines — a mismatch prints a readable line diff.
+- The parser fragments paragraph text on word boundaries (note the separate `"A"`, `" "`, `" parser,"` events in the parsing output above), so `mergeAdjacentText()` coalesces adjacent text events first, keeping the expectation concise.
+
+`semanticEvents` and `mergeAdjacentText` ship in `markanywhere-flow`; `sameAs` ships in `markanywhere-test`:
+
+```kotlin
+testImplementation("com.xemantic.markanywhere:markanywhere-test:0.1.3")
+```
+
+> This is the exact pattern behind every "Backed by …" test linked above.
 
 ## Supported Markdown features
 
@@ -124,73 +181,76 @@ GFM is the dialect LLMs were trained on, which is why we take it as the baseline
 
 ### GFM baseline
 
-| Feature | Syntax |
-|---------|--------|
-| ATX headings | `# H1` … `###### H6` |
-| Paragraphs | plain text blocks |
-| Hard line break | two trailing spaces or `\` before newline |
-| Thematic break | `---` / `***` / `___` |
-| Fenced code block | ` ```lang ` … ` ``` ` |
-| Indented code block | 4-space indent |
-| Block quote | `> text` |
-| Unordered list | `- item` / `* item` / `+ item` |
-| Ordered list | `1. item` |
-| Task list | `- [x] done` / `- [ ] todo` |
-| Table | `\| col \| col \|` with separator row |
-| Inline code | `` `code` `` |
-| Strong | `**bold**` or `__bold__` |
-| Emphasis | `*italic*` or `_italic_` |
-| Strikethrough | `~~text~~` |
-| Inline link | `[text](url)` / `[text](url "title")` |
-| Inline image | `![alt](src)` |
-| Autolink | `<https://example.com>` / `<user@example.com>` |
-| Extended autolink | `www.example.com` / `https://…` (GFM §6.9) |
-| Raw HTML (block) | HTML type 1–7 blocks pass through |
-| Raw HTML (inline) | `<tag attr="val">…</tag>` |
-| Entity references | `&amp;` / `&#42;` / `&#x2A;` |
-| Backslash escapes | `\*` → literal `*` |
+| Feature                    | Syntax                                                                                          |
+|----------------------------|-------------------------------------------------------------------------------------------------|
+| ATX headings               | `# H1` … `###### H6`                                                                            |
+| Paragraphs                 | plain text blocks                                                                               |
+| Hard line break            | two trailing spaces or `\` before newline                                                       |
+| Thematic break             | `---` / `***` / `___`                                                                           |
+| Fenced code block          | ` ```lang ` … ` ``` `                                                                           |
+| Indented code block        | 4-space indent                                                                                  |
+| Block quote                | `> text`                                                                                        |
+| Unordered list             | `- item` / `* item` / `+ item`                                                                  |
+| Ordered list               | `1. item`                                                                                       |
+| Task list                  | `- [x] done` / `- [ ] todo`                                                                     |
+| Table                      | `\| col \| col \|` with separator row                                                           |
+| Inline code                | `` `code` ``                                                                                    |
+| Strong                     | `**bold**` or `__bold__`                                                                        |
+| Emphasis                   | `*italic*` or `_italic_`                                                                        |
+| Strikethrough              | `~~text~~`                                                                                      |
+| Inline link                | `[text](url)` / `[text](url "title")`                                                           |
+| Inline image               | `![alt](src)`                                                                                   |
+| Autolink                   | `<https://example.com>` / `<user@example.com>`                                                  |
+| Extended autolink          | `www.example.com` / `https://…` (GFM §6.9)                                                      |
+| Raw HTML (block)           | HTML type 1–7 blocks pass through                                                               |
+| Raw HTML (inline)          | `<tag attr="val">…</tag>`                                                                       |
+| Entity references          | `&amp;` / `&#42;` / `&#x2A;`                                                                    |
+| Backslash escapes          | `\*` → literal `*`                                                                              |
 | Link reference definitions | `[label]: url "title"` (back-references only — see [divergences](markanywhere-parse/README.md)) |
 
 ### Extensions beyond GFM
 
-| Feature | Syntax | Output element |
-|---------|--------|---------------|
-| Highlight | `==text==` | `<mark>` |
-| Superscript | `^text^` | `<sup>` |
-| Inline math | `$E=mc^2$` | `<math>` |
-| Display math | `$$`…`$$` on own lines | `<math display="block">` |
-| Front matter | `---`/`+++` fence at document start | `<frontmatter format="yaml|toml">` |
-| Namespaced tags | `<ns:tag attr="val">` | `Mark(name="ns:tag", isTagged=true)` |
+| Feature             | Syntax                               | Output element                        |
+|---------------------|--------------------------------------|---------------------------------------|
+| Highlight           | `==text==`                           | `<mark>`                              |
+| Superscript         | `^text^`                             | `<sup>`                               |
+| Inline math         | `$E=mc^2$`                           | `<math>`                              |
+| Display math        | `$$`…`$$` on own lines               | `<math display="block">`              |
+| Front matter        | `---`/`+++` fence at document start  | `<frontmatter format="yaml\|toml">`   |
+| Namespaced tags     | `<ns:tag attr="val">`                | `Mark(name="ns:tag", isTagged=true)`  |
 | DOCTYPE declaration | `<!DOCTYPE html>` (case-insensitive) | `Mark(name="doctype", isTagged=true)` |
 
 **Namespaced tags** let you embed arbitrary custom markup in a Markdown document. Any `<namespace:tagname …>` / `</namespace:tagname>` pair passes through as `Mark`/`Unmark` events with `isTagged = true` and parsed attributes — your renderer handles them however it wants. This covers use cases like custom card components, alert boxes, or any domain-specific block type without requiring new parser syntax.
 
 ### GFM features not supported
 
-| Feature | Reason |
-|---------|--------|
-| Setext headings (`===` / `---` underline) | Requires one-line look-ahead to distinguish from paragraph + thematic break |
-| Forward reference links (`[text][label]` before `[label]: url`) | Definition must precede usage — the append-only stream cannot revisit emitted events |
-| Tight vs. loose lists | Tight/loose can only be decided after the full list closes |
-| Mid-paragraph tables | Tables only start at a fresh block boundary |
-| Multi-line inline constructs | `flushInline` force-closes inline state (code/em/strong/etc.) at every line/block boundary |
-| Image inside link (`[![alt](src)](url)`) | Nested inline constructs require speculative recursive parsing |
-| Nested inline links (`[foo [bar](/u)](/u)`) | Inner link is treated as label content; spec requires parser unwinding |
-| Multi-line link parsing | Link destination, title, or label spanning newlines is not supported |
+| Feature                                                         | Reason                                                                                     |
+|-----------------------------------------------------------------|--------------------------------------------------------------------------------------------|
+| Setext headings (`===` / `---` underline)                       | Requires one-line look-ahead to distinguish from paragraph + thematic break                |
+| Forward reference links (`[text][label]` before `[label]: url`) | Definition must precede usage — the append-only stream cannot revisit emitted events       |
+| Tight vs. loose lists                                           | Tight/loose can only be decided after the full list closes                                 |
+| Mid-paragraph tables                                            | Tables only start at a fresh block boundary                                                |
+| Multi-line inline constructs                                    | `flushInline` force-closes inline state (code/em/strong/etc.) at every line/block boundary |
+| Image inside link (`[![alt](src)](url)`)                        | Nested inline constructs require speculative recursive parsing                             |
+| Nested inline links (`[foo [bar](/u)](/u)`)                     | Inner link is treated as label content; spec requires parser unwinding                     |
+| Multi-line link parsing                                         | Link destination, title, or label spanning newlines is not supported                       |
 
 See [markanywhere-parse/README.md](markanywhere-parse/README.md) for a full list of divergences and their rationale.
 
 ## Modules
 
-| Module | Purpose |
-|--------|---------|
-| `markanywhere-api` | `SemanticEvent` sealed type — the only interface between modules |
-| `markanywhere-parse` | Streaming parser: `Flow<String>` → `Flow<SemanticEvent>` |
-| `markanywhere-render` | HTML renderer: `Flow<SemanticEvent>` → HTML string |
-| `markanywhere-transform` | DSL for rewriting event streams on the fly |
-| `markanywhere-flow` | Utilities for composing and splitting event flows |
-| `markanywhere-extract` | Utilities for extracting structured data from event streams |
-| `markanywhere-js` | Kotlin/JS DOM renderer |
+| Module                   | Purpose                                                             |
+|--------------------------|---------------------------------------------------------------------|
+| `markanywhere-api`       | `SemanticEvent` sealed type — the only interface between modules    |
+| `markanywhere-parse`     | Streaming parser: `Flow<String>` → `Flow<SemanticEvent>`            |
+| `markanywhere-render`    | HTML renderer: `Flow<SemanticEvent>` → HTML string                  |
+| `markanywhere-transform` | DSL for rewriting event streams on the fly                          |
+| `markanywhere-flow`      | Utilities for composing and splitting event flows                   |
+| `markanywhere-extract`   | Utilities for extracting structured data from event streams         |
+| `markanywhere-js`        | Kotlin/JS DOM renderer                                              |
+| `markanywhere-dump`      | Injectable browser bundle exposing `window.markanywhere.dump()` — captures a live page's DOM as `SemanticEventDump` JSON |
+| `markanywhere-html`      | HTML→Markdown pipeline: `resolveIcons`, `simplifyHtml`, `dropEmptyInlineFormatting`, whitespace normalization |
+| `markanywhere-test`      | Test helpers: `sameAs` for asserting `Flow<SemanticEvent>` equality |
 
 You can depend only on `markanywhere-parse` and consume the `Flow<SemanticEvent>` with your own renderer — the API surface is a single three-variant sealed class. The `markanywhere-transform` module additionally lets you intercept and rewrite events before they reach any renderer.
 
@@ -226,3 +286,69 @@ dependencies {
     implementation("com.xemantic.markanywhere:markanywhere:0.1.3")
 }
 ```
+
+## Development
+
+### Build target sets: `devBuild`
+
+This is a Kotlin Multiplatform project published for JVM, JS, Wasm, and Native.
+Building every target on every local run is slow, so the `markanywhere.convention`
+plugin exposes a **`devBuild`** Gradle property that selects a minimal,
+fast-to-build target set for local development:
+
+- `devBuild` **defaults to `true`**, so a bare `./gradlew build` only touches the
+  dev targets each module declares — JVM, plus browser-JS for the JS modules and
+  the chain they depend on.
+- CI passes **`-PdevBuild=false`** to build the full published set.
+
+The convention plugin declares **no Kotlin target itself**. Instead each module
+reads the flag via `val devBuild: Boolean by extra` and branches its own
+`kotlin { }` target declarations on it, using two helpers the convention adds to
+`KotlinMultiplatformExtension` — `allTargets()` (the full published set, honoring
+the `targetGroup` flag) and `jsTarget()` (a configured browser+nodejs JS target):
+
+```kotlin
+import con.xemantic.markanywhere.buildlogic.allTargets
+
+val devBuild: Boolean by extra
+
+kotlin {
+    if (devBuild) jvm() else allTargets()   // most modules
+    sourceSets { /* … */ }
+}
+```
+
+Variations:
+
+- **JS-only modules** (and the modules in their dependency chain, which need a JS
+  variant available in dev builds) declare browser-JS in dev too:
+  `if (devBuild) { jvm(); js { browser() } } else allTargets()`, or for a JS-only
+  module `if (devBuild) js { browser() } else allTargets()`.
+- **Modules whose dependencies don't cover the whole set** list their targets by
+  hand instead of calling `allTargets()`. For example `markanywhere-browse`
+  depends on `kdriver` (`dev.kdriver:core`), which publishes only JVM, JS, and the
+  desktop-native triples — no Wasm, Apple-mobile, or android-native — so it
+  declares exactly that intersection in its `else` branch.
+
+To build (or just configure) the complete multiplatform set locally, run any task
+with `-PdevBuild=false`.
+
+### DOM-dump fixtures and the `renderDumpFixtures` task
+
+The end-to-end HTML→Markdown tests run against **captured DOM dumps**, not raw
+HTML. Each fixture in `markanywhere-html/src/commonTest/dumps/*.json` is a
+[`SemanticEventDump`](markanywhere-html/src/commonTest/kotlin/SemanticEventDump.kt):
+the semantic event stream of a real page's rendered DOM tree, plus the `url` it
+was captured from and the `dumpedAt` instant of the capture. The events — not any
+original HTML — are the source of truth, so the bloated source HTML is not kept
+in the repository.
+
+A raw event stream is hard to read, so to regenerate the human-readable HTML a
+dump represents (for example to see what input produced a given Markdown output):
+
+```shell
+./gradlew :markanywhere-html:renderDumpFixtures
+```
+
+This renders every dump back to pretty-printed HTML under
+`markanywhere-html/build/renderedDumps/<name>.html`.
