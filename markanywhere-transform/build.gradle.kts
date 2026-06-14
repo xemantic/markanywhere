@@ -14,12 +14,20 @@
  * limitations under the License.
  */
 
+import con.xemantic.markanywhere.buildlogic.allTargets
+
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     id("markanywhere.convention")
 }
 
+val devBuild: Boolean by extra
+
 kotlin {
+
+    explicitApi()
+
+    if (devBuild) jvm() else allTargets()
 
     sourceSets {
 
