@@ -16,7 +16,7 @@
 
 package com.xemantic.markanywhere.parse
 
-import com.xemantic.kotlin.core.text.buildText
+import com.xemantic.kotlin.core.text.unaryPlus
 import com.xemantic.kotlin.test.text.chunkedRandomly
 import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.flow.mergeAdjacentText
@@ -264,7 +264,7 @@ class DoctypeTest {
     @Test
     fun `should stream multi-line DOCTYPE`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"<!DOCTYPE html PUBLIC\n"
             +"  \"-//W3C//DTD HTML 4.01//EN\"\n"
             +"  \"http://www.w3.org/TR/html4/strict.dtd\">\n"
@@ -367,7 +367,7 @@ class DoctypeTest {
     @Test
     fun `should close DOCTYPE before following paragraph`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"<!DOCTYPE html>\n"
             +"\n"
             +"hello\n"
@@ -389,7 +389,7 @@ class DoctypeTest {
     fun `should interrupt paragraph with DOCTYPE`() = runTest {
         // given: CommonMark HTML block types 1-6 (DOCTYPE is type 4) can
         // interrupt an open paragraph without a preceding blank line.
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"some text\n"
             +"<!DOCTYPE html>\n"
         }.chunkedRandomly().asFlow()
@@ -411,7 +411,7 @@ class DoctypeTest {
         // given: inside a fenced code block, no constructs are parsed — content
         // streams verbatim. The DOCTYPE recognition is suppressed because the
         // dispatcher is in CodeBlock mode, not Start mode, when the line arrives.
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"```html\n"
             +"<!DOCTYPE html>\n"
             +"```\n"
@@ -435,7 +435,7 @@ class DoctypeTest {
         // given: a 4-space-indented line is an indented code block — the line's
         // 4 leading spaces never reach the HTML-block dispatcher, so the DOCTYPE
         // detector is never asked about this line.
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"some paragraph\n"
             +"\n"
             +"    <!DOCTYPE html>\n"
