@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-package com.xemantic.markanywhere
+package com.xemantic.markanywhere.dump
 
+import com.xemantic.markanywhere.SemanticEvent
 import kotlinx.serialization.Serializable
 import kotlin.time.Instant
 
@@ -30,10 +31,11 @@ import kotlin.time.Instant
  * @param url the URL of the page the DOM was captured from.
  * @param dumpedAt the instant at which the DOM was captured.
  * @param events the semantic event stream of the captured, rendered DOM tree.
+ *   same session.
  */
 @Serializable
 public data class SemanticEventDump(
     val url: String,
     val dumpedAt: Instant,
-    val events: List<SemanticEvent>
+    val events: List<SemanticEvent>,
 )
