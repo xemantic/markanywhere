@@ -11,6 +11,8 @@ xemanticKotlinCore = "0.8.0"
 xemanticKotlinJs = "0.5.0"
 kdriver = "0.5.10"
 jetbrainsAnnotations = "26.1.0"
+slf4j = "2.0.17"
+logback = "1.5.18"
 # plugins
 versionsPlugin = "0.54.0"
 versionCatalogUpdatePlugin = "1.1.0"
@@ -31,6 +33,8 @@ jetbrains-annotations = { module = "org.jetbrains:annotations", version.ref = "j
 xemantic-kotlin-test = { module = "com.xemantic.kotlin:xemantic-kotlin-test", version.ref = "xemanticKotlinTest" }
 xemantic-kotlin-core = { module = "com.xemantic.kotlin:xemantic-kotlin-core", version.ref = "xemanticKotlinCore" }
 kdriver-core = { module = "dev.kdriver:core", version.ref = "kdriver" }
+slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
+logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
 # build-logic plugins
 kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
 kotlin-power-assert = { module = "org.jetbrains.kotlin:kotlin-power-assert", version.ref = "kotlin" }
