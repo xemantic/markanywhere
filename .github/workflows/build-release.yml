@@ -20,6 +20,6 @@ jobs:
     uses: xemantic/.github/.github/workflows/build-gradle.yml@main
     secrets: inherit
     with:
-      gradle_args: -Pversion=${{ needs.extract_version.outputs.version }} -PjvmOnlyBuild=false build publishToMavenCentral --no-configuration-cache
+      gradle_args: -Pversion=${{ needs.extract_version.outputs.version }} -PdevBuild=false build publishToMavenCentral --no-configuration-cache
       maven_central: true
       jreleaser: true
