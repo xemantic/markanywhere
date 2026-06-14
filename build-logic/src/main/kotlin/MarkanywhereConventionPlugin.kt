@@ -138,8 +138,9 @@ fun KotlinMultiplatformExtension.doConfigure(
         progressiveMode.set(true)
         languageVersion.set(kotlinVersion)
         apiVersion.set(kotlinVersion)
-        //freeCompilerArgs.addAll(
-        //)
+        freeCompilerArgs.addAll(
+            "-Xcontext-sensitive-resolution"
+        )
     }
 
     // Lazily configure the jvm compiler target for whichever module declares a
