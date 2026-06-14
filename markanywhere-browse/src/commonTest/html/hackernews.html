@@ -1,0 +1,91 @@
+<!--
+  ~ Copyright 2026 Kazimierz Pogoda / Xemantic
+  ~
+  ~ Licensed under the Apache License, Version 2.0 (the "License");
+  ~ you may not use this file except in compliance with the License.
+  ~ You may obtain a copy of the License at
+  ~
+  ~     https://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+  -->
+
+<!--
+  A trimmed, synthetic reproduction of the Hacker News front page. Like the
+  real site, the whole layout is built from nested borderless <table>s with no
+  <th>/<caption> — the classic signals that make Chrome's accessibility engine
+  demote them to LayoutTable rather than a data table. The dump (with
+  respectAccessibility = true) should therefore unwrap every table and promote
+  the story content into the body flow.
+-->
+
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Hacker News</title>
+</head>
+<body>
+<center>
+    <table id="hnmain" border="0" cellpadding="0" cellspacing="0" width="85%" bgcolor="#f6f6ef">
+        <tr>
+            <td bgcolor="#ff6600">
+                <table border="0" cellpadding="0" cellspacing="0" width="100%" style="padding:2px">
+                    <tr>
+                        <td style="width:18px;padding-right:4px">
+                            <a href="https://news.ycombinator.com"><img src="y18.svg" width="18" height="18" alt="Hacker News"></a>
+                        </td>
+                        <td style="line-height:12pt;height:10px;">
+                            <span class="pagetop"><b class="hnname"><a href="news">Hacker News</a></b>
+                                <a href="newest">new</a> | <a href="newcomments">comments</a> | <a href="ask">ask</a> | <a href="show">show</a></span>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+        <tr id="pagespace" style="height:10px"></tr>
+        <tr>
+            <td>
+                <table border="0" cellpadding="0" cellspacing="0" class="itemlist">
+                    <tr class="athing" id="40001">
+                        <td align="right" valign="top" class="title"><span class="rank">1.</span></td>
+                        <td valign="top" class="votelinks">
+                            <a href="vote?id=40001&amp;how=up"><div class="votearrow" title="upvote" aria-hidden="true"></div></a>
+                        </td>
+                        <td class="title">
+                            <span class="titleline"><a href="https://example.com/streaming-markdown">Show HN: A streaming Markdown parser</a><span class="sitebit comhead"> (<a href="from?site=example.com"><span class="sitestr">example.com</span></a>)</span></span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td colspan="2"></td>
+                        <td class="subtext">
+                            <span class="subline"><span class="score" id="score_40001">128 points</span> by <a href="user?id=alice" class="hnuser">alice</a> <span class="age"><a href="item?id=40001">2 hours ago</a></span> | <a href="item?id=40001">42&nbsp;comments</a></span>
+                        </td>
+                    </tr>
+                    <tr class="spacer" style="height:5px"></tr>
+                    <tr class="athing" id="40002">
+                        <td align="right" valign="top" class="title"><span class="rank">2.</span></td>
+                        <td valign="top" class="votelinks">
+                            <a href="vote?id=40002&amp;how=up"><div class="votearrow" title="upvote" aria-hidden="true"></div></a>
+                        </td>
+                        <td class="title">
+                            <span class="titleline"><a href="https://example.org/dom-to-markdown">Converting the DOM to Markdown via the accessibility tree</a><span class="sitebit comhead"> (<a href="from?site=example.org"><span class="sitestr">example.org</span></a>)</span></span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td colspan="2"></td>
+                        <td class="subtext">
+                            <span class="subline"><span class="score" id="score_40002">73 points</span> by <a href="user?id=bob" class="hnuser">bob</a> <span class="age"><a href="item?id=40002">4 hours ago</a></span> | <a href="item?id=40002">15&nbsp;comments</a></span>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</center>
+</body>
+</html>
