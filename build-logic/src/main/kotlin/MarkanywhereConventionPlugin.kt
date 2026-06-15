@@ -29,6 +29,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
 import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
 import org.jetbrains.kotlin.gradle.targets.jvm.KotlinJvmTarget
+import org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeSimulatorTest
 import org.jetbrains.kotlin.powerassert.gradle.PowerAssertGradleExtension
 import org.jetbrains.kotlin.powerassert.gradle.PowerAssertGradlePlugin
 
@@ -91,15 +92,22 @@ fun Project.doApply() {
         doConfigure(kotlinVersion, jvmTargetVersion)
     }
 
-    // Skip tests which require XCode components to be installed, wherever the
-    // tvos/watchos simulator targets end up being declared by a module's
-    // allTargets() call. Lazy `matching {}` so it is independent of the order
-    // in which the module's `kotlin { }` block declares its targets — an eager
-    // tasks.named(...) would fail because the target (and its test task) is now
-    // declared in the module file, after this plugin has applied.
-    tasks.matching {
-        it.name == "tvosSimulatorArm64Test" || it.name == "watchosSimulatorArm64Test"
-    }.configureEach { enabled = false }
+    // Skip the tvOS / watchOS simulator tests, whose Xcode simulator runtimes
+    // are not installed on the build host (the task's `device` property probes
+    // Xcode and throws "Xcode does not support simulator tests for
+    // tvos_simulator_arm64" when run). The `enabled = false` MUST be applied
+    // from `afterEvaluate`, NOT a plain `configureEach`: the Kotlin Gradle
+    // plugin re-enables the simulator test task in its own `afterEvaluate`
+    // (tvOS-sim counts as host-supported on Apple Silicon), overwriting an
+    // earlier `enabled = false`. Our `afterEvaluate` runs after KGP's because
+    // this convention plugin is applied after `kotlin.multiplatform` in each
+    // module's `plugins { }` block. Once disabled, the task is skipped before
+    // its `device` property is ever evaluated, so no Xcode probe happens.
+    afterEvaluate {
+        tasks.withType<KotlinNativeSimulatorTest>().matching {
+            it.name == "tvosSimulatorArm64Test" || it.name == "watchosSimulatorArm64Test"
+        }.configureEach { enabled = false }
+    }
 }
 
 /**
