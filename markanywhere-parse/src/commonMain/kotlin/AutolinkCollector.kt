@@ -82,7 +82,7 @@ internal class AutolinkCollector(
 
     override suspend fun emit(value: SemanticEvent) {
         when (value) {
-            is SemanticEvent.Text -> {
+            is Text -> {
                 if (suppressDepth > 0 || htmlRawTextDepth > 0) {
                     drain()
                     charBeforeWord = null
@@ -91,13 +91,13 @@ internal class AutolinkCollector(
                 }
                 pendingEvents.add(value)
             }
-            is SemanticEvent.Mark -> {
+            is Mark -> {
                 drain()
                 charBeforeWord = null
                 if (value.name.lowercase() in SUPPRESS_NAMES) suppressDepth++
                 downstream.emit(value)
             }
-            is SemanticEvent.Unmark -> {
+            is Unmark -> {
                 drain()
                 charBeforeWord = null
                 if (value.name.lowercase() in SUPPRESS_NAMES && suppressDepth > 0) suppressDepth--
