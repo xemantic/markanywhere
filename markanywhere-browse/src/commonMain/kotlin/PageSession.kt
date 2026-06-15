@@ -16,7 +16,7 @@
 
 package com.xemantic.markanywhere.browse
 
-import com.xemantic.markanywhere.browse.PageSession.Companion.REF_ATTRIBUTE
+import com.xemantic.markanywhere.dump.AccessibilityAnnotations
 import com.xemantic.markanywhere.dump.SemanticEventDump
 import dev.kdriver.cdp.domain.Accessibility
 import dev.kdriver.cdp.domain.dom
@@ -29,7 +29,7 @@ import kotlinx.serialization.json.booleanOrNull
 /**
  * A stateful handle over a live [Tab] that bridges the serialized, LLM-facing
  * [dump] and the page it describes: every [dump] stamps a short, dense ref
- * ([REF_ATTRIBUTE]) on each *actionable* element (a focusable control / link,
+ * ([AccessibilityAnnotations.REF]) on each *actionable* element (a focusable control / link,
  * or one whose accessibility role is interactive), and remembers `ref →
  * backendNodeId` so an LLM that read the dump can name an element by its ref and
  * have the session resolve it back to a live [Element] to act on — `click`,
@@ -52,12 +52,12 @@ public class PageSession(
     /**
      * Captures the page as a [SemanticEventDump] (full DOM, accessibility
      * verdicts annotated — see [capturePage]) and, additionally, a
-     * [REF_ATTRIBUTE] on every actionable element. Refreshes this session's
-     * ref registry, so it must be called before [element].
+     * [AccessibilityAnnotations.REF] on every actionable element. Refreshes
+     * this session's ref registry, so it must be called before [element].
      */
     public suspend fun dump(): SemanticEventDump {
         val capture = tab.capturePage(
-            refAttribute = REF_ATTRIBUTE,
+            refAttribute = AccessibilityAnnotations.REF,
             isActionable = ::isActionable
         )
         refs = capture.refs
@@ -65,7 +65,7 @@ public class PageSession(
     }
 
     /**
-     * Resolves the [REF_ATTRIBUTE] value [ref] from the most recent [dump] back
+     * Resolves the [AccessibilityAnnotations.REF] value [ref] from the most recent [dump] back
      * to a live, actionable [Element]. Rehydration goes through the captured
      * `backendNodeId` (stable for the node's lifetime) via CDP `DOM.describeNode`
      * — no DOM mutation, the same path kdriver's own selectors take.
@@ -79,11 +79,6 @@ public class PageSession(
         )
         val node = tab.dom.describeNode(backendNodeId = backendNodeId).node
         return DefaultElement(tab, node, node)
-    }
-
-    public companion object {
-        /** Attribute carrying an actionable element's short ref in the dump. */
-        public const val REF_ATTRIBUTE: String = "data-markanywhere-ref"
     }
 
 }
