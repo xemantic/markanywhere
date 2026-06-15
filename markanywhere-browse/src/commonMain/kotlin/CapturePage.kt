@@ -79,7 +79,10 @@ internal suspend fun Tab.capturePage(
         dom = dom,
         axIndex = buildMap {
             axNodes.forEach { node ->
-                node.backendDOMNodeId?.let { putIfAbsent(it, node) }
+                node.backendDOMNodeId?.let {
+                    @OptIn(ExperimentalStdlibApi::class)
+                    getOrPutIfMissing(it) { node }
+                }
             }
         },
         refAttribute = refAttribute,
