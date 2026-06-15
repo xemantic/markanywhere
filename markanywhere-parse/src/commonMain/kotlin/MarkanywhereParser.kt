@@ -77,7 +77,7 @@ internal class RedirectingCollector(
             // event for label content. Doing the merge here keeps replay
             // identical to the pre-Phase-3a single-text emission shape.
             val last = buf.lastOrNull()
-            if (last is SemanticEvent.Text && value is SemanticEvent.Text) {
+            if (last is Text && value is Text) {
                 buf[buf.size - 1] = SemanticEvent.Text(last.text + value.text)
                 return
             }
@@ -1418,6 +1418,24 @@ private class ParserState(
     private var codeRunLength = 0
     private var inlineBuffer = StringBuilder()
 
+    // GFM §6.11 disallowed raw HTML (`script`, `style`, `textarea`, `iframe`,
+    // …) encountered *inline* (mid-line, not at a block boundary). At a block
+    // boundary these open a type-1 HTML block that is emitted structurally (and
+    // dropped downstream); mid-line they reach the inline `<…>` dispatch, where
+    // we suppress the element and its raw-text body entirely rather than leaking
+    // it as literal text — a minified `<script>{json}</script>` would otherwise
+    // dump its whole body into the output. While [inlineRawSkipTag] is set, every
+    // char is dropped until the matching close tag completes. [inlineRawSkipMatch]
+    // is the incremental match position against [inlineRawSkipClose] (`</name`),
+    // and reaching its length means the name matched and we are consuming optional
+    // whitespace before the final `>`. STREAMING DIVERGENCE: the skip is bounded to
+    // a single line — a `\n` falls through to the block machine and [flushInline]
+    // clears the state, so a disallowed tag whose body spans soft breaks only drops
+    // its first line (same constraint as every other inline construct).
+    private var inlineRawSkipTag: String? = null
+    private var inlineRawSkipClose: String = ""
+    private var inlineRawSkipMatch = 0
+
     // Unified stack of in-flight inline opens — emphasis (`em`/`strong`) and
     // inline HTML tags — recorded in the order they were emitted. A single
     // stack is required to preserve LIFO close order across the two: a
@@ -1678,6 +1696,44 @@ private class ParserState(
         return true
     }
 
+    /** Enter inline raw-text skip mode for a disallowed [tagName] (GFM §6.11). */
+    private fun beginInlineRawSkip(tagName: String) {
+        inlineRawSkipTag = tagName
+        inlineRawSkipClose = "</" + tagName.lowercase()
+        inlineRawSkipMatch = 0
+    }
+
+    private fun endInlineRawSkip() {
+        inlineRawSkipTag = null
+        inlineRawSkipClose = ""
+        inlineRawSkipMatch = 0
+    }
+
+    /**
+     * Consume one dropped char while in inline raw-text skip mode, advancing the
+     * incremental match against the close tag `</name …>`. Returns `true` when
+     * the close completes (skip mode ends). The restart-on-`<` rule is sufficient
+     * because `</name` has no internal repeat of its `<` prefix.
+     */
+    private fun consumeInlineRawSkipChar(char: Char): Boolean {
+        val close = inlineRawSkipClose
+        if (inlineRawSkipMatch < close.length) {
+            inlineRawSkipMatch = when {
+                char.lowercaseChar() == close[inlineRawSkipMatch] -> inlineRawSkipMatch + 1
+                char == '<' -> 1
+                else -> 0
+            }
+            return false
+        }
+        // Name matched: skip optional whitespace, then require the closing `>`.
+        return when {
+            char == '>' -> { endInlineRawSkip(); true }
+            char == ' ' || char == '\t' -> false
+            char == '<' -> { inlineRawSkipMatch = 1; false }
+            else -> { inlineRawSkipMatch = 0; false }
+        }
+    }
+
     /**
      * Process inline content in bulk, emitting maximal text runs.
      * This is used when replaying buffered content (e.g., from lineBuffer)
@@ -1732,6 +1788,9 @@ private class ParserState(
      * Returns the fast-path end index if an inline state applies, or -1 if no inline state is active.
      */
     private fun getInlineStateFastPathEnd(content: String, startIndex: Int): Int = when {
+        // Inline raw-text skip drops every char one-by-one through the close-tag
+        // matcher — no fast-path substring emit may bypass it.
+        inlineRawSkipTag != null -> startIndex
         escaped -> startIndex
         // N=1 code spans stream content as text events for typewriter UX — the
         // fast-path emits a maximal run of non-backtick chars at once, stopping
@@ -1777,7 +1836,7 @@ private class ParserState(
             val heading = blockMode
             if (heading is BlockMode.Heading &&
                 inlineBuffer.isEmpty() && !escaped && !code && !math &&
-                !inLink && !inImage
+                !inLink && !inImage && inlineRawSkipTag == null
             ) {
                 if (!heading.contentStarted && heading.pendingSpaces.isEmpty()) {
                     var skip = index
@@ -1940,6 +1999,13 @@ private class ParserState(
     }
 
     private suspend fun SemanticEventScope.process(char: Char) {
+        // Inline raw-text skip (GFM §6.11): drop the body of a mid-line disallowed
+        // tag until its close completes. `\n` falls through so the block machine
+        // and `flushInline` bound the skip to a single line.
+        if (inlineRawSkipTag != null && char != '\n') {
+            consumeInlineRawSkipChar(char)
+            return
+        }
         // Blockquote prefix interceptor: consumes `>` (and optional space) at the
         // start of each line for every enclosing Blockquote frame, before chars
         // reach the inner sub-parser. Failed prefix consumption either closes
@@ -2100,7 +2166,7 @@ private class ParserState(
                 parseFenceOpen(line) != null -> {
                     val fence = parseFenceOpen(line)!!
                     mark("pre")
-                    val codeAttrs = fence.language?.let { mapOf("class" to "language-$it") }
+                    val codeAttrs = fence.language?.let { mapOf("class" to "language-$it") } ?: emptyMap()
                     mark("code", attributes = codeAttrs)
                     replaceMode(BlockMode.CodeBlock(fence.marker, fence.length, fence.indent))
                 }
@@ -2131,7 +2197,7 @@ private class ParserState(
                     val parsed = parseCustomMarkupOpeningTag(line)
                     if (parsed != null) {
                         val (tagName, attributes) = parsed
-                        mark(tagName, isTagged = true, attributes = attributes)
+                        mark(tagName, isTagged = true, attributes = attributes ?: emptyMap())
                         customMarkupSkipFirstNewline = false  // Already consumed by line-based detection
                         customMarkupPendingNewline = false  // Reset any stale state from previous custom markup
                         replaceMode(BlockMode.CustomMarkup(tagName))
@@ -2219,7 +2285,7 @@ private class ParserState(
                 val parsed = parseCustomMarkupOpeningTag(line)
                 if (parsed != null) {
                     val (tagName, attributes) = parsed
-                    mark(tagName, isTagged = true, attributes = attributes)
+                    mark(tagName, isTagged = true, attributes = attributes ?: emptyMap())
                     lineBuffer.clear()
                     customMarkupSkipFirstNewline = true  // Skip newline that may follow immediately
                     customMarkupPendingNewline = false  // Reset any stale state from previous custom markup
@@ -2467,7 +2533,7 @@ private class ParserState(
             singleTag.second.name.lowercase() !in INLINE_HTML_BLOCK_ELEMENTS
         ) {
             val tag = singleTag.second
-            mark(tag.name, isTagged = true, attributes = tag.attributes)
+            mark(tag.name, isTagged = true, attributes = tag.attributes ?: emptyMap())
             unmark(tag.name, isTagged = true)
         } else {
             processInlineContent(stripped)
@@ -2626,8 +2692,8 @@ private class ParserState(
         mode.stack.add(ctx)
         val listAttrs = if (marker.ordered && marker.digits != null) {
             val start = marker.digits.trimStart('0').ifEmpty { "0" }
-            if (start != "1") mapOf("start" to start) else null
-        } else null
+            if (start != "1") mapOf("start" to start) else emptyMap()
+        } else emptyMap()
         mark(if (ctx.ordered) "ol" else "ul", attributes = listAttrs)
         mark("li")
         val firstContent = markerLine.substring(marker.markerEndIndex)
@@ -2689,7 +2755,7 @@ private class ParserState(
         val fence = parseFenceOpen(trimmed)
         if (fence != null) {
             mark("pre")
-            val codeAttrs = fence.language?.let { mapOf("class" to "language-$it") }
+            val codeAttrs = fence.language?.let { mapOf("class" to "language-$it") } ?: emptyMap()
             mark("code", attributes = codeAttrs)
             ctx.fencedCodeOpen = true
             ctx.fencedMarker = fence.marker
@@ -3366,7 +3432,7 @@ private class ParserState(
         }
         val parsed = parseCustomMarkupOpeningTag(line) ?: return false
         val (tagName, attributes) = parsed
-        mark(tagName, isTagged = true, attributes = attributes)
+        mark(tagName, isTagged = true, attributes = attributes ?: emptyMap())
         ctx.customMarkupTagName = tagName
         ctx.customMarkupHasContent = false
         ctx.hasContent = true
@@ -3779,7 +3845,7 @@ private class ParserState(
                 closeListParagraphIfOpen(mode)
                 closeListBlockquoteIfOpen(mode)
                 mark("pre")
-                val codeAttrs = fence.language?.let { mapOf("class" to "language-$it") }
+                val codeAttrs = fence.language?.let { mapOf("class" to "language-$it") } ?: emptyMap()
                 mark("code", attributes = codeAttrs)
                 ctx.fencedCodeOpen = true
                 ctx.fencedMarker = fence.marker
@@ -3856,7 +3922,7 @@ private class ParserState(
                     closeListMathBlockIfOpen(mode)
                     closeListBlockquoteIfOpen(mode)
                     val (tagName, attributes) = parsed
-                    mark(tagName, isTagged = true, attributes = attributes)
+                    mark(tagName, isTagged = true, attributes = attributes ?: emptyMap())
                     ctx.customMarkupTagName = tagName
                     ctx.customMarkupHasContent = false
                     ctx.hasContent = true
@@ -4635,7 +4701,7 @@ private class ParserState(
         val tag = if (isHeader) "th" else "td"
         for (i in 0 until columnCount) {
             val align = alignments.getOrNull(i)
-            val attrs = align?.let { mapOf("align" to it) }
+            val attrs = align?.let { mapOf("align" to it) } ?: emptyMap()
             mark(tag, attributes = attrs)
             val cell = cells.getOrNull(i)?.trim().orEmpty()
             if (cell.isNotEmpty()) {
@@ -4780,6 +4846,7 @@ private class ParserState(
             isTagged = true,
             attributes = attributes?.takeIf { it.isNotEmpty() }
                 ?.let { attrs -> if (isHtml5) attrs.mapKeys { it.key.lowercase() } else attrs }
+                ?: emptyMap()
         )
     }
 
@@ -5400,17 +5467,53 @@ private class ParserState(
         if (pending.isNotEmpty()) +pending.toString()
     }
 
-    /** Find the index of the matching root close tag `</rootName>` (case-insensitive) in [line], or -1. */
+    /**
+     * Find the index of the matching root close tag `</rootName>`
+     * (case-insensitive) in [line], or -1.
+     *
+     * Tracks same-line nesting of `<rootName …>` openers vs `</rootName>`
+     * closers and returns only the index of the first **excess** close — one
+     * not balanced by a line-local opener of the same name. A self-contained
+     * `<div …></div>` on a content line therefore does NOT count as the
+     * enclosing `div` frame's root close (its `</div>` balances its own
+     * opener); only a genuinely unmatched `</div>` closes the frame. Without
+     * this, a one-line `<div></div>` inside a `div`-rooted block would be
+     * mistaken for the block's close, prematurely popping it and leaking the
+     * rest of the document as raw text.
+     */
     private fun findRootCloseTagIndex(line: String, rootTagName: String): Int {
-        val pattern = "</$rootTagName"
         val lower = line.lowercase()
-        var idx = lower.indexOf(pattern)
-        while (idx >= 0) {
-            val afterName = idx + pattern.length
-            var i = afterName
-            while (i < line.length && (line[i] == ' ' || line[i] == '\t')) i++
-            if (i < line.length && line[i] == '>') return idx
-            idx = lower.indexOf(pattern, idx + 1)
+        val openPattern = "<$rootTagName"
+        val closePattern = "</$rootTagName"
+        var depth = 0
+        var i = 0
+        while (i < line.length) {
+            if (line[i] == '<') {
+                if (lower.startsWith(closePattern, i)) {
+                    var j = i + closePattern.length
+                    while (j < line.length && (line[j] == ' ' || line[j] == '\t')) j++
+                    if (j < line.length && line[j] == '>') {
+                        if (depth == 0) return i
+                        depth--
+                        i = j + 1
+                        continue
+                    }
+                } else if (lower.startsWith(openPattern, i)) {
+                    val afterName = i + openPattern.length
+                    val next = if (afterName < line.length) line[afterName] else '\u0000'
+                    // Real tag boundary, not a longer name like `<divider`.
+                    if (next == ' ' || next == '\t' || next == '>' || next == '/' || next == '\u0000') {
+                        val gt = line.indexOf('>', i)
+                        if (gt >= 0) {
+                            // `<rootName … />` opens and closes — no net depth change.
+                            if (line[gt - 1] != '/') depth++
+                            i = gt + 1
+                            continue
+                        }
+                    }
+                }
+            }
+            i++
         }
         return -1
     }
@@ -5459,6 +5562,12 @@ private class ParserState(
     }
 
     private suspend fun SemanticEventScope.processInlineChar(char: Char) {
+        // Inline raw-text skip (GFM §6.11): drop disallowed-tag body chars; `\n`
+        // falls through so the block boundary clears the skip in `flushInline`.
+        if (inlineRawSkipTag != null && char != '\n') {
+            consumeInlineRawSkipChar(char)
+            return
+        }
         // Capture the char that immediately preceded any delimiter run that
         // might start (or has started) in this call. We do this opportunistically
         // whenever the inline buffer is empty at the start of the call: if a run
@@ -5821,11 +5930,21 @@ private class ParserState(
                         val open = tryParseOpenTag(full, 0)
                         val close = if (open == null) tryParseCloseTag(full, 0) else null
                         if (open != null && open.first == full.length &&
-                            open.second.name.lowercase() !in INLINE_HTML_BLOCK_ELEMENTS &&
-                            open.second.name.lowercase() !in GFM_DISALLOWED_TAGS
+                            open.second.name.lowercase() in GFM_DISALLOWED_TAGS
+                        ) {
+                            // GFM §6.11 disallowed raw HTML reached mid-line. Drop the
+                            // element and its raw-text body (emit nothing) rather than
+                            // leaking source as literal text — see [inlineRawSkipTag].
+                            // A self-closing/void shape has no body to skip.
+                            val tag = open.second
+                            if (!tag.isSelfClosingOrVoid()) {
+                                beginInlineRawSkip(tag.name)
+                            }
+                        } else if (open != null && open.first == full.length &&
+                            open.second.name.lowercase() !in INLINE_HTML_BLOCK_ELEMENTS
                         ) {
                             val tag = open.second
-                            mark(tag.name, isTagged = true, attributes = tag.attributes)
+                            mark(tag.name, isTagged = true, attributes = tag.attributes ?: emptyMap())
                             if (tag.isSelfClosingOrVoid()) {
                                 unmark(tag.name, isTagged = true)
                             } else {
@@ -6193,7 +6312,7 @@ private class ParserState(
     private fun List<SemanticEvent>.toLabelText(): String {
         val sb = StringBuilder()
         for (e in this) {
-            if (e is SemanticEvent.Text) sb.append(e.text)
+            if (e is Text) sb.append(e.text)
         }
         return sb.toString()
     }
@@ -6399,7 +6518,7 @@ private class ParserState(
         return sb.toString() to i
     }
 
-    /** Parse a link title at `s[start..]`. Returns (raw, indexAfter). */
+    /** Parse a link title at `s[start]..`. Returns (raw, indexAfter). */
     private fun parseLinkDefTitle(s: String, start: Int): Pair<String, Int>? {
         if (start >= s.length) return null
         val open = s[start]
@@ -6454,7 +6573,7 @@ private class ParserState(
         }
 
         when (linkUrlPhase) {
-            LinkUrlPhase.PreDest -> when (char) {
+            PreDest -> when (char) {
                 ' ', '\t' -> {} // skip leading whitespace
                 ')' -> finalizeInlineLink(isImage) // empty destination — `[foo]()`
                 '<' -> linkUrlPhase = LinkUrlPhase.DestAngle
@@ -6473,7 +6592,7 @@ private class ParserState(
                     dest.append(char)
                 }
             }
-            LinkUrlPhase.DestAngle -> when (char) {
+            DestAngle -> when (char) {
                 '\\' -> {
                     linkEscape = true
                     dest.append('\\')
@@ -6482,7 +6601,7 @@ private class ParserState(
                 '<' -> abortInlineLinkOrImage(isImage)
                 else -> dest.append(char)
             }
-            LinkUrlPhase.DestPlain -> when (char) {
+            DestPlain -> when (char) {
                 '\\' -> {
                     linkEscape = true
                     dest.append('\\')
@@ -6506,7 +6625,7 @@ private class ParserState(
                 }
                 else -> dest.append(char)
             }
-            LinkUrlPhase.BetweenDestTitle -> when (char) {
+            BetweenDestTitle -> when (char) {
                 ' ', '\t' -> {}
                 ')' -> finalizeInlineLink(isImage)
                 '"' -> linkUrlPhase = LinkUrlPhase.TitleDouble
@@ -6514,23 +6633,23 @@ private class ParserState(
                 '(' -> linkUrlPhase = LinkUrlPhase.TitleParen
                 else -> abortInlineLinkOrImage(isImage)
             }
-            LinkUrlPhase.TitleDouble -> when (char) {
+            TitleDouble -> when (char) {
                 '\\' -> { linkEscape = true; linkTitle.append('\\') }
                 '"' -> linkUrlPhase = LinkUrlPhase.AfterTitle
                 else -> linkTitle.append(char)
             }
-            LinkUrlPhase.TitleSingle -> when (char) {
+            TitleSingle -> when (char) {
                 '\\' -> { linkEscape = true; linkTitle.append('\\') }
                 '\'' -> linkUrlPhase = LinkUrlPhase.AfterTitle
                 else -> linkTitle.append(char)
             }
-            LinkUrlPhase.TitleParen -> when (char) {
+            TitleParen -> when (char) {
                 '\\' -> { linkEscape = true; linkTitle.append('\\') }
                 ')' -> linkUrlPhase = LinkUrlPhase.AfterTitle
                 '(' -> abortInlineLinkOrImage(isImage)
                 else -> linkTitle.append(char)
             }
-            LinkUrlPhase.AfterTitle -> when (char) {
+            AfterTitle -> when (char) {
                 ' ', '\t' -> {}
                 ')' -> finalizeInlineLink(isImage)
                 else -> abortInlineLinkOrImage(isImage)
@@ -6677,43 +6796,6 @@ private class ParserState(
     }
 
     /**
-     * Look up [key] in [linkDefinitions] and emit the matching `<a>`/`<img>`
-     * for an in-flight `[label]` (link) or `![alt]` (image) using [labelText]
-     * as the visible link text or alt-text. Returns `true` on a successful
-     * match; the caller is responsible for resetting inline-link state.
-     *
-     * NOTE: link text rendering currently emits the raw label as a single
-     * text event — inline markdown markup inside the label (em / strong /
-     * code / nested image) is not parsed. Same divergence as inline
-     * `[label](url)` in this parser.
-     */
-    private suspend fun SemanticEventScope.emitReferenceMatch(
-        key: String,
-        labelText: String,
-        isImage: Boolean
-    ): Boolean {
-        val def = linkDefinitions[key] ?: return false
-        if (isImage) {
-            val attrs = if (def.title != null) {
-                mapOf("src" to def.href, "alt" to labelText, "title" to def.title)
-            } else {
-                mapOf("src" to def.href, "alt" to labelText)
-            }
-            "img"(attributes = attrs) {}
-        } else {
-            val attrs = if (def.title != null) {
-                mapOf("href" to def.href, "title" to def.title)
-            } else {
-                mapOf("href" to def.href)
-            }
-            "a"(attributes = attrs) {
-                +labelText
-            }
-        }
-        return true
-    }
-
-    /**
      * Replay an unresolved inline link `[label]` (or `[label](partial_url…`) as
      * literal text and reset link state. Called when the parser determines that
      * a `[` did not start a real link — either because `[label]` was not
@@ -6743,7 +6825,7 @@ private class ParserState(
             linkLabelTentativeClose = false
         }
         if (inLinkUrl) {
-            +applyBackslashEscapes("(" + linkUrlSource.toString())
+            +applyBackslashEscapes("($linkUrlSource")
         }
         resetInlineLinkState()
     }
@@ -6764,7 +6846,7 @@ private class ParserState(
             linkLabelTentativeClose = false
         }
         if (inLinkUrl) {
-            +applyBackslashEscapes("(" + linkUrlSource.toString())
+            +applyBackslashEscapes("($linkUrlSource")
         }
         resetInlineLinkState()
     }
@@ -6892,6 +6974,9 @@ private class ParserState(
             unmark(frame.name, isTagged = frame.isTagged)
         }
         escaped = false
+        // Clear any in-flight inline raw-text skip — a disallowed tag's body does
+        // not span a block boundary (STREAMING DIVERGENCE, see [inlineRawSkipTag]).
+        endInlineRawSkip()
         // Reset flanking state so the next inline run starts at a block boundary
         // (treated as Unicode whitespace) — matches CommonMark expectation that
         // delimiters at the start of a paragraph are preceded by whitespace.
