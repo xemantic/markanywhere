@@ -267,6 +267,7 @@ class Gfm_06_04_Test {
     }
 
     @Test
+    @Suppress("NonAsciiCharacters")
     fun `example 371 - paragraph пристаням_стремятся_`() = runTest {
         // given
         val textFlow = "пристаням_стремятся_".chunkedRandomly().asFlow()
@@ -561,6 +562,7 @@ class Gfm_06_04_Test {
     }
 
     @Test
+    @Suppress("NonAsciiCharacters")
     fun `example 384 - DIVERGENCE - paragraph _пристаням_стремятся`() = runTest {
         // given
         val textFlow = "_пристаням_стремятся".chunkedRandomly().asFlow()
@@ -839,6 +841,7 @@ class Gfm_06_04_Test {
     }
 
     @Test
+    @Suppress("NonAsciiCharacters")
     fun `example 397 - paragraph пристаням__стремятся__`() = runTest {
         // given
         val textFlow = "пристаням__стремятся__".chunkedRandomly().asFlow()
@@ -1151,6 +1154,7 @@ class Gfm_06_04_Test {
     }
 
     @Test
+    @Suppress("NonAsciiCharacters")
     fun `example 410 - DIVERGENCE - paragraph __пристаням__стремятся`() = runTest {
         // given
         val textFlow = "__пристаням__стремятся".chunkedRandomly().asFlow()
