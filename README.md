@@ -79,6 +79,43 @@ Will print:
 
 > Backed by the first test in [`SemanticEventsRenderingTest`](markanywhere-render/src/commonTest/kotlin/SemanticEventsRenderingTest.kt) — `should render the README HTML example`.
 
+### Converting HTML to Markdown
+
+Because the same `SemanticEvent` stream can carry pure HTML (everything `isTagged = true`), the pipeline runs in reverse too: feed a real page's DOM — presentational wrappers, icon fonts, tracking scripts and all — and get clean Markdown back, ideal for handing a web page to an LLM.
+
+```kotlin
+val page = semanticEvents(tagged = true) {
+    "body" {
+        "h1" { +"Weather" }
+        "p" {
+            "i"("class" to "fa-solid fa-sun") { }
+            +" Sunny and "
+            "strong" { +"warm" }
+            +" today — see the "
+            "a"("href" to "https://example.com/forecast") { +"forecast" }
+            +"."
+        }
+        "script" { +"track('view')" }
+    }
+}
+
+println(page.transformHtmlToMarkdown().renderMarkdown())
+```
+
+Will print:
+
+```text
+# Weather
+
+☀️ Sunny and **warm** today — see the [forecast](https://example.com/forecast).
+```
+
+`transformHtmlToMarkdown()` (in `markanywhere-html`) is a fixed chain of stream operators: `resolveIcons()` maps icon-font glyphs to emoji (`fa-sun` → ☀️), `simplifyHtml()` unwraps the presentational `<body>` and drops the `<script>` noise while keeping semantic tags and link `href`s, blank inline formatting and structural whitespace are dropped, and `encodeActionableRefs()` runs last; `renderMarkdown()` then serializes the result. Each operator is a plain `Flow<SemanticEvent>` extension, so you can compose your own subset — the module also ships `applyAccessibility()` (honour the browser's hidden-subtree and layout-table verdicts) for when you start from a raw capture.
+
+The input here is built by hand, but in practice it comes from a captured page: [`markanywhere-dump`](markanywhere-dump) injects `window.markanywhere.dump()` into any browser, and [`markanywhere-browse`](markanywhere-browse) drives a real Chrome over CDP to produce a `SemanticEventDump`. That capture stamps every actionable element with a reference, and the final `encodeActionableRefs()` step turns those into `[forecast](ref:7:https://…)`-style links (a no-op here, since the hand-built input carries no refs) — so an agent can read the Markdown and then click an element back on the live page by its `ref`. See [`markanywhere-browse`](markanywhere-browse/README.md).
+
+> Backed by the first test in [`HtmlToMarkdownTest`](markanywhere-html/src/commonTest/kotlin/HtmlToMarkdownTest.kt) — `should convert the README HTML to Markdown example`.
+
 ### Rendering Markdown as DOM (Kotlin JS)
 
 ```kotlin
@@ -249,7 +286,8 @@ See [markanywhere-parse/README.md](markanywhere-parse/README.md) for a full list
 | `markanywhere-extract`   | Utilities for extracting structured data from event streams         |
 | `markanywhere-js`        | Kotlin/JS DOM renderer                                              |
 | `markanywhere-dump`      | Injectable browser bundle exposing `window.markanywhere.dump()` — captures a live page's DOM as `SemanticEventDump` JSON |
-| `markanywhere-html`      | HTML→Markdown pipeline: `resolveIcons`, `simplifyHtml`, `dropEmptyInlineFormatting`, whitespace normalization |
+| `markanywhere-browse`    | Drives real Chrome over CDP (via `kdriver`) to capture a live page as a `SemanticEventDump` and act on it by element reference |
+| `markanywhere-html`      | HTML→Markdown pipeline `transformHtmlToMarkdown` (`resolveIcons`, `simplifyHtml`, `dropBlankInlineFormatting`, whitespace normalization, `encodeActionableRefs`), plus `applyAccessibility` |
 | `markanywhere-test`      | Test helpers: `sameAs` for asserting `Flow<SemanticEvent>` equality |
 
 You can depend only on `markanywhere-parse` and consume the `Flow<SemanticEvent>` with your own renderer — the API surface is a single three-variant sealed class. The `markanywhere-transform` module additionally lets you intercept and rewrite events before they reach any renderer.
