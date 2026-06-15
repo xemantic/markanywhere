@@ -39,42 +39,41 @@ public fun semanticEvents(
 @SemanticEventDsl
 public class SemanticEventScope(
     public val tagged: Boolean = false,
-    @PublishedApi
     internal val collector: FlowCollector<SemanticEvent>,
 ) {
 
-    public suspend inline fun tagged(
-        crossinline block: suspend SemanticEventScope.() -> Unit
+    public suspend fun tagged(
+        block: suspend SemanticEventScope.() -> Unit
     ) {
         SemanticEventScope(tagged = true, collector).block()
     }
 
-    public suspend inline fun untagged(
-        crossinline block: suspend SemanticEventScope.() -> Unit
+    public suspend fun untagged(
+        block: suspend SemanticEventScope.() -> Unit
     ) {
         SemanticEventScope(tagged = false, collector).block()
     }
 
-    public suspend inline operator fun String.unaryPlus() {
+    public suspend operator fun String.unaryPlus() {
         text(this)
     }
 
-    public suspend inline operator fun Char.unaryPlus() {
+    public suspend operator fun Char.unaryPlus() {
         text(this.toString())
     }
 
-    public suspend inline operator fun String.invoke(
+    public suspend operator fun String.invoke(
         attributes: Map<String, String> = emptyMap(),
-        crossinline block: suspend SemanticEventScope.() -> Unit
+        block: suspend SemanticEventScope.() -> Unit
     ) {
         mark(this, attributes = attributes)
         block()
         unmark(this)
     }
 
-    public suspend inline operator fun String.invoke(
+    public suspend operator fun String.invoke(
         vararg attributes: Pair<String, String>,
-        crossinline block: suspend SemanticEventScope.() -> Unit
+        block: suspend SemanticEventScope.() -> Unit
     ) {
         invoke(
             attributes = attributes.toMap(),
@@ -90,7 +89,7 @@ public class SemanticEventScope(
         )
     }
 
-    public suspend inline fun mark(
+    public suspend fun mark(
         name: String,
         isTagged: Boolean = tagged,
         vararg attributes: Pair<String, String>,
@@ -141,20 +140,20 @@ public class SemanticEventScope(
         events.forEach { collector.emit(it) }
     }
 
-    public suspend inline fun tag(
+    public suspend fun tag(
         name: String,
         attributes: Map<String, String> = emptyMap(),
-        crossinline block: suspend SemanticEventScope.() -> Unit
+        block: suspend SemanticEventScope.() -> Unit
     ) {
         mark(name, isTagged = true, attributes)
         block()
         unmark(name, isTagged = true)
     }
 
-    public suspend inline fun tag(
+    public suspend fun tag(
         name: String,
         vararg attributes: Pair<String, String>,
-        crossinline block: suspend SemanticEventScope.() -> Unit
+        block: suspend SemanticEventScope.() -> Unit
     ) {
         tag(name, attributes.toMap(), block)
     }
