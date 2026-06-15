@@ -14,13 +14,21 @@
  * limitations under the License.
  */
 
+import con.xemantic.markanywhere.buildlogic.allTargets
+
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.kotlin.plugin.serialization)
     id("markanywhere.convention")
 }
 
+val devBuild: Boolean by extra
+
 kotlin {
+
+    explicitApi()
+
+    if (devBuild) jvm() else allTargets()
 
     sourceSets {
 
@@ -29,6 +37,7 @@ kotlin {
                 api(project(":markanywhere-api"))
                 api(project(":markanywhere-flow"))
                 api(project(":markanywhere-transform"))
+                implementation(project(":markanywhere-dump"))
                 api(libs.kotlinx.coroutines.core)
                 implementation(libs.xemantic.kotlin.core)
             }
@@ -41,6 +50,18 @@ kotlin {
                 implementation(libs.kotlin.test)
                 implementation(libs.kotlinx.coroutines.test)
                 implementation(libs.xemantic.kotlin.test)
+            }
+        }
+
+        jvmTest {
+            // Test-only: the `capture` developer task (Capture.kt) drives a live
+            // browser via :markanywhere-browse to write a SemanticEventDump
+            // fixture into src/commonTest/dumps/. Kept off commonMain/jvmMain so
+            // kdriver (limited target set) never reaches the published artifact.
+            dependencies {
+                implementation(project(":markanywhere-browse"))
+                runtimeOnly(libs.slf4j.api)
+                runtimeOnly(libs.logback.classic)
             }
         }
 
@@ -161,5 +182,23 @@ val renderDumpMarkdown by tasks.registering(JavaExec::class) {
     dependsOn(jvmTest.compileTaskProvider)
     classpath(jvmTest.output.allOutputs, jvmTest.runtimeDependencyFiles)
     mainClass.set("com.xemantic.markanywhere.html.RenderDumpMarkdownKt")
+    workingDir = projectDir
+}
+
+// --- Capture a live page as a dump fixture ----------------------------------
+//
+// Developer utility (NOT a test): drives a live browser via :markanywhere-browse
+// to capture a SemanticEventDump straight into src/commonTest/dumps/, where
+// generateDumpFixtures then bakes it into DumpFixtures. Entry point: Capture.kt
+// in src/jvmTest. Runs on the jvmTest classpath (which has markanywhere-browse +
+// kdriver) without polluting the published module's dependencies.
+
+val capture by tasks.registering(JavaExec::class) {
+    description = "Captures a SemanticEventDump into src/commonTest/dumps/: --args=\"<url> [output.json]\""
+    group = "markanywhere"
+    val jvmTest = kotlin.jvm().compilations.getByName("test")
+    dependsOn(jvmTest.compileTaskProvider)
+    classpath(jvmTest.output.allOutputs, jvmTest.runtimeDependencyFiles)
+    mainClass.set("com.xemantic.markanywhere.html.CaptureKt")
     workingDir = projectDir
 }
