@@ -76,3 +76,16 @@ kotlin {
     }
 
 }
+
+// Every test in this module drives a real headless browser via kdriver
+// (`runInBrowser` -> `createBrowser`), but kdriver cannot launch a browser
+// process on JS/Node — `defaultBrowserSearchConfig` throws
+// `UnsupportedOperationException` there. So the JS test *code* is still compiled
+// (a cross-platform compile check), but its execution is disabled; the browser
+// tests run on JVM and the desktop-native targets, where kdriver is supported.
+// `afterEvaluate` so the lazily-registered test tasks exist before we disable.
+afterEvaluate {
+    tasks.matching {
+        it.name == "jsNodeTest" || it.name == "jsBrowserTest"
+    }.configureEach { enabled = false }
+}
