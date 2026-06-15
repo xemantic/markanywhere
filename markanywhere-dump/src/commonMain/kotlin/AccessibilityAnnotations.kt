@@ -59,7 +59,22 @@ public object AccessibilityAnnotations {
      */
     public const val VISIBILITY: String = "data-markanywhere-visibility"
 
-    /** All reserved annotation attribute names — strip these before output. */
+    /**
+     * A short, dense ref stamped on every *actionable* element (a focusable
+     * control / link, or one whose accessibility role is interactive) so a
+     * downstream LLM that read the dump can name an element by its ref and have
+     * the session resolve it back to a live element to act on. Unlike the
+     * verdict annotations above this one is **not** consumed-and-stripped — it
+     * survives to the LLM-facing output (renamed to a shorter token by
+     * `simplifyHtml`'s `renameAttributes`), which is why it is deliberately
+     * absent from [ALL]. See `PageSession` in `markanywhere-browse`.
+     */
+    public const val REF: String = "data-markanywhere-ref"
+
+    /**
+     * All reserved verdict annotation names — strip these before output.
+     * Deliberately excludes [REF], which is renamed and kept (see its doc).
+     */
     public val ALL: Set<String> = setOf(ROLE, DISPLAY, VISIBILITY)
 
 }
