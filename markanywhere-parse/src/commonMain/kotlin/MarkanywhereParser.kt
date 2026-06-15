@@ -81,7 +81,7 @@ internal class RedirectingCollector(
                 buf[buf.size - 1] = SemanticEvent.Text(last.text + value.text)
                 return
             }
-            buf.add(value)
+            buf += value
         } else {
             downstream.emit(value)
         }
@@ -860,7 +860,7 @@ private fun tokenizeHtmlLine(line: String): List<HtmlToken> {
     val text = StringBuilder()
     fun flushText() {
         if (text.isNotEmpty()) {
-            tokens.add(HtmlToken.Text(text.toString()))
+            tokens += HtmlToken.Text(text.toString())
             text.clear()
         }
     }
@@ -889,7 +889,7 @@ private fun tokenizeHtmlLine(line: String): List<HtmlToken> {
                     }
                 } else {
                     flushText()
-                    tokens.add(open.second)
+                    tokens += open.second
                     i = open.first
                 }
                 continue
@@ -900,7 +900,7 @@ private fun tokenizeHtmlLine(line: String): List<HtmlToken> {
                     text.append(line, i, close.first)
                 } else {
                     flushText()
-                    tokens.add(close.second)
+                    tokens += close.second
                 }
                 i = close.first
                 continue
@@ -2689,7 +2689,7 @@ private class ParserState(
             markerStartCol = parentContentCol + marker.markerStartCol,
             contentCol = parentContentCol + marker.contentCol
         )
-        mode.stack.add(ctx)
+        mode.stack += ctx
         val listAttrs = if (marker.ordered && marker.digits != null) {
             val start = marker.digits.trimStart('0').ifEmpty { "0" }
             if (start != "1") mapOf("start" to start) else emptyMap()
@@ -3179,7 +3179,7 @@ private class ParserState(
                         if (text.isNotEmpty()) { +text.toString(); text.clear() }
                         markHtml(tok.name, tok.attributes)
                         if (tok.isSelfClosingOrVoid()) unmarkHtml(tok.name)
-                        else state.openTags.add(normalizeHtmlName(tok.name))
+                        else state.openTags += normalizeHtmlName(tok.name)
                     }
                 }
             }
@@ -3211,7 +3211,7 @@ private class ParserState(
         var foundRoot = false
         while (idx < source.length && source[idx] == '<') {
             val open = tryParseOpenTag(source, idx) ?: break
-            opens.add(open.second)
+            opens += open.second
             if (open.second.name.lowercase() == state.rootTagName) foundRoot = true
             idx = open.first
         }
@@ -3219,7 +3219,7 @@ private class ParserState(
         if (leading.isNotEmpty()) +leading
         for (tag in opens) {
             markHtml(tag.name, tag.attributes)
-            state.openTags.add(normalizeHtmlName(tag.name))
+            state.openTags += normalizeHtmlName(tag.name)
         }
         state.firstLineBuffer = null
         val remainder = source.substring(idx)
@@ -3297,7 +3297,7 @@ private class ParserState(
             if (nextOpen.second.isSelfClosingOrVoid()) {
                 unmarkHtml(nextOpen.second.name)
             } else {
-                state.openTags.add(normalizeHtmlName(nextOpen.second.name))
+                state.openTags += normalizeHtmlName(nextOpen.second.name)
             }
             idx = nextOpen.first
         }
@@ -3331,7 +3331,7 @@ private class ParserState(
                     flushPending()
                     markHtml(tok.name, tok.attributes)
                     if (tok.isSelfClosingOrVoid()) unmarkHtml(tok.name)
-                    else state.openTags.add(normalizeHtmlName(tok.name))
+                    else state.openTags += normalizeHtmlName(tok.name)
                 }
                 is HtmlToken.CloseTag -> {
                     flushPending()
@@ -5090,7 +5090,7 @@ private class ParserState(
         var foundRoot = false
         while (idx < source.length && source[idx] == '<') {
             val open = tryParseOpenTag(source, idx) ?: break
-            opens.add(open.second)
+            opens += open.second
             if (open.second.name.lowercase() == mode.rootTag) foundRoot = true
             idx = open.first
         }
@@ -5099,7 +5099,7 @@ private class ParserState(
         if (leading.isNotEmpty()) +leading
         for (tag in opens) {
             markHtml(tag.name, tag.attributes)
-            mode.openTags.add(normalizeHtmlName(tag.name))
+            mode.openTags += normalizeHtmlName(tag.name)
         }
         mode.firstLineBuffer = null
         // Handle any remaining content on the same first line.
@@ -5279,7 +5279,7 @@ private class ParserState(
             if (nextOpen.second.isSelfClosingOrVoid()) {
                 unmarkHtml(nextOpen.second.name)
             } else {
-                mode.openTags.add(normalizeHtmlName(nextOpen.second.name))
+                mode.openTags += normalizeHtmlName(nextOpen.second.name)
             }
             idx = nextOpen.first
         }
@@ -5424,7 +5424,7 @@ private class ParserState(
                     flushPending()
                     markHtml(tok.name, tok.attributes)
                     if (tok.isSelfClosingOrVoid()) unmarkHtml(tok.name)
-                    else mode.openTags.add(normalizeHtmlName(tok.name))
+                    else mode.openTags += normalizeHtmlName(tok.name)
                 }
                 is HtmlToken.CloseTag -> {
                     flushPending()
@@ -5456,7 +5456,7 @@ private class ParserState(
                     flushPending()
                     markHtml(tok.name, tok.attributes)
                     if (tok.isSelfClosingOrVoid()) unmarkHtml(tok.name)
-                    else mode.openTags.add(normalizeHtmlName(tok.name))
+                    else mode.openTags += normalizeHtmlName(tok.name)
                 }
                 is HtmlToken.CloseTag -> {
                     flushPending()
