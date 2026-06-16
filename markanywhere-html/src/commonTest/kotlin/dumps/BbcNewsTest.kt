@@ -125,7 +125,7 @@ class BbcNewsTest {
             
             BBC News understands the yacht had drifted towards the Admiral Grigorovich, a Russian frigate which has been operating in the Channel.
             
-            11 mins ago Europe
+            Just now Europe
             
             </a>
             <a href="/news/articles/c20ydx06ym2o" ref="35">
@@ -154,7 +154,7 @@ class BbcNewsTest {
             
             The vote fulfils a promise by new PM Péter Magyar to stop his predecessor from becoming prime minister again.
             
-            7 hrs ago Europe
+            8 hrs ago Europe
             
             </a>
             <a href="/news/articles/cn4rwzxvl8ko" ref="38">
@@ -412,7 +412,7 @@ class BbcNewsTest {
             
             The move comes six months after Israel became the first country to recognise the breakaway East African state.
             
-            5 hrs ago World
+            6 hrs ago World
             
             </a>
             <a href="/news/articles/c0jyzpv52yyo" ref="66">
@@ -506,32 +506,32 @@ class BbcNewsTest {
             ## Russian artist and Putin critic shot dead in Poland
             
             </a>
-            <a href="/news/articles/cy73xe2006po" ref="75">
+            <a href="/news/articles/c0jyzp9z9deo" ref="75">
             
             4
-            
-            ## 'Daylight robbery but worth it' - what fans are spending on World Cup
-            
-            </a>
-            <a href="/news/articles/c0jyzp9z9deo" ref="76">
-            
-            5
             
             ## German broadcaster removes TV intro after Elon Musk takes legal action
             
             </a>
-            <a href="/news/articles/cqx10gg2r2vo" ref="77">
+            <a href="/news/articles/cy73xe2006po" ref="76">
+            
+            5
+            
+            ## 'Daylight robbery but worth it' - what fans are spending on World Cup
+            
+            </a>
+            <a href="/news/articles/c87q7g48y4po" ref="77">
             
             6
             
-            ## Dozens walk out as Google boss Pichai addresses Stanford graduates
+            ## Woman left traumatised by swinging says website 'facilitated abuse'
             
             </a>
-            <a href="/news/articles/c87q7g48y4po" ref="78">
+            <a href="/news/articles/cqx10gg2r2vo" ref="78">
             
             7
             
-            ## Woman left traumatised by swinging says website 'facilitated abuse'
+            ## Dozens walk out as Google boss Pichai addresses Stanford graduates
             
             </a>
             <a href="/news/articles/cn4rw784nj2o" ref="79">
@@ -541,18 +541,18 @@ class BbcNewsTest {
             ## Three reasons ships are not going through the Strait of Hormuz yet
             
             </a>
-            <a href="/news/articles/clyx4jd9kkdo" ref="80">
+            <a href="/news/articles/cvgd5g7d7gyo" ref="80">
             
             9
             
-            ## Prince George to attend Eton College from September
+            ## Musk's SpaceX overtakes Amazon to become world's fifth most valuable firm
             
             </a>
-            <a href="/news/articles/c621zplqrrno" ref="81">
+            <a href="/news/articles/cn4rwzxvl8ko" ref="81">
             
             10
             
-            ## Hungary's MPs block return of Orbán, limiting rule of PM to eight years
+            ## Tehran selling deal with US as victory – but for Iranians it was necessity
             
             </a>
             </section>
@@ -606,9 +606,9 @@ class BbcNewsTest {
             </a>
             <a href="https://www.bbc.com/sport/cricket/live/cy510923w0pt" ref="87">
             
-            ![](https://static.files.bbci.co.uk/bbcdotcom/web/20260609-143108-fe43574f32-web-3.9.0-5/grey-placeholder.png)![Danielle Gibson](https://ichef.bbci.co.uk/ace/standard/480/cpsprodpb/ab5d/live/95c78330-69ba-11f1-8546-8f19e4fe30f4.jpg.webp) LIVE
+            ![](https://static.files.bbci.co.uk/bbcdotcom/web/20260609-143108-fe43574f32-web-3.9.0-5/grey-placeholder.png)![England's Amy Jones and Danni Wyatt-Hodge run between the wickets](https://ichef.bbci.co.uk/ace/standard/480/cpsprodpb/5b8f/live/9d5ca300-69bf-11f1-bd62-216646a5e7ca.jpg.webp) LIVE
             
-            ## Women's T20 World Cup: Ireland battle up to 118-9 against ruthless England
+            ## Women's T20 World Cup: England chasing 119 to beat Ireland
             
             Follow live text, BBC Radio 5 Live Sport commentary and in-play video highlights as England face Ireland in the Women's T20 World Cup in Southampton.
             
@@ -621,7 +621,7 @@ class BbcNewsTest {
             
             England have handed out four debuts in two Tests this summer but Ben Stokes' role in the latest revolution remains a mystery and will hang over England at The Oval.
             
-            2 hrs ago England
+            3 hrs ago England
             
             </a>
             <a href="/sport/articles/cpwez2pg8x1o" ref="89">
@@ -632,7 +632,7 @@ class BbcNewsTest {
             
             Netherlands World Cup defender Jan Paul van Hecke is set to leave Brighton for Tottenham Hotspur after the two clubs agree a £52m deal.
             
-            36 mins ago Premier League
+            45 mins ago Premier League
             
             </a>
             </section>
