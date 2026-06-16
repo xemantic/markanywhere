@@ -257,8 +257,7 @@ public fun Flow<SemanticEvent>.asHtml(): Flow<String> = flow {
 /**
  * Collects [asHtml] into a single HTML string.
  */
-// TODO later on we have to rename it to renderHtml
-public suspend fun Flow<SemanticEvent>.render(): String = asHtml().joinToString()
+public suspend fun Flow<SemanticEvent>.renderHtml(): String = asHtml().joinToString()
 
 // Block elements that expand with newlines and indentation
 private val BLOCK_ELEMENTS = setOf(

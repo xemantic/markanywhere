@@ -22,7 +22,7 @@ import com.xemantic.kotlin.test.have
 import com.xemantic.kotlin.test.sameAs
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.parse.parse
-import com.xemantic.markanywhere.render.render
+import com.xemantic.markanywhere.render.renderHtml
 import com.xemantic.markanywhere.test.sameAs
 import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.test.runTest
@@ -47,7 +47,7 @@ class SemanticEventsExtractorTest {
         )
 
         // when
-        val rendered = events.extract(extractor).render()
+        val rendered = events.extract(extractor).renderHtml()
 
         // then
         extractor should {
@@ -88,7 +88,7 @@ class SemanticEventsExtractorTest {
         )
 
         // when
-        val rendered = events.extract(extractor).render()
+        val rendered = events.extract(extractor).renderHtml()
 
         // then
         extractor should {
@@ -119,7 +119,7 @@ class SemanticEventsExtractorTest {
         )
 
         // when
-        val rendered = events.extract(extractor).render()
+        val rendered = events.extract(extractor).renderHtml()
 
         // then
         extractor should {
@@ -153,7 +153,7 @@ class SemanticEventsExtractorTest {
         )
 
         // when
-        val rendered = events.extract(extractor).render()
+        val rendered = events.extract(extractor).renderHtml()
 
         // then
         extractor should {
@@ -185,7 +185,7 @@ class SemanticEventsExtractorTest {
         val extractor = MarkupContentExtractor(tag = "foo:bar")
 
         // when
-        val rendered = events.extract(extractor).render()
+        val rendered = events.extract(extractor).renderHtml()
 
         // then
         extractor should {
@@ -237,7 +237,7 @@ class SemanticEventsExtractorTest {
         )
 
         // when
-        val rendered = events.extract(extractor).render()
+        val rendered = events.extract(extractor).renderHtml()
 
         // then
         extractor should {
@@ -301,7 +301,7 @@ class SemanticEventsExtractorTest {
         )
 
         // when
-        val rendered = events.extract(extractor).render()
+        val rendered = events.extract(extractor).renderHtml()
 
         // then
         extractor should {

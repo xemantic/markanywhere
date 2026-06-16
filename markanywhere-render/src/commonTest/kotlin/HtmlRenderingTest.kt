@@ -23,7 +23,7 @@ import com.xemantic.markanywhere.flow.semanticEvents
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 
-class SemanticEventsRenderingTest {
+class HtmlRenderingTest {
 
     @Test
     fun `should render the README HTML example`() = runTest {
@@ -41,7 +41,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -62,7 +62,7 @@ class SemanticEventsRenderingTest {
         val flow = semanticEvents { }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAs ""
@@ -76,7 +76,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAs "Hello World"
@@ -92,7 +92,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAs "Hello World!"
@@ -108,7 +108,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -128,7 +128,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -154,7 +154,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -180,7 +180,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -203,7 +203,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -230,7 +230,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -259,7 +259,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -291,7 +291,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -331,7 +331,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -358,7 +358,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """<a href="https://example.com">Click here</a>"""
@@ -378,7 +378,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         // Note: attribute order may vary
@@ -396,7 +396,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """<img src="https://example.com/image.png" alt="An example image"/>"""
@@ -412,7 +412,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -433,7 +433,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """<input type="checkbox" checked="true"/>"""
@@ -451,7 +451,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """<a href="https://example.com?foo=1&amp;bar=2">Link</a>"""
@@ -469,7 +469,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -502,7 +502,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -543,7 +543,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -568,7 +568,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -597,7 +597,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -617,7 +617,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -637,7 +637,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -654,7 +654,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml "<hr/>"
@@ -672,7 +672,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -694,7 +694,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         // Note: text inside custom markup is not indented to preserve raw content
@@ -715,7 +715,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         // Note: text inside custom markup is not indented to preserve raw HTML
@@ -740,7 +740,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         // Note: text inside custom markup is not indented to preserve raw HTML
@@ -768,7 +768,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         // Note: text inside custom markup is not indented to preserve raw HTML
@@ -800,7 +800,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         // Note: text inside custom markup is not indented to preserve raw HTML
@@ -845,7 +845,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -885,7 +885,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -922,7 +922,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -944,7 +944,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -966,7 +966,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -988,7 +988,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -1008,7 +1008,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then - whitespace-only text inside block elements is preserved
         html sameAsHtml """
@@ -1028,7 +1028,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -1054,7 +1054,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -1084,7 +1084,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -1112,7 +1112,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -1132,7 +1132,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -1152,7 +1152,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -1172,7 +1172,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -1195,7 +1195,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -1228,7 +1228,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -1251,7 +1251,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -1284,7 +1284,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -1331,7 +1331,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -1355,7 +1355,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -1379,7 +1379,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -1401,7 +1401,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -1422,7 +1422,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -1443,7 +1443,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -1467,7 +1467,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -1492,7 +1492,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -1513,7 +1513,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -1535,7 +1535,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -1557,7 +1557,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -1578,7 +1578,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -1599,7 +1599,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -1620,7 +1620,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -1642,7 +1642,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -1664,7 +1664,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -1686,7 +1686,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -1708,7 +1708,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """<a id="section1">Section 1</a>"""
@@ -1725,7 +1725,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -1746,7 +1746,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -1768,7 +1768,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -1788,7 +1788,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -1811,7 +1811,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml "<ruby>漢<rp>(</rp><rt>かん</rt><rp>)</rp></ruby>"
@@ -1831,7 +1831,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -1861,7 +1861,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -1901,7 +1901,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         // Nested elements inside pre should not add extra newlines or indentation
@@ -1925,7 +1925,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -1946,7 +1946,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -1969,7 +1969,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -1993,7 +1993,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         // Custom namespaced elements (containing :) are normally block elements,
@@ -2018,7 +2018,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -2044,7 +2044,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -2070,7 +2070,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -2094,7 +2094,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -2121,7 +2121,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -2148,7 +2148,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -2177,7 +2177,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -2205,7 +2205,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -2227,7 +2227,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -2248,7 +2248,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         // Trailing newline sets atLineStart=true, so closing tag appears on new line without extra blank line
@@ -2270,7 +2270,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -2292,7 +2292,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -2315,7 +2315,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -2337,7 +2337,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -2359,7 +2359,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -2387,7 +2387,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -2417,7 +2417,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -2443,7 +2443,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -2467,7 +2467,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -2490,7 +2490,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -2513,7 +2513,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -2541,7 +2541,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -2566,7 +2566,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -2589,7 +2589,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -2614,7 +2614,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -2636,7 +2636,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -2663,7 +2663,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -2700,7 +2700,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -2729,7 +2729,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -2861,7 +2861,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsXml """
@@ -2921,7 +2921,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsXml """
@@ -2952,7 +2952,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsXml """
@@ -2982,7 +2982,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsXml """
@@ -3016,7 +3016,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsXml """
@@ -3048,7 +3048,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsXml """
@@ -3080,7 +3080,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsXml """
@@ -3108,7 +3108,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -3128,7 +3128,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -3148,7 +3148,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -3172,7 +3172,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -3199,7 +3199,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -3226,7 +3226,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -3246,7 +3246,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -3267,7 +3267,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -3287,7 +3287,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -3307,7 +3307,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -3333,7 +3333,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -3368,7 +3368,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -3396,7 +3396,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """
@@ -3424,7 +3424,7 @@ class SemanticEventsRenderingTest {
         }
 
         // when
-        val html = flow.render()
+        val html = flow.renderHtml()
 
         // then
         html sameAsHtml """

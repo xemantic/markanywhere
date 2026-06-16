@@ -19,7 +19,7 @@ package com.xemantic.markanywhere.transform
 import com.xemantic.kotlin.test.sameAsHtml
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.parse.parse
-import com.xemantic.markanywhere.render.render
+import com.xemantic.markanywhere.render.renderHtml
 import com.xemantic.markanywhere.test.sameAs
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
@@ -53,7 +53,7 @@ class TransformationTest {
                 emphasizeToStrong()
                 passthrough() // copy every other mark and its text verbatim
             }
-            .render()
+            .renderHtml()
 
         // then - the Markdown `*streaming*` is rewritten to <strong>, while the
         //   literal <b> flows through untouched via passthrough

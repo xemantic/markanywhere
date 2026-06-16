@@ -18,7 +18,7 @@ package com.xemantic.markanywhere.html
 
 import com.xemantic.markanywhere.dump.SemanticEventDump
 import com.xemantic.markanywhere.markanywhereJson
-import com.xemantic.markanywhere.render.render
+import com.xemantic.markanywhere.render.renderHtml
 import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.runBlocking
 import java.io.File
@@ -47,7 +47,7 @@ fun main() {
         val dump = markanywhereJson.decodeFromString<SemanticEventDump>(file.readText())
         val base = file.nameWithoutExtension
         val html = runBlocking {
-            dump.events.asFlow().dropHtmlStructuralWhitespace().render()
+            dump.events.asFlow().dropHtmlStructuralWhitespace().renderHtml()
         }
         File(outputDir, "$base.html").writeText(html)
         println("Rendered ${file.name} (${dump.url}) -> $base.html")
