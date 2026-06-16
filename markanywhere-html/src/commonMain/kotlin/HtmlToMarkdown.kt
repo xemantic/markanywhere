@@ -35,6 +35,16 @@ public fun Flow<SemanticEvent>.transformHtmlToMarkdown(
     keepAttributes: Set<String> = emptySet(),
 ): Flow<SemanticEvent> = resolveIcons()
     .applyAccessibility()
+    // After applyAccessibility (aria-hidden SVGs already dropped), before
+    // simplifyHtml (which would otherwise discard the whole svg subtree): turn
+    // an accessible-name-bearing inline <svg> logo/wordmark into an ![name]().
+    .resolveInlineGraphics()
+    // Still before simplifyHtml (which unwraps block boxes and discards their
+    // DISPLAY annotation): inject a separator where flattening an unwrapped
+    // block box would merge inline content from two boxes that share no source
+    // whitespace (e.g. the BBC card metadata `3 hrs ago` + `Europe`, an image
+    // box next to a `LIVE` badge box).
+    .separateUnwrappedBlocks()
     // DISPLAY is preserved through simplify so dropHtmlStructuralWhitespace can
     // gate whitespace on the browser's computed block/inline verdict; it strips
     // the annotation itself.
