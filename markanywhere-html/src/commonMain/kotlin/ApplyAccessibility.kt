@@ -62,6 +62,11 @@ public fun TransformerBuilder.applyAccessibility() {
     // hidden subtree: no children() → the whole subtree is skipped.
     match({ isHidden() }) { /* drop */ }
 
+    // decorative image: Blink kept it out of the accessibility tree (empty alt,
+    // role=presentation, a superseded lazy-load placeholder, …). An <img> is a
+    // void element, so there is no subtree to descend — just drop it.
+    match({ name == "img" && isAxIgnoredImage() }) { /* drop */ }
+
     // layout table: drop the mark, descend unwrapping the structural skeleton.
     match({ name == "table" && isLayoutTable() }) { children(mode = LAYOUT_TABLE_MODE) }
 
@@ -124,6 +129,9 @@ private fun SemanticEvent.Mark.isHidden(): Boolean =
         || this[AccessibilityAnnotations.DISPLAY] == "none"
         || this[AccessibilityAnnotations.VISIBILITY] == "hidden"
 
+private fun SemanticEvent.Mark.isAxIgnoredImage(): Boolean =
+    this[AccessibilityAnnotations.IGNORED] == "true"
+
 private fun SemanticEvent.Mark.isLayoutTable(): Boolean {
     val role = this[AccessibilityAnnotations.ROLE] ?: return false
     return role !in DATA_TABLE_ROLES
@@ -137,7 +145,9 @@ private fun SemanticEvent.Mark.isLayoutTable(): Boolean {
  */
 private suspend fun MatcherScope.passThrough(event: SemanticEvent.Mark) {
     val attributes = event.attributes.filterKeys {
-        it != AccessibilityAnnotations.ROLE && it != AccessibilityAnnotations.VISIBILITY
+        it != AccessibilityAnnotations.ROLE &&
+            it != AccessibilityAnnotations.VISIBILITY &&
+            it != AccessibilityAnnotations.IGNORED
     }
     if (event.isTagged) {
         tag(event.name, attributes) { children() }

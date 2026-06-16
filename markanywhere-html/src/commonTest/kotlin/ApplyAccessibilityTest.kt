@@ -226,4 +226,42 @@ class ApplyAccessibilityTest {
         }
     }
 
+    @Test
+    fun `should drop an image Blink marks accessibility-ignored`() = runTest {
+        // given — a decorative placeholder image flagged ignored by the browser,
+        // next to a real image that is kept.
+        val input = semanticEvents(tagged = true) {
+            "div" {
+                "img"("src" to "/placeholder.png", AccessibilityAnnotations.IGNORED to "true") {}
+                "img"("src" to "/real.jpg", "alt" to "Photo") {}
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then — the ignored image is dropped, the real one passes unchanged
+        output sameAs semanticEvents(tagged = true) {
+            "div" {
+                "img"("src" to "/real.jpg", "alt" to "Photo") {}
+            }
+        }
+    }
+
+    @Test
+    fun `should strip the ignored annotation from a surviving image`() = runTest {
+        // given — defensive: a non-decorative image must not leak the annotation.
+        val input = semanticEvents(tagged = true) {
+            "img"("src" to "/real.jpg", "alt" to "Photo", AccessibilityAnnotations.IGNORED to "false") {}
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "img"("src" to "/real.jpg", "alt" to "Photo") {}
+        }
+    }
+
 }
