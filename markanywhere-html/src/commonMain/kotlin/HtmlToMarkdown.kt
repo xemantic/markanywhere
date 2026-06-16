@@ -34,7 +34,11 @@ import kotlinx.coroutines.flow.Flow
 public fun Flow<SemanticEvent>.transformHtmlToMarkdown(
     keepAttributes: Set<String> = emptySet(),
 ): Flow<SemanticEvent> = resolveIcons()
-    .simplifyHtml(keepAttributes + AccessibilityAnnotations.REF)
+    .applyAccessibility()
+    // DISPLAY is preserved through simplify so dropHtmlStructuralWhitespace can
+    // gate whitespace on the browser's computed block/inline verdict; it strips
+    // the annotation itself.
+    .simplifyHtml(keepAttributes + AccessibilityAnnotations.REF + AccessibilityAnnotations.DISPLAY)
     .dropBlankInlineFormatting()
     .dropHtmlStructuralWhitespace()
     .encodeActionableRefs()
