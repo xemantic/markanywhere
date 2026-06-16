@@ -322,4 +322,167 @@ class HtmlParsingTest {
             }
         }
     }
+
+    /**
+     * **Place 12** — A self-contained `<div>…</div>` on a single content line
+     * inside a sub-parsed `div`-rooted HTML block must NOT be mistaken for the
+     * enclosing frame's root close.
+     *
+     * The blank line transitions the outer `<div class="ad">` frame to
+     * sub-parse mode. The line `<div id="slot"></div>` both opens and closes a
+     * nested `div`. Before the fix, [findRootCloseTagIndex] returned the first
+     * `</div>` regardless of same-line balance, so `tryCloseEnclosingHtmlBlock`
+     * popped the enclosing `ad` frame prematurely (an extra `unmark`), and the
+     * real `</div>` then leaked as literal text — desyncing the rest of the
+     * document into raw passthrough. The index now tracks same-line nesting and
+     * only matches an *excess* (unbalanced) close.
+     */
+    @Test
+    fun `one-line nested div in sub-parsed div block does not close the frame early`() = runTest {
+        // given
+        val src = "<div class=\"ad\">\n\n<div id=\"slot\"></div>\n<section>after</section>\n</div>\n"
+
+        // when
+        val parsed = flowOf(src).parse()
+
+        // then — the empty inner div is balanced; the outer `ad` div closes
+        // only on the final `</div>`, with `<section>` content in between.
+        parsed.mergeAdjacentText() sameAs semanticEvents(tagged = true) {
+            "div"("class" to "ad") {
+                +"\n\n"
+                "div"("id" to "slot") {}
+                "section" { +"after" }
+            }
+        }
+    }
+
+    /**
+     * **Place 13** — A GFM §6.11 disallowed tag (`<script>`) encountered
+     * *inline* (mid-line, not at a block boundary) drops the element **and
+     * its raw-text body** rather than leaking the source as literal text.
+     *
+     * At a block boundary `<script>` opens a type-1 HTML block (Place 1/5);
+     * minified real-world HTML, however, packs the whole document onto one
+     * line (`…</footer><script id="__NEXT_DATA__">{…}</script>…`), so the
+     * `<script>` arrives mid-line and reaches the inline `<…>` dispatch in
+     * `processInlineCharImpl`. The body — a serialized state blob in the BBC
+     * page — would otherwise dump verbatim into the output. The surrounding
+     * paragraph text is preserved.
+     *
+     * DIVERGENCE from GFM §6.11, which escapes disallowed tags to visible
+     * text (`&lt;script>`); we drop them, prioritising clean LLM-facing output
+     * over spec-faithful escaping.
+     */
+    @Test
+    fun `DIVERGENCE inline disallowed script tag and its body are dropped`() = runTest {
+        // given
+        val src = "before<script>alert(1)</script>after\n"
+
+        // when
+        val parsed = flowOf(src).parse()
+
+        // then — only the paragraph text on either side survives.
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" { +"beforeafter" }
+        }
+    }
+
+    /**
+     * **Place 14** — same as Place 13 for inline `<style>`; the CSS body,
+     * including HTML-like substrings, is dropped.
+     */
+    @Test
+    fun `DIVERGENCE inline disallowed style tag and its body are dropped`() = runTest {
+        // given
+        val src = "x<style>a::before{content:\"<x>\"}</style>y\n"
+
+        // when
+        val parsed = flowOf(src).parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" { +"xy" }
+        }
+    }
+
+    /**
+     * **Place 15** — the inline close-tag matcher tolerates whitespace before
+     * the final `>` (`</script   >`), mirroring the block-1 close rule.
+     */
+    @Test
+    fun `DIVERGENCE inline disallowed close tag tolerates trailing whitespace`() = runTest {
+        // given
+        val src = "a<script>js</script\t >b\n"
+
+        // when
+        val parsed = flowOf(src).parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" { +"ab" }
+        }
+    }
+
+    /**
+     * **Place 16** — once the disallowed element closes, normal inline parsing
+     * resumes: a following link / emphasis is recognised, and a JSON body
+     * containing `<x>` does not derail the close detection. Models the BBC
+     * `[link]<script>{json}</script>[link]` shape.
+     */
+    @Test
+    fun `inline parsing resumes after a dropped disallowed element`() = runTest {
+        // given
+        val src = "[BBC](/news)<script type=\"application/json\">{\"a\":1,\"b\":\"<x>\"}</script>[More](/more)\n"
+
+        // when
+        val parsed = flowOf(src).parse()
+
+        // then — both links parse; the script body (with its `<x>`) is gone.
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "a"("href" to "/news") { +"BBC" }
+                "a"("href" to "/more") { +"More" }
+            }
+        }
+    }
+
+    /**
+     * **Place 17** — a self-closing / void-shaped disallowed tag has no body to
+     * skip; it is simply dropped and the surrounding text flows through.
+     */
+    @Test
+    fun `inline self-closing disallowed tag is dropped without skipping a body`() = runTest {
+        // given
+        val src = "p<iframe src=\"x\"/>q\n"
+
+        // when
+        val parsed = flowOf(src).parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" { +"pq" }
+        }
+    }
+
+    /**
+     * **Place 18** — DIVERGENCE / bound: the skip cannot span a soft break (same
+     * constraint as every other inline construct — `flushInline` clears it at the
+     * block boundary). An *unclosed* inline disallowed opener therefore consumes
+     * the rest of its line only; the next line resumes normally. Real captures
+     * always close their `<script>`/`<style>`, so this edge is benign in practice.
+     */
+    @Test
+    fun `DIVERGENCE unclosed inline disallowed opener drops only the rest of its line`() = runTest {
+        // given
+        val src = "keep<script>dropped to end of line\nnext line\n"
+
+        // when
+        val parsed = flowOf(src).parse()
+
+        // then — line 1 keeps only `keep`; line 2 is an ordinary soft-break
+        // continuation of the same paragraph.
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" { +"keep\nnext line" }
+        }
+    }
 }
