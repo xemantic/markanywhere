@@ -17,6 +17,7 @@
 package com.xemantic.markanywhere.html
 
 import com.xemantic.markanywhere.SemanticEvent
+import com.xemantic.markanywhere.dump.AccessibilityAnnotations
 import com.xemantic.markanywhere.flow.mergeAdjacentText
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -74,6 +75,9 @@ public fun Flow<SemanticEvent>.dropHtmlStructuralWhitespace(): Flow<SemanticEven
     var depth = 0              // current open-mark nesting depth
     var preserveFrom = -1      // depth at which the active preserve region opened, -1 = none
     var leftQualifies = false  // can the previous significant token be the left side of a kept space?
+    // Per open element, whether it is inline-level (so a closing tag can read
+    // back its open-tag verdict — Unmark carries no attributes).
+    val inlineStack = ArrayDeque<Boolean>()
 
     // Resolve a buffered whitespace run now that its right neighbour is known:
     // keep a single collapsed space if inline content flanks both sides, else
@@ -110,9 +114,19 @@ public fun Flow<SemanticEvent>.dropHtmlStructuralWhitespace(): Flow<SemanticEven
             }
 
             is Mark -> {
-                resolvePending(rightQualifies = event.name in INLINE_HTML_ELEMENTS)
-                emit(event)
+                val inline = event.isInlineLevel()
+                resolvePending(rightQualifies = inline)
+                // Strip the display annotation we consumed so it can't leak into
+                // the rendered output.
+                emit(
+                    if (AccessibilityAnnotations.DISPLAY in event.attributes)
+                        event.copy(
+                            attributes = event.attributes - AccessibilityAnnotations.DISPLAY
+                        )
+                    else event
+                )
                 depth++
+                inlineStack.addLast(inline)
                 if (preserveFrom < 0 && event.isPreserveRegion()) {
                     preserveFrom = depth
                 }
@@ -124,7 +138,9 @@ public fun Flow<SemanticEvent>.dropHtmlStructuralWhitespace(): Flow<SemanticEven
                 if (depth == preserveFrom) preserveFrom = -1
                 depth--
                 emit(event)
-                leftQualifies = event.name in INLINE_HTML_ELEMENTS
+                // The closing tag reads back its open-tag inline verdict.
+                leftQualifies = inlineStack.removeLastOrNull()
+                    ?: (event.name in INLINE_HTML_ELEMENTS)
             }
         }
     }
@@ -158,10 +174,21 @@ private fun SemanticEvent.Mark.isPreserveRegion(): Boolean =
 
 private val WHITESPACE_PRESERVE_TAGS = setOf("pre", "code", "textarea")
 
+// Decides whether an element is inline-level for whitespace gating. Prefers the
+// browser's *computed* `display` captured in the dump (`data-markanywhere-display`):
+// any `inline*` value (`inline`, `inline-block`, …) is inline, everything else
+// (`block`, `flex`, `grid`, `table-cell`, `list-item`, …) is a block boundary —
+// this honours CSS overrides a tag-name set can't see (`<span style=display:block>`).
+// When no display annotation is present (synthetic / Markdown-native streams) it
+// falls back to the [INLINE_HTML_ELEMENTS] tag-name heuristic.
+private fun SemanticEvent.Mark.isInlineLevel(): Boolean =
+    this[AccessibilityAnnotations.DISPLAY]?.startsWith("inline") ?: (name in INLINE_HTML_ELEMENTS)
+
 // HTML phrasing / inline-level elements: whitespace touching their boundaries
 // is part of inline flow and collapses to a single space rather than being
 // dropped. Everything not listed here (div, p, section, li, table, …, and any
-// unknown / custom tag) is treated as a block boundary.
+// unknown / custom tag) is treated as a block boundary. Used only as a fallback
+// by [isInlineLevel] when the dump carries no computed-display annotation.
 private val INLINE_HTML_ELEMENTS = setOf(
     "a", "abbr", "b", "bdi", "bdo", "big", "cite", "code", "data", "dfn",
     "em", "font", "i", "img", "ins", "del", "kbd", "label", "mark", "q",

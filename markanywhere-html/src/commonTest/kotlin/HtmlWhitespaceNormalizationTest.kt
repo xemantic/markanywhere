@@ -16,6 +16,7 @@
 
 package com.xemantic.markanywhere.html
 
+import com.xemantic.markanywhere.dump.AccessibilityAnnotations
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.test.sameAs
 import kotlinx.coroutines.test.runTest
@@ -207,6 +208,48 @@ class HtmlWhitespaceNormalizationTest {
             "p" {
                 "code" { }
             }
+        }
+    }
+
+    @Test
+    fun `should keep space between block-named elements that compute to inline`() = runTest {
+        // given — `<div>` is block by tag name, but its computed display is
+        // inline here; the separating space must be kept (and the annotation
+        // stripped from the output).
+        val input = semanticEvents(tagged = true) {
+            "div"(AccessibilityAnnotations.DISPLAY to "inline") { +"A" }
+            +" "
+            "div"(AccessibilityAnnotations.DISPLAY to "inline") { +"B" }
+        }
+
+        // when
+        val output = input.dropHtmlStructuralWhitespace()
+
+        // then — display overrides the tag-name heuristic, annotation dropped
+        output sameAs semanticEvents(tagged = true) {
+            "div" { +"A" }
+            +" "
+            "div" { +"B" }
+        }
+    }
+
+    @Test
+    fun `should drop space around an inline-named element that computes to block`() = runTest {
+        // given — `<span>` is inline by tag name, but its computed display is
+        // block here, so the whitespace touching it is structural and dropped.
+        val input = semanticEvents(tagged = true) {
+            "a"("href" to "/x") { +"A" }
+            +" "
+            "span"(AccessibilityAnnotations.DISPLAY to "block") { +"B" }
+        }
+
+        // when
+        val output = input.dropHtmlStructuralWhitespace()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "a"("href" to "/x") { +"A" }
+            "span" { +"B" }
         }
     }
 }
