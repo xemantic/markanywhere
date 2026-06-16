@@ -45,6 +45,25 @@ class SimplifyHtmlTest {
     }
 
     @Test
+    fun `should drop script tag even when it carries a presentation role`() = runTest {
+        // given
+        val input = semanticEvents(tagged = true) {
+            "body" {
+                "script"("role" to "none") { +"console.log('x')" }
+                "p" { +"after" }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "p" { +"after" }
+        }
+    }
+
+    @Test
     fun `should drop style tag and any nested marks inside it`() = runTest {
         // given
         val input = semanticEvents(tagged = true) {

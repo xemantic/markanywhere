@@ -259,7 +259,7 @@ public fun TransformerBuilder.simplifyHtml(
     // element's *own* semantics on purpose, so it applies to any element (e.g. a
     // layout `<table role="presentation">`), carrying any caller keep-attribute
     // like the UNWRAPPED_TAGS rule does.
-    match({ this["role"]?.lowercase() in PRESENTATION_ROLES }) { event ->
+    match({ name !in DROPPED_TAGS && this["role"]?.lowercase() in PRESENTATION_ROLES }) { event ->
         val kept = extraKept(event)
         if (kept.isEmpty()) children()
         else event.name(kept) { children() }
