@@ -60,6 +60,18 @@ public object AccessibilityAnnotations {
     public const val VISIBILITY: String = "data-markanywhere-visibility"
 
     /**
+     * Present with value `true` on an `<img>` whose accessibility node Blink
+     * marks **ignored** — i.e. the browser keeps the image out of the
+     * accessibility tree, its own verdict that the image is decorative /
+     * redundant (empty `alt`, `role="presentation"`, a lazy-load placeholder
+     * superseded by a sibling, …). A downstream consumer can drop such an image
+     * without re-deriving "is this decorative?" from `alt`/`role` heuristics.
+     * Recorded only for images — most other ignored nodes (generic `<div>`s, …)
+     * are structurally meaningful and must not be dropped.
+     */
+    public const val IGNORED: String = "data-markanywhere-ignored"
+
+    /**
      * A short, dense ref stamped on every *actionable* element (a focusable
      * control / link, or one whose accessibility role is interactive) so a
      * downstream LLM that read the dump can name an element by its ref and have
@@ -75,6 +87,6 @@ public object AccessibilityAnnotations {
      * All reserved verdict annotation names — strip these before output.
      * Deliberately excludes [REF], which is renamed and kept (see its doc).
      */
-    public val ALL: Set<String> = setOf(ROLE, DISPLAY, VISIBILITY)
+    public val ALL: Set<String> = setOf(ROLE, DISPLAY, VISIBILITY, IGNORED)
 
 }
