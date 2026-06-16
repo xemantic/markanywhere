@@ -82,6 +82,46 @@ class MarkdownRenderingTest {
         """.trimIndent()
     }
 
+    @Test
+    fun `should suppress a single trailing newline at end of stream`() = runTest {
+        // given — text ending in a newline. The renderer holds at most one
+        // pending `\n` and drops it on completion, so the stream never ends
+        // with a trailing newline (guards flushDeferringTrailingNewline).
+        val flow = semanticEvents { +"Hello\n" }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "Hello"
+    }
+
+    @Test
+    fun `should preserve interior newlines and suppress only the trailing one`() = runTest {
+        // given — only the final newline is suppressed; newlines between
+        // content are emitted untouched.
+        val flow = semanticEvents { +"a\nb\n" }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "a\nb"
+    }
+
+    @Test
+    fun `should suppress only one of several trailing newlines`() = runTest {
+        // given — the renderer defers a single newline, so trailing blank lines
+        // collapse by exactly one: `a\n\n` becomes `a\n`, not `a`.
+        val flow = semanticEvents { +"a\n\n" }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "a\n"
+    }
+
     // Headings
 
     @Test
@@ -132,6 +172,48 @@ class MarkdownRenderingTest {
 
             Body.
         """.trimIndent()
+    }
+
+    @Test
+    fun `should render empty heading without a trailing space`() = runTest {
+        // given — the parser emits an empty ATX heading (`#`) as `h1 {}` with
+        // no content (see MarkanywhereParserTest
+        // `should treat bare hash lines as empty ATX headings`). The renderer
+        // must emit a bare `#`, not a dangling `# ` with trailing whitespace.
+        val flow = semanticEvents {
+            "h1" {}
+            "p" { +"after" }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs """
+            #
+
+            after
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should render heading with inline formatting`() = runTest {
+        // given — headings carry inline content too (code, links, emphasis),
+        // not just plain text; the `#` prefix precedes the rendered inline run.
+        val flow = semanticEvents {
+            "h2" {
+                +"Use "
+                "code" { +"git" }
+                +" — see "
+                "a"("href" to "/docs") { +"docs" }
+            }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "## Use `git` — see [docs](/docs)"
     }
 
     // Inline formatting
@@ -227,6 +309,42 @@ class MarkdownRenderingTest {
     }
 
     @Test
+    fun `should widen backtick fence for inline code containing a backtick`() = runTest {
+        // given — content with a literal backtick can't be wrapped in a single
+        // backtick (`` `a`b` `` would close early); the fence must be one
+        // backtick longer than the longest internal run.
+        val flow = semanticEvents {
+            "p" {
+                "code" { +"a`b" }
+            }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "``a`b``"
+    }
+
+    @Test
+    fun `should pad inline code that begins or ends with a backtick`() = runTest {
+        // given — when the content starts (or ends) with a backtick, a single
+        // space is padded inside the fence so the delimiters stay distinct; a
+        // GFM parser strips that leading/trailing space back out on read.
+        val flow = semanticEvents {
+            "p" {
+                "code" { +"`x`" }
+            }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "`` `x` ``"
+    }
+
+    @Test
     fun `should render highlight mark`() = runTest {
         // given
         val flow = semanticEvents {
@@ -315,6 +433,23 @@ class MarkdownRenderingTest {
 
         // then
         markdown sameAs "![A cat](https://example.com/cat.png)"
+    }
+
+    @Test
+    fun `should render image with missing alt as empty alt`() = runTest {
+        // given — an `img` with no `alt` attribute (common in real HTML) still
+        // produces a valid `![](src)` shape with an empty description.
+        val flow = semanticEvents {
+            "p" {
+                "img"("src" to "https://example.com/x.png") {}
+            }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "![](https://example.com/x.png)"
     }
 
     @Test
@@ -432,6 +567,30 @@ class MarkdownRenderingTest {
 
         // then
         markdown sameAs "Line one  \nLine two"
+    }
+
+    @Test
+    fun `should drop a trailing hard break at a paragraph boundary`() = runTest {
+        // given — a `<br>` as the last child of a paragraph. The hard break is
+        // inline-only; reaching the block boundary makes it moot, so it is
+        // dropped rather than injecting a dangling `  \n` before the next block.
+        val flow = semanticEvents {
+            "p" {
+                +"text"
+                "br" {}
+            }
+            "p" { +"next" }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs """
+            text
+
+            next
+        """.trimIndent()
     }
 
     // Blockquote
@@ -565,6 +724,78 @@ class MarkdownRenderingTest {
               - Nested 1.1
               - Nested 1.2
             - Item 2
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should honor ordered list start attribute`() = runTest {
+        // given — an `ol` with `start=5` numbers from 5, incrementing per item.
+        val flow = semanticEvents {
+            "ol"("start" to "5") {
+                "li" { "p" { +"five" } }
+                "li" { "p" { +"six" } }
+            }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs """
+            5. five
+            6. six
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should render ordered list nested in unordered list`() = runTest {
+        // given — mixed nesting: an `ol` inside a `ul` item. The nested ordered
+        // markers are indented under the unordered item's content.
+        val flow = semanticEvents {
+            "ul" {
+                "li" {
+                    "p" { +"Item" }
+                    "ol" {
+                        "li" { "p" { +"one" } }
+                        "li" { "p" { +"two" } }
+                    }
+                }
+            }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs """
+            - Item
+              1. one
+              2. two
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should render list item with two paragraphs as indented continuation`() = runTest {
+        // given — a list item with two `p` children. Lists are always rendered
+        // loose (see CLAUDE.md), but the second paragraph is emitted as an
+        // indented continuation line under the marker rather than a separate
+        // blank-line-separated block — locking the current streaming behavior.
+        val flow = semanticEvents {
+            "ul" {
+                "li" {
+                    "p" { +"First para" }
+                    "p" { +"Second para" }
+                }
+            }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs """
+            - First para
+              Second para
         """.trimIndent()
     }
 
@@ -1281,6 +1512,28 @@ class MarkdownRenderingTest {
             title = "Hello"
             author = "Alice"
             +++
+
+            Body.
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should default front matter format to YAML when format attribute is absent`() = runTest {
+        // given — a `frontmatter` mark with no `format` attribute defaults to
+        // YAML, so the `---` delimiter is used.
+        val flow = semanticEvents {
+            "frontmatter" { +"title: Hello\n" }
+            "p" { +"Body." }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs """
+            ---
+            title: Hello
+            ---
 
             Body.
         """.trimIndent()

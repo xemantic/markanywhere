@@ -31,9 +31,11 @@ import kotlinx.coroutines.flow.flow
  * needs coarser units.
  *
  * Bounded buffering still occurs around link/image labels (`[label](url)`
- * can't emit `[` until the closing bracket / URL resolves) and table cells
+ * can't emit `[` until the closing bracket / URL resolves), table cells
  * (cell content is held until the cell closes so the trailing ` |` lands
- * after it). These match the parser's own buffering constraints.
+ * after it), and inline code spans (content is held until the close so the
+ * backtick fence can be made longer than any internal backtick run). These
+ * match the parser's own buffering constraints.
  *
  * Untagged events (Markdown-derived) are emitted using Markdown syntax —
  * headings as `#`-prefixed lines, emphasis as `*…*` / `**…**`, links as
@@ -56,6 +58,10 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
     var atLineStart = true
     var pendingHardBreak = false
     var inPreCode = false
+    // After a heading's `#`s are emitted, the single space before its content
+    // is deferred until the first content actually arrives — so an empty
+    // heading (`# ` with no content) renders as bare `#`, not a dangling `# `.
+    var headingSpacePending = false
     // Tracks the kind of the last block-level item emitted, to decide block
     // separation: a blank line is inserted at every Markdown↔raw-tag boundary
     // (so a block-level HTML element's Markdown content stays parseable), while
@@ -74,6 +80,16 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
     var rowCapture: StringBuilder? = null
 
     fun out(s: String) { (rowCapture ?: eventBuffer).append(s) }
+
+    // Emits the deferred space between a heading's `#`s and its first content
+    // (no-op outside a just-opened heading). Called at every content-entry
+    // point so the space lands only when content actually follows.
+    fun consumeHeadingSpace() {
+        if (headingSpacePending) {
+            out(" ")
+            headingSpacePending = false
+        }
+    }
 
     suspend fun flush() {
         hasPendingNewline = flushDeferringTrailingNewline(eventBuffer, hasPendingNewline)
@@ -135,6 +151,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
     // tags, whose separation is handled by their callers (separateBeforeBlockTag).
     fun writeTag(s: String) {
         if (inLabel()) { appendLabel(s); return }
+        consumeHeadingSpace()
         // At line start, emit the block prefix (consuming a pending list-item
         // marker) before the content — mirrors `emitText` and the `img` branch.
         // Without this, a list item whose first content is a link / emphasis /
@@ -205,6 +222,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
     fun emitText(text: String) {
         if (text.isEmpty()) return
         if (inLabel()) { appendLabel(text); return }
+        consumeHeadingSpace()
         beforeContent()
         val parts = text.split('\n')
         parts.forEachIndexed { i, part ->
@@ -396,7 +414,9 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                     val level = event.name.substring(1).toInt()
                     startBlock()
                     out("#".repeat(level))
-                    out(" ")
+                    // The separating space is deferred so an empty heading
+                    // renders as bare `#` (see consumeHeadingSpace).
+                    headingSpacePending = true
                     blockStack.addLast(BlockFrame.Heading)
                 }
 
@@ -471,7 +491,10 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                         ensureLineStart()
                         inPreCode = true
                     } else {
-                        writeRaw("`")
+                        // Inline code content is captured so the backtick fence
+                        // length (and any space padding) can be chosen once the
+                        // full content is known — see renderInlineCode.
+                        labelBuffers.addLast(StringBuilder())
                     }
                     blockStack.addLast(BlockFrame.Code)
                 }
@@ -494,6 +517,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                     val alt = event.attributes["alt"] ?: ""
                     if (inLabel()) appendLabel("![$alt]($src)")
                     else {
+                        consumeHeadingSpace()
                         beforeContent()
                         if (atLineStart) out(buildPrefix(consumeMarker = true))
                         out("![")
@@ -564,7 +588,11 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                         endBlock()
                     }
 
-                    "h1", "h2", "h3", "h4", "h5", "h6" -> endBlock()
+                    "h1", "h2", "h3", "h4", "h5", "h6" -> {
+                        // An empty heading never consumed its deferred space.
+                        headingSpacePending = false
+                        endBlock()
+                    }
 
                     "p" -> {
                         if ((frame as BlockFrame.Paragraph).suppressClose) {
@@ -595,7 +623,10 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                             out(buildPrefix(consumeMarker = false))
                             out("```")
                             inPreCode = false
-                        } else writeRaw("`")
+                        } else {
+                            val content = labelBuffers.removeLast().toString()
+                            writeRaw(renderInlineCode(content))
+                        }
                     }
 
                     "strong", "em", "del", "mark", "sup" -> {
@@ -757,6 +788,33 @@ private val BLOCK_TAGGED_ELEMENTS = setOf(
     // misc block-level semantics
     "address", "search"
 )
+
+// Renders an inline code span (CommonMark §6.3). The backtick fence is one
+// longer than the longest backtick run in the content, so a literal backtick
+// in the content can never close the span. A single space is padded on each
+// side when the content would otherwise be misread on re-parse — it begins or
+// ends with a backtick, or it is space-padded around non-space content (the
+// parser strips that one leading/trailing space back out). Content that is
+// empty or entirely spaces needs no padding.
+private fun renderInlineCode(content: String): String {
+    var maxRun = 0
+    var run = 0
+    for (c in content) {
+        if (c == '`') {
+            run++
+            if (run > maxRun) maxRun = run
+        } else run = 0
+    }
+    val fence = "`".repeat(maxRun + 1)
+    val hasNonSpace = content.any { it != ' ' }
+    val needsPad = hasNonSpace && (
+        content.first() == '`' ||
+            content.last() == '`' ||
+            (content.first() == ' ' && content.last() == ' ')
+    )
+    val pad = if (needsPad) " " else ""
+    return "$fence$pad$content$pad$fence"
+}
 
 private fun SemanticEvent.Mark.renderOpenTag(): String = buildString {
     append('<')
