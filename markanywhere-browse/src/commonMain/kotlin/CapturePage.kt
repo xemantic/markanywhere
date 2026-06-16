@@ -329,6 +329,12 @@ private class DomEventBuilder(
         if (dom.isVisibilityHidden(element)) {
             result[AccessibilityAnnotations.VISIBILITY] = "hidden"
         }
+        // Blink's own decorative-image verdict: an <img> kept out of the
+        // accessibility tree is decorative / redundant. Recorded for images
+        // only — most other ignored nodes are structurally meaningful.
+        if (dom.name(element) == "img" && element.axNode()?.ignored == true) {
+            result[AccessibilityAnnotations.IGNORED] = "true"
+        }
         return result.withResolvedAccessibleName(element)
     }
 
