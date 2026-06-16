@@ -255,20 +255,36 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
     // When a block-level mark arrives while one or more `<a>` frames are
     // still collecting Markdown into label buffers, the Markdown `[label](url)`
     // form can't represent the block content. Spill every open link as a raw
-    // `<a href="…">` tag (innermost first); their matching `</a>` will then
-    // emit `</a>` on Unmark. Anything already buffered into the label streams
-    // out inline right after the opening tag.
+    // `<a …>` tag (innermost first); their matching `</a>` will then emit
+    // `</a>` on Unmark. The raw tag preserves the link's full attributes (it,
+    // unlike Markdown link syntax, can carry them), so any actionable ref or
+    // other attribute survives. Anything already buffered into the label
+    // streams out inline right after the opening tag.
     fun spillActiveLinks() {
         for (i in blockStack.indices.reversed()) {
             val frame = blockStack[i]
             if (frame !is BlockFrame.Link || frame.rawMode) continue
             val labelText = labelBuffers.removeLast().toString()
-            // Once this link's label buffer is popped, the *next* spill (or
-            // any subsequent writeRaw) writes into either an outer label
-            // buffer or the actual output. At the outermost spill, ensure
-            // any pending block separator collapses correctly.
-            if (labelBuffers.isEmpty() && atLineStart) ensureBlankLine()
-            writeTag("<a href=\"${frame.href.escapeAttr()}\">$labelText")
+            val openTag = renderOpenTag("a", frame.attributes)
+            // Once this link's label buffer is popped, the *next* spill writes
+            // into either an outer label buffer (nested link) or the actual
+            // output (the outermost link).
+            if (labelBuffers.isEmpty()) {
+                // Outermost spilled link: a block-level raw tag. Separate it
+                // from the preceding block (blank line at a Markdown→tag
+                // boundary, newline-tight after another tag) and put the open
+                // tag *alone* on its line — only then is it a valid CommonMark
+                // HTML-block start, so the heading/paragraph that follows parses
+                // as Markdown rather than raw HTML. Any inline label collected
+                // before the spill (e.g. a "LIVE" badge) becomes its own block.
+                separateBeforeBlockTag()
+                writeTag(openTag)
+                ensureLineStart()
+                lastBlock = BLOCK_TAG
+                if (labelText.isNotEmpty()) writeRaw(labelText)
+            } else {
+                writeTag("$openTag$labelText")
+            }
             frame.rawMode = true
         }
     }
@@ -508,7 +524,10 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                 "a" -> {
                     labelBuffers.addLast(StringBuilder())
                     blockStack.addLast(
-                        BlockFrame.Link(href = event.attributes["href"] ?: "")
+                        BlockFrame.Link(
+                            href = event.attributes["href"] ?: "",
+                            attributes = event.attributes
+                        )
                     )
                 }
 
@@ -636,8 +655,13 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                     "a" -> {
                         val link = frame as BlockFrame.Link
                         if (link.rawMode) {
-                            // Already spilled to `<a href="…">` — close as raw HTML.
+                            // Already spilled to a raw `<a …>` tag — close it as a
+                            // block-level raw tag (blank line at the Markdown→tag
+                            // boundary), mirroring its block-level open.
+                            separateBeforeBlockTag()
                             writeTag("</a>")
+                            ensureLineStart()
+                            lastBlock = BLOCK_TAG
                         } else {
                             val label = labelBuffers.removeLast().toString()
                             writeRaw("[$label](${link.href})")
@@ -733,7 +757,11 @@ private sealed interface BlockFrame {
     data object Pre : BlockFrame
     data object Code : BlockFrame
     class Inline(val delimiter: String) : BlockFrame
-    class Link(val href: String, var rawMode: Boolean = false) : BlockFrame
+    class Link(
+        val href: String,
+        val attributes: Map<String, String>,
+        var rawMode: Boolean = false
+    ) : BlockFrame
     data object SelfClosed : BlockFrame
     data object TaggedInline : BlockFrame
     class Frontmatter(val delimiter: String) : BlockFrame
@@ -816,7 +844,9 @@ private fun renderInlineCode(content: String): String {
     return "$fence$pad$content$pad$fence"
 }
 
-private fun SemanticEvent.Mark.renderOpenTag(): String = buildString {
+private fun SemanticEvent.Mark.renderOpenTag(): String = renderOpenTag(name, attributes)
+
+private fun renderOpenTag(name: String, attributes: Map<String, String>): String = buildString {
     append('<')
     append(name)
     for ((k, v) in attributes) {
@@ -836,8 +866,6 @@ private fun String.escapeAttrTo(out: Appendable) {
         else -> out.append(c)
     }
 }
-
-private fun String.escapeAttr(): String = buildString { this@escapeAttr.escapeAttrTo(this) }
 
 // HTML-escapes a text node for raw inline HTML serialization (nested tables).
 private fun String.escapeHtmlText(): String = buildString {
