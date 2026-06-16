@@ -458,8 +458,9 @@ class MarkdownRenderingTest {
         // When an `<a>` wraps block-level content (`<p>`, headings, etc.) the
         // Markdown `[label](url)` shape can't represent it — the label would
         // have to span paragraphs. The renderer spills the anchor as a raw
-        // HTML `<a href="…">…</a>` pair instead, so the inner block content
-        // streams through unchanged.
+        // HTML `<a href="…">…</a>` pair instead, separated like any block-level
+        // tag (blank lines at the tag↔Markdown boundaries) so the inner block
+        // content parses as Markdown rather than raw HTML.
         val flow = semanticEvents {
             "a"("href" to "/page") {
                 "p" { +"Body." }
@@ -472,7 +473,9 @@ class MarkdownRenderingTest {
         // then
         markdown sameAs """
             <a href="/page">
+
             Body.
+
             </a>
         """.trimIndent()
     }
@@ -491,14 +494,16 @@ class MarkdownRenderingTest {
         val markdown = flow.renderMarkdown()
 
         // then
-        // The first block sits directly under the open `<a>` tag (one
-        // newline); sibling blocks inside get the usual blank-line
-        // separator from `endBlock` / `startBlock`.
+        // The spilled `<a>` is a block-level raw tag: its content is isolated
+        // by a blank line on each side, and sibling blocks inside get the
+        // usual blank-line separator from `endBlock` / `startBlock`.
         markdown sameAs """
             <a href="/berlin-2026">
+
             ### BERLIN '26
 
             May 18-22 · 2026
+
             </a>
         """.trimIndent()
     }
@@ -507,7 +512,9 @@ class MarkdownRenderingTest {
     fun `should preserve inline label before spilling raw HTML anchor on block content`() = runTest {
         // given
         // Any inline content collected into the link label before the block
-        // mark arrives is flushed inline right after the opening `<a …>` tag.
+        // mark arrives becomes its own block under the open tag — the tag stays
+        // alone on its line (a valid HTML-block start) and the label, like the
+        // block that forced the spill, is isolated by blank lines.
         val flow = semanticEvents {
             "a"("href" to "/page") {
                 +"Click "
@@ -521,8 +528,79 @@ class MarkdownRenderingTest {
 
         // then
         markdown sameAs """
-            <a href="/page">Click **here**
+            <a href="/page">
+
+            Click **here**
+
             Then read this.
+
+            </a>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should preserve all attributes when spilling a link as a raw HTML anchor`() = runTest {
+        // given
+        // A spilled anchor is a raw HTML tag, which (unlike Markdown link
+        // syntax) can carry attributes — so every attribute survives, not just
+        // href. This is what lets an actionable `ref` ride a block-wrapping link.
+        val flow = semanticEvents {
+            "a"("href" to "/live", "ref" to "9") {
+                +"LIVE"
+                "h2" { +"Headline" }
+            }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs """
+            <a href="/live" ref="9">
+
+            LIVE
+
+            ## Headline
+
+            </a>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should separate consecutive sibling links spilled as raw HTML anchors`() = runTest {
+        // given
+        // Two block-wrapping links in a row (e.g. a "Most watched" list). Each
+        // spills to a raw anchor; the separation must be consistent regardless
+        // of position — no `</a><a>` jammed onto one line, every open tag alone
+        // on its line, every inner heading isolated by blank lines.
+        val flow = semanticEvents {
+            "h2" { +"Most watched" }
+            "a"("href" to "/v1", "ref" to "1") { +"1"; "h2" { +"First" } }
+            "a"("href" to "/v2", "ref" to "2") { +"2"; "h2" { +"Second" } }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        // Sibling raw tags stay newline-tight (`</a>` then `<a>`), like
+        // `</section>` / `<section>`; everything inside is blank-line separated.
+        markdown sameAs """
+            ## Most watched
+
+            <a href="/v1" ref="1">
+
+            1
+
+            ## First
+
+            </a>
+            <a href="/v2" ref="2">
+
+            2
+
+            ## Second
+
             </a>
         """.trimIndent()
     }
