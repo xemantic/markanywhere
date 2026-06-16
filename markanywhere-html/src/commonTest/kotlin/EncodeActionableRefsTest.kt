@@ -20,11 +20,21 @@ import com.xemantic.kotlin.test.assert
 import com.xemantic.kotlin.test.sameAs
 import com.xemantic.markanywhere.dump.AccessibilityAnnotations
 import com.xemantic.markanywhere.flow.semanticEvents
+import com.xemantic.markanywhere.render.MARKDOWN_BLOCK_CONTENT_TAGS
 import com.xemantic.markanywhere.test.sameAs
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 
 class EncodeActionableRefsTest {
+
+    @Test
+    fun `LINK_BLOCK_CONTENT_TAGS must stay in sync with the renderer block-content tags`() {
+        // given the renderer's block-content predicate set (the source of truth)
+        // when compared against the encoder's hand-maintained mirror
+        // then they are identical — a drift would silently misencode a
+        // block-wrapping <a>'s ref (inline ref: scheme instead of ref= attribute)
+        assert(LINK_BLOCK_CONTENT_TAGS == MARKDOWN_BLOCK_CONTENT_TAGS)
+    }
 
     // --- ActionableRef.encode / decode --------------------------------------
 

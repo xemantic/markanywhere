@@ -817,6 +817,21 @@ private val BLOCK_TAGGED_ELEMENTS = setOf(
     "address", "search"
 )
 
+/**
+ * The mark names this renderer treats as block-level content — the union of the
+ * block-level Markdown marks and the block-level raw HTML tags. A buffering
+ * `<a>` label that contains any of these can no longer render as `[label](url)`
+ * and must spill to a raw `<a …>` tag.
+ *
+ * Exposed publicly so a sibling module that must replicate this predicate
+ * (markanywhere-html's `LINK_BLOCK_CONTENT_TAGS`, used by the ref encoder to
+ * decide inline-vs-block ref encoding) can verify its mirror against this set in
+ * a CI test, instead of the two drifting silently. The renderer itself stays
+ * ref-agnostic; this is only a name set.
+ */
+public val MARKDOWN_BLOCK_CONTENT_TAGS: Set<String> =
+    BLOCK_LEVEL_MARK_NAMES + BLOCK_TAGGED_ELEMENTS
+
 // Renders an inline code span (CommonMark §6.3). The backtick fence is one
 // longer than the longest backtick run in the content, so a literal backtick
 // in the content can never close the span. A single space is padded on each

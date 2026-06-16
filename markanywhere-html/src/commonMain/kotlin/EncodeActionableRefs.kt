@@ -93,7 +93,9 @@ public object ActionableRef {
  * spill decision lives there, but the renderer is deliberately ref-agnostic, so
  * the encoder replicates the predicate rather than the renderer learning the
  * ref scheme. The two modules are siblings with no shared home for the set —
- * keep the two copies in sync when either changes.
+ * keep the two copies in sync when either changes. `EncodeActionableRefsTest`
+ * asserts this set equals the renderer's public `MARKDOWN_BLOCK_CONTENT_TAGS`,
+ * so a drift fails CI instead of silently misencoding a block-wrapping `<a>`.
  */
 internal val LINK_BLOCK_CONTENT_TAGS: Set<String> = setOf(
     // BLOCK_LEVEL_MARK_NAMES (Markdown block marks)

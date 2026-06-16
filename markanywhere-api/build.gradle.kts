@@ -38,7 +38,10 @@ kotlin {
             dependencies {
                 api(libs.kotlinx.serialization.core)
                 api(libs.kotlinx.serialization.json)
-                implementation(libs.jetbrains.annotations)
+                // api, not implementation: @Language("json") annotates the
+                // public fromJson parameter, so downstream consumers' IDEs need
+                // the annotation on their compile classpath for JSON injection.
+                api(libs.jetbrains.annotations)
             }
         }
 
