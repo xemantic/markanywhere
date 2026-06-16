@@ -593,7 +593,7 @@ class BbcNewsTest {
             </a>
             <a href="https://www.bbc.com/sport/football/live/c3wy8j9j21yt" ref="64">
             
-            ![Chalobah](https://ichef.bbci.co.uk/ace/standard/480/cpsprodpb/4cb8/live/19c1d1b0-6987-11f1-ac49-cbb0d85207cb.jpg.webp)LIVE
+            ![Chalobah](https://ichef.bbci.co.uk/ace/standard/480/cpsprodpb/4cb8/live/19c1d1b0-6987-11f1-ac49-cbb0d85207cb.jpg.webp) LIVE
             
             ## World Cup: Chalobah replaces Livramento in England squad
             
