@@ -66,6 +66,14 @@ public fun Flow<SemanticEvent>.dropBlankInlineFormatting(): Flow<SemanticEvent> 
             is Text -> if (!event.text.isHtmlBlank()) {
                 suppressedMarks.flush()
                 emit(event)
+            } else if (suppressedMarks.isEmpty()) {
+                // A standalone blank text node is an inter-element separator,
+                // not the empty content of a formatting element — keep it so
+                // the downstream whitespace normalizer can gate it (drop at a
+                // block boundary, keep one space between inline content). Blank
+                // text *inside* a pending formatting element is still absorbed
+                // (the element may turn out empty).
+                emit(event)
             }
 
             is Unmark -> if (suppressedMarks.isNotEmpty()) {

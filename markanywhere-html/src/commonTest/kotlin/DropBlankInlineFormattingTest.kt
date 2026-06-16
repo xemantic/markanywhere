@@ -60,6 +60,28 @@ class DropBlankInlineFormattingTest {
     }
 
     @Test
+    fun `should keep a standalone blank text used as an inter-element separator`() = runTest {
+        // given — a blank text node between two elements (not inside a blank
+        // formatting element) is a separator; it must survive so the downstream
+        // whitespace normalizer can gate it.
+        val input = semanticEvents {
+            "a"("href" to "/a") { +"A" }
+            +" "
+            "a"("href" to "/b") { +"B" }
+        }
+
+        // when
+        val output = input.dropBlankInlineFormatting()
+
+        // then
+        output sameAs semanticEvents {
+            "a"("href" to "/a") { +"A" }
+            +" "
+            "a"("href" to "/b") { +"B" }
+        }
+    }
+
+    @Test
     fun `should drop an element whose only content is whitespace`() = runTest {
         // when
         val output = semanticEvents {
