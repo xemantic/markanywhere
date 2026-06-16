@@ -16,7 +16,7 @@
 
 package com.xemantic.markanywhere.parse.gfm
 
-import com.xemantic.kotlin.core.text.buildText
+import com.xemantic.kotlin.core.text.unaryPlus
 import com.xemantic.kotlin.test.text.chunkedRandomly
 import com.xemantic.markanywhere.flow.mergeAdjacentText
 import com.xemantic.markanywhere.flow.semanticEvents
@@ -397,7 +397,7 @@ class Gfm_06_10_Test {
     @Test
     fun `example 651 - DIVERGENCE - processing instruction`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +$$"foo <?php echo $a; ?>\n"
         }.chunkedRandomly().asFlow()
 
@@ -492,7 +492,7 @@ class Gfm_06_10_Test {
     @Test
     fun `example 655 - paragraph foo`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"foo <a href=\"\\*\">\n"
         }.chunkedRandomly().asFlow()
 
@@ -516,7 +516,7 @@ class Gfm_06_10_Test {
     @Test
     fun `example 656 - paragraph a href=`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"<a href=\"\\\"\">\n"
         }.chunkedRandomly().asFlow()
 

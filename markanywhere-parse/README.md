@@ -172,3 +172,21 @@ has been seen.
 `markanywhere-parse` always emits list items as if the list were loose, wrapping
 their content in `<p>` regardless of blank-line layout in the source. This keeps
 each item's events emittable as soon as the item itself is parsed.
+
+### Disallowed raw HTML is dropped, not escaped (GFM §6.11)
+
+GFM's disallowed-raw-HTML extension neutralizes dangerous tags (`script`,
+`style`, `textarea`, `title`, `iframe`, `xmp`, `noembed`, `noframes`,
+`plaintext`) by **escaping** them to visible text (`<script>` renders as
+`&lt;script>`).
+
+`markanywhere-parse` instead **drops** such a tag and its raw-text body
+entirely. The primary use case is feeding rendered DOM / HTML to an LLM, where a
+neutralized-but-visible `<script>{…serialized state…}</script>` is pure noise
+that floods the context. At a block boundary these tags open a type-1 HTML block
+that is emitted structurally (and dropped by `simplifyHtml` downstream); a tag
+encountered mid-line (as in minified `outerHTML`) is dropped by the inline
+parser. The skip is bounded to a single line — an *unclosed* disallowed opener
+drops only the rest of its line — so it never buffers past a soft break.
+
+See `Gfm_06_11_Test.kt` (ex 657) and `HtmlParsingTest.kt` (Places 13–18).

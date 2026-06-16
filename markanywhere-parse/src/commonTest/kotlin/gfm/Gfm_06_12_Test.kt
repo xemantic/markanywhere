@@ -16,7 +16,7 @@
 
 package com.xemantic.markanywhere.parse.gfm
 
-import com.xemantic.kotlin.core.text.buildText
+import com.xemantic.kotlin.core.text.unaryPlus
 import com.xemantic.kotlin.test.text.chunkedRandomly
 import com.xemantic.markanywhere.flow.mergeAdjacentText
 import com.xemantic.markanywhere.flow.semanticEvents
@@ -38,7 +38,7 @@ class Gfm_06_12_Test {
     @Test
     fun `example 658 - paragraph foo baz`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"foo  \n"
             +"baz\n"
         }.chunkedRandomly().asFlow()
@@ -90,7 +90,7 @@ class Gfm_06_12_Test {
     @Test
     fun `example 660 - paragraph foo baz`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"foo       \n"
             +"baz\n"
         }.chunkedRandomly().asFlow()
@@ -116,7 +116,7 @@ class Gfm_06_12_Test {
     @Test
     fun `example 661 - paragraph foo bar`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"foo  \n"
             +"     bar\n"
         }.chunkedRandomly().asFlow()
@@ -142,7 +142,7 @@ class Gfm_06_12_Test {
     @Test
     fun `example 662 - paragraph foo bar`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"foo\\\n"
             +"     bar\n"
         }.chunkedRandomly().asFlow()
@@ -174,7 +174,7 @@ class Gfm_06_12_Test {
     @Test
     fun `example 663 - DIVERGENCE - paragraph foo bar`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"*foo  \n"
             +"bar*\n"
         }.chunkedRandomly().asFlow()
@@ -238,7 +238,7 @@ class Gfm_06_12_Test {
     @Test
     fun `example 665 - DIVERGENCE - paragraph code span`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"`code  \n"
             +"span`\n"
         }.chunkedRandomly().asFlow()
@@ -301,7 +301,7 @@ class Gfm_06_12_Test {
     @Test
     fun `example 667 - DIVERGENCE - empty paragraph`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"<a href=\"foo  \n"
             +"bar\">\n"
         }.chunkedRandomly().asFlow()
@@ -355,7 +355,7 @@ class Gfm_06_12_Test {
     @Test
     fun `example 669 - paragraph foo`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"foo\\\n"
         }.chunkedRandomly().asFlow()
 
@@ -377,7 +377,7 @@ class Gfm_06_12_Test {
     @Test
     fun `example 670 - paragraph foo`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"foo  \n"
         }.chunkedRandomly().asFlow()
 
@@ -399,7 +399,7 @@ class Gfm_06_12_Test {
     @Test
     fun `example 671 - h3 foo`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"### foo\\\n"
         }.chunkedRandomly().asFlow()
 
@@ -421,7 +421,7 @@ class Gfm_06_12_Test {
     @Test
     fun `example 672 - h3 foo`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"### foo  \n"
         }.chunkedRandomly().asFlow()
 

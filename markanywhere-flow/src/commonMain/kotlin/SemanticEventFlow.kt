@@ -39,45 +39,44 @@ public fun semanticEvents(
 @SemanticEventDsl
 public class SemanticEventScope(
     public val tagged: Boolean = false,
-    @PublishedApi
     internal val collector: FlowCollector<SemanticEvent>,
 ) {
 
-    public suspend inline fun tagged(
-        crossinline block: suspend SemanticEventScope.() -> Unit
+    public suspend fun tagged(
+        block: suspend SemanticEventScope.() -> Unit
     ) {
         SemanticEventScope(tagged = true, collector).block()
     }
 
-    public suspend inline fun untagged(
-        crossinline block: suspend SemanticEventScope.() -> Unit
+    public suspend fun untagged(
+        block: suspend SemanticEventScope.() -> Unit
     ) {
         SemanticEventScope(tagged = false, collector).block()
     }
 
-    public suspend inline operator fun String.unaryPlus() {
+    public suspend operator fun String.unaryPlus() {
         text(this)
     }
 
-    public suspend inline operator fun Char.unaryPlus() {
+    public suspend operator fun Char.unaryPlus() {
         text(this.toString())
     }
 
-    public suspend inline operator fun String.invoke(
-        attributes: Map<String, String>? = null,
-        crossinline block: suspend SemanticEventScope.() -> Unit
+    public suspend operator fun String.invoke(
+        attributes: Map<String, String> = emptyMap(),
+        block: suspend SemanticEventScope.() -> Unit
     ) {
         mark(this, attributes = attributes)
         block()
         unmark(this)
     }
 
-    public suspend inline operator fun String.invoke(
+    public suspend operator fun String.invoke(
         vararg attributes: Pair<String, String>,
-        crossinline block: suspend SemanticEventScope.() -> Unit
+        block: suspend SemanticEventScope.() -> Unit
     ) {
         invoke(
-            attributes = attributes.toMap().ifEmpty { null },
+            attributes = attributes.toMap(),
             block
         )
     }
@@ -90,18 +89,18 @@ public class SemanticEventScope(
         )
     }
 
-    public suspend inline fun mark(
+    public suspend fun mark(
         name: String,
         isTagged: Boolean = tagged,
         vararg attributes: Pair<String, String>,
     ) {
-        mark(name, isTagged, attributes.toMap().ifEmpty { null })
+        mark(name, isTagged, attributes.toMap())
     }
 
     public suspend fun mark(
         name: String,
         isTagged: Boolean = tagged,
-        attributes: Map<String, String>? = null
+        attributes: Map<String, String> = emptyMap()
     ) {
         collector.emit(
             SemanticEvent.Mark(
@@ -121,22 +120,42 @@ public class SemanticEventScope(
         )
     }
 
-    public suspend inline fun tag(
+    /**
+     * Emits a pre-built [SemanticEvent] verbatim.
+     *
+     * Unlike [text] / [mark] / [unmark], this does **not** derive
+     * [SemanticEvent.Mark.isTagged] from the enclosing [tagged] default — the
+     * event is forwarded exactly as given. Useful for replaying a captured or
+     * buffered subtree (e.g. inside a stream transformer) without losing the
+     * original tagging or attributes.
+     */
+    public suspend fun emit(event: SemanticEvent) {
+        collector.emit(event)
+    }
+
+    /**
+     * Emits each of [events] verbatim, in iteration order. See [emit].
+     */
+    public suspend fun emit(events: Iterable<SemanticEvent>) {
+        events.forEach { collector.emit(it) }
+    }
+
+    public suspend fun tag(
         name: String,
-        attributes: Map<String, String>? = null,
-        crossinline block: suspend SemanticEventScope.() -> Unit
+        attributes: Map<String, String> = emptyMap(),
+        block: suspend SemanticEventScope.() -> Unit
     ) {
         mark(name, isTagged = true, attributes)
         block()
         unmark(name, isTagged = true)
     }
 
-    public suspend inline fun tag(
+    public suspend fun tag(
         name: String,
         vararg attributes: Pair<String, String>,
-        crossinline block: suspend SemanticEventScope.() -> Unit
+        block: suspend SemanticEventScope.() -> Unit
     ) {
-        tag(name, attributes.toMap().ifEmpty { null }, block)
+        tag(name, attributes.toMap(), block)
     }
 
 }

@@ -22,7 +22,7 @@ import com.xemantic.kotlin.test.have
 import com.xemantic.kotlin.test.sameAs
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.parse.parse
-import com.xemantic.markanywhere.render.render
+import com.xemantic.markanywhere.render.renderHtml
 import com.xemantic.markanywhere.test.sameAs
 import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.test.runTest
@@ -47,7 +47,7 @@ class SemanticEventsExtractorTest {
         )
 
         // when
-        val rendered = events.extract(extractor).render()
+        val rendered = events.extract(extractor).renderHtml()
 
         // then
         extractor should {
@@ -88,7 +88,7 @@ class SemanticEventsExtractorTest {
         )
 
         // when
-        val rendered = events.extract(extractor).render()
+        val rendered = events.extract(extractor).renderHtml()
 
         // then
         extractor should {
@@ -119,13 +119,13 @@ class SemanticEventsExtractorTest {
         )
 
         // when
-        val rendered = events.extract(extractor).render()
+        val rendered = events.extract(extractor).renderHtml()
 
         // then
         extractor should {
             have(succeeded)
             have(!isExtracting)
-            have(attributes == null)
+            have(attributes == emptyMap<String, String>())
             extractedEvents.asFlow() sameAs semanticEvents(tagged = true) {
                 "foo:bar" {
                     +"content"
@@ -153,13 +153,13 @@ class SemanticEventsExtractorTest {
         )
 
         // when
-        val rendered = events.extract(extractor).render()
+        val rendered = events.extract(extractor).renderHtml()
 
         // then
         extractor should {
             have(succeeded)
             have(!isExtracting)
-            have(attributes == null)
+            have(attributes == emptyMap<String, String>())
             extractedEvents.asFlow() sameAs semanticEvents(tagged = true) {
                 "foo:bar" {}
             }
@@ -185,13 +185,13 @@ class SemanticEventsExtractorTest {
         val extractor = MarkupContentExtractor(tag = "foo:bar")
 
         // when
-        val rendered = events.extract(extractor).render()
+        val rendered = events.extract(extractor).renderHtml()
 
         // then
         extractor should {
             have(succeeded)
             have(!isExtracting)
-            have(attributes == null)
+            have(attributes == emptyMap<String, String>())
             extractedEvents.asFlow() sameAs semanticEvents(tagged = true) {
                 "foo:bar" {
                     +"line1"
@@ -237,13 +237,13 @@ class SemanticEventsExtractorTest {
         )
 
         // when
-        val rendered = events.extract(extractor).render()
+        val rendered = events.extract(extractor).renderHtml()
 
         // then
         extractor should {
             have(succeeded)
             have(!isExtracting)
-            have(attributes == null)
+            have(attributes == emptyMap<String, String>())
             // NOTE: The text chunking reflects how the parser incrementally detects
             // potential closing tags - when '<' is seen, it buffers until it can
             // determine if it's the closing tag or not.
@@ -301,13 +301,13 @@ class SemanticEventsExtractorTest {
         )
 
         // when
-        val rendered = events.extract(extractor).render()
+        val rendered = events.extract(extractor).renderHtml()
 
         // then
         extractor should {
             have(succeeded)
             have(!isExtracting)
-            have(attributes == null)
+            have(attributes == emptyMap<String, String>())
             extractedEvents.asFlow() sameAs semanticEvents(tagged = true) {
                 "foo:bar" {
                     +"first content"

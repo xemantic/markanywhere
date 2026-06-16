@@ -16,7 +16,7 @@
 
 package com.xemantic.markanywhere.parse.gfm
 
-import com.xemantic.kotlin.core.text.buildText
+import com.xemantic.kotlin.core.text.unaryPlus
 import com.xemantic.kotlin.test.text.chunkedRandomly
 import com.xemantic.markanywhere.flow.mergeAdjacentText
 import com.xemantic.markanywhere.flow.semanticEvents
@@ -180,7 +180,7 @@ class Gfm_04_01_Test {
     @Test
     fun `example 19 - paragraph Foo`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"Foo\n"
             +"    ***\n"
         }.chunkedRandomly().asFlow()
@@ -222,7 +222,7 @@ class Gfm_04_01_Test {
     @Test
     fun `example 21 - thematic break`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +" - - -\n"
         }.chunkedRandomly().asFlow()
 
@@ -242,7 +242,7 @@ class Gfm_04_01_Test {
     @Test
     fun `example 22 - thematic break`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +" **  * ** * ** * **\n"
         }.chunkedRandomly().asFlow()
 
@@ -280,7 +280,7 @@ class Gfm_04_01_Test {
     @Test
     fun `example 24 - thematic break`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"- - - -    \n"
         }.chunkedRandomly().asFlow()
 
@@ -334,7 +334,7 @@ class Gfm_04_01_Test {
     @Test
     fun `example 26 - paragraph -`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +" *-*\n"
         }.chunkedRandomly().asFlow()
 

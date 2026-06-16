@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Kazimierz Pogoda / Xemantic
+ * Copyright 2025-2026 Kazimierz Pogoda / Xemantic
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -68,14 +68,14 @@ public class MarkupContentExtractor(
     override fun process(event: SemanticEvent) {
         when (event) {
 
-            is SemanticEvent.Text -> {
+            is Text -> {
                 if (_extracting) {
                     _events += event
                     contentBuilder.append(event.text)
                 }
             }
 
-            is SemanticEvent.Mark -> {
+            is Mark -> {
                 if (!succeeded && event.name == tag) {
                     _events += event
                     _attributes = event.attributes
@@ -83,7 +83,7 @@ public class MarkupContentExtractor(
                 }
             }
 
-            is SemanticEvent.Unmark -> {
+            is Unmark -> {
                 if (_extracting && event.name == tag) {
                     _extracting = false
                     _events += event

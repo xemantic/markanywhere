@@ -16,6 +16,7 @@
 
 package com.xemantic.markanywhere
 
+import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import org.intellij.lang.annotations.Language
@@ -43,9 +44,7 @@ public sealed interface SemanticEvent {
     @SerialName("text")
     public data class Text(
         public val text: String
-    ) : SemanticEvent {
-        override fun toString(): String = toJson()
-    }
+    ) : SemanticEvent
 
     @Serializable
     @SerialName("mark")
@@ -53,9 +52,12 @@ public sealed interface SemanticEvent {
         public override val name: String,
         @SerialName("tagged")
         public override val isTagged: Boolean = false,
-        public val attributes: Map<String, String>? = null
+        @EncodeDefault(EncodeDefault.Mode.NEVER)
+        public val attributes: Map<String, String> = emptyMap()
     ) : SemanticEvent, Marked {
-        override fun toString(): String = toJson()
+        public operator fun get(
+            attribute: String
+        ): String? = attributes[attribute]
     }
 
     @Serializable
@@ -64,9 +66,7 @@ public sealed interface SemanticEvent {
         public override val name: String,
         @SerialName("tagged")
         public override val isTagged: Boolean = false
-    ) : SemanticEvent, Marked {
-        override fun toString(): String = toJson()
-    }
+    ) : SemanticEvent, Marked
 
     /**
      * Common interface for [Mark] and [Unmark] events.
@@ -113,6 +113,14 @@ public sealed interface SemanticEvent {
 
 }
 
-private fun SemanticEvent.toJson() = markanywhereJson.encodeToString<SemanticEvent>(
+public fun SemanticEvent.toJson(): String  = markanywhereJson.encodeToString<SemanticEvent>(
     value = this
 )
+
+/**
+ * Returns the flattened textual content of this sequence of [SemanticEvent]s,
+ * concatenating the text of every [SemanticEvent.Text] in order and ignoring
+ * all [SemanticEvent.Mark] / [SemanticEvent.Unmark] structure.
+ */
+public fun Iterable<SemanticEvent>.textContent(): String =
+    filterIsInstance<SemanticEvent.Text>().joinToString("") { it.text }

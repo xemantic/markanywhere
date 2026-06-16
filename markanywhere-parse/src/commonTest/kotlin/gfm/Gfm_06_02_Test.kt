@@ -16,7 +16,7 @@
 
 package com.xemantic.markanywhere.parse.gfm
 
-import com.xemantic.kotlin.core.text.buildText
+import com.xemantic.kotlin.core.text.unaryPlus
 import com.xemantic.kotlin.test.text.chunkedRandomly
 import com.xemantic.markanywhere.flow.mergeAdjacentText
 import com.xemantic.markanywhere.flow.semanticEvents
@@ -290,7 +290,7 @@ class Gfm_06_02_Test {
     @Test
     fun `example 332 - indented code block`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"    f&ouml;f&ouml;\n"
         }.chunkedRandomly().asFlow()
 

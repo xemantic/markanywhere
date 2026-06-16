@@ -40,7 +40,7 @@ public suspend fun Element.appendSemanticEvents(
     events.collect { event ->
         when (event) {
 
-            is SemanticEvent.Mark -> {
+            is Mark -> {
                 val parentChildNs = childNamespaceStack.last()
                 val elementNs = resolveElementNamespace(event.name, parentChildNs)
                 val element = event.toElement(elementNs)
@@ -49,13 +49,13 @@ public suspend fun Element.appendSemanticEvents(
                 childNamespaceStack += resolveChildrenNamespace(event, elementNs)
             }
 
-            is SemanticEvent.Text -> {
+            is Text -> {
                 path.last().appendChild(
                     document.createTextNode(event.text)
                 )
             }
 
-            is SemanticEvent.Unmark -> {
+            is Unmark -> {
                 path.last().normalize()
                 path.removeLast()
                 childNamespaceStack.removeLast()
@@ -81,7 +81,7 @@ private fun resolveChildrenNamespace(
     elementNs == SVG_NS && mark.name == "foreignObject" -> HTML_NS
     elementNs == MATHML_NS
         && mark.name == "annotation-xml"
-        && mark.attributes?.get("encoding") in HTML_ENCODINGS -> HTML_NS
+        && mark["encoding"] in HTML_ENCODINGS -> HTML_NS
     else -> elementNs
 }
 
@@ -89,7 +89,7 @@ private fun SemanticEvent.Mark.toElement(
     elementNs: String
 ): Element {
     val element = document.createElementNS(elementNs, name)
-    attributes?.forEach { (key, value) ->
+    attributes.forEach { (key, value) ->
         val attrNs = attributeNamespace(key)
         if (attrNs == null) element.setAttribute(key, value)
         else element.setAttributeNS(attrNs, key, value)

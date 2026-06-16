@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Kazimierz Pogoda / Xemantic
+ * Copyright 2025-2026 Kazimierz Pogoda / Xemantic
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,13 +24,18 @@ import org.w3c.dom.Element
 import org.w3c.dom.Text
 import org.w3c.dom.asList
 
+/**
+ * Captures the DOM subtree rooted at this [Element] as a [Flow] of [SemanticEvent]s.
+ */
 public fun Element.toSemanticEvents(): Flow<SemanticEvent> = semanticEvents(
     tagged = true
 ) {
-    flowChildren(element = this@toSemanticEvents)
+    flowElement(
+        element = this@toSemanticEvents
+    )
 }
 
-private suspend fun SemanticEventScope.flowChildren(
+private suspend fun SemanticEventScope.flowElement(
     element: Element
 ) {
 
@@ -40,13 +45,21 @@ private suspend fun SemanticEventScope.flowChildren(
         it.name to it.value
     }
 
-    tag(name = tagName, attributes.ifEmpty { null }) {
-        element.childNodes.asList().forEach {
-            when (it) {
-                is Text -> +it.wholeText // unescaped, escaping done on render
-                is Element -> flowChildren(it)
+    tag(name = tagName, attributes) {
+        flowChildren(element)
+    }
+
+}
+
+private suspend fun SemanticEventScope.flowChildren(
+    element: Element
+) {
+    element.childNodes.asList().forEach {
+        when (it) {
+            is Text -> +it.wholeText // unescaped, escaping done on render
+            is Element -> {
+                flowElement(it)
             }
         }
     }
-
 }

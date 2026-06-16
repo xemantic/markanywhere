@@ -14,12 +14,48 @@
  * limitations under the License.
  */
 
+import con.xemantic.markanywhere.buildlogic.allTargets
 import groovy.json.JsonSlurper
 import java.net.URI
 
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     id("markanywhere.convention")
+}
+
+
+val devBuild: Boolean by extra
+
+kotlin {
+
+    explicitApi()
+
+    // jvm + browser-js in dev: markanywhere-js (and its js test chain) needs a
+    // js variant of this module, so dev builds expose one. The full set in CI.
+    if (devBuild) { jvm(); js { browser() } } else allTargets()
+
+    sourceSets {
+
+        commonMain {
+            dependencies {
+                api(project(":markanywhere-api"))
+                api(project(":markanywhere-flow"))
+            }
+        }
+
+        commonTest {
+            dependencies {
+                implementation(project(":markanywhere-test"))
+                implementation(project(":markanywhere-render"))
+                implementation(libs.kotlinx.coroutines.test)
+                implementation(libs.kotlin.test)
+                implementation(libs.xemantic.kotlin.test)
+                implementation(libs.xemantic.kotlin.core)
+            }
+        }
+
+    }
+
 }
 
 // ---------------------------------------------------------------------------
@@ -117,30 +153,4 @@ fun StringBuilder.appendEscaped(s: String) {
             }
         }
     }
-}
-
-kotlin {
-
-    sourceSets {
-
-        commonMain {
-            dependencies {
-                api(project(":markanywhere-api"))
-                api(project(":markanywhere-flow"))
-            }
-        }
-
-        commonTest {
-            dependencies {
-                implementation(project(":markanywhere-test"))
-                implementation(project(":markanywhere-render"))
-                implementation(libs.kotlinx.coroutines.test)
-                implementation(libs.kotlin.test)
-                implementation(libs.xemantic.kotlin.test)
-                implementation(libs.xemantic.kotlin.core)
-            }
-        }
-
-    }
-
 }

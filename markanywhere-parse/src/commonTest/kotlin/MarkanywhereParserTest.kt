@@ -21,10 +21,37 @@ import com.xemantic.markanywhere.flow.mergeAdjacentText
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.test.sameAs
 import kotlinx.coroutines.flow.asFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 
 class MarkanywhereParserTest {
+
+    @Test
+    fun `should parse the README parsing example`() = runTest {
+        // given - the running example from the project README "Markdown Parsing" section
+        val markdown = """
+            # Hello
+
+            A *streaming* parser, <b>live</b>.
+        """.trimIndent()
+
+        // when
+        val parsed = flowOf(markdown).parse()
+
+        // then - the Markdown `*streaming*` yields an untagged `em`, the literal
+        //   `<b>` yields a tagged `b` - same event shape, different origin
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "h1" { +"Hello" }
+            "p" {
+                +"A "
+                "em" { +"streaming" }
+                +" parser, "
+                tag("b") { +"live" }
+                +"."
+            }
+        }
+    }
 
     @Test
     fun `should parse simple Hello World markdown`() = runTest {

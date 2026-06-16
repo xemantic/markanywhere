@@ -16,7 +16,7 @@
 
 package com.xemantic.markanywhere.parse.gfm
 
-import com.xemantic.kotlin.core.text.buildText
+import com.xemantic.kotlin.core.text.unaryPlus
 import com.xemantic.kotlin.test.text.chunkedRandomly
 import com.xemantic.markanywhere.flow.mergeAdjacentText
 import com.xemantic.markanywhere.flow.semanticEvents
@@ -141,7 +141,7 @@ class Gfm_04_02_Test {
     @Test
     fun `example 36 - h1 foo bar baz`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"# foo *bar* \\*baz\\*\n"
         }.chunkedRandomly().asFlow()
 
@@ -167,7 +167,7 @@ class Gfm_04_02_Test {
     @Test
     fun `example 37 - h1 foo`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"#                  foo                     \n"
         }.chunkedRandomly().asFlow()
 
@@ -189,7 +189,7 @@ class Gfm_04_02_Test {
     @Test
     fun `example 38 - h3 foo h2 foo h1 foo`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +" ### foo\n"
             +"  ## foo\n"
             +"   # foo\n"
@@ -221,7 +221,7 @@ class Gfm_04_02_Test {
     @Test
     fun `example 39 - indented code block`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"    # foo\n"
         }.chunkedRandomly().asFlow()
 
@@ -246,7 +246,7 @@ class Gfm_04_02_Test {
     @Test
     fun `example 40 - paragraph foo bar`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"foo\n"
             +"    # bar\n"
         }.chunkedRandomly().asFlow()
@@ -270,7 +270,7 @@ class Gfm_04_02_Test {
     @Test
     fun `example 41 - h2 foo h3 bar`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"## foo ##\n"
             +"  ###   bar    ###\n"
         }.chunkedRandomly().asFlow()
@@ -324,7 +324,7 @@ class Gfm_04_02_Test {
     @Test
     fun `example 43 - h3 foo`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"### foo ###     \n"
         }.chunkedRandomly().asFlow()
 
@@ -478,7 +478,7 @@ class Gfm_04_02_Test {
     @Test
     fun `example 49 - h2 empty h1 empty h3 empty`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"## \n"
             +"#\n"
             +"### ###\n"

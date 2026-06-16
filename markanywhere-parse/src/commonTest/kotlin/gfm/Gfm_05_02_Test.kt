@@ -16,7 +16,7 @@
 
 package com.xemantic.markanywhere.parse.gfm
 
-import com.xemantic.kotlin.core.text.buildText
+import com.xemantic.kotlin.core.text.unaryPlus
 import com.xemantic.kotlin.test.text.chunkedRandomly
 import com.xemantic.markanywhere.flow.mergeAdjacentText
 import com.xemantic.markanywhere.flow.semanticEvents
@@ -38,7 +38,7 @@ class Gfm_05_02_Test {
     @Test
     fun `example 231 - paragraph A paragraph with two li indented code block blockquote te truncated`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"A paragraph\n"
             +"with two lines.\n"
             +"\n"
@@ -81,7 +81,7 @@ class Gfm_05_02_Test {
     @Test
     fun `example 232 - ol with 1 item`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"1.  A paragraph\n"
             +"    with two lines.\n"
             +"\n"
@@ -132,7 +132,7 @@ class Gfm_05_02_Test {
     @Test
     fun `example 233 - DIVERGENCE - ul with 1 item paragraph two`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"- one\n"
             +"\n"
             +" two\n"
@@ -166,7 +166,7 @@ class Gfm_05_02_Test {
     @Test
     fun `example 234 - ul with 1 item`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"- one\n"
             +"\n"
             +"  two\n"
@@ -202,7 +202,7 @@ class Gfm_05_02_Test {
     @Test
     fun `example 235 - DIVERGENCE - ul with 1 item indented code block`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +" -    one\n"
             +"\n"
             +"     two\n"
@@ -239,7 +239,7 @@ class Gfm_05_02_Test {
     @Test
     fun `example 236 - ul with 1 item`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +" -    one\n"
             +"\n"
             +"      two\n"
@@ -275,7 +275,7 @@ class Gfm_05_02_Test {
     @Test
     fun `example 237 - blockquote text blockquote text ol with 1 item text text`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"   > > 1.  one\n"
             +">>\n"
             +">>     two\n"
@@ -319,7 +319,7 @@ class Gfm_05_02_Test {
     @Test
     fun `example 238 - DIVERGENCE - blockquote text blockquote text ul with 1 item text paragraph truncated`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +">>- one\n"
             +">>\n"
             +"  >  > two\n"
@@ -389,7 +389,7 @@ class Gfm_05_02_Test {
     @Test
     fun `example 240 - ul with 1 item`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"- foo\n"
             +"\n"
             +"\n"
@@ -426,7 +426,7 @@ class Gfm_05_02_Test {
     @Test
     fun `example 241 - ol with 1 item`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"1.  foo\n"
             +"\n"
             +"    ```\n"
@@ -483,7 +483,7 @@ class Gfm_05_02_Test {
     @Test
     fun `example 242 - ul with 1 item`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"- Foo\n"
             +"\n"
             +"      bar\n"
@@ -646,7 +646,7 @@ class Gfm_05_02_Test {
     @Test
     fun `example 248 - ul with 1 item`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"- foo\n"
             +"\n"
             +"      bar\n"
@@ -685,7 +685,7 @@ class Gfm_05_02_Test {
     @Test
     fun `example 249 - ol with 1 item start 10`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"  10.  foo\n"
             +"\n"
             +"           bar\n"
@@ -724,7 +724,7 @@ class Gfm_05_02_Test {
     @Test
     fun `example 250 - indented code block paragraph paragraph indented code block`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"    indented code\n"
             +"\n"
             +"paragraph\n"
@@ -764,7 +764,7 @@ class Gfm_05_02_Test {
     @Test
     fun `example 251 - ol with 1 item`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"1.     indented code\n"
             +"\n"
             +"   paragraph\n"
@@ -812,7 +812,7 @@ class Gfm_05_02_Test {
     @Test
     fun `example 252 - ol with 1 item`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"1.      indented code\n"
             +"\n"
             +"   paragraph\n"
@@ -860,7 +860,7 @@ class Gfm_05_02_Test {
     @Test
     fun `example 253 - paragraph foo paragraph bar`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"   foo\n"
             +"\n"
             +"bar\n"
@@ -885,9 +885,10 @@ class Gfm_05_02_Test {
          */
     }
 
+    @Test
     fun `example 254 - DIVERGENCE - ul with 1 item paragraph bar`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"-    foo\n"
             +"\n"
             +"  bar\n"
@@ -921,7 +922,7 @@ class Gfm_05_02_Test {
     @Test
     fun `example 255 - ul with 1 item`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"-  foo\n"
             +"\n"
             +"   bar\n"
@@ -957,7 +958,7 @@ class Gfm_05_02_Test {
     @Test
     fun `example 256 - DIVERGENCE - ul with 3 items`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"-\n"
             +"  foo\n"
             +"-\n"
@@ -1014,7 +1015,7 @@ class Gfm_05_02_Test {
     @Test
     fun `example 257 - DIVERGENCE - ul with 1 item`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"-   \n"
             +"  foo\n"
         }.chunkedRandomly().asFlow()
@@ -1043,7 +1044,7 @@ class Gfm_05_02_Test {
     @Test
     fun `example 258 - ul with 1 item paragraph foo`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"-\n"
             +"\n"
             +"  foo\n"
@@ -1113,7 +1114,7 @@ class Gfm_05_02_Test {
     @Test
     fun `example 260 - DIVERGENCE - ul with 3 items`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"- foo\n"
             +"-   \n"
             +"- bar\n"
@@ -1246,7 +1247,7 @@ class Gfm_05_02_Test {
     @Test
     fun `example 264 - ol with 1 item`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +" 1.  A paragraph\n"
             +"     with two lines.\n"
             +"\n"
@@ -1297,7 +1298,7 @@ class Gfm_05_02_Test {
     @Test
     fun `example 265 - ol with 1 item`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"  1.  A paragraph\n"
             +"      with two lines.\n"
             +"\n"
@@ -1348,7 +1349,7 @@ class Gfm_05_02_Test {
     @Test
     fun `example 266 - ol with 1 item`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"   1.  A paragraph\n"
             +"       with two lines.\n"
             +"\n"
@@ -1399,7 +1400,7 @@ class Gfm_05_02_Test {
     @Test
     fun `example 267 - indented code block`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"    1.  A paragraph\n"
             +"        with two lines.\n"
             +"\n"
@@ -1434,7 +1435,7 @@ class Gfm_05_02_Test {
     @Test
     fun `example 268 - ol with 1 item`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"  1.  A paragraph\n"
             +"with two lines.\n"
             +"\n"
@@ -1485,7 +1486,7 @@ class Gfm_05_02_Test {
     @Test
     fun `example 269 - DIVERGENCE - ol with 1 item`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"  1.  A paragraph\n"
             +"    with two lines.\n"
         }.chunkedRandomly().asFlow()
@@ -1595,7 +1596,7 @@ class Gfm_05_02_Test {
     @Test
     fun `example 272 - DIVERGENCE - ul with 1 item`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"- foo\n"
             +"  - bar\n"
             +"    - baz\n"
@@ -1659,7 +1660,7 @@ class Gfm_05_02_Test {
     @Test
     fun `example 273 - DIVERGENCE - ul with 4 items`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"- foo\n"
             +" - bar\n"
             +"  - baz\n"
@@ -1708,7 +1709,7 @@ class Gfm_05_02_Test {
     @Test
     fun `example 274 - DIVERGENCE - ol with 1 item start 10`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"10) foo\n"
             +"    - bar\n"
         }.chunkedRandomly().asFlow()
@@ -1748,7 +1749,7 @@ class Gfm_05_02_Test {
     @Test
     fun `example 275 - DIVERGENCE - ol with 1 item start 10 ul with 1 item`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"10) foo\n"
             +"   - bar\n"
         }.chunkedRandomly().asFlow()
@@ -1863,7 +1864,7 @@ class Gfm_05_02_Test {
     @Test
     fun `example 278 - DIVERGENCE - ul with 2 items`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"- # Foo\n"
             +"- Bar\n"
             +"  ---\n"

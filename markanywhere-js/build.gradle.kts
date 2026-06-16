@@ -19,39 +19,38 @@ plugins {
     id("markanywhere.convention")
 }
 
-val isJvmOnlyBuild: Boolean by extra
+val devBuild: Boolean by extra
 
 kotlin {
 
+    explicitApi()
+
+    // This is a JS-only module (only jsMain/jsTest sources).
+    // It is also a Browser-only module (dependent on Browser's document API)
+    js {
+        browser()
+    }
+
     sourceSets {
 
-        if (!isJvmOnlyBuild) {
-            jsMain {
-                dependencies {
-                    api(project(":markanywhere-flow"))
-                    api(project(":markanywhere-api"))
-                    api(libs.kotlinx.coroutines.core)
-                }
+        jsMain {
+            dependencies {
+                api(project(":markanywhere-flow"))
+                api(project(":markanywhere-api"))
+                api(libs.kotlinx.coroutines.core)
             }
+        }
 
-            jsTest {
-                dependencies {
-                    implementation(project(":markanywhere-test"))
-                    implementation(project(":markanywhere-parse"))
-                    implementation(libs.kotlinx.coroutines.test)
-                    implementation(libs.kotlin.test)
-                    implementation(libs.xemantic.kotlin.test)
-                }
+        jsTest {
+            dependencies {
+                implementation(project(":markanywhere-test"))
+                implementation(project(":markanywhere-parse"))
+                implementation(libs.kotlinx.coroutines.test)
+                implementation(libs.kotlin.test)
+                implementation(libs.xemantic.kotlin.test)
             }
         }
 
     }
 
-}
-
-if (!isJvmOnlyBuild) {
-    // DOM tests require a browser environment - Node.js has no document object
-    tasks.named("jsNodeTest") {
-        enabled = false
-    }
 }

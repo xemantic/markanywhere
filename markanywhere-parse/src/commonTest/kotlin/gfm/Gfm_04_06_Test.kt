@@ -16,7 +16,7 @@
 
 package com.xemantic.markanywhere.parse.gfm
 
-import com.xemantic.kotlin.core.text.buildText
+import com.xemantic.kotlin.core.text.unaryPlus
 import com.xemantic.kotlin.test.text.chunkedRandomly
 import com.xemantic.markanywhere.flow.mergeAdjacentText
 import com.xemantic.markanywhere.flow.semanticEvents
@@ -145,7 +145,7 @@ class Gfm_04_06_Test {
     @Test
     fun `example 119 - DIVERGENCE - table paragraph okay`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"<table>\n"
             +"  <tr>\n"
             +"    <td>\n"
@@ -197,7 +197,7 @@ class Gfm_04_06_Test {
     @Test
     fun `example 120 - DIVERGENCE - div hello`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +" <div>\n"
             +"  *hello*\n"
             +"         <foo><a>\n"
@@ -298,7 +298,7 @@ class Gfm_04_06_Test {
     @Test
     fun `example 123 - DIVERGENCE - div`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"<div id=\"foo\"\n"
             +"  class=\"bar\">\n"
             +"</div>\n"
@@ -325,7 +325,7 @@ class Gfm_04_06_Test {
     @Test
     fun `example 124 - DIVERGENCE - div`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"<div id=\"foo\" class=\"bar\n"
             +"  baz\">\n"
             +"</div>\n"
@@ -740,7 +740,7 @@ class Gfm_04_06_Test {
     @Test
     fun `example 139 - DIVERGENCE - pre haskell paragraph okay`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"<pre language=\"haskell\"><code>\n"
             +"import Text.HTML.TagSoup\n"
             +"\n"
@@ -818,7 +818,7 @@ class Gfm_04_06_Test {
     @Test
     fun `example 141 - DIVERGENCE - style css paragraph okay`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"<style\n"
             +"  type=\"text/css\">\n"
             +"h1 {color:red;}\n"
@@ -857,7 +857,7 @@ class Gfm_04_06_Test {
     @Test
     fun `example 142 - DIVERGENCE - style foo`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"<style\n"
             +"  type=\"text/css\">\n"
             +"\n"
@@ -1054,7 +1054,7 @@ class Gfm_04_06_Test {
     @Test
     fun `example 148 - comment paragraph okay`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"<!-- Foo\n"
             +"\n"
             +"bar\n"
@@ -1087,7 +1087,7 @@ class Gfm_04_06_Test {
     @Test
     fun `example 149 - php paragraph okay`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"<?php\n"
             +"\n"
             +"  echo '>';\n"
@@ -1148,7 +1148,7 @@ class Gfm_04_06_Test {
     @Test
     fun `example 151 - cdata paragraph okay`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"<![CDATA[\n"
             +"function matchwo(a,b)\n"
             +"{\n"
@@ -1198,7 +1198,7 @@ class Gfm_04_06_Test {
     @Test
     fun `example 152 - comment indented code block`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"  <!-- foo -->\n"
             +"\n"
             +"    <!-- foo -->\n"
@@ -1232,7 +1232,7 @@ class Gfm_04_06_Test {
     @Test
     fun `example 153 - DIVERGENCE - div div`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"  <div>\n"
             +"\n"
             +"    <div>\n"
@@ -1477,7 +1477,7 @@ class Gfm_04_06_Test {
     @Test
     fun `example 160 - DIVERGENCE - table`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"<table>\n"
             +"\n"
             +"  <tr>\n"

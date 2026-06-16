@@ -16,7 +16,7 @@
 
 package com.xemantic.markanywhere.parse.gfm
 
-import com.xemantic.kotlin.core.text.buildText
+import com.xemantic.kotlin.core.text.unaryPlus
 import com.xemantic.kotlin.test.text.chunkedRandomly
 import com.xemantic.markanywhere.flow.mergeAdjacentText
 import com.xemantic.markanywhere.flow.semanticEvents
@@ -113,7 +113,7 @@ class Gfm_04_03_Test {
     @Test
     fun `example 52 - DIVERGENCE - paragraph with leading whitespace broken em tab em`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"  Foo *bar\n"
             +"baz*\t\n"
             +"====\n"
@@ -173,7 +173,7 @@ class Gfm_04_03_Test {
     @Test
     fun `example 54 - DIVERGENCE - 3 paragraphs and 2 thematic breaks`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"   Foo\n"
             +"---\n"
             +"\n"
@@ -212,7 +212,7 @@ class Gfm_04_03_Test {
     @Test
     fun `example 55 - indented code block thematic break`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"    Foo\n"
             +"    ---\n"
             +"\n"
@@ -246,7 +246,7 @@ class Gfm_04_03_Test {
     @Test
     fun `example 56 - DIVERGENCE - paragraph Foo thematic break`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"Foo\n"
             +"   ----      \n"
         }.chunkedRandomly().asFlow()
@@ -270,7 +270,7 @@ class Gfm_04_03_Test {
     @Test
     fun `example 57 - paragraph with 4-space indented dashes`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"Foo\n"
             +"    ---\n"
         }.chunkedRandomly().asFlow()
@@ -327,7 +327,7 @@ class Gfm_04_03_Test {
     @Test
     fun `example 59 - DIVERGENCE - paragraph Foo thematic break`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"Foo  \n"
             +"-----\n"
         }.chunkedRandomly().asFlow()
@@ -661,7 +661,7 @@ class Gfm_04_03_Test {
     @Test
     fun `example 70 - indented code block foo thematic break`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"    foo\n"
             +"---\n"
         }.chunkedRandomly().asFlow()

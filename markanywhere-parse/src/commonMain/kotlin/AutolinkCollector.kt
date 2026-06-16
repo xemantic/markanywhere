@@ -82,22 +82,22 @@ internal class AutolinkCollector(
 
     override suspend fun emit(value: SemanticEvent) {
         when (value) {
-            is SemanticEvent.Text -> {
+            is Text -> {
                 if (suppressDepth > 0 || htmlRawTextDepth > 0) {
                     drain()
                     charBeforeWord = null
                     downstream.emit(value)
                     return
                 }
-                pendingEvents.add(value)
+                pendingEvents += value
             }
-            is SemanticEvent.Mark -> {
+            is Mark -> {
                 drain()
                 charBeforeWord = null
                 if (value.name.lowercase() in SUPPRESS_NAMES) suppressDepth++
                 downstream.emit(value)
             }
-            is SemanticEvent.Unmark -> {
+            is Unmark -> {
                 drain()
                 charBeforeWord = null
                 if (value.name.lowercase() in SUPPRESS_NAMES && suppressDepth > 0) suppressDepth--
@@ -247,13 +247,11 @@ internal fun findAutolinkSpans(
         val word = full.substring(wordStart, wordEnd)
         val pre = if (wordStart == 0) charBeforeFirst else full[wordStart - 1]
         val match = detectAutolink(word, pre) ?: continue
-        out.add(
-            AutolinkSpan(
-                urlStart = wordStart + match.prefix.length,
-                urlEnd = wordStart + match.prefix.length + match.linkText.length,
-                href = match.href,
-                linkText = match.linkText
-            )
+        out += AutolinkSpan(
+            urlStart = wordStart + match.prefix.length,
+            urlEnd = wordStart + match.prefix.length + match.linkText.length,
+            href = match.href,
+            linkText = match.linkText
         )
     }
     return out
@@ -407,7 +405,7 @@ private fun scanEmail(s: String, start: Int): String? {
         val c = s[i]
         if (c == '.') {
             if (i == segStart) return null
-            segments.add(segStart until i)
+            segments += (segStart until i)
             segStart = i + 1
             i++
         } else if (c.isDomainSegmentChar()) {
@@ -417,7 +415,7 @@ private fun scanEmail(s: String, start: Int): String? {
         }
     }
     if (segStart < i) {
-        segments.add(segStart until i)
+        segments += (segStart until i)
     }
     if (segments.size < 2) return null
     for ((idx, range) in segments.withIndex()) {

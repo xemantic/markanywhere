@@ -16,7 +16,7 @@
 
 package com.xemantic.markanywhere.parse.gfm
 
-import com.xemantic.kotlin.core.text.buildText
+import com.xemantic.kotlin.core.text.unaryPlus
 import com.xemantic.kotlin.test.text.chunkedRandomly
 import com.xemantic.markanywhere.flow.mergeAdjacentText
 import com.xemantic.markanywhere.flow.semanticEvents
@@ -89,7 +89,7 @@ class Gfm_02_02_Test {
     @Test
     fun `example 3 - tabs preserved literally in code block content`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"    a\ta\n"
             +"    ὐ\ta\n"
         }.chunkedRandomly().asFlow()
@@ -116,7 +116,7 @@ class Gfm_02_02_Test {
     @Test
     fun `example 4 - tab as list item continuation indent`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"  - foo\n"
             +"\n"
             +"\tbar\n"
@@ -148,7 +148,7 @@ class Gfm_02_02_Test {
     @Test
     fun `example 5 - two tabs in list continuation produce code block with two-space content`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"- foo\n"
             +"\n"
             +"\t\tbar\n"
@@ -243,7 +243,7 @@ class Gfm_02_02_Test {
     @Test
     fun `example 8 - tab line continues indented code block from four-space line`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"    foo\n"
             +"\tbar\n"
         }.chunkedRandomly().asFlow()
@@ -270,7 +270,7 @@ class Gfm_02_02_Test {
     @Test
     fun `example 9 - tab in nested list indentation`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +" - foo\n"
             +"   - bar\n"
             +"\t - baz\n"

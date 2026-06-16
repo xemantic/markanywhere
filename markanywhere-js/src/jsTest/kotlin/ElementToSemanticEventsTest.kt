@@ -965,4 +965,65 @@ class ElementToSemanticEventsTest {
         }
     }
 
+    @Test
+    fun `should capture aria-hidden subtree by default`() = runTest {
+        // given
+        document.body!!.innerHTML =
+            """<p>visible</p><p aria-hidden="true">hidden</p>"""
+
+        // when
+        val events = document.body!!.toSemanticEvents()
+
+        // then
+        events sameAs semanticEvents(tagged = true) {
+            "body" {
+                "p" { +"visible" }
+                "p"("aria-hidden" to "true") { +"hidden" }
+            }
+        }
+    }
+
+    @Test
+    fun `should not resolve aria-labelledby without the accessibility flag`() = runTest {
+        // given
+        document.body!!.innerHTML =
+            """<button aria-labelledby="lbl"></button><span id="lbl">Download PDF</span>"""
+
+        // when - raw capture leaves the id reference unresolved
+        val events = document.body!!.toSemanticEvents()
+
+        // then
+        events sameAs semanticEvents(tagged = true) {
+            "body" {
+                "button"("aria-labelledby" to "lbl") { }
+                "span"("id" to "lbl") { +"Download PDF" }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep a layout table intact without the accessibility flag`() = runTest {
+        // given - same presentation table, but raw 1:1 capture
+        document.body!!.innerHTML =
+            """<table role="presentation"><tbody><tr><td><p>Left</p></td></tr></tbody></table>"""
+
+        // when - no respectAccessibility, so computedRole is never consulted
+        val events = document.body!!.toSemanticEvents()
+
+        // then - the table structure survives verbatim
+        events sameAs semanticEvents(tagged = true) {
+            "body" {
+                "table"("role" to "presentation") {
+                    "tbody" {
+                        "tr" {
+                            "td" {
+                                "p" { +"Left" }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
 }

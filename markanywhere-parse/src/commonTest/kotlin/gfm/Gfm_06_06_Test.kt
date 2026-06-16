@@ -16,7 +16,7 @@
 
 package com.xemantic.markanywhere.parse.gfm
 
-import com.xemantic.kotlin.core.text.buildText
+import com.xemantic.kotlin.core.text.unaryPlus
 import com.xemantic.kotlin.test.text.chunkedRandomly
 import com.xemantic.markanywhere.flow.mergeAdjacentText
 import com.xemantic.markanywhere.flow.semanticEvents
@@ -242,7 +242,7 @@ class Gfm_06_06_Test {
     @Test
     fun `example 503 - paragraph linkfoo`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"[link](<foo\\>)\n"
         }.chunkedRandomly().asFlow()
 
@@ -294,7 +294,7 @@ class Gfm_06_06_Test {
     @Test
     fun `example 505 - paragraph link`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"[link](\\(foo\\))\n"
         }.chunkedRandomly().asFlow()
 
@@ -340,7 +340,7 @@ class Gfm_06_06_Test {
     @Test
     fun `example 507 - paragraph link`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"[link](foo\\(and\\(bar\\))\n"
         }.chunkedRandomly().asFlow()
 
@@ -386,7 +386,7 @@ class Gfm_06_06_Test {
     @Test
     fun `example 509 - paragraph link`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"[link](foo\\)\\:)\n"
         }.chunkedRandomly().asFlow()
 
@@ -450,7 +450,7 @@ class Gfm_06_06_Test {
     @Test
     fun `example 511 - paragraph link`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"[link](foo\\bar)\n"
         }.chunkedRandomly().asFlow()
 
@@ -554,7 +554,7 @@ class Gfm_06_06_Test {
     @Test
     fun `example 515 - paragraph link`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"[link](/url \"title \\\"&quot;\")\n"
         }.chunkedRandomly().asFlow()
 
@@ -647,7 +647,7 @@ class Gfm_06_06_Test {
     @Test
     fun `example 519 - DIVERGENCE - paragraph link`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"[link](   /uri\n"
             +"  \"title\"  )\n"
         }.chunkedRandomly().asFlow()
@@ -758,7 +758,7 @@ class Gfm_06_06_Test {
     @Test
     fun `example 524 - paragraph link bar`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"[link \\[bar](/uri)\n"
         }.chunkedRandomly().asFlow()
 
@@ -1479,7 +1479,7 @@ class Gfm_06_06_Test {
     @Test
     fun `example 550 - DIVERGENCE - multi-line label in ref def`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"[Foo\n"
             +"  bar]: /url\n"
             +"\n"
@@ -1777,7 +1777,7 @@ class Gfm_06_06_Test {
     @Test
     fun `example 561 - paragraph paragraph uri`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"[\n"
             +" ]\n"
             +"\n"
@@ -1885,7 +1885,7 @@ class Gfm_06_06_Test {
     @Test
     fun `example 565 - DIVERGENCE - forward ref shortcut with whitespace before collapsed`() = runTest {
         // given
-        val textFlow = buildText {
+        val textFlow = buildString {
             +"[foo] \n"
             +"[]\n"
             +"\n"
