@@ -25,6 +25,35 @@ import kotlin.test.Test
 
 class SemanticEventsRenderingTest {
 
+    @Test
+    fun `should render the README HTML example`() = runTest {
+        // given - the event structure parsed from the running example in the
+        //   project README "Rendering Markdown as HTML" section
+        val flow = semanticEvents {
+            "h1" { +"Hello" }
+            "p" {
+                +"A "
+                "em" { +"streaming" }
+                +" parser, "
+                tag("b") { +"live" }
+                +"."
+            }
+        }
+
+        // when
+        val html = flow.render()
+
+        // then
+        html sameAsHtml """
+            <h1>
+              Hello
+            </h1>
+            <p>
+              A <em>streaming</em> parser, <b>live</b>.
+            </p>
+        """.trimIndent()
+    }
+
     // Basic structure tests
 
     @Test
@@ -2182,7 +2211,7 @@ class SemanticEventsRenderingTest {
         html sameAsHtml """
             <p>
               First paragraph.
-
+            
               Second paragraph after blank line.
             </p>
         """.trimIndent()
@@ -2203,7 +2232,7 @@ class SemanticEventsRenderingTest {
         // then
         html sameAsHtml """
             <p>
-
+            
               Text after leading newline.
             </p>
         """.trimIndent()
@@ -2419,9 +2448,9 @@ class SemanticEventsRenderingTest {
         // then
         html sameAsHtml """
             <p>
-
-
-
+            
+            
+            
             </p>
         """.trimIndent()
     }
