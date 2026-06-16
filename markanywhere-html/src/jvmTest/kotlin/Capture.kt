@@ -33,7 +33,7 @@ import kotlin.time.Duration.Companion.seconds
  * `generateDumpFixtures` / `DumpFixtures`).
  *
  * ```
- * ./gradlew :markanywhere-html:capture --args="<url> [output.json] [--headless] [--wait=<seconds>]"
+ * ./gradlew :markanywhere-html:capture --args="<url> [output.json] [--headless] [--wait=<seconds>] [--viewport=<w>x<h>]"
  * ```
  *
  * - the output path defaults to `src/commonTest/dumps/dump.json`; pass a
@@ -44,13 +44,25 @@ import kotlin.time.Duration.Companion.seconds
  * - `--wait=<seconds>` hard cap for the post-navigation settle wait
  *   ([waitUntilLoaded]); capture proceeds once the network and DOM go quiet,
  *   or this backstop elapses on a never-quiet page (default 15)
+ * - `--viewport=<w>x<h>` window size, default `1920x1080` (Full HD). Fixtures
+ *   must be captured at a stable **desktop** width: a headless browser's small
+ *   default viewport drops below responsive breakpoints, so a CSS navbar
+ *   collapses behind its hamburger and its links/search form compute
+ *   `display:none` — then `applyAccessibility` (correctly) drops them, and the
+ *   fixture silently loses content. `1920x1080` sits **above every common
+ *   framework breakpoint** (the highest being Tailwind `2xl` / MUI `xl` at
+ *   1536px, Foundation `xxlarge` 1440, Bootstrap `xxl` 1400) and on none of
+ *   them, so no responsive layout collapses; it is also the most common real
+ *   monitor resolution. Avoid landing *on* a breakpoint (e.g. 1024/1280/1536):
+ *   the layout viewport is the window minus the classic scrollbar, so an
+ *   exactly-on-breakpoint width can evaluate just under it and drop to mobile.
  */
 fun main(args: Array<String>) {
     val options = args.filter { it.startsWith("--") }
     val positional = args.filterNot { it.startsWith("--") }
     val url = positional.getOrNull(0) ?: run {
         System.err.println(
-            "usage: capture <url> [output.json] [--headless] [--wait=<seconds>]"
+            "usage: capture <url> [output.json] [--headless] [--wait=<seconds>] [--viewport=<w>x<h>]"
         )
         exitProcess(1)
     }
@@ -59,8 +71,17 @@ fun main(args: Array<String>) {
         .firstOrNull { it.startsWith("--wait=") }
         ?.substringAfter('=')?.toIntOrNull()
         ?: 15
+    val viewport = options
+        .firstOrNull { it.startsWith("--viewport=") }
+        ?.substringAfter('=')
+        ?: "1920x1080"
+    val (width, height) = viewport.split('x', limit = 2)
     runBlocking {
-        val browser = createBrowser(this, headless = "--headless" in options)
+        val browser = createBrowser(
+            this,
+            headless = "--headless" in options,
+            browserArgs = listOf("--window-size=$width,$height"),
+        )
         try {
             val tab = browser.get(url)
             tab.waitUntilLoaded(timeout = wait.seconds)
