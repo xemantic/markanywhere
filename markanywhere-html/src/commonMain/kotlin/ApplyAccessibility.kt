@@ -79,8 +79,18 @@ public fun TransformerBuilder.applyAccessibility() {
         children(mode = LAYOUT_TABLE_MODE)
     }
 
-    // structural descendants are unwrapped, staying in layout-table mode so the
-    // skeleton keeps promoting; `<table>` is deliberately not in this set.
+    // a cell's content is promoted, then a single space separates it from the
+    // next cell so adjacent cells don't merge into one word once the table
+    // skeleton is gone (real captures often carry no inter-cell whitespace).
+    // Downstream `dropHtmlStructuralWhitespace` collapses/trims the extra space.
+    match({ name == "td" || name == "th" }, mode = LAYOUT_TABLE_MODE) {
+        children(mode = LAYOUT_TABLE_MODE)
+        +" "
+    }
+
+    // the remaining structural descendants are unwrapped, staying in layout-table
+    // mode so the skeleton keeps promoting; `<table>` is deliberately not in
+    // this set.
     match({ name in TABLE_STRUCTURAL_TAGS }, mode = LAYOUT_TABLE_MODE) {
         children(mode = LAYOUT_TABLE_MODE)
     }
@@ -119,9 +129,16 @@ private fun SemanticEvent.Mark.isLayoutTable(): Boolean {
     return role !in DATA_TABLE_ROLES
 }
 
-/** Re-emits [event] verbatim (annotations stripped), descending in default mode. */
+/**
+ * Re-emits [event] verbatim, descending in default mode. The role / visibility
+ * annotations this operator consumed are stripped, but [AccessibilityAnnotations.DISPLAY]
+ * is deliberately preserved so the downstream whitespace normalizer can gate on
+ * the browser's computed block/inline verdict; it strips the annotation itself.
+ */
 private suspend fun MatcherScope.passThrough(event: SemanticEvent.Mark) {
-    val attributes = event.attributes.filterKeys { it !in AccessibilityAnnotations.ALL }
+    val attributes = event.attributes.filterKeys {
+        it != AccessibilityAnnotations.ROLE && it != AccessibilityAnnotations.VISIBILITY
+    }
     if (event.isTagged) {
         tag(event.name, attributes) { children() }
     } else {

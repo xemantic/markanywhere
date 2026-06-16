@@ -110,11 +110,14 @@ class ApplyAccessibilityTest {
         val output = input.applyAccessibility()
 
         // then the table / tbody / tr / td skeleton is gone, the hidden span is
-        // dropped, and the real content is promoted into the surrounding div
+        // dropped, and the real content is promoted into the surrounding div —
+        // each cell followed by a separating space so adjacent cells don't merge
         output sameAs semanticEvents(tagged = true) {
             "div" {
                 "p" { +"Hello" }
+                +" "
                 +"World"
+                +" "
             }
         }
     }
@@ -168,11 +171,38 @@ class ApplyAccessibilityTest {
         val output = input.applyAccessibility()
 
         // then the outer layout table is unwrapped, but the inner data table
-        // survives — re-evaluated on its own role
+        // survives — re-evaluated on its own role; the unwrapped outer cell adds
+        // its trailing separator space
         output sameAs semanticEvents(tagged = true) {
             "table" {
                 "tr" { "td" { +"data" } }
             }
+            +" "
+        }
+    }
+
+    @Test
+    fun `should separate adjacent layout table cells with a space`() = runTest {
+        // given two cells with inline content and no inter-cell whitespace
+        // (as in real minified markup like Hacker News' nav)
+        val input = semanticEvents(tagged = true) {
+            "table"(AccessibilityAnnotations.ROLE to "LayoutTable") {
+                "tr" {
+                    "td" { "a"("href" to "/1") { +"A" } }
+                    "td" { "a"("href" to "/2") { +"B" } }
+                }
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then the two links are separated by a space instead of merging
+        output sameAs semanticEvents(tagged = true) {
+            "a"("href" to "/1") { +"A" }
+            +" "
+            "a"("href" to "/2") { +"B" }
+            +" "
         }
     }
 
