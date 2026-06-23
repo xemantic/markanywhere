@@ -622,10 +622,123 @@ class MarkdownRenderingTest {
         // then
         markdown sameAs """
             Above.
-
+            
             ---
-
+            
             Below.
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should render a tagged line-start anchor wrapping block content as a block-level raw tag`() = runTest {
+        // given
+        // A block-wrapping `<a>` arrives as a *tagged* mark (what `parse()`
+        // emits for a raw `<a …>` HTML block — distinct from the untagged-link
+        // spill path above). At a line start it must render as a block-level
+        // raw tag: a blank line at the tag↔Markdown boundary so the inner
+        // `## heading` survives and re-parses as a heading, not raw text. This
+        // is what keeps the HTML→Markdown→parse round-trip a fixpoint.
+        val flow = semanticEvents {
+            tag("a", "href" to "/article", "ref" to "34") {
+                "h2" { +"Headline" }
+                "p" { +"Body." }
+            }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs """
+            <a href="/article" ref="34">
+            
+            ## Headline
+            
+            Body.
+            
+            </a>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should keep adjacent tagged anchors newline-tight`() = runTest {
+        // given
+        // Two block-wrapping links in a row, each a tagged `<a>` mark. Like
+        // sibling `</section>` / `<section>`, the close and the next open stay
+        // newline-tight (no blank line between `</a>` and `<a>`), while inner
+        // content is blank-line separated.
+        val flow = semanticEvents {
+            tag("a", "href" to "/a", "ref" to "4") { "h2" { +"First" } }
+            tag("a", "href" to "/b", "ref" to "6") { "h2" { +"Second" } }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs """
+            <a href="/a" ref="4">
+            
+            ## First
+            
+            </a>
+            <a href="/b" ref="6">
+            
+            ## Second
+            
+            </a>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should render a whitespace-only paragraph as nothing`() = runTest {
+        // given
+        // A content-less `<p> </p>` (common in captured DOMs) between two real
+        // paragraphs. Its block-start is deferred until real content arrives,
+        // so it emits nothing — no stray blank line that a render→parse→render
+        // round-trip would then collapse, breaking the fixpoint.
+        val flow = semanticEvents {
+            "p" { +"First." }
+            "p" { +" " }
+            "p" { +"Second." }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs """
+            First.
+            
+            Second.
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should keep a tagged anchor that starts a paragraph inline`() = runTest {
+        // given
+        // A tagged inline `<a>` that is the first content of a paragraph sits
+        // at a line start, but it is NOT a block-wrapping link — it must stay
+        // inline. Regression: the line-start block-tag rule (combined with the
+        // deferred paragraph start) once spilled it to a block-level raw tag,
+        // wrongly producing `<a href>\n\nhi</a> rest`. The preceding heading
+        // also checks the paragraph still gets its blank-line separation.
+        val flow = semanticEvents {
+            "h1" { +"Title" }
+            "p" {
+                tag("a", "href" to "/x") { +"hi" }
+                +" rest of line"
+            }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs """
+            # Title
+            
+            <a href="/x">hi</a> rest of line
         """.trimIndent()
     }
 
@@ -668,6 +781,236 @@ class MarkdownRenderingTest {
             text
 
             next
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should drop a moot hard break and stray whitespace between loose blocks`() = runTest {
+        // given — the Hacker News footer shape: after a block, loose inline
+        // content of an image, a `<br>`, then a link, with a space on each side
+        // of the `<br>`. The image is its own block (loose content), so the
+        // `<br>` sits at a block boundary — it is moot, and the surrounding
+        // spaces are insignificant. The round-trip would otherwise leave a moot
+        // trailing hard break on the image line and a leading space on the link.
+        val flow = semanticEvents {
+            "p" { +"Above" }
+            "img"("src" to "s.gif") {}
+            +" "
+            "br" {}
+            +" "
+            "a"("href" to "/g") { +"Guidelines" }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then — the `<br>` and both spaces are dropped; the blocks separate
+        // with a blank line and neither carries stray whitespace
+        markdown sameAs """
+            Above
+            
+            ![](s.gif)
+            
+            [Guidelines](/g)
+        """.trimIndent()
+    }
+
+    // Trailing whitespace at line ends — a single trailing space on a line is
+    // insignificant in Markdown (GFM strips it on parse), and `<br>` hard breaks
+    // arrive as structural events, not literal double-spaces, so the renderer can
+    // safely drop text trailing spaces at a line/block boundary. Without this the
+    // renderer leaks insignificant trailing whitespace that the parser then strips
+    // — making a render→parse round-trip diverge on whitespace alone.
+
+    @Test
+    fun `should drop an insignificant trailing space at a paragraph end`() = runTest {
+        // given — a paragraph whose text ends with a space (as a captured DOM
+        // text node often does, e.g. openJur's "Rechtskraft: ❓ ").
+        val flow = semanticEvents {
+            "p" { +"Done " }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then — the trailing space is dropped
+        markdown sameAs "Done"
+    }
+
+    @Test
+    fun `should drop trailing spaces before a following block`() = runTest {
+        // given — loose text ending in a space, immediately followed by a
+        // block-level tag (the openJur "❓ <button>" shape).
+        val flow = semanticEvents {
+            "h6" { +"Heading" }
+            +"Label "
+            tag("button") { +"Optionen" }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then — "Label" has no trailing space before the blank-line boundary
+        markdown sameAs """
+            ###### Heading
+            
+            Label
+            
+            <button>
+            
+            Optionen
+            
+            </button>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should keep interior spaces between inline content`() = runTest {
+        // given — spaces that are *not* trailing must survive: deferral only
+        // drops a space when the line actually ends, not when content follows.
+        val flow = semanticEvents {
+            "p" {
+                +"see the "
+                "a"("href" to "/x") { +"link" }
+                +" now"
+            }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "see the [link](/x) now"
+    }
+
+    @Test
+    fun `should drop a trailing space before a soft line break`() = runTest {
+        // given — a soft break (`\n` inside a paragraph's text) preceded by a
+        // space. The space is trailing on its line and is dropped.
+        val flow = semanticEvents {
+            "p" { +"Line one \nLine two" }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "Line one\nLine two"
+    }
+
+    // Leading block-marker escaping — paragraph text that, written verbatim,
+    // would re-parse as a *different* block construct (an ordered/bullet list,
+    // ATX heading, blockquote, thematic break) is backslash-escaped at the line
+    // start so it round-trips as the paragraph text it is. The openJur case:
+    // separate `<p>1.</p>` margin numbers (Randnummern) that bare `1.` would
+    // turn into an empty list item and drop.
+
+    @Test
+    fun `should escape an ordered-list marker that is paragraph text`() = runTest {
+        // given — a paragraph whose entire text is "1." (an openJur margin number)
+        val flow = semanticEvents { "p" { +"1." } }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then — escaped so it does not re-parse as an ordered list
+        markdown sameAs "1\\."
+    }
+
+    @Test
+    fun `should escape an ordered-list marker that has following content`() = runTest {
+        // given
+        val flow = semanticEvents { "p" { +"1. Stop here" } }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then — only the delimiter is escaped
+        markdown sameAs "1\\. Stop here"
+    }
+
+    @Test
+    fun `should escape a bullet-list marker that is paragraph text`() = runTest {
+        // given
+        val flow = semanticEvents { "p" { +"- item" } }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "\\- item"
+    }
+
+    @Test
+    fun `should escape an ATX heading marker that is paragraph text`() = runTest {
+        // given
+        val flow = semanticEvents { "p" { +"# not a heading" } }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "\\# not a heading"
+    }
+
+    @Test
+    fun `should escape a blockquote marker that is paragraph text`() = runTest {
+        // given
+        val flow = semanticEvents { "p" { +"> not a quote" } }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "\\> not a quote"
+    }
+
+    @Test
+    fun `should escape a thematic break that is paragraph text`() = runTest {
+        // given
+        val flow = semanticEvents { "p" { +"---" } }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "\\---"
+    }
+
+    @Test
+    fun `should not escape a marker that is not at the line start`() = runTest {
+        // given — the marker characters appear mid-line, where they are plain
+        // text and must not be escaped.
+        val flow = semanticEvents { "p" { +"see point 1. below - now" } }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "see point 1. below - now"
+    }
+
+    @Test
+    fun `should not escape markers inside a fenced code block`() = runTest {
+        // given — code content is verbatim; a leading "1." or "- " is real code.
+        val flow = semanticEvents {
+            "pre" {
+                "code" {
+                    +"1. not a list\n"
+                    +"- not a bullet\n"
+                }
+            }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs """
+            ```
+            1. not a list
+            - not a bullet
+            ```
         """.trimIndent()
     }
 
@@ -1875,6 +2218,96 @@ class MarkdownRenderingTest {
 
             </summary>
             </details>
+        """.trimIndent()
+    }
+
+    // Structural inter-block whitespace — the shape a *re-parsed* HTML block
+    // produces: the parser emits the source line breaks between block-level
+    // tags (`<header>\n<nav>`) as whitespace-only `text` events. The reverse
+    // renderer previously amplified each into a blank line, and since every
+    // render left those text events behind, the blank lines grew on every
+    // render→parse round-trip (never converging). These lock the fix in at the
+    // unit level — the end-to-end dump round-trip was the only thing catching it.
+
+    @Test
+    fun `should keep adjacent block tags tight across a structural newline text event`() = runTest {
+        // given — `<header>` then a whitespace-only `\n` text event then
+        // `<nav>`, exactly as the parser re-emits an HTML block's line breaks.
+        val flow = semanticEvents {
+            tag("header") {
+                +"\n"
+                tag("nav") {
+                    +"\n"
+                    "p" { +"Home" }
+                }
+            }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then — the structural newlines are dropped: the tags stay tight and
+        // the content gets a single blank-line separation (not amplified).
+        markdown sameAs """
+            <header>
+            <nav>
+            
+            Home
+            
+            </nav>
+            </header>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should not let structural whitespace text events accumulate blank lines`() = runTest {
+        // when — two streams differing only in how many whitespace-only text
+        // events sit between the block tag and its content (one vs. five): the
+        // root cause of the round-trip accumulation was that more such events
+        // produced more blank lines.
+        suspend fun render(blankRuns: Int) = semanticEvents {
+            tag("section") {
+                repeat(blankRuns) { +"\n" }
+                "p" { +"Body" }
+            }
+        }.renderMarkdown()
+
+        // then — both render identically, to a single blank separation
+        val expected = """
+            <section>
+
+            Body
+
+            </section>
+        """.trimIndent()
+        render(1) sameAs expected
+        render(5) sameAs expected
+    }
+
+    @Test
+    fun `should preserve blank lines inside fenced code despite the structural whitespace rule`() = runTest {
+        // given — a blank line *inside* a code block is significant content and
+        // must survive (the structural-whitespace drop is gated off in pre/code).
+        val flow = semanticEvents {
+            "pre" {
+                "code" {
+                    +"line 1\n"
+                    +"\n"
+                    +"line 3\n"
+                }
+            }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs """
+            ```
+            line 1
+
+            line 3
+            ```
         """.trimIndent()
     }
 

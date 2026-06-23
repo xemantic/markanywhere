@@ -1505,7 +1505,6 @@ class Gfm_04_06_Test {
                             +"<td>\n  Hi\n</td>\n"
                         }
                     }
-                    +"  "
                 }
             }
         }

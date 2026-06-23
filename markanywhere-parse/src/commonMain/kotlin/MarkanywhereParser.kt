@@ -1234,8 +1234,12 @@ private class ParserState(
      * which drains the frame's `openTags` down to and including the matched
      * name, then resumes sub-parse with a fresh `Start` frame on top.
      *
-     * Excludes root matches because those are handled by
-     * [findEnclosingHtmlFrameIndex], which fully pops the frame.
+     * A match against an inner `openTag` is preferred over a root match even
+     * when the two share a name (e.g. `<nav><nav>…</nav></nav>`): the inner
+     * tag was opened later, so a stand-alone close resolves to it LIFO. The
+     * caller ([tryCloseEnclosingHtmlBlock]) checks this before the root-close
+     * path so a same-named nesting closes one level at a time rather than
+     * draining the whole frame.
      */
     private fun findEnclosingHtmlOpenTagClose(line: String): Pair<Int, String>? {
         val trimmed = line.trimStart()
@@ -1246,8 +1250,6 @@ private class ParserState(
         for (i in blockModeStack.lastIndex downTo 0) {
             val frame = blockModeStack[i] as? BlockMode.HtmlBlock6or7 ?: continue
             if (frame.rootIsClosingTag || frame.firstLineBuffer != null) continue
-            // Skip frames whose root matches — root case handled elsewhere.
-            if (frame.rootTagName == name) continue
             // openTags entries may keep source casing for non-HTML5 tags, so
             // compare case-insensitively against the (already-lowercased) name.
             if (frame.openTags.any { it.lowercase() == name }) return i to name
@@ -5354,6 +5356,38 @@ private class ParserState(
     private suspend fun SemanticEventScope.tryCloseEnclosingHtmlBlock(
         line: String
     ): Boolean {
+        // Non-root close: a stand-alone close tag matching an inner `openTag`
+        // tracked by an enclosing frame (e.g. `</pre>` while a `<table>` frame
+        // has `pre` in its openTags). Drain that frame's openTags down to and
+        // including the matched name, then resume sub-parse with a fresh
+        // `Start` on top so subsequent lines route through the dispatcher.
+        //
+        // Checked BEFORE the root close: an inner `openTag` is deeper than the
+        // frame root, so when the close name matches both (same-named nesting
+        // like `<nav><nav>…</nav></nav>`) the inner one wins LIFO — closing a
+        // single level instead of draining the whole frame.
+        val nonRoot = findEnclosingHtmlOpenTagClose(line)
+        if (nonRoot != null) {
+            val (frameIdx, closeName) = nonRoot
+            while (blockModeStack.lastIndex > frameIdx) popMode()
+            val mode = blockModeStack[frameIdx] as BlockMode.HtmlBlock6or7
+            // Compare case-insensitively against `closeName` (always lowercased)
+            // so non-HTML5 openTags (which preserve source casing) still match.
+            while (mode.openTags.isNotEmpty() &&
+                mode.openTags.last().lowercase() != closeName
+            ) {
+                unmarkHtml(mode.openTags.removeLast())
+            }
+            if (mode.openTags.isNotEmpty()) {
+                unmarkHtml(mode.openTags.removeLast())
+            }
+            leaveRawHtmlBlock(mode)
+            pushMode(BlockMode.Start)
+            return true
+        }
+        // Root close: the line carries the matching root close tag of an
+        // enclosing frame (and the name did not match any deeper inner
+        // `openTag`). Drain all of the frame's open tags and pop it.
         val idx = findEnclosingHtmlFrameIndex(line)
         if (idx >= 0) {
             val mode = blockModeStack[idx] as BlockMode.HtmlBlock6or7
@@ -5372,30 +5406,6 @@ private class ParserState(
             if (trailing.isNotEmpty()) +"$trailing\n"
             leaveRawHtmlBlock(mode)
             popMode()
-            return true
-        }
-        // Non-root close: a stand-alone close tag matching an inner `openTag`
-        // tracked by an enclosing frame (e.g. `</pre>` while a `<table>` frame
-        // has `pre` in its openTags). Drain that frame's openTags down to and
-        // including the matched name, then resume sub-parse with a fresh
-        // `Start` on top so subsequent lines route through the dispatcher.
-        val nonRoot = findEnclosingHtmlOpenTagClose(line)
-        if (nonRoot != null) {
-            val (frameIdx, closeName) = nonRoot
-            while (blockModeStack.lastIndex > frameIdx) popMode()
-            val mode = blockModeStack[frameIdx] as BlockMode.HtmlBlock6or7
-            // Compare case-insensitively against `closeName` (always lowercased)
-            // so non-HTML5 openTags (which preserve source casing) still match.
-            while (mode.openTags.isNotEmpty() &&
-                mode.openTags.last().lowercase() != closeName
-            ) {
-                unmarkHtml(mode.openTags.removeLast())
-            }
-            if (mode.openTags.isNotEmpty()) {
-                unmarkHtml(mode.openTags.removeLast())
-            }
-            leaveRawHtmlBlock(mode)
-            pushMode(BlockMode.Start)
             return true
         }
         return false

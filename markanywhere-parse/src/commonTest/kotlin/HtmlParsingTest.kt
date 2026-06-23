@@ -356,6 +356,33 @@ class HtmlParsingTest {
         }
     }
 
+    @Test
+    fun `same-named nested HTML block closes one level at a time`() = runTest {
+        // given — an outer `<nav>` with a same-named inner `<nav>`. A naive
+        // close that matched the frame root would drain BOTH on the first
+        // `</nav>`, dumping the outer's remaining content as raw text. The
+        // close must resolve to the deepest open `nav` (LIFO) instead.
+        val src = "<nav>\n<nav>\n\ninner\n\n</nav>\nouter\n\n</nav>\n"
+
+        // when
+        val parsed = flowOf(src).parse()
+
+        // then — the inner `</nav>` closes only the inner nav; `outer` then
+        // sub-parses as a Markdown paragraph inside the still-open outer nav,
+        // which the final `</nav>` closes. (Had the inner close drained to the
+        // root, `outer` would have leaked as raw text after both navs closed.)
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            tag("nav") {
+                +"\n"
+                tag("nav") {
+                    +"\n\n"
+                    "p" { +"inner" }
+                }
+                "p" { +"outer" }
+            }
+        }
+    }
+
     /**
      * **Place 13** — A GFM §6.11 disallowed tag (`<script>`) encountered
      * *inline* (mid-line, not at a block boundary) drops the element **and

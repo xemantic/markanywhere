@@ -498,6 +498,11 @@ private fun stripTrailingUrl(raw: String): Pair<String, String> {
             changed = true
             continue
         }
+        if (end > 0 && raw[end - 1] in TRAILING_URL_QUOTES) {
+            end--
+            changed = true
+            continue
+        }
         if (end > 0 && raw[end - 1] == ')') {
             var opens = 0
             var closes = 0
@@ -524,7 +529,9 @@ private fun stripTrailingUrl(raw: String): Pair<String, String> {
 private fun stripTrailingMailtoOrXmpp(raw: String): Pair<String, String> {
     var end = raw.length
     while (end > 0 &&
-        (raw[end - 1] in TRAILING_URL_PUNCT || raw[end - 1] == '/')
+        (raw[end - 1] in TRAILING_URL_PUNCT ||
+            raw[end - 1] in TRAILING_URL_QUOTES ||
+            raw[end - 1] == '/')
     ) {
         end--
     }
@@ -537,7 +544,9 @@ private fun stripTrailingMailtoOrXmpp(raw: String): Pair<String, String> {
  */
 private fun stripTrailingEmail(raw: String): Pair<String, String> {
     var end = raw.length
-    while (end > 0 && raw[end - 1] in TRAILING_URL_PUNCT) {
+    while (end > 0 &&
+        (raw[end - 1] in TRAILING_URL_PUNCT || raw[end - 1] in TRAILING_URL_QUOTES)
+    ) {
         end--
     }
     return raw.substring(0, end) to raw.substring(end)
@@ -568,6 +577,17 @@ private fun isValidEmailLastChar(body: String): Boolean {
 }
 
 private val TRAILING_URL_PUNCT = setOf('?', '!', '.', ',', ':', '*', '_', '~')
+
+/**
+ * Trailing straight quotes stripped from extended autolink bodies.
+ *
+ * DIVERGENCE from GFM §6.9 (which keeps them, as `"`/`'` are neither in its
+ * trailing-punctuation set nor parentheses): a URL never legitimately ends in a
+ * straight quote in prose, and keeping it yields a broken link — e.g. openJur's
+ * `…unter www.deutschepost.de/datenschutz").` would link `…/datenschutz"`. The
+ * stripped quote is replayed as plain text after the `</a>`.
+ */
+private val TRAILING_URL_QUOTES = setOf('"', '\'')
 
 private fun Char.isEmailLocalChar(): Boolean =
     this in 'A'..'Z' || this in 'a'..'z' || this in '0'..'9' ||

@@ -47,6 +47,7 @@ kotlin {
             dependencies {
                 implementation(project(":markanywhere-test"))
                 implementation(project(":markanywhere-render"))
+                implementation(project(":markanywhere-parse"))
                 implementation(libs.kotlin.test)
                 implementation(libs.kotlinx.coroutines.test)
                 implementation(libs.xemantic.kotlin.test)

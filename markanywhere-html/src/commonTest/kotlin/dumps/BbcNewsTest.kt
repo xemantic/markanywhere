@@ -20,7 +20,9 @@ import com.xemantic.kotlin.test.sameAs
 import com.xemantic.markanywhere.html.DumpFixtures
 import com.xemantic.markanywhere.html.dumpFlow
 import com.xemantic.markanywhere.html.transformHtmlToMarkdown
+import com.xemantic.markanywhere.parse.parse
 import com.xemantic.markanywhere.render.renderMarkdown
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 
@@ -725,9 +727,7 @@ class BbcNewsTest {
             </section>
             
             Copyright 2026 BBC. All rights reserved. The BBC is not responsible for the content of external sites. [:DACi:](ref:129:https://www.bbc.com/editorialguidelines/guidance/links-and-feeds)
-            
-             
-            
+
             </footer>
             <section>
             
@@ -748,6 +748,24 @@ class BbcNewsTest {
             
             </section>
         """.trimIndent()
+    }
+
+    @Test
+    fun `should round-trip the rendered Markdown to a stable fixpoint`() = runTest {
+        // given — the Markdown the pipeline produces for the BBC News dump
+        val markdown = dumpFlow(DumpFixtures.bbcNews).transformHtmlToMarkdown().renderMarkdown()
+
+        // when
+        val roundtripped = flowOf(markdown).parse().renderMarkdown()
+
+        // then — a clean fixpoint: parsing and re-rendering reproduces the
+        // pipeline Markdown exactly. This dump exercises the heavy raw-HTML
+        // shape (block-wrapping `<a>` links and nested `<header>`/`<nav>`/
+        // `<section>` wrappers around Markdown headings, lists and images); the
+        // round-trip is stable because the renderer treats a line-start `<a>`
+        // as a block tag, the parser closes same-named HTML nesting one level
+        // at a time, and an empty `<p>` renders to nothing.
+        roundtripped sameAs markdown
     }
 
 }
