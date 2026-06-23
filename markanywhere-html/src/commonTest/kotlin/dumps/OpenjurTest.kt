@@ -20,7 +20,9 @@ import com.xemantic.kotlin.test.sameAs
 import com.xemantic.markanywhere.html.DumpFixtures
 import com.xemantic.markanywhere.html.dumpFlow
 import com.xemantic.markanywhere.html.transformHtmlToMarkdown
+import com.xemantic.markanywhere.parse.parse
 import com.xemantic.markanywhere.render.renderMarkdown
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 
@@ -76,7 +78,7 @@ class OpenjurTest {
             
             ###### [KG](ref:11:/be/kg.html), Urteil vom 15.09.2021 - 5 U 35/20
             
-            Fundstelle openJur 2022, 4663 Rechtskraft: ❓ 
+            Fundstelle openJur 2022, 4663 Rechtskraft: ❓
             
             <button type="button" aria-expanded="false" ref="12">
             
@@ -84,7 +86,7 @@ class OpenjurTest {
             
             </button>
             
-             [Datenschutzrecht](ref:13:/gebiet-44.html) [Zivilrecht](ref:14:/gebiet-1.html) 
+            [Datenschutzrecht](ref:13:/gebiet-44.html) [Zivilrecht](ref:14:/gebiet-1.html)
             
             ###### Tenor
             
@@ -138,27 +140,27 @@ class OpenjurTest {
             
             Der Kläger beantragt zuletzt,
             
-            1.
+            1\.
             
             Der Beklagten wird unter Androhung von Ordnungsmitteln für jeden Fall der Zuwiderhandlung gegen die Unterlassungsverpflichtung untersagt, den Kläger telefonisch zu werblichen Zwecken zu kontaktieren oder kontaktieren zu lassen, ohne dass die vorherige ausdrückliche Einwilligung des Klägers vorliegt, wenn dies geschieht wie durch den Anruf der Beklagten vom 22. März 2019, bei dem die Beklagte den Kläger um Teilnahme an einer Zufriedenheitsbefragung bat und anfragte, ob der Kläger überhaupt bereit wäre, sich für solche Rückfragen zwei/drei Minuten Zeit zu nehmen.
             
-            2.
+            2\.
             
             Die Beklagte wird weiter verurteilt, an den Kläger 571,44 € nebst Zinsen in Höhe von 5 Prozentpunkten über dem jeweiligen Basiszinssatz seit dem 12. Juni 2019 zu zahlen.
             
-            3.
+            3\.
             
             Der Beklagten wird unter Androhung von Ordnungsmitteln für jeden Fall der Zuwiderhandlung gegen die Unterlassungsverpflichtung untersagt, an den Kläger Werbung per elektronischer Post zu versenden oder versenden zu lassen, ohne dass die vorherige ausdrückliche Einwilligung des Klägers vorliegt, wenn dies geschieht, wie aus den E-Mails der Beklagten vom 25. März 2019 (Anlage K8) sowie 4. April 2019 (Anlage K2) ersichtlich.
             
-            4.
+            4\.
             
             Die Beklagte wird weiter verurteilt, an den Kläger Kosten der Abmahnung vom 22. April 2019 in Höhe von 571,44 € nebst Zinsen in Höhe von 5 Prozentpunkten über dem jeweiligen Basiszinssatz seit dem 18. November 2019 zu zahlen.
             
-            5.
+            5\.
             
             Die Beklagte wird weiter verurteilt, an den Kläger gemäß Art. 15 Abs. 1 Halbsatz 2 lit. h) Datenschutz - Grundverordnung (DS-GVO) Auskunft über das Bestehen (oder Nichtbestehen) einer automatisierten Entscheidungsfindung einschließlich Profiling gemäß Art. [22](ref:20:https://dejure.org/gesetze/DSGVO/22.html) Absätze 1 und [4](ref:21:https://dejure.org/gesetze/DSGVO/4.html) DS-GVO und - zumindest in diesen Fällen - aussagekräftige Informationen über die involvierte Logik sowie die Tragweite und die angestrebten Auswirkungen einer derartigen Verarbeitung für den Kläger.
             
-            6.
+            6\.
             
             Die Beklagte wird verurteilt, an den Kläger 255,85 € vorgerichtliche Kosten als Verzugsschaden (hinsichtlich des Klageantrags zu 5) nebst Zinsen in Höhe von 5 Prozentpunkten über dem jeweiligen Basiszinssatz seit dem 18. November 2019 zu zahlen.
             
@@ -180,7 +182,7 @@ class OpenjurTest {
             
             In der Sache hat die Berufung teilweise Erfolg, sodass insoweit die landgerichtliche Entscheidung abzuändern ist. Im Übrigen unterliegt die Berufung der Zurückweisung.
             
-            1. Berufungsantrag zu 1)
+            1\. Berufungsantrag zu 1)
             
             Der Kläger kann von der Beklagten Unterlassung von Telefonanrufen mit werblichem Inhalt, wie aus dem Tenor zu I. ersichtlich, verlangen und sich dabei auf § [823](ref:26:https://dejure.org/gesetze/BGB/823.html) Abs. 1, § [1004](ref:27:https://dejure.org/gesetze/BGB/1004.html) Abs. 1 S. 2 BGB analog berufen.
             
@@ -220,7 +222,7 @@ class OpenjurTest {
             
             d) Der Antrag des Klägers ist auch nicht zu weit gefasst, obwohl er - entgegen § [7](ref:50:https://dejure.org/gesetze/UWG/7.html) Abs. 2 Nr. 2 Alt. 2 UWG - auch Anrufe verbieten lassen möchte, bei denen eine zumindest mutmaßliche Einwilligung vorliegt. Im vorliegenden Fall ist dies zulässig, da angesichts der unzweideutigen Erklärungen des Klägers, er wolle von der Beklagten unter keinen Umständen angerufen werden, eine mutmaßliche Einwilligung von vornherein ausscheidet.
             
-            2. Berufungsantrag zu 3)
+            2\. Berufungsantrag zu 3)
             
             Der Kläger kann von der Beklagten Unterlassung von E-Mails mit werblichem Inhalt, wie aus dem Tenor zu II. ersichtlich, verlangen und sich dabei auf § [823](ref:51:https://dejure.org/gesetze/BGB/823.html) Abs. 1, § [1004](ref:52:https://dejure.org/gesetze/BGB/1004.html) Abs. 1 S. 2 BGB analog berufen.
             
@@ -240,13 +242,13 @@ class OpenjurTest {
             
             aa) Die Beklagte hat zwar nicht von der Hand zu weisende Argumente vorgebracht, die gegen eine Rechtswidrigkeit streiten: So sei hier zu berücksichtigen, dass der werbliche Zusatz
             
-            - durch einen Absatz von dem Rest der E-Mail abgesetzt sei,
+            \- durch einen Absatz von dem Rest der E-Mail abgesetzt sei,
             
-            - flächenmäßig einen Bruchteil der gesamten E-Mail ausmache und lediglich aus acht Worten bestehe,
+            \- flächenmäßig einen Bruchteil der gesamten E-Mail ausmache und lediglich aus acht Worten bestehe,
             
-            - am Ende der Nachricht stehe,
+            \- am Ende der Nachricht stehe,
             
-            - nicht in einem Zusammenhang mit dem Rest der E-Mail stehe und nicht als Teil des Schreibens angesehen werden könne.
+            \- nicht in einem Zusammenhang mit dem Rest der E-Mail stehe und nicht als Teil des Schreibens angesehen werden könne.
             
             Zudem seien die E-Mails ohne Anhang versendet worden und das Laden und die Inanspruchnahme von Speicherkapazität habe sich auf ein Minimum beschränkt. Dadurch habe der werbliche Zusatz sowohl aufgrund der Gestaltung der E-Mails als auch aufgrund des Inhaltes leicht als werbend identifiziert werden und leicht unbeachtet bleiben können. Der Zeitaufwand für die Identifizierung des Zusatzes als Werbeteil habe sich auf ein Minimum beschränkt. Damit sei die Beeinträchtigung des Klägers in einem so minimalen Maße eingetreten, dass eine Abwägung der widerstreitenden Interessen zugunsten der Beklagten ausfallen müsse.
             
@@ -266,7 +268,7 @@ class OpenjurTest {
             
             e) Nachdem in der mündlichen Berufungsverhandlung deutlich geworden ist, dass sich der Kläger zur Begründung des Berufungsantrages zu 3) auf die Anlage K 4 (E-Mail vom 04. April 2019), und nicht, wie (offenbar versehentlich) im Schriftsatz vom 25. August 2021 (Bl. II/99 d. A.) angegeben, auf die Anlage K 2 (Screenshot des Bildschirms des Mobiltelefons des Klägers mit dessen Telefonnummer) beziehen will, hat der Senat auch im Tenor zu A.II auf die Anlage K 4 verwiesen.
             
-            3. Berufungsantrag zu 5)
+            3\. Berufungsantrag zu 5)
             
             Der Kläger hat gegen die Beklagte nicht den geltend gemachten Anspruch auf (Negativ-)Auskunft gem. Art. [15](ref:73:https://dejure.org/gesetze/DSGVO/15.html) Abs. 1 HS. 2 lit) h DS-GVO. Selbst wenn ein solcher Anspruch bestünde, wäre er bereits durch Erfüllung (§ [362](ref:74:https://dejure.org/gesetze/BGB/362.html) Abs. 1 BGB) erloschen.
             
@@ -288,7 +290,7 @@ class OpenjurTest {
             
             dd) Im Übrigen ist die Klage insoweit jedenfalls deswegen unbegründet, da die Beklagte zwischenzeitlich (sogar) eine Negativauskunft erteilt hat. Der Kläger hat insoweit auch nicht den Rechtsstreit teilweise für erledigt erklärt.
             
-            4. Feststellung der Teilerledigung
+            4\. Feststellung der Teilerledigung
             
             Der Antrag auf Feststellung der Erledigung des erstinstanzlich gestellten Antrags, die Beklagte zur Auskunft gem. Art. [15](ref:86:https://dejure.org/gesetze/DSGVO/15.html) Abs. 1 HS. 2 lit c) DS-GVO zu verurteilen, ist zulässig und begründet.
             
@@ -316,7 +318,7 @@ class OpenjurTest {
             
             bb) Der Anspruch des Klägers gem. Art. [15](ref:101:https://dejure.org/gesetze/DSGVO/15.html) Abs. 1 HS. 2 lit c) DS-GVO, der auch nicht durch die E-Mail vom 25. Juni 2019 (Anlage K 10) erfüllt worden ist, ist erst durch die Mitteilung der Beklagten im Schriftsatz vom 11. Dezember 2019 (dort S. 9, Bl. I/65 d. A.), die der Kläger insoweit als ausreichend akzeptiert, erloschen (§ [362](ref:102:https://dejure.org/gesetze/BGB/362.html) Abs. 1 BGB). Die Klage ist insoweit unbegründet geworden, der Rechtsstreit hat sich in diesem Umfang in der Hauptsache erledigt. Da sich die Beklagte der Teilerledigungserklärung des Klägers auch nicht angeschlossen hat, ist der entsprechende Feststellungsantrag, auf den der Kläger seinen Leistungsantrag zulässigerweise umgestellt hat (§ [264](ref:103:https://dejure.org/gesetze/ZPO/264.html) Nr. 2 ZPO), begründet.
             
-            5. Berufungsanträge zu 2) und zu 4)
+            5\. Berufungsanträge zu 2) und zu 4)
             
             Die Berufungsanträge zu 2) und zu 4) sind unbegründet. Dem Kläger stehen die geltend gemachten Ansprüche auf Ersatz der Rechtsanwaltskosten für die Abmahnungen vom 22. März 2019 und vom 22. April 2019 unter keinem rechtlichen Gesichtspunkt zu.
             
@@ -340,7 +342,7 @@ class OpenjurTest {
             
             bb) Der Anspruch unterliegt dem allgemeinen nationalen Haftungsregime des BGB, sodass die §§ [249](ref:118:https://dejure.org/gesetze/BGB/249.html) ff. BGB zur Anwendung kommen (BeckOK DatenschutzR/Quaas, 37. Ed. 1.8.2021, DS-GVO Art. [82](ref:119:https://dejure.org/gesetze/DSGVO/82.html) Rn. 10, 28; Nemitz in: Ehmann/Selmayr, DS-GVO, 2. Aufl., Art. 82 Rn. 16; so wohl auch Frenzel in: Paal/Pauly, DS-GVO, 3. Aufl., Art. 82 Rn. 19; zum ähnlichen Problem beim Kartellschadensersatz vgl. EuGH, Urteil vom 05. Juni 2014 - [C-557/12](ref:120:https://dejure.org/dienste/vernetzung/rechtsprechung?Text=C-557/12) -, Rn. 24, juris - Kone; Urteil vom 13. Juli 2006 - [C-295/04](ref:121:https://dejure.org/dienste/vernetzung/rechtsprechung?Text=C-295/04) bis [C-298/04](ref:122:https://dejure.org/dienste/vernetzung/rechtsprechung?Text=C-298/04) -, Rn. 64, juris - Manfredi). Damit kann auf die obigen Ausführungen zur fehlenden Erforderlichkeit und Zweckmäßigkeit der Rechtsanwaltskosten verwiesen werden. Die dort dargestellten Grundsätze sind nicht nur dem deutschen Schadensrecht immanent und verstoßen auch nicht gegen den unionsrechtlichen Effektivitätsgrundsatz, denn auch bei Befolgung dieser Grundsätze wird die Ausübung der durch die Unionsrechtsordnung verliehenen Rechte weder praktisch unmöglich gemacht noch übermäßig erschwert (vgl. zum Effektivitätsgrundsatz etwa EuGH, Urteil vom 05. Juni 2014 - [C-557/12](ref:123:https://dejure.org/dienste/vernetzung/rechtsprechung?Text=C-557/12) -, Rn. 24 f., juris - Kone). Zudem vertritt der EuGH im Rahmen seiner Rechtsprechung zur unionsrechtlichen Amtshaftung ohnehin die Auffassung, vorgerichtliche Rechtsanwaltskosten, etwa für eine außergerichtliche Aufforderung, seien nicht erstattungsfähig, weil ihr Entstehen auf einer freien Entscheidung des Geschädigten beruhe (vgl. etwa EuGH, Urteil vom 28. Juni 2007 - [C-331/05 P](ref:124:https://dejure.org/dienste/vernetzung/rechtsprechung?Text=C-331/05%20P) -, Rn. 24, juris - Internationaler Hilfsfonds/Kommission; Urteil vom 09.03.1978, C-[54/77](ref:125:https://dejure.org/dienste/vernetzung/rechtsprechung?Text=54/77), Rn. 48, juris - Herpels/Kommission).
             
-            6. Berufungsantrag zu 6)
+            6\. Berufungsantrag zu 6)
             
             Ebenso unbegründet ist der Berufungsantrag zu 6. Dem Kläger steht der geltend gemachte Anspruch auf Ersatz vorgerichtlich entstandener Kosten unter keinem rechtlichen Gesichtspunkt zu.
             
@@ -354,21 +356,21 @@ class OpenjurTest {
             
             b) Auch auf §§ [280](ref:132:https://dejure.org/gesetze/BGB/280.html) Abs. 1 und Abs. 2, [286](ref:133:https://dejure.org/gesetze/BGB/286.html) BGB kann sich der Kläger nicht berufen. Zum Zeitpunkt der Entstehung einer Geschäftsgebühr (22. März 2019) befand sich die Beklagte nicht im Verzug. Die Aufforderung vom 22. April 2019 hat, wie oben ausgeführt, keine Kosten ausgelöst.
             
-            7.
+            7\.
             
             Einer Vorlage an den EuGH bedurfte es nicht (vgl. Art. [267](ref:134:https://dejure.org/gesetze/AEUV/267.html) Abs. 2 AEUV). Das insoweit eingeräumte Ermessen hat der Senat ausgeübt. Ein Fall, in dem ausnahmsweise eine Vorlagepflicht des nicht-letztinstanzlichen Gerichts angenommen wird (vgl. Wegener in: Calliess/Ruffert, AEUV, 5. Aufl., Art. 267 Rn. 29), liegt nicht vor.
             
-            8.
+            8\.
             
             Die Einwendungen aus dem Schriftsatz der Beklagten vom 06. August 2021 führen nicht zu einem anderen Ergebnis:
             
             Zwar hat der Kläger zwischenzeitlich zum Teil Schriftsätze eingereicht, die nicht mehr oder nur noch entfernt Bezug zu dem Rechtsstreit haben und sich im Wesentlichen in Beschimpfungen ergehen. Welche Folgen dies außerhalb dieses Rechtsstreits haben mag, ist hier nicht zu entscheiden. Jedenfalls hat dies keine Auswirkungen auf ein ursprünglich bestehendes Rechtsschutzinteresse des Klägers und führt nicht dazu, dass der Senat nicht in der Sache entscheiden könnte. Falls sich der Kläger selbst Unterlassungsansprüchen in Bezug auf von ihm verschickte Nachrichten ausgesetzt haben sollte, ändert dies ebenfalls nichts an einem Anspruch, den der Kläger im hiesigen Verfahren geltend macht.
             
-            9. Bei der Androhung der Ordnungsmittel hat der Senat die Formulierung des Klägers aus der Berufungsbegründungsschrift übernommen.
+            9\. Bei der Androhung der Ordnungsmittel hat der Senat die Formulierung des Klägers aus der Berufungsbegründungsschrift übernommen.
             
             C. Nebenentscheidungen
             
-            1.
+            1\.
             
             Die Entscheidung über die Kosten des Rechtsstreits beider Instanzen hat ihre Grundlage in §§ [91](ref:135:https://dejure.org/gesetze/ZPO/91.html), [92](ref:136:https://dejure.org/gesetze/ZPO/92.html), [97](ref:137:https://dejure.org/gesetze/ZPO/97.html) ZPO.
             
@@ -382,11 +384,11 @@ class OpenjurTest {
             
             Antrag zu ... Kl beantragt Kl bekommt Kl unterliegt U-Quote Obs-Quote                                                 1        6.000,00 € 6.000,00 € 0,00 €                 2        571,44 € 0,00 € 571,44 €                 3        6.600,00 € 6.600,00 € 0,00 €                 4        571,44 € 0,00 € 571,44 €                 5a (erledigt) 250,00 € 250,00 € 0,00 €                 5b     250,00 € 0,00 € 250,00 €                 6        255,85 € 0,00 € 255,85 €                                                                 Ergebnis 14.498,73 € 12.850,00 € 1.648,73 € 11,4%  88,6%
             
-            2.
+            2\.
             
             Der Ausspruch zur vorläufigen Vollstreckbarkeit folgt aus §§ [708](ref:148:https://dejure.org/gesetze/ZPO/708.html) Nr. 10, [711](ref:149:https://dejure.org/gesetze/ZPO/711.html), [709](ref:150:https://dejure.org/gesetze/ZPO/709.html) Satz 2 ZPO.
             
-            3.
+            3\.
             
             Die Voraussetzungen für die Zulassung der Revision sind erfüllt (§ [543](ref:151:https://dejure.org/gesetze/ZPO/543.html) Abs. 2 Satz 1 ZPO).
             
@@ -409,6 +411,60 @@ class OpenjurTest {
             
             </footer>
         """.trimIndent()
+    }
+
+    @Test
+    fun `should round-trip the rendered Markdown re-detecting only autolinks`() = runTest {
+        // given — the Markdown the pipeline produces for the openJur dump
+        val markdown = dumpFlow(DumpFixtures.openjur).transformHtmlToMarkdown().renderMarkdown()
+
+        // when
+        val reparsed = flowOf(markdown).parse()
+
+        // then — the round-trip reproduces the pipeline Markdown EXCEPT that
+        // re-parsing re-detects GFM §6.9 extended autolinks (the forward pipeline
+        // leaves `www.…` / `http…` as plain text). Asserting the exact diff pins
+        // that down as the *only* divergence: any new round-trip difference (a
+        // regression) changes this message and fails the test. NOTE: keep the
+        // trailing space on the blank ` ` context lines below — `trimMargin`
+        // relies on the `|`, and an editor stripping it would break the match.
+        try {
+            reparsed.renderMarkdown() sameAs markdown
+            error("expected the round-trip to diverge only by autolink re-detection")
+        } catch (e: AssertionError) {
+            e.message sameAs """
+                --- expected
+                +++ actual
+                @@ -194,7 +194,7 @@
+                 
+                 (1) Diese E-Mails beinhalteten an deren jeweiligen Ende jeweils ein werbliches Element:
+                 
+                -XXXXX. Organisiert, denkt mit, erledigt.Nutzen Sie www.XXXXX.de
+                +XXXXX. Organisiert, denkt mit, erledigt.Nutzen Sie [www.XXXXX.de](http://www.XXXXX.de)
+                 
+                 (2) Zwar ist der übrige, weit überwiegende Teil der streitgegenständlichen E-Mails keine Werbung. Dies hat aber nicht zur Folge, dass das werbliche Element von vornherein keine Werbung darstellen könnte. Die streitgegenständlichen E-Mails werden von der Beklagten vielmehr in zweifacher Hinsicht - nämlich für die nicht zu beanstandende Kommunikation im Rest der E-Mails und ganz am Ende für Zwecke der Werbung - genutzt. Nach der Rechtsprechung des BGH ist in solchen Konstellationen für die Annahme, die Nutzung der elektronischen Post sei durch den zulässigen Teil der E-Mail insgesamt gerechtfertigt, "kein Raum" (BGH, Urteil vom 10. Juli 2018 - [VI ZR 225/17](ref:56:/u/2111609.html) -, Rn. 20, juris; Urteil vom 15. Dezember 2015 - [VI ZR 134/15](ref:57:/u/870114.html) -, Rn. 19, juris).
+                 
+                @@ -274,7 +274,7 @@
+                 
+                 (1) Für die Darstellungsweise der Auskunft gelten das Genauigkeitsgebot und das Verständlichkeitsgebot des Art. [12](ref:98:https://dejure.org/gesetze/DSGVO/12.html) Abs. 1 S. 1 DS-GVO (Bäcker in: Kühling/Buchner, DS-GVO, 3. Aufl., Art. 15 Rn. 32; Specht in: Sydow, DS-GVO, 2. Aufl., Art. 15 Rn. 15). Danach sind die Mitteilungen gem. Art. [15](ref:99:https://dejure.org/gesetze/DSGVO/15.html) DS-GVO in präziser, transparenter, verständlicher und leicht zugänglicher Form sowie in einfacher Sprache zu übermitteln. Die Auskunft muss es der betroffenen Person ermöglichen, ihre Betroffenenrechte umfassend auszuüben. Der Verantwortliche muss die Auskunft so aufbereiten und ggf. erläutern, um der betroffenen Person einen Überblick in vertretbarer Zeit und mit vertretbarem Aufwand zu ermöglichen (Bäcker in: Kühling/Buchner, DS-GVO, 3. Aufl., Art. 15 Rn. 32).
+                 
+                -(2) Mit diesen Grundsätzen nicht zu vereinbaren ist eine "Auskunft" durch den Hinweis auf eine umfangreiche Datenschutzerklärung, aus der sich die betroffene Person die gem. Art. [15](ref:100:https://dejure.org/gesetze/DSGVO/15.html) Abs. 1 HS 2 DS-GVO geschuldeten Auskünfte heraussuchen muss. Dies gilt jedenfalls dann, wenn der Verweis auf die Datenschutzerklärung so pauschal erfolgt wie in der E-Mail der Beklagten vom 25. März 2019 ("Weitere Informationen finden Sie im Internet unter www.deutschepost.de/datenschutz").
+                +(2) Mit diesen Grundsätzen nicht zu vereinbaren ist eine "Auskunft" durch den Hinweis auf eine umfangreiche Datenschutzerklärung, aus der sich die betroffene Person die gem. Art. [15](ref:100:https://dejure.org/gesetze/DSGVO/15.html) Abs. 1 HS 2 DS-GVO geschuldeten Auskünfte heraussuchen muss. Dies gilt jedenfalls dann, wenn der Verweis auf die Datenschutzerklärung so pauschal erfolgt wie in der E-Mail der Beklagten vom 25. März 2019 ("Weitere Informationen finden Sie im Internet unter [www.deutschepost.de/datenschutz](http://www.deutschepost.de/datenschutz)").
+                 
+                 bb) Der Anspruch des Klägers gem. Art. [15](ref:101:https://dejure.org/gesetze/DSGVO/15.html) Abs. 1 HS. 2 lit c) DS-GVO, der auch nicht durch die E-Mail vom 25. Juni 2019 (Anlage K 10) erfüllt worden ist, ist erst durch die Mitteilung der Beklagten im Schriftsatz vom 11. Dezember 2019 (dort S. 9, Bl. I/65 d. A.), die der Kläger insoweit als ausreichend akzeptiert, erloschen (§ [362](ref:102:https://dejure.org/gesetze/BGB/362.html) Abs. 1 BGB). Die Klage ist insoweit unbegründet geworden, der Rechtsstreit hat sich in diesem Umfang in der Hauptsache erledigt. Da sich die Beklagte der Teilerledigungserklärung des Klägers auch nicht angeschlossen hat, ist der entsprechende Feststellungsantrag, auf den der Kläger seinen Leistungsantrag zulässigerweise umgestellt hat (§ [264](ref:103:https://dejure.org/gesetze/ZPO/264.html) Nr. 2 ZPO), begründet.
+                 
+                @@ -356,7 +356,7 @@
+                 
+                 b) Gemessen hieran hat die Rechtssache grundsätzliche Bedeutung. Die sich im Streitfall stellenden Rechtsfragen zu § [11](ref:155:https://dejure.org/gesetze/UWG/11.html) UWG sowie zur Frage der Zulässigkeit von werblichen Zusätzen in einer E-Mail in der hier vorliegenden Sachverhaltsgestaltung sind entscheidungserheblich, keineswegs eindeutig zu beantworten und vom Bundesgerichtshof noch nicht entschieden. Gleiches gilt hinsichtlich der Auslegung der DS-GVO, wo zudem eine Vorlage an den EuGH nach Art. [267](ref:156:https://dejure.org/gesetze/AEUV/267.html) AEUV in Betracht kommt (zu Art. [82](ref:157:https://dejure.org/gesetze/DSGVO/82.html) DS-GVO vgl. BVerfG, Stattgebender Kammerbeschluss vom 14. Januar 2021 - [1 BvR 2853/19](ref:158:/u/2320170.html) -, Rn. 20, juris).
+                 
+                -Permalink: https://openjur.de/u/2388450.html (https://oj.is/2388450) 📄 [Volltext](ref:159:/u/2388450.html) 🖨️ [Druckansicht](ref:160:https://openjur.de/u/2388450.print) 📕 [PDF Download](ref:161:https://openjur.de/u/2388450.ppdf) <abbr>🔗</abbr> [Zitate](ref:162:https://openjur.de/u/2388450-quotes.html) 26 <abbr>:reply:</abbr> [Zitiert](ref:163:https://openjur.de/u/2388450-quoted.html) 1 📖 Referenzen 0 ☁️ Schlagworte [⚠️ Problem melden](ref:164:https://openjur.de/u/report/2388450.html)
+                +Permalink: [https://openjur.de/u/2388450.html](https://openjur.de/u/2388450.html) ([https://oj.is/2388450](https://oj.is/2388450)) 📄 [Volltext](ref:159:/u/2388450.html) 🖨️ [Druckansicht](ref:160:https://openjur.de/u/2388450.print) 📕 [PDF Download](ref:161:https://openjur.de/u/2388450.ppdf) <abbr>🔗</abbr> [Zitate](ref:162:https://openjur.de/u/2388450-quotes.html) 26 <abbr>:reply:</abbr> [Zitiert](ref:163:https://openjur.de/u/2388450-quoted.html) 1 📖 Referenzen 0 ☁️ Schlagworte [⚠️ Problem melden](ref:164:https://openjur.de/u/report/2388450.html)
+                 
+                 </main>
+                 <footer>
+                
+            """.trimIndent()
+        }
     }
 
 }

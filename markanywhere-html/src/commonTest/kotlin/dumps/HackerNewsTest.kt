@@ -20,7 +20,9 @@ import com.xemantic.kotlin.test.sameAs
 import com.xemantic.markanywhere.html.DumpFixtures
 import com.xemantic.markanywhere.html.dumpFlow
 import com.xemantic.markanywhere.html.transformHtmlToMarkdown
+import com.xemantic.markanywhere.parse.parse
 import com.xemantic.markanywhere.render.renderMarkdown
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 
@@ -109,9 +111,9 @@ class HackerNewsTest {
             |  |  | 139 points by [california-og](ref:217:user?id=california-og) [15 hours ago](ref:218:item?id=48550569) \| [hide](ref:219:hide?id=48550569&goto=news) \| [24 comments](ref:220:item?id=48550569) |
             |  |  | [More](ref:221:?p=2) |
             
-            ![](s.gif)   
+            ![](s.gif)
             
-             [Guidelines](ref:222:newsguidelines.html) | [FAQ](ref:223:newsfaq.html) | [Lists](ref:224:lists) | [API](ref:225:https://github.com/HackerNews/API) | [Security](ref:226:security.html) | [Legal](ref:227:https://www.ycombinator.com/legal/) | [Apply to YC](ref:228:https://www.ycombinator.com/apply/) | [Contact](ref:229:mailto:hn@ycombinator.com)
+            [Guidelines](ref:222:newsguidelines.html) | [FAQ](ref:223:newsfaq.html) | [Lists](ref:224:lists) | [API](ref:225:https://github.com/HackerNews/API) | [Security](ref:226:security.html) | [Legal](ref:227:https://www.ycombinator.com/legal/) | [Apply to YC](ref:228:https://www.ycombinator.com/apply/) | [Contact](ref:229:mailto:hn@ycombinator.com)
             
             <form action="//hn.algolia.com/" method="get">
             
@@ -119,6 +121,22 @@ class HackerNewsTest {
             
             </form>
         """.trimIndent()
+    }
+
+    @Test
+    fun `should round-trip the rendered Markdown to a stable fixpoint`() = runTest {
+        // given — the Markdown the pipeline produces for the Hacker News dump
+        val markdown = dumpFlow(DumpFixtures.hackernews).transformHtmlToMarkdown().renderMarkdown()
+
+        // when
+        val roundtripped = flowOf(markdown).parse().renderMarkdown()
+
+        // then — a clean fixpoint: parsing and re-rendering reproduces the
+        // pipeline Markdown exactly. Unlike openJur there are no bare URLs to
+        // re-autolink, and the renderer now drops the moot trailing hard break
+        // and leading space the forward pipeline would otherwise leave in (so
+        // there is no longer any divergence to document).
+        roundtripped sameAs markdown
     }
 
 }
