@@ -72,7 +72,7 @@ class SoftBreakRoundTripTest {
     }
 
     @Test
-    fun `should round-trip an image, hard break, then a paragraph`() = runTest {
+    fun `should round-trip an image hard break then a paragraph`() = runTest {
         // The reviewer's original repro shape: a moot `<br>` before a following
         // block. The break is dropped (block boundary), and the soft break the
         // re-parse introduces between the image and the text is preserved.
