@@ -2311,6 +2311,74 @@ class MarkdownRenderingTest {
         """.trimIndent()
     }
 
+    // Soft line breaks emitted as standalone `\n` text events — the shape the
+    // parser re-emits a Markdown soft break in (`a\nb` parses to text "a",
+    // text "\n", text "b"). Unlike a structural inter-block `\n` (which arrives
+    // at line start), a soft break sits mid-line after real content, so it is
+    // meaningful and must be preserved. Dropping it merged the lines (`ab`) and
+    // broke the render→parse→render fixpoint for every paragraph carrying one.
+
+    @Test
+    fun `should preserve a soft break emitted as a standalone newline text event`() = runTest {
+        // given — a paragraph whose soft line break arrives as its own
+        // whitespace-only `\n` text event between two content events
+        val flow = semanticEvents {
+            "p" {
+                +"a"
+                +"\n"
+                +"b"
+            }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then — the soft break survives; dropping it would render `ab`
+        markdown sameAs "a\nb"
+    }
+
+    @Test
+    fun `should drop the source newline that follows a hard break`() = runTest {
+        // given — a hard break (`<br>`) followed by the source line break the
+        // parser emits after it (`foo  \nbar` parses to text "foo", br, text
+        // "\n", text "bar"). The `\n` is absorbed by the hard break and must
+        // not also render as a separate soft break.
+        val flow = semanticEvents {
+            "p" {
+                +"foo"
+                "br" {}
+                +"\n"
+                +"bar"
+            }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then — exactly one hard break, no extra soft-break newline
+        markdown sameAs "foo  \nbar"
+    }
+
+    @Test
+    fun `should escape a leading block marker after a soft break`() = runTest {
+        // given — a soft break followed by content that begins with a block
+        // marker (`a\n# b`). On the continuation line `# b` is paragraph text,
+        // not a heading, so it must be escaped to survive re-parsing.
+        val flow = semanticEvents {
+            "p" {
+                +"a"
+                +"\n"
+                +"# b"
+            }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then — the marker is escaped so the line does not re-parse as a heading
+        markdown sameAs "a\n\\# b"
+    }
+
     // Loose inline content at block level — the shapes real HTML produces once
     // containers are unwrapped (children not wrapped in a paragraph). These
     // guard the block-separation gaps that previously only the end-to-end dump

@@ -306,6 +306,18 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
             it is BlockFrame.Pre || it is BlockFrame.Code || it is BlockFrame.Frontmatter
         }
 
+    // A soft line break. Spaces deferred from the previous line are trailing
+    // and dropped (insignificant around a soft break); the line resets to a
+    // fresh Markdown line so a continuation line that begins with a block
+    // marker (`# x`, `- x`, …) is still escaped on re-emission.
+    fun emitSoftBreak() {
+        pendingSpaces = 0
+        out("\n")
+        atLineStart = true
+        freshBlockLine = true
+        lineStartDigits = false
+    }
+
     fun emitText(text: String) {
         if (text.isEmpty()) return
         if (inLabel()) { appendLabel(text); return }
@@ -313,15 +325,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         beforeContent()
         val parts = text.split('\n')
         parts.forEachIndexed { i, part ->
-            if (i > 0) {
-                // Soft line break: spaces deferred from the previous line are
-                // trailing and dropped.
-                pendingSpaces = 0
-                out("\n")
-                atLineStart = true
-                freshBlockLine = true
-                lineStartDigits = false
-            }
+            if (i > 0) emitSoftBreak()
             if (part.isNotEmpty()) {
                 // Split off the line's trailing ASCII spaces and defer them
                 // (see flushPendingSpaces / pendingSpaces): they are emitted
@@ -549,9 +553,19 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                     // it would amplify one newline into a blank line and grow on
                     // every render→parse round-trip.
                     blank && atLineStart -> { }
-                    // Mid-line whitespace: defer ASCII spaces (re-emitted before
-                    // real same-line content, dropped at a line/block boundary);
-                    // newlines/tabs are structural and dropped.
+                    // A soft line break mid-line: the parser re-emits a Markdown
+                    // soft break (`a\nb`) as a standalone whitespace `\n` text
+                    // event once the line's real content has streamed (so we are
+                    // not at line start). Preserve it — dropping it merges the
+                    // two lines (`ab`) and breaks the render→parse→render
+                    // fixpoint. Excluded when a hard break is pending: there the
+                    // `\n` is the source newline that follows the `<br>` and is
+                    // absorbed by it (the hard break renders when the next real
+                    // content arrives, via beforeContent).
+                    blank && '\n' in text && !pendingHardBreak -> emitSoftBreak()
+                    // Mid-line whitespace with no newline: defer ASCII spaces
+                    // (re-emitted before real same-line content, dropped at a
+                    // line/block boundary); tabs are structural and dropped.
                     blank -> { for (c in text) if (c == ' ') pendingSpaces++ }
                     else -> {
                         emitText(text)
