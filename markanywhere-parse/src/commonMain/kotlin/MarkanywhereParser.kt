@@ -6437,12 +6437,11 @@ private class ParserState(
         ) {
             val frame = inlineOpenStack.last()
             if (frame.isTagged) break
+            // Only `em`/`strong` live on inlineOpenStack — `del`/`mark`/`sup` are
+            // tracked as boolean flags and never pushed here, so they cannot match.
             val need = when (frame.name) {
                 "em" -> if (delim == '*' || delim == '_') 1 else break
                 "strong" -> if (delim == '*' || delim == '_') 2 else break
-                "del" -> if (delim == '~') 2 else break
-                "mark" -> if (delim == '=') 2 else break
-                "sup" -> if (delim == '^') 1 else break
                 else -> break
             }
             if (inlineBuffer.length < need) break
@@ -7021,6 +7020,17 @@ private class ParserState(
                 "~", "~~" -> when {
                     strikethrough -> { unmark("del"); strikethrough = false }
                     else -> { mark("del"); strikethrough = true }
+                }
+                // A `==` run is resolved on the next char during inline parsing
+                // (it must distinguish `==` from a longer run), so a closing `==`
+                // at the very end of a line never sees that char — resolve it here
+                // the same way `del` resolves a trailing `~~`. Without this, the
+                // closing `==` leaked into the span as literal content (`==a==` →
+                // `<mark>a==</mark>`) and the run grew on every round-trip. A lone
+                // `=` is not a delimiter (`=a=` stays literal), so only `==` toggles.
+                "==" -> when {
+                    highlight -> { unmark("mark"); highlight = false }
+                    else -> { mark("mark"); highlight = true }
                 }
                 else -> +buf
             }

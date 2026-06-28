@@ -97,6 +97,11 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
     // table cell (Markdown has no nested-table syntax). >0 means every event
     // is serialized as raw single-line HTML into the enclosing cell buffer.
     var htmlTableDepth = 0
+    // Base chars of the currently-open inline emphasis delimiters (e.g. `*` for
+    // em/strong, `~` for del). Maintained on Inline mark/unmark so the per-text
+    // escaping pass (escapeActiveInlineDelimiters) doesn't rescan blockStack on
+    // every text token of a streamed span.
+    var activeDelimiters: Set<Char> = emptySet()
 
     val eventBuffer = StringBuilder()
     var hasPendingNewline = false
@@ -310,16 +315,24 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         // Link/image labels are buffered and re-emitted verbatim between `[` … `]`;
         // their emphasis round-trips through the parser's label-scoped close, so
         // escaping here would only add noise. Restrict to direct block content.
-        if (inPreCode || inLabel() || text.isEmpty()) return text
-        val delimiters = blockStack.mapNotNullTo(mutableSetOf()) {
-            (it as? BlockFrame.Inline)?.delimiter?.get(0)
-        }
-        if (delimiters.isEmpty()) return text
+        // Every literal occurrence of the base char is escaped (not just doubled
+        // runs): a single `~` is a valid GFM strikethrough delimiter (`~a~` →
+        // `<del>a</del>`), so a lone `~` inside a `~~…~~` span would re-pair on the
+        // next parse — the same reasoning applies to `*`/`^`.
+        if (inPreCode || inLabel() || text.isEmpty() || activeDelimiters.isEmpty()) return text
         return buildString(text.length) {
             for (c in text) {
-                if (c in delimiters) +'\\'
+                if (c in activeDelimiters) +'\\'
                 +c
             }
+        }
+    }
+
+    // Recompute the open inline emphasis delimiters from blockStack — called only
+    // on Inline mark/unmark (rare), keeping the per-text escaping pass allocation-free.
+    fun refreshActiveDelimiters() {
+        activeDelimiters = blockStack.mapNotNullTo(mutableSetOf()) {
+            (it as? BlockFrame.Inline)?.delimiter?.firstOrNull()
         }
     }
 
@@ -569,7 +582,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                 // to vanish — that resolution happens in `beforeContent`).
                 val blank = !inLabel() && !inPreCode
                     && text.isNotEmpty() && text.isBlank()
-                    && blockStack.none { it is BlockFrame.Pre || it is BlockFrame.Code }
+                    && blockStack.none { it is Pre || it is Code }
                 when {
                     // Structural inter-block whitespace at a line start — e.g. the
                     // literal `\n` the parser emits between two block-level HTML
@@ -715,11 +728,11 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                     blockStack.addLast(BlockFrame.Code)
                 }
 
-                "strong" -> { writeRaw("**"); blockStack.addLast(BlockFrame.Inline("**")) }
-                "em" -> { writeRaw("*"); blockStack.addLast(BlockFrame.Inline("*")) }
-                "del" -> { writeRaw("~~"); blockStack.addLast(BlockFrame.Inline("~~")) }
-                "mark" -> { writeRaw("=="); blockStack.addLast(BlockFrame.Inline("==")) }
-                "sup" -> { writeRaw("^"); blockStack.addLast(BlockFrame.Inline("^")) }
+                "strong" -> { writeRaw("**"); blockStack.addLast(BlockFrame.Inline("**")); refreshActiveDelimiters() }
+                "em" -> { writeRaw("*"); blockStack.addLast(BlockFrame.Inline("*")); refreshActiveDelimiters() }
+                "del" -> { writeRaw("~~"); blockStack.addLast(BlockFrame.Inline("~~")); refreshActiveDelimiters() }
+                "mark" -> { writeRaw("=="); blockStack.addLast(BlockFrame.Inline("==")); refreshActiveDelimiters() }
+                "sup" -> { writeRaw("^"); blockStack.addLast(BlockFrame.Inline("^")); refreshActiveDelimiters() }
 
                 "a" -> {
                     labelBuffers.addLast(StringBuilder())
@@ -859,6 +872,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
 
                     "strong", "em", "del", "mark", "sup" -> {
                         writeRaw((frame as BlockFrame.Inline).delimiter)
+                        refreshActiveDelimiters()
                     }
 
                     "a" -> {

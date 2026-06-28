@@ -22,6 +22,7 @@ import com.xemantic.markanywhere.parse.parse
 import com.xemantic.markanywhere.render.renderMarkdown
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
+import org.intellij.lang.annotations.Language
 import kotlin.test.Test
 
 /**
@@ -44,7 +45,9 @@ class EmphasisDelimiterRoundTripTest {
 
     // A Markdown string that is already canonical must be a stable fixpoint: a
     // parse + re-render reproduces it, and a second pass changes nothing.
-    private suspend fun assertMarkdownFixpoint(markdown: String) {
+    private suspend fun assertMarkdownFixpoint(
+        @Language("markdown") markdown: String
+    ) {
         // when
         val once = flowOf(markdown).parse().renderMarkdown()
         val twice = flowOf(once).parse().renderMarkdown()
@@ -56,12 +59,18 @@ class EmphasisDelimiterRoundTripTest {
 
     @Test
     fun `should round-trip strong spanning a whole link label`() = runTest {
-        assertMarkdownFixpoint("[**bold**](u)")
+        // when
+        val markdown = "[**bold**](u)"
+        // then
+        assertMarkdownFixpoint(markdown)
     }
 
     @Test
     fun `should round-trip emphasis spanning a whole link label`() = runTest {
-        assertMarkdownFixpoint("[*em*](u)")
+        // when
+        val markdown = "[*em*](u)"
+        // then
+        assertMarkdownFixpoint(markdown)
     }
 
     @Test
@@ -70,7 +79,10 @@ class EmphasisDelimiterRoundTripTest {
         // carries a `*`, plus a trailing `*`. The opening `*` (in the URL) and the
         // trailing `*` form a label-local emphasis that must close on the trailing
         // delimiter rather than swallow it as content (which grew the run forever).
-        assertMarkdownFixpoint("[![alt](http://x/v3/*app/a.svg)*](http://r/)")
+        // when
+        val markdown = "[![alt](http://x/v3/*app/a.svg)*](http://r/)"
+        // then
+        assertMarkdownFixpoint(markdown)
     }
 
     @Test
@@ -78,15 +90,72 @@ class EmphasisDelimiterRoundTripTest {
         // An HTML-sourced `<em>a*b</em>` — the parser never produces this shape on
         // its own, but the DOM pipeline does. The renderer must escape the inner
         // `*` so the re-emitted `*a*b*` does not re-pair into `<em>a</em>b*`.
+        // when
         val markdown = semanticEvents { "p" { "em" { +"a*b" } } }.renderMarkdown()
+        // then
         markdown sameAs "*a\\*b*"
         assertMarkdownFixpoint(markdown)
     }
 
     @Test
     fun `should round-trip strong whose content contains a literal asterisk`() = runTest {
+        // when
         val markdown = semanticEvents { "p" { "strong" { +"a*b" } } }.renderMarkdown()
+        // then
         markdown sameAs "**a\\*b**"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip superscript whose content contains a literal caret`() = runTest {
+        // `^` closes a sup span, so a literal `^` inside the span must be escaped —
+        // otherwise the re-emitted `^a^b^` would re-pair into `<sup>a</sup>b^`.
+        // when
+        val markdown = semanticEvents { "p" { "sup" { +"a^b" } } }.renderMarkdown()
+        // then
+        markdown sameAs "^a\\^b^"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip del whose content contains a literal tilde`() = runTest {
+        // A single `~` is a valid GFM strikethrough delimiter (`~a~` is
+        // `<del>a</del>`), so a lone `~` inside a `~~…~~` span must be escaped —
+        // unescaped, `~~a~b~~` re-parses to the broken `<del>a</del>b<del></del>`.
+        // when
+        val markdown = semanticEvents { "p" { "del" { +"a~b" } } }.renderMarkdown()
+        // then
+        markdown sameAs "~~a\\~b~~"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip del whose content contains a literal tilde pair`() = runTest {
+        // when
+        val markdown = semanticEvents { "p" { "del" { +"a~~b" } } }.renderMarkdown()
+        // then
+        markdown sameAs "~~a\\~\\~b~~"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip a plain mark span`() = runTest {
+        // A `==…==` span whose closer ends the block used to leak the closing `==`
+        // into the content (`<mark>a==</mark>`), growing the run every round-trip —
+        // see the parser-side flushInline fix.
+        // when
+        val markdown = semanticEvents { "p" { "mark" { +"highlighted" } } }.renderMarkdown()
+        // then
+        markdown sameAs "==highlighted=="
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip mark whose content contains a literal equals`() = runTest {
+        // when
+        val markdown = semanticEvents { "p" { "mark" { +"a=b" } } }.renderMarkdown()
+        // then
+        markdown sameAs "==a\\=b=="
         assertMarkdownFixpoint(markdown)
     }
 }

@@ -732,6 +732,26 @@ class MarkanywhereParserTest {
     }
 
     @Test
+    fun `should close a mark span whose closing run ends the block`() = runTest {
+        // given — a `==` run is resolved on the *next* char during inline parsing,
+        // but a closing `==` at the very end of a line never sees that char. It must
+        // still close the span at the block boundary (flushInline), like a trailing
+        // `~~` closes del — otherwise the closer leaked in as literal content
+        // (`==a==` → `<mark>a==</mark>`) and grew on every round-trip.
+        val textFlow = "==highlighted==".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "mark" { +"highlighted" }
+            }
+        }
+    }
+
+    @Test
     fun `should parse inline math`() = runTest {
         // given
 
