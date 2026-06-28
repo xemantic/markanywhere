@@ -6392,8 +6392,20 @@ private class ParserState(
         // before the `[` stays open — its closer arrives after the label — so its
         // `unmark` is not captured into the label buffer (which would cross the
         // link nesting and break the stream).
-        if (strikethrough && !linkLabelOuterStrikethrough) { unmark("del"); strikethrough = false }
-        if (highlight && !linkLabelOuterHighlight) { unmark("mark"); highlight = false }
+        if (strikethrough && !linkLabelOuterStrikethrough) {
+            unmark("del"); strikethrough = false
+            // `del`/`mark` resolve their closing run on the *next* char (to size
+            // the run), but at a label's end the `]` is not that char — so the
+            // closing `~~`/`==` sits unresolved in inlineBuffer. Consume it here,
+            // else it flushes as literal text inside the committed link and grows
+            // the run on every render→parse round-trip. `sup` resolves eagerly
+            // (never buffered), so it needs no such guard.
+            if (inlineBuffer.toString() == "~" || inlineBuffer.toString() == "~~") inlineBuffer.clear()
+        }
+        if (highlight && !linkLabelOuterHighlight) {
+            unmark("mark"); highlight = false
+            if (inlineBuffer.toString() == "==") inlineBuffer.clear()
+        }
         if (superscript && !linkLabelOuterSuperscript) { unmark("sup"); superscript = false }
         // A pending delimiter run in inlineBuffer that sits in closing position at
         // the label's end (e.g. the `**` of `[**bold**]`, or the trailing `*` of
@@ -6425,13 +6437,15 @@ private class ParserState(
      * [linkLabelOuterStackDepth], i.e. opened inside the current label). Each
      * close pops one frame and removes the delimiter characters it consumed from
      * the run; matching stops at the first frame the run can't close, leaving the
-     * remainder for the literal-flush fallback. Only pure single-character runs
-     * (`*`/`_`/`~`/`=`/`^`) are considered — mixed buffers fall straight through.
+     * remainder for the literal-flush fallback. Only `em`/`strong` live on
+     * [inlineOpenStack], so only pure `*`/`_` runs can match — `~`/`=`/`^`
+     * (`del`/`mark`/`sup`) are boolean-flag state closed by the caller before this
+     * runs, so a run of those is left for the literal-flush / buffer-clear path.
      */
     private suspend fun SemanticEventScope.closeLabelLocalEmphasisRun() {
         if (inlineBuffer.isEmpty()) return
         val delim = inlineBuffer[0]
-        if (delim !in "*_~=^" || inlineBuffer.any { it != delim }) return
+        if (delim !in "*_" || inlineBuffer.any { it != delim }) return
         while (inlineBuffer.isNotEmpty() &&
             inlineOpenStack.size > linkLabelOuterStackDepth
         ) {

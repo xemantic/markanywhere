@@ -711,6 +711,28 @@ class MarkanywhereParserTest {
     }
 
     @Test
+    fun `should close a label-local mark whose closing run ends the label`() = runTest {
+        // given — `mark` opened *inside* a link label, closer right before `]`.
+        // The `==` resolves on the next char, which `]` is not, so the closing run
+        // sits in inlineBuffer; flushInlineLabelClose must consume it instead of
+        // leaking it as literal content after the span (`<mark>mark</mark>==`),
+        // which grew the run on every round-trip.
+        val textFlow = "[==mark==](u)".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "a"("href" to "u") {
+                    "mark" { +"mark" }
+                }
+            }
+        }
+    }
+
+    @Test
     fun `should parse highlight or mark text`() = runTest {
         // given
         

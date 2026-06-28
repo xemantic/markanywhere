@@ -74,6 +74,36 @@ class EmphasisDelimiterRoundTripTest {
     }
 
     @Test
+    fun `should round-trip mark spanning a whole link label`() = runTest {
+        // `mark` (`==`) is a boolean-flagged span whose closer resolves on the next
+        // char — but at a label's end the `]` is not that char, so the closing `==`
+        // leaked into the committed link as literal content (`<mark>mark</mark>==`)
+        // and grew on every round-trip. flushInlineLabelClose must consume it.
+        // when
+        val markdown = "[==mark==](u)"
+        // then
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip del spanning a whole link label`() = runTest {
+        // when
+        val markdown = "[~~del~~](u)"
+        // then
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip superscript spanning a whole link label`() = runTest {
+        // `sup` (`^`) resolves eagerly (no buffering), so its closer is consumed
+        // mid-label and never leaks — locking that this stays a fixpoint.
+        // when
+        val markdown = "[^sup^](u)"
+        // then
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
     fun `should round-trip an image-in-link label with a trailing asterisk`() = runTest {
         // The minimised Brave shape: a link label holding image-as-text whose URL
         // carries a `*`, plus a trailing `*`. The opening `*` (in the URL) and the
