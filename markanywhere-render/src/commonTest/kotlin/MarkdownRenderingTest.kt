@@ -16,6 +16,7 @@
 
 package com.xemantic.markanywhere.render
 
+import com.xemantic.kotlin.test.assert
 import com.xemantic.kotlin.test.sameAs
 import com.xemantic.markanywhere.flow.semanticEvents
 import kotlinx.coroutines.test.runTest
@@ -1369,6 +1370,11 @@ class MarkdownRenderingTest {
               x = 1
               ```
         """.trimIndent()
+        // The `- ` marker's trailing space is significant but lives at a line end
+        // in the golden above, where "strip trailing whitespace on save" can erase
+        // it — silently weakening the assertion to accept a renderer that drops the
+        // space. Pin it explicitly; the space here sits inside the literal, safe.
+        assert(markdown.lineSequence().first() == "- ")
     }
 
     // Tables

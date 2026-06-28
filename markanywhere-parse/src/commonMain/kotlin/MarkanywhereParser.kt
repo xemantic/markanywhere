@@ -6446,7 +6446,7 @@ private class ParserState(
     private suspend fun SemanticEventScope.closeLabelLocalEmphasisRun() {
         if (inlineBuffer.isEmpty()) return
         val delim = inlineBuffer[0]
-        if (delim !in "*_" || inlineBuffer.any { it != delim }) return
+        if (delim !in "*_" || !inlineBuffer.all { it == delim }) return
         while (inlineBuffer.isNotEmpty() &&
             inlineOpenStack.size > linkLabelOuterStackDepth
         ) {
@@ -7033,20 +7033,22 @@ private class ParserState(
                 "_" -> resolveEmphasisRun('_', 1, null)
                 "__" -> resolveEmphasisRun('_', 2, null)
                 "___" -> resolveEmphasisRun('_', 3, null)
+                // `del`/`mark` resolve their run on the *next* char during inline
+                // parsing (to size the run), so a run at the very end of a line
+                // never sees that char and lands here. A run that *closes* an open
+                // span (`==a==`, `~~a~~`) must emit the `unmark` — without it the
+                // closer leaked into the span as literal content (`==a==` →
+                // `<mark>a==</mark>`) and grew on every round-trip. But an *unmatched*
+                // run (no span open — `foo==`, `foo~~`) is literal text: opening an
+                // empty span here would rewrite `foo==` to `foo====` on the first
+                // render. So close-if-open, else emit the buffer verbatim.
                 "~", "~~" -> when {
                     strikethrough -> { unmark("del"); strikethrough = false }
-                    else -> { mark("del"); strikethrough = true }
+                    else -> +buf
                 }
-                // A `==` run is resolved on the next char during inline parsing
-                // (it must distinguish `==` from a longer run), so a closing `==`
-                // at the very end of a line never sees that char — resolve it here
-                // the same way `del` resolves a trailing `~~`. Without this, the
-                // closing `==` leaked into the span as literal content (`==a==` →
-                // `<mark>a==</mark>`) and the run grew on every round-trip. A lone
-                // `=` is not a delimiter (`=a=` stays literal), so only `==` toggles.
                 "==" -> when {
                     highlight -> { unmark("mark"); highlight = false }
-                    else -> { mark("mark"); highlight = true }
+                    else -> +buf
                 }
                 else -> +buf
             }

@@ -692,8 +692,9 @@ class MarkanywhereParserTest {
 
     @Test
     fun `should parse highlight wrapping an inline link`() = runTest {
-        // given — trailing text so the closing `==` resolves (a `==` run at the
-        // very end of input is a separate lookahead quirk, unrelated to this fix).
+        // given — `mark` wrapping a whole inline link. (The block-end closer case,
+        // `==…==` with nothing after, is covered separately by "should close a mark
+        // span whose closing run ends the block".)
         val textFlow = "==[1](u)== ok".chunkedRandomly().asFlow()
 
         // when
@@ -770,6 +771,36 @@ class MarkanywhereParserTest {
             "p" {
                 "mark" { +"highlighted" }
             }
+        }
+    }
+
+    @Test
+    fun `should treat an unmatched trailing mark run as literal text`() = runTest {
+        // given — `foo==` has no open `mark` to close: the trailing `==` is literal
+        // (Python equality, math). flushInline must emit it verbatim, NOT open an
+        // empty `<mark></mark>` (which would rewrite `foo==` to `foo====`).
+        val textFlow = "foo==".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" { +"foo==" }
+        }
+    }
+
+    @Test
+    fun `should treat an unmatched trailing del run as literal text`() = runTest {
+        // given — same as the mark case, for `~~` (a trailing `~~` with no open del).
+        val textFlow = "foo~~".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" { +"foo~~" }
         }
     }
 

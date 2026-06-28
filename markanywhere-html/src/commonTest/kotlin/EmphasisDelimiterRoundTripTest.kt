@@ -203,4 +203,22 @@ class EmphasisDelimiterRoundTripTest {
         markdown sameAs "==a\\=\\=b=="
         assertMarkdownFixpoint(markdown)
     }
+
+    @Test
+    fun `should round-trip an unmatched trailing mark run as literal`() = runTest {
+        // `foo==` (Python equality, math) has no span to close — it must stay
+        // literal, not become an empty `<mark></mark>` that renders `foo====`.
+        // when
+        val markdown = "foo=="
+        // then
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip an unmatched trailing del run as literal`() = runTest {
+        // when
+        val markdown = "foo~~"
+        // then
+        assertMarkdownFixpoint(markdown)
+    }
 }

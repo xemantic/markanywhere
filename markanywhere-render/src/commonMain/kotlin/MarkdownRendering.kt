@@ -97,11 +97,11 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
     // table cell (Markdown has no nested-table syntax). >0 means every event
     // is serialized as raw single-line HTML into the enclosing cell buffer.
     var htmlTableDepth = 0
-    // Base chars of the currently-open inline emphasis delimiters (e.g. `*` for
-    // em/strong, `~` for del). Maintained on Inline mark/unmark so the per-text
-    // escaping pass (escapeActiveInlineDelimiters) doesn't rescan blockStack on
-    // every text token of a streamed span.
-    var activeDelimiters: Set<Char> = emptySet()
+    // Bitmask of the open inline-emphasis delimiter base chars (`*`/`~`/`=`/`^` —
+    // see delimiterBit). Maintained on Inline mark/unmark so the per-text escaping
+    // pass (escapeActiveInlineDelimiters) needs neither a blockStack rescan nor a
+    // set lookup per char — a plain `and` keeps the hot path allocation-free.
+    var activeDelimiterMask = 0
 
     val eventBuffer = StringBuilder()
     var hasPendingNewline = false
@@ -304,6 +304,17 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         pendingBlockSeparator = false
     }
 
+    // The distinct delimiter base char of every inline emphasis frame, as a bit:
+    // `*` (em/strong), `~` (del), `=` (mark), `^` (sup). Any other char → 0, so it
+    // is never escaped. (`_` is never emitted — the renderer always uses `*`.)
+    fun delimiterBit(c: Char): Int = when (c) {
+        '*' -> 1
+        '~' -> 2
+        '=' -> 4
+        '^' -> 8
+        else -> 0
+    }
+
     // Backslash-escape every character that is the run delimiter of an enclosing
     // inline emphasis span (`*` for em/strong, `~` for del, `=` for mark, `^` for
     // sup). A literal delimiter inside the span's content would otherwise re-pair
@@ -324,21 +335,23 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         // could no longer see the pair and the run would re-form. Over-escaping a
         // lone `=` (a harmless `\=` in `<mark>x=5</mark>`) keeps the round-trip
         // stable, which the append-only stream cannot trade away.
-        if (inPreCode || inLabel() || text.isEmpty() || activeDelimiters.isEmpty()) return text
+        if (inPreCode || inLabel() || text.isEmpty() || activeDelimiterMask == 0) return text
         return buildString(text.length) {
             for (c in text) {
-                if (c in activeDelimiters) +'\\'
+                if ((delimiterBit(c) and activeDelimiterMask) != 0) +'\\'
                 +c
             }
         }
     }
 
-    // Recompute the open inline emphasis delimiters from blockStack — called only
-    // on Inline mark/unmark (rare), keeping the per-text escaping pass allocation-free.
+    // Recompute the open inline emphasis delimiter mask from blockStack — called
+    // only on Inline mark/unmark (rare), so even the recompute is allocation-free.
     fun refreshActiveDelimiters() {
-        activeDelimiters = blockStack.mapNotNullTo(mutableSetOf()) {
-            (it as? Inline)?.delimiter?.firstOrNull()
+        var mask = 0
+        for (frame in blockStack) {
+            if (frame is Inline) frame.delimiter.firstOrNull()?.let { mask = mask or delimiterBit(it) }
         }
+        activeDelimiterMask = mask
     }
 
     // Escaping a leading block marker is only safe in a Markdown-block context —
