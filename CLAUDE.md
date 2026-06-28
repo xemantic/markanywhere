@@ -165,7 +165,11 @@ Residual divergences within label content:
   `[**a*b**]`→`[**a*b****]`), but must NOT be escaped against an **em/strong**
   opened *outside* the `[` (the parser scopes em/strong on `inlineOpenStack` by
   `linkLabelOuterStackDepth`, so an inner `*` can't pair with it). A `Code`
-  frame at the top yields mask 0, keeping inline-code content verbatim.
+  frame yields mask 0, keeping inline-code content verbatim; a `TaggedInline`
+  frame (a raw inline tag like `<b>`) is **transparent** — the scan keeps going
+  past it to the `Inline` below, so a literal `*` inside `<b>` inside `**…**`
+  (`[**<b>a\*b</b>**](u)`) is still escaped (else it re-pairs with the strong and
+  grows every round-trip).
   **Exception — outer `del`/`mark`/`sup`**: those are parser *boolean flags*,
   NOT watermark-scoped, so a `~`/`=`/`^` in label text *does* close an OUTER
   del/mark/sup on re-parse — a crossed/unbalanced stream that **crashes** the

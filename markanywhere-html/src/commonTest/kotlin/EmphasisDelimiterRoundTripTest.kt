@@ -61,16 +61,20 @@ class EmphasisDelimiterRoundTripTest {
     fun `should round-trip strong spanning a whole link label`() = runTest {
         // given
         val markdown = "[**bold**](u)"
-        // when + then
-        assertMarkdownFixpoint(markdown)
+        // when
+        val rendered = flowOf(markdown).parse().renderMarkdown()
+        // then
+        rendered sameAs markdown
     }
 
     @Test
     fun `should round-trip emphasis spanning a whole link label`() = runTest {
         // given
         val markdown = "[*em*](u)"
-        // when + then
-        assertMarkdownFixpoint(markdown)
+        // when
+        val rendered = flowOf(markdown).parse().renderMarkdown()
+        // then
+        rendered sameAs markdown
     }
 
     @Test
@@ -81,16 +85,20 @@ class EmphasisDelimiterRoundTripTest {
         // and grew on every round-trip. flushInlineLabelClose must consume it.
         // given
         val markdown = "[==mark==](u)"
-        // when + then
-        assertMarkdownFixpoint(markdown)
+        // when
+        val rendered = flowOf(markdown).parse().renderMarkdown()
+        // then
+        rendered sameAs markdown
     }
 
     @Test
     fun `should round-trip del spanning a whole link label`() = runTest {
         // given
         val markdown = "[~~del~~](u)"
-        // when + then
-        assertMarkdownFixpoint(markdown)
+        // when
+        val rendered = flowOf(markdown).parse().renderMarkdown()
+        // then
+        rendered sameAs markdown
     }
 
     @Test
@@ -99,8 +107,10 @@ class EmphasisDelimiterRoundTripTest {
         // mid-label and never leaks — locking that this stays a fixpoint.
         // given
         val markdown = "[^sup^](u)"
-        // when + then
-        assertMarkdownFixpoint(markdown)
+        // when
+        val rendered = flowOf(markdown).parse().renderMarkdown()
+        // then
+        rendered sameAs markdown
     }
 
     @Test
@@ -128,6 +138,21 @@ class EmphasisDelimiterRoundTripTest {
         }.renderMarkdown()
         // then
         markdown sameAs "[**a\\*b**](u)"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip strong with a tagged child in a link label containing a literal asterisk`() = runTest {
+        // A raw inline tag (`<b>`) between the `<strong>` and its text pushes a
+        // TaggedInline frame; the label-scoped escaping must scan *past* it to the
+        // strong below, else the `*` inside `<b>` is unescaped and re-pairs with the
+        // strong on re-parse (`[**<b>a*b</b>**]` → `[**<b>a*b*</b>**]`, growing).
+        // when
+        val markdown = semanticEvents {
+            "p" { "a"("href" to "u") { "strong" { tag("b") { +"a*b" } } } }
+        }.renderMarkdown()
+        // then
+        markdown sameAs "[**<b>a\\*b</b>**](u)"
         assertMarkdownFixpoint(markdown)
     }
 
@@ -204,8 +229,10 @@ class EmphasisDelimiterRoundTripTest {
         // delimiter rather than swallow it as content (which grew the run forever).
         // given
         val markdown = "[![alt](http://x/v3/*app/a.svg)*](http://r/)"
-        // when + then
-        assertMarkdownFixpoint(markdown)
+        // when
+        val rendered = flowOf(markdown).parse().renderMarkdown()
+        // then
+        rendered sameAs markdown
     }
 
     @Test
@@ -217,6 +244,19 @@ class EmphasisDelimiterRoundTripTest {
         val markdown = semanticEvents { "p" { "em" { +"a*b" } } }.renderMarkdown()
         // then
         markdown sameAs "*a\\*b*"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip emphasis whose content contains a literal underscore`() = runTest {
+        // `_` is NOT in delimiterBit (the renderer always emits `*` for em/strong),
+        // and a `_` in `*…*` content can't close the em (CommonMark flanking: a
+        // `_` adjacent to a letter is intraword-suppressed) — so it needs no escape
+        // and stays a stable fixpoint. Confirms the "renderer always uses `*`" claim.
+        // when
+        val markdown = semanticEvents { "p" { "em" { +"foo_bar" } } }.renderMarkdown()
+        // then
+        markdown sameAs "*foo_bar*"
         assertMarkdownFixpoint(markdown)
     }
 
@@ -316,16 +356,20 @@ class EmphasisDelimiterRoundTripTest {
         // literal, not become an empty `<mark></mark>` that renders `foo====`.
         // given
         val markdown = "foo=="
-        // when + then
-        assertMarkdownFixpoint(markdown)
+        // when
+        val rendered = flowOf(markdown).parse().renderMarkdown()
+        // then
+        rendered sameAs markdown
     }
 
     @Test
     fun `should round-trip an unmatched trailing del run as literal`() = runTest {
         // given
         val markdown = "foo~~"
-        // when + then
-        assertMarkdownFixpoint(markdown)
+        // when
+        val rendered = flowOf(markdown).parse().renderMarkdown()
+        // then
+        rendered sameAs markdown
     }
 
     @Test

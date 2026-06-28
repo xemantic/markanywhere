@@ -316,22 +316,27 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
     }
 
     // Mask of the emphasis delimiters whose span *directly* encloses the current
-    // text — the contiguous run of `Inline` frames at the top of blockStack, up to
-    // the first non-`Inline` frame. Used inside a link/image label, where the full
+    // text — the run of `Inline` frames at the top of blockStack, up to the first
+    // frame that ends the span. Used inside a link/image label, where the full
     // `activeDelimiterMask` would also include emphasis opened *outside* the label
     // (before the `[`): a literal `*` in label content must not be escaped against
     // an *outer* em (the parser scopes label emphasis by `linkLabelOuterStackDepth`,
     // so an inner `*` can't pair with it), only against an em opened *inside* the
     // label. Stopping at the enclosing `Link` frame yields exactly the latter; a
-    // `Code` frame at the top (inline code in a label) yields 0, so code content
-    // stays verbatim.
+    // `Code` frame yields 0, so inline-code content stays verbatim. A raw inline
+    // tag (`TaggedInline`, e.g. `<b>`) is **transparent** — it doesn't end the
+    // enclosing emphasis, so keep scanning past it to the `Inline` below (a literal
+    // `*` inside `<b>` inside `**…**` still re-pairs with the strong on re-parse).
     fun enclosingInlineDelimiterMask(): Int {
         var mask = 0
         for (i in blockStack.indices.reversed()) {
-            val frame = blockStack[i] as? Inline ?: break
-            // `delimiter[0]` (not `firstOrNull()`) avoids boxing the Char on JVM;
-            // the delimiter is always one of the five non-empty literals.
-            if (frame.delimiter.isNotEmpty()) mask = mask or delimiterBit(frame.delimiter[0])
+            when (val frame = blockStack[i]) {
+                // `delimiter[0]` (not `firstOrNull()`) avoids boxing the Char on JVM;
+                // the delimiter is always one of the five non-empty literals.
+                is Inline -> if (frame.delimiter.isNotEmpty()) mask = mask or delimiterBit(frame.delimiter[0])
+                is TaggedInline -> {} // transparent — keep scanning to the Inline below
+                else -> break
+            }
         }
         return mask
     }
