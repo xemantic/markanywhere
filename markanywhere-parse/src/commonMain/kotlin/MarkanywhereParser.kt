@@ -1461,7 +1461,15 @@ private class ParserState(
     // pairs with an `unmark`, including for sources that omit the closer
     // (e.g. `*foo` with no closing `*` in the same paragraph) or close tags
     // out of order.
-    private data class InlineOpenFrame(val name: String, val isTagged: Boolean)
+    // `delimChar` is the run char that opened an em/strong frame (`*` or `_`),
+    // used by closeLabelLocalEmphasisRun to refuse closing a `*`-opened span with
+    // a `_` run (or vice versa) — `*` and `_` are distinct delimiter types that
+    // never pair (CommonMark §6.2). null for tagged HTML frames.
+    private data class InlineOpenFrame(
+        val name: String,
+        val isTagged: Boolean,
+        val delimChar: Char? = null
+    )
     private val inlineOpenStack = ArrayDeque<InlineOpenFrame>()
 
     private fun isInlineOpen(name: String): Boolean =
@@ -1643,12 +1651,12 @@ private class ParserState(
         when (runLen) {
             1 -> when {
                 canClose && emOpen -> closeInlineDownTo("em", isTagged = false)
-                canOpen && !emOpen -> openInlineEmphasis("em")
+                canOpen && !emOpen -> openInlineEmphasis("em", runChar)
                 else -> +runChar.toString()
             }
             2 -> when {
                 canClose && strongOpen -> closeInlineDownTo("strong", isTagged = false)
-                canOpen && !strongOpen -> openInlineEmphasis("strong")
+                canOpen && !strongOpen -> openInlineEmphasis("strong", runChar)
                 else -> +runChar.toString().repeat(2)
             }
             else -> when {
@@ -1662,18 +1670,18 @@ private class ParserState(
                     // 2 of the 3 delimiters close strong; the remaining 1 opens
                     // em if it can, else falls through as literal.
                     closeInlineDownTo("strong", isTagged = false)
-                    if (canOpen) openInlineEmphasis("em") else +runChar.toString()
+                    if (canOpen) openInlineEmphasis("em", runChar) else +runChar.toString()
                 }
                 canClose && emOpen -> {
                     // 1 of the 3 delimiters closes em; the remaining 2 open
                     // strong if they can, else fall through as literal.
                     closeInlineDownTo("em", isTagged = false)
-                    if (canOpen) openInlineEmphasis("strong") else +runChar.toString().repeat(2)
+                    if (canOpen) openInlineEmphasis("strong", runChar) else +runChar.toString().repeat(2)
                 }
                 canOpen && !strongOpen && !emOpen -> {
                     // ***foo***: outer strong, inner em — closes em first via LIFO.
-                    openInlineEmphasis("strong")
-                    openInlineEmphasis("em")
+                    openInlineEmphasis("strong", runChar)
+                    openInlineEmphasis("em", runChar)
                 }
                 else -> +runChar.toString().repeat(3)
             }
@@ -1683,9 +1691,9 @@ private class ParserState(
     /**
      * Open an emphasis tag and push it onto [inlineOpenStack].
      */
-    private suspend fun SemanticEventScope.openInlineEmphasis(name: String) {
+    private suspend fun SemanticEventScope.openInlineEmphasis(name: String, delimChar: Char) {
         mark(name)
-        inlineOpenStack.addLast(InlineOpenFrame(name, isTagged = false))
+        inlineOpenStack.addLast(InlineOpenFrame(name, isTagged = false, delimChar = delimChar))
     }
 
     /**
@@ -6456,6 +6464,11 @@ private class ParserState(
         ) {
             val frame = inlineOpenStack.last()
             if (frame.isTagged) break
+            // `*` and `_` are distinct delimiter types and never pair (CommonMark
+            // §6.2): a `_` run must not close a `*`-opened em (or vice versa). Leave
+            // the mismatched run for the literal-flush fallback (`[*foo_](u)` keeps
+            // the `_` as content → `<em>foo_</em>`, not a silently-dropped closer).
+            if (frame.delimChar != null && frame.delimChar != delim) break
             // Only `em`/`strong` live on inlineOpenStack — `del`/`mark`/`sup` are
             // tracked as boolean flags and never pushed here, so they cannot match.
             // `delim` is already constrained to `*`/`_` by the guard above.

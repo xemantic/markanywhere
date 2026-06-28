@@ -757,6 +757,27 @@ class MarkanywhereParserTest {
     }
 
     @Test
+    fun `should not close a star-opened em with an underscore at a label close`() = runTest {
+        // given — `[*foo_]`: `*` opens em inside the label, `_` lands in inlineBuffer
+        // before `]`. `*` and `_` are distinct delimiter types and never pair
+        // (CommonMark §6.2), so the `_` must NOT close the em (which would also
+        // silently drop it) — it stays literal content of the force-closed em.
+        val textFlow = "[*foo_](u)".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "a"("href" to "u") {
+                    "em" { +"foo_" }
+                }
+            }
+        }
+    }
+
+    @Test
     fun `should parse highlight or mark text`() = runTest {
         // given
         
@@ -824,6 +845,21 @@ class MarkanywhereParserTest {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" { +"foo~~" }
+        }
+    }
+
+    @Test
+    fun `should treat an unmatched trailing single tilde as literal text`() = runTest {
+        // given — a lone trailing `~` with no open del (the single-`~` sub-case of
+        // the flushInline fix); it must stay literal, not open an empty `<del></del>`.
+        val textFlow = "foo~".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" { +"foo~" }
         }
     }
 

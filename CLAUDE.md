@@ -137,8 +137,13 @@ Residual divergences within label content:
   `closeLabelLocalEmphasisRun`, which closes the matching emphasis frame(s)
   opened *inside* this label (those above `linkLabelOuterStackDepth`), LIFO and
   innermost-first, consuming the run. This is the watermark-scoped close, so an
-  inner closer still can never pair with an outer em/strong — but a label-local
-  em now closes on its own trailing `*`/`**`/`~~`/etc. instead of swallowing it
+  inner closer still can never pair with an outer em/strong. The close is also
+  **delimiter-type-checked**: `InlineOpenFrame.delimChar` records the run char
+  (`*` or `_`) that opened each em/strong, and the run only closes a frame whose
+  `delimChar` matches — `*` and `_` never pair (CommonMark §6.2), so `[*foo_](u)`
+  keeps the `_` as content (`<em>foo_</em>`) instead of letting the `_` close the
+  `*`-em and silently vanish. A label-local em closes on its own trailing
+  `*`/`**`/`~~`/etc. instead of swallowing it
   as content (`[**bold**]`, `[link *foo*](/uri)`, and the image-in-link
   `[![a](u*)*]` all round-trip; previously the run grew by one every round-trip
   — the Brave SERP dump instability). `Gfm_06_04_Test` ex 442 and `Gfm_06_06_Test`
