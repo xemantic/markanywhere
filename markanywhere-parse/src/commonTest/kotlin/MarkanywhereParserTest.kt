@@ -734,6 +734,29 @@ class MarkanywhereParserTest {
     }
 
     @Test
+    fun `should absorb a dangling single equals at a mark label close`() = runTest {
+        // given — `[==foo=]`: inside the label `==` opens mark, `foo` streams, and a
+        // single trailing `=` lands in inlineBuffer (it resolves on the next char,
+        // which is `]`). A lone `=` is not a mark delimiter, so left in the buffer it
+        // leaks out as literal text *after* the unmark and grows the run unboundedly
+        // every round-trip (`[==foo=]` → `[==foo===]` → `[==foo=====]` → …).
+        // flushInlineLabelClose must drop the dangling delimiter.
+        val textFlow = "[==foo=](u)".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "a"("href" to "u") {
+                    "mark" { +"foo" }
+                }
+            }
+        }
+    }
+
+    @Test
     fun `should parse highlight or mark text`() = runTest {
         // given
         

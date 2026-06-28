@@ -329,7 +329,9 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         var mask = 0
         for (i in blockStack.indices.reversed()) {
             val frame = blockStack[i] as? Inline ?: break
-            mask = mask or delimiterBit(frame.delimiter.firstOrNull() ?: ' ')
+            // `delimiter[0]` (not `firstOrNull()`) avoids boxing the Char on JVM;
+            // the delimiter is always one of the five non-empty literals.
+            if (frame.delimiter.isNotEmpty()) mask = mask or delimiterBit(frame.delimiter[0])
         }
         return mask
     }
@@ -360,9 +362,17 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         // could no longer see the pair and the run would re-form. Over-escaping a
         // lone `=` (a harmless `\=` in `<mark>x=5</mark>`) keeps the round-trip
         // stable, which the append-only stream cannot trade away.
+        //
+        // A literal backtick is also escaped here (we only reach this loop with an
+        // emphasis span open): inside `<em>`/`<strong>`/… a bare `` ` `` would
+        // eagerly open an inline code span on re-parse, and `flushInline` closes
+        // `code` before the emphasis (LIFO), restructuring `<em>a`b</em>` into
+        // `<em>a<code>b</code></em>` and growing every round-trip. A real code span
+        // never reaches here — its content is captured into a label buffer and
+        // emitted via renderInlineCode, not through this text path.
         return buildString(text.length) {
             for (c in text) {
-                if ((delimiterBit(c) and mask) != 0) +'\\'
+                if ((delimiterBit(c) and mask) != 0 || c == '`') +'\\'
                 +c
             }
         }
@@ -373,7 +383,8 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
     fun refreshActiveDelimiters() {
         var mask = 0
         for (frame in blockStack) {
-            if (frame is Inline) frame.delimiter.firstOrNull()?.let { mask = mask or delimiterBit(it) }
+            // `delimiter[0]` (not `firstOrNull()`) avoids boxing the Char on JVM.
+            if (frame is Inline && frame.delimiter.isNotEmpty()) mask = mask or delimiterBit(frame.delimiter[0])
         }
         activeDelimiterMask = mask
     }

@@ -183,6 +183,19 @@ class EmphasisDelimiterRoundTripTest {
     }
 
     @Test
+    fun `should round-trip emphasis whose content contains a literal backtick`() = runTest {
+        // A literal backtick inside `<em>` would eagerly open an inline code span on
+        // re-parse — and `flushInline` closes `code` before `em` (LIFO), turning
+        // `*a`b*` into `<em>a<code>b</code></em>` and growing every round-trip. The
+        // renderer must escape the backtick like an emphasis delimiter.
+        // when
+        val markdown = semanticEvents { "p" { "em" { +"a`b" } } }.renderMarkdown()
+        // then
+        markdown sameAs "*a\\`b*"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
     fun `should round-trip strong whose content contains a literal asterisk`() = runTest {
         // when
         val markdown = semanticEvents { "p" { "strong" { +"a*b" } } }.renderMarkdown()
