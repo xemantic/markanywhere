@@ -181,11 +181,26 @@ class EmphasisDelimiterRoundTripTest {
     }
 
     @Test
-    fun `should round-trip mark whose content contains a literal equals`() = runTest {
+    fun `should conservatively escape a lone equals inside a mark span`() = runTest {
+        // A lone `=` is not itself a delimiter, but escaping it anyway is the safe
+        // choice: pair-only escaping can't survive the round-trip, because
+        // re-parsing an escaped span splits its `\=\=` into two single-`=` text
+        // events, hiding the pair from the per-event escaping pass. Over-escaping
+        // (a harmless `\=`) keeps the fixpoint stable.
         // when
         val markdown = semanticEvents { "p" { "mark" { +"a=b" } } }.renderMarkdown()
         // then
         markdown sameAs "==a\\=b=="
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should escape an equals pair inside a mark span`() = runTest {
+        // A literal `==` inside the span WOULD close mark early on re-parse.
+        // when
+        val markdown = semanticEvents { "p" { "mark" { +"a==b" } } }.renderMarkdown()
+        // then
+        markdown sameAs "==a\\=\\=b=="
         assertMarkdownFixpoint(markdown)
     }
 }

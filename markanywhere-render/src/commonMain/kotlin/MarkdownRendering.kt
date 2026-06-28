@@ -316,9 +316,14 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         // their emphasis round-trips through the parser's label-scoped close, so
         // escaping here would only add noise. Restrict to direct block content.
         // Every literal occurrence of the base char is escaped (not just doubled
-        // runs): a single `~` is a valid GFM strikethrough delimiter (`~a~` →
-        // `<del>a</del>`), so a lone `~` inside a `~~…~~` span would re-pair on the
-        // next parse — the same reasoning applies to `*`/`^`.
+        // runs). A single `~` is itself a valid GFM strikethrough delimiter (`~a~`
+        // → `<del>a</del>`), so it must always be escaped. A lone `=` is NOT a
+        // delimiter (only `==` toggles mark), so escaping it is *conservative* —
+        // but pair-only escaping is unsafe here: re-parsing an escaped span emits
+        // its `\=\=` as two separate single-`=` text events, so this per-event pass
+        // could no longer see the pair and the run would re-form. Over-escaping a
+        // lone `=` (a harmless `\=` in `<mark>x=5</mark>`) keeps the round-trip
+        // stable, which the append-only stream cannot trade away.
         if (inPreCode || inLabel() || text.isEmpty() || activeDelimiters.isEmpty()) return text
         return buildString(text.length) {
             for (c in text) {
@@ -332,7 +337,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
     // on Inline mark/unmark (rare), keeping the per-text escaping pass allocation-free.
     fun refreshActiveDelimiters() {
         activeDelimiters = blockStack.mapNotNullTo(mutableSetOf()) {
-            (it as? BlockFrame.Inline)?.delimiter?.firstOrNull()
+            (it as? Inline)?.delimiter?.firstOrNull()
         }
     }
 

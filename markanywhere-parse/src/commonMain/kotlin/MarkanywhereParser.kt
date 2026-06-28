@@ -6400,7 +6400,8 @@ private class ParserState(
             // else it flushes as literal text inside the committed link and grows
             // the run on every render→parse round-trip. `sup` resolves eagerly
             // (never buffered), so it needs no such guard.
-            if (inlineBuffer.toString() == "~" || inlineBuffer.toString() == "~~") inlineBuffer.clear()
+            val run = inlineBuffer.toString()
+            if (run == "~" || run == "~~") inlineBuffer.clear()
         }
         if (highlight && !linkLabelOuterHighlight) {
             unmark("mark"); highlight = false
@@ -6453,9 +6454,10 @@ private class ParserState(
             if (frame.isTagged) break
             // Only `em`/`strong` live on inlineOpenStack — `del`/`mark`/`sup` are
             // tracked as boolean flags and never pushed here, so they cannot match.
+            // `delim` is already constrained to `*`/`_` by the guard above.
             val need = when (frame.name) {
-                "em" -> if (delim == '*' || delim == '_') 1 else break
-                "strong" -> if (delim == '*' || delim == '_') 2 else break
+                "em" -> 1
+                "strong" -> 2
                 else -> break
             }
             if (inlineBuffer.length < need) break
