@@ -1336,6 +1336,41 @@ class MarkdownRenderingTest {
         """.trimIndent()
     }
 
+    @Test
+    fun `should indent a fenced code opening fence to its list item even after an intervening block`() = runTest {
+        // given — the Bing Copilot shape: a single <pre> wraps both a heading
+        // (the language label) and the <code>, inside a list item. The heading
+        // ends the line, so the fence open must rebuild the item's indent prefix
+        // — otherwise the opening fence dropped to column 0 and, on re-parse,
+        // escaped its list item (the closing fence and body stayed indented).
+        val flow = semanticEvents {
+            "ul" {
+                "li" {
+                    "pre" {
+                        "h5" { +"Javascript" }
+                        "code"("class" to "language-javascript") {
+                            +"x = 1\n"
+                        }
+                    }
+                }
+            }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then — every line of the code block sits at the item's 2-space content
+        // indent. (The bare `- ` first line is a separate artifact of a <pre>
+        // wrapping a block-level heading; the fix here is purely the fence indent.)
+        markdown sameAs /* language=markdown */ """
+            - 
+              ##### Javascript
+              ```javascript
+              x = 1
+              ```
+        """.trimIndent()
+    }
+
     // Tables
 
     @Test

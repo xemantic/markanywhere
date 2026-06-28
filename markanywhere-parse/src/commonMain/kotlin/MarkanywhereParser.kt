@@ -1379,6 +1379,20 @@ private class ParserState(
     private var linkLabelOuterStackDepth = 0
 
     /**
+     * Snapshot of the boolean-tracked inline flags (`del`/`mark`/`sup`) at the
+     * moment `[` (or `![`) opened the current label. Unlike em/strong/HTML — which
+     * live in [inlineOpenStack] and are watermark-scoped by [linkLabelOuterStackDepth]
+     * — these flags have no stack position, so [flushInlineLabelClose] consults this
+     * snapshot to close only the ones opened *inside* the label, leaving a `del`/
+     * `mark`/`sup` opened *before* the `[` alone (otherwise its `unmark` would leak
+     * into the captured label buffer and produce a crossed, unrenderable stream —
+     * e.g. the citation superscript `^[1](url)^`).
+     */
+    private var linkLabelOuterStrikethrough = false
+    private var linkLabelOuterHighlight = false
+    private var linkLabelOuterSuperscript = false
+
+    /**
      * True when the next [processInlineCharImpl] call is the *re-process* leg
      * of the [pendingDeferredChar] protocol — i.e. the same source char is
      * being delivered for a second time so that buffered delimiter resolution
@@ -6308,6 +6322,9 @@ private class ParserState(
      */
     private fun openLinkLabelCapture() {
         linkLabelOuterStackDepth = inlineOpenStack.size
+        linkLabelOuterStrikethrough = strikethrough
+        linkLabelOuterHighlight = highlight
+        linkLabelOuterSuperscript = superscript
         linkLabelBracketDepth = 0
         redirector.startCapture()
     }
@@ -6370,10 +6387,26 @@ private class ParserState(
             code = false
             codeRunLength = 0
         }
-        if (strikethrough) { unmark("del"); strikethrough = false }
-        if (highlight) { unmark("mark"); highlight = false }
-        if (superscript) { unmark("sup"); superscript = false }
-        // Any pending delimiter run in inlineBuffer flushes as literal text
+        // Close only the boolean-tracked inline state opened *inside* this label
+        // (see [linkLabelOuterSuperscript] et al.). A `del`/`mark`/`sup` opened
+        // before the `[` stays open — its closer arrives after the label — so its
+        // `unmark` is not captured into the label buffer (which would cross the
+        // link nesting and break the stream).
+        if (strikethrough && !linkLabelOuterStrikethrough) { unmark("del"); strikethrough = false }
+        if (highlight && !linkLabelOuterHighlight) { unmark("mark"); highlight = false }
+        if (superscript && !linkLabelOuterSuperscript) { unmark("sup"); superscript = false }
+        // A pending delimiter run in inlineBuffer that sits in closing position at
+        // the label's end (e.g. the `**` of `[**bold**]`, or the trailing `*` of
+        // an image-in-link label like `[![a](u*)*]`) closes the matching emphasis
+        // frame *opened inside this label* (above the watermark), LIFO and
+        // innermost-first. This is the label-scoped counterpart of the normal
+        // delimiter resolver: it only consults label-local frames, so an inner
+        // closer can never pair with an em/strong opened *before* the `[`. Without
+        // it the closer was emitted as literal text inside the still-open span, so
+        // the span's delimiter run grew by one on every render→parse round-trip
+        // (the unbounded `…)*` → `…)**` instability of the Brave SERP dump).
+        closeLabelLocalEmphasisRun()
+        // Any leftover run (no matching label-local frame) flushes as literal text
         // — same fallback the rest of the parser uses when a run can't resolve.
         if (inlineBuffer.isNotEmpty()) {
             +inlineBuffer.toString()
@@ -6383,6 +6416,39 @@ private class ParserState(
         while (inlineOpenStack.size > linkLabelOuterStackDepth) {
             val frame = inlineOpenStack.removeLast()
             unmark(frame.name, isTagged = frame.isTagged)
+        }
+    }
+
+    /**
+     * Consume a trailing emphasis-delimiter run in [inlineBuffer] by closing the
+     * matching label-local frames at the top of [inlineOpenStack] (those above
+     * [linkLabelOuterStackDepth], i.e. opened inside the current label). Each
+     * close pops one frame and removes the delimiter characters it consumed from
+     * the run; matching stops at the first frame the run can't close, leaving the
+     * remainder for the literal-flush fallback. Only pure single-character runs
+     * (`*`/`_`/`~`/`=`/`^`) are considered — mixed buffers fall straight through.
+     */
+    private suspend fun SemanticEventScope.closeLabelLocalEmphasisRun() {
+        if (inlineBuffer.isEmpty()) return
+        val delim = inlineBuffer[0]
+        if (delim !in "*_~=^" || inlineBuffer.any { it != delim }) return
+        while (inlineBuffer.isNotEmpty() &&
+            inlineOpenStack.size > linkLabelOuterStackDepth
+        ) {
+            val frame = inlineOpenStack.last()
+            if (frame.isTagged) break
+            val need = when (frame.name) {
+                "em" -> if (delim == '*' || delim == '_') 1 else break
+                "strong" -> if (delim == '*' || delim == '_') 2 else break
+                "del" -> if (delim == '~') 2 else break
+                "mark" -> if (delim == '=') 2 else break
+                "sup" -> if (delim == '^') 1 else break
+                else -> break
+            }
+            if (inlineBuffer.length < need) break
+            inlineBuffer.deleteRange(inlineBuffer.length - need, inlineBuffer.length)
+            inlineOpenStack.removeLast()
+            unmark(frame.name)
         }
     }
 

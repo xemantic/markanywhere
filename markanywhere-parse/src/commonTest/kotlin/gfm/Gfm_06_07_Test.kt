@@ -70,14 +70,13 @@ class Gfm_06_07_Test {
         // then
         // Forward reference DIVERGENCE: definition appears after usage; the
         // append-only stream emits the usage as literal text before the def
-        // is registered. Trailing `*` before `]` is buffered as a delimiter
-        // and flushed as literal text by `flushInlineLabelClose`, so the em
-        // closes around `bar*`.
+        // is registered. The trailing `*` in closing position closes the
+        // label-local em (via `closeLabelLocalEmphasisRun`).
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
                 +"![foo "
                 "em" {
-                    +"bar*"
+                    +"bar"
                 }
                 +"]"
             }
@@ -157,7 +156,7 @@ class Gfm_06_07_Test {
             "p" {
                 +"![foo "
                 "em" {
-                    +"bar*"
+                    +"bar"
                 }
                 +"][]"
             }
@@ -186,7 +185,7 @@ class Gfm_06_07_Test {
             "p" {
                 +"![foo "
                 "em" {
-                    +"bar*"
+                    +"bar"
                 }
                 +"][foobar]"
             }

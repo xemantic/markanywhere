@@ -299,11 +299,35 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         pendingBlockSeparator = false
     }
 
+    // Backslash-escape every character that is the run delimiter of an enclosing
+    // inline emphasis span (`*` for em/strong, `~` for del, `=` for mark, `^` for
+    // sup). A literal delimiter inside the span's content would otherwise re-pair
+    // against the span's own closing run on the next parse — making the run grow
+    // by one every round-trip (the unbounded `…)*` → `…)**` → `…)***` instability
+    // seen in the Brave SERP dump). Suppressed inside verbatim `pre`/`code`, where
+    // a backslash is literal text, not an escape.
+    fun escapeActiveInlineDelimiters(text: String): String {
+        // Link/image labels are buffered and re-emitted verbatim between `[` … `]`;
+        // their emphasis round-trips through the parser's label-scoped close, so
+        // escaping here would only add noise. Restrict to direct block content.
+        if (inPreCode || inLabel() || text.isEmpty()) return text
+        val delimiters = blockStack.mapNotNullTo(mutableSetOf()) {
+            (it as? BlockFrame.Inline)?.delimiter?.get(0)
+        }
+        if (delimiters.isEmpty()) return text
+        return buildString(text.length) {
+            for (c in text) {
+                if (c in delimiters) +'\\'
+                +c
+            }
+        }
+    }
+
     // Escaping a leading block marker is only safe in a Markdown-block context —
     // never inside verbatim `pre`/`code` or a raw frontmatter block.
     fun blockMarkerEscapingAllowed(): Boolean =
         !inPreCode && blockStack.none {
-            it is BlockFrame.Pre || it is BlockFrame.Code || it is BlockFrame.Frontmatter
+            it is Pre || it is Code || it is Frontmatter
         }
 
     // A soft line break. Spaces deferred from the previous line are trailing
@@ -318,8 +342,9 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         lineStartDigits = false
     }
 
-    fun emitText(text: String) {
-        if (text.isEmpty()) return
+    fun emitText(rawText: String) {
+        if (rawText.isEmpty()) return
+        val text = escapeActiveInlineDelimiters(rawText)
         if (inLabel()) { appendLabel(text); return }
         consumeHeadingSpace()
         beforeContent()
@@ -671,6 +696,12 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                         val lang = event.attributes["class"]
                             ?.removePrefix("language-")
                             ?: ""
+                        // Rebuild the container prefix when the fence opens a fresh
+                        // line (e.g. the `<pre>` wrapped a heading before the
+                        // `<code>`, so the heading's line-end left us at line start).
+                        // Without this the opening fence drops to column 0 and, on
+                        // re-parse, escapes its list item / blockquote.
+                        if (atLineStart) out(buildPrefix(consumeMarker = false))
                         out("```")
                         out(lang)
                         ensureLineStart()

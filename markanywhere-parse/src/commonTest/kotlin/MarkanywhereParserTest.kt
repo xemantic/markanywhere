@@ -651,6 +651,66 @@ class MarkanywhereParserTest {
     }
 
     @Test
+    fun `should parse a superscript wrapping an inline link`() = runTest {
+        // given — citation superscripts (`^[1](url)^`) appear in real content
+        // (e.g. the Bing SERP answer). The closing `^` must close the sup that
+        // wraps the link, producing a balanced, properly-nested stream — not an
+        // unmark leaking into the link label (which previously produced a crossed,
+        // unrenderable stream).
+        val textFlow = "^[1](u)^".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "sup" {
+                    "a"("href" to "u") { +"1" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should parse strikethrough wrapping an inline link`() = runTest {
+        // given
+        val textFlow = "~~[1](u)~~".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "del" {
+                    "a"("href" to "u") { +"1" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should parse highlight wrapping an inline link`() = runTest {
+        // given — trailing text so the closing `==` resolves (a `==` run at the
+        // very end of input is a separate lookahead quirk, unrelated to this fix).
+        val textFlow = "==[1](u)== ok".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "mark" {
+                    "a"("href" to "u") { +"1" }
+                }
+                +" ok"
+            }
+        }
+    }
+
+    @Test
     fun `should parse highlight or mark text`() = runTest {
         // given
         
