@@ -104,6 +104,61 @@ class EmphasisDelimiterRoundTripTest {
     }
 
     @Test
+    fun `should round-trip emphasis nested in a link label with a literal asterisk`() = runTest {
+        // HTML-pipeline shape: an `<em>` *inside* a link label whose content holds a
+        // literal `*`. The renderer must escape the inner `*` (`[*a\*b*](u)`) even
+        // though it's label content — the parser's label-scoped close only resolves
+        // a delimiter at the label's end, not in the middle. Unescaped, `[*a*b*](u)`
+        // re-parses to the broken `<a><em>a</em>b*</a>`.
+        // when
+        val markdown = semanticEvents {
+            "p" { "a"("href" to "u") { "em" { +"a*b" } } }
+        }.renderMarkdown()
+        // then
+        markdown sameAs "[*a\\*b*](u)"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip strong nested in a link label with a literal asterisk`() = runTest {
+        // Without escaping this grew unboundedly: `[**a*b**](u)` → `[**a*b****](u)`.
+        // when
+        val markdown = semanticEvents {
+            "p" { "a"("href" to "u") { "strong" { +"a*b" } } }
+        }.renderMarkdown()
+        // then
+        markdown sameAs "[**a\\*b**](u)"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip del nested in a link label with a literal tilde`() = runTest {
+        // when
+        val markdown = semanticEvents {
+            "p" { "a"("href" to "u") { "del" { +"a~b" } } }
+        }.renderMarkdown()
+        // then
+        markdown sameAs "[~~a\\~b~~](u)"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should not escape label content against emphasis opened outside the label`() = runTest {
+        // An `<em>` wrapping a link: a literal `*` in the *link label* must NOT be
+        // escaped against the outer em — only against emphasis opened *inside* the
+        // label (here there is none). The fix scopes escaping to the enclosing
+        // Inline run up to the Link frame, so the label `*` stays unescaped.
+        // when
+        val markdown = semanticEvents {
+            "p" { "em" { +"x "; "a"("href" to "u") { +"a*b" }; +" y" } }
+        }.renderMarkdown()
+        // then — render only (no fixpoint): re-parsing `[a*b]` inside `*…*` trips a
+        // SEPARATE pre-existing parser bug (the lone label `*` crosses the outer em
+        // → unbalanced stream), unrelated to this renderer-side escaping fix.
+        markdown sameAs "*x [a*b](u) y*"
+    }
+
+    @Test
     fun `should round-trip an image-in-link label with a trailing asterisk`() = runTest {
         // The minimised Brave shape: a link label holding image-as-text whose URL
         // carries a `*`, plus a trailing `*`. The opening `*` (in the URL) and the

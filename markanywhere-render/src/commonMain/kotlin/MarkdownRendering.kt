@@ -315,6 +315,25 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         else -> 0
     }
 
+    // Mask of the emphasis delimiters whose span *directly* encloses the current
+    // text — the contiguous run of `Inline` frames at the top of blockStack, up to
+    // the first non-`Inline` frame. Used inside a link/image label, where the full
+    // `activeDelimiterMask` would also include emphasis opened *outside* the label
+    // (before the `[`): a literal `*` in label content must not be escaped against
+    // an *outer* em (the parser scopes label emphasis by `linkLabelOuterStackDepth`,
+    // so an inner `*` can't pair with it), only against an em opened *inside* the
+    // label. Stopping at the enclosing `Link` frame yields exactly the latter; a
+    // `Code` frame at the top (inline code in a label) yields 0, so code content
+    // stays verbatim.
+    fun enclosingInlineDelimiterMask(): Int {
+        var mask = 0
+        for (i in blockStack.indices.reversed()) {
+            val frame = blockStack[i] as? Inline ?: break
+            mask = mask or delimiterBit(frame.delimiter.firstOrNull() ?: ' ')
+        }
+        return mask
+    }
+
     // Backslash-escape every character that is the run delimiter of an enclosing
     // inline emphasis span (`*` for em/strong, `~` for del, `=` for mark, `^` for
     // sup). A literal delimiter inside the span's content would otherwise re-pair
@@ -323,9 +342,15 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
     // seen in the Brave SERP dump). Suppressed inside verbatim `pre`/`code`, where
     // a backslash is literal text, not an escape.
     fun escapeActiveInlineDelimiters(text: String): String {
-        // Link/image labels are buffered and re-emitted verbatim between `[` … `]`;
-        // their emphasis round-trips through the parser's label-scoped close, so
-        // escaping here would only add noise. Restrict to direct block content.
+        if (inPreCode || text.isEmpty()) return text
+        // Outside a label all open emphasis is contiguous at the top of the stack,
+        // so the cached full mask applies; inside a label only the label-internal
+        // emphasis must be escaped (see enclosingInlineDelimiterMask) — escaping a
+        // literal delimiter that is content of a label-local em/strong/del/mark span
+        // (`[**a*b**](u)` → `[**a\*b**](u)`), which the parser's label-scoped close
+        // does NOT handle (it only resolves a delimiter at the very label end).
+        val mask = if (inLabel()) enclosingInlineDelimiterMask() else activeDelimiterMask
+        if (mask == 0) return text
         // Every literal occurrence of the base char is escaped (not just doubled
         // runs). A single `~` is itself a valid GFM strikethrough delimiter (`~a~`
         // → `<del>a</del>`), so it must always be escaped. A lone `=` is NOT a
@@ -335,10 +360,9 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         // could no longer see the pair and the run would re-form. Over-escaping a
         // lone `=` (a harmless `\=` in `<mark>x=5</mark>`) keeps the round-trip
         // stable, which the append-only stream cannot trade away.
-        if (inPreCode || inLabel() || text.isEmpty() || activeDelimiterMask == 0) return text
         return buildString(text.length) {
             for (c in text) {
-                if ((delimiterBit(c) and activeDelimiterMask) != 0) +'\\'
+                if ((delimiterBit(c) and mask) != 0) +'\\'
                 +c
             }
         }

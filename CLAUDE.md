@@ -151,8 +151,17 @@ Residual divergences within label content:
   renderer has the symmetric guard: `escapeActiveInlineDelimiters`
   (`MarkdownRendering.kt`) backslash-escapes a literal delimiter inside an
   emphasis span (e.g. an HTML-sourced `<em>a*b</em>` → `*a\*b*`) so it doesn't
-  re-pair on the next parse — suppressed inside link/image labels, whose
-  emphasis the parser-side close already round-trips.
+  re-pair on the next parse. Inside a link/image label it escapes against
+  **only the label-internal** emphasis (`enclosingInlineDelimiterMask` — the
+  contiguous `Inline` run at the top of `blockStack`, stopping at the enclosing
+  `Link`/`Code` frame), NOT the full `activeDelimiterMask`: a literal `*` in
+  label content must round-trip a span opened *inside* the label
+  (`<a><strong>a*b</strong></a>` → `[**a\*b**](u)`, else it grows
+  `[**a*b**]`→`[**a*b****]`), but must NOT be escaped against an em opened
+  *outside* the `[` (the parser scopes label emphasis by
+  `linkLabelOuterStackDepth`, so an inner `*` can't pair with it). A `Code`
+  frame at the top yields mask 0, keeping inline-code content verbatim. See
+  `EmphasisDelimiterRoundTripTest` "nested in a link label".
 - **Backtick exception**: an unresolved backtick run in `inlineBuffer` falls
   through to the standard dispatcher so the code span opens with `]` as
   content (`[foo``]``](/uri)` etc. work per spec).
