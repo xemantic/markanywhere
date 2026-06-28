@@ -327,4 +327,50 @@ class EmphasisDelimiterRoundTripTest {
         // when + then
         assertMarkdownFixpoint(markdown)
     }
+
+    @Test
+    fun `should round-trip strong whose content contains a literal backtick`() = runTest {
+        // The backtick escape fires for ANY active emphasis (mask != 0), not just
+        // `em` — locking the non-em delimiters share the same code path.
+        // when
+        val markdown = semanticEvents { "p" { "strong" { +"a`b" } } }.renderMarkdown()
+        // then
+        markdown sameAs "**a\\`b**"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip del whose content contains a literal backtick`() = runTest {
+        // when
+        val markdown = semanticEvents { "p" { "del" { +"a`b" } } }.renderMarkdown()
+        // then
+        markdown sameAs "~~a\\`b~~"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should NOT escape delimiters inside a fenced code block`() = runTest {
+        // Escaping is suppressed inside verbatim `pre`/`code` (inPreCode) — a
+        // backslash there is literal text, not an escape, so a `*`/`~`/backtick in
+        // code content must pass through unchanged (escaping it would corrupt code).
+        // when
+        val markdown = semanticEvents { "pre" { "code" { +"a * b ~ c `d`" } } }.renderMarkdown()
+        // then
+        markdown sameAs "```\na * b ~ c `d`\n```"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should escape emphasis text but keep an inline code span verbatim`() = runTest {
+        // An inline `<code>` inside `<em>` pushes a Code frame, so
+        // enclosingInlineDelimiterMask stops at it (mask 0) and the code content
+        // (`x*y`) is NOT escaped, while the em's own text (`a*`, `b*`) IS.
+        // when
+        val markdown = semanticEvents {
+            "p" { "em" { +"a*"; "code" { +"x*y" }; +"b*" } }
+        }.renderMarkdown()
+        // then
+        markdown sameAs "*a\\*`x*y`b\\**"
+        assertMarkdownFixpoint(markdown)
+    }
 }

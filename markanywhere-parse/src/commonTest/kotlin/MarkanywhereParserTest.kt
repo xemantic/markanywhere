@@ -778,6 +778,64 @@ class MarkanywhereParserTest {
     }
 
     @Test
+    fun `should not close an underscore-opened em with an asterisk at a label close`() = runTest {
+        // given — the mirror of the star/underscore case: `_` opens the em, a
+        // trailing `*` must NOT close it (delimiter-type mismatch), staying literal.
+        val textFlow = "[_foo*](u)".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "a"("href" to "u") {
+                    "em" { +"foo*" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should close an underscore-opened em on its own trailing underscore at a label close`() = runTest {
+        // given — matching `_` run closes the label-local `_`-em (`[_em_]`), the
+        // underscore counterpart of the `[*em*]` / `[**bold**]` cases.
+        val textFlow = "[_em_](u)".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "a"("href" to "u") {
+                    "em" { +"em" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should absorb a dangling single tilde at a del label close`() = runTest {
+        // given — the del counterpart of `[==foo=]`: a single trailing `~` after a
+        // label-local del must be absorbed (not leaked as literal text after the
+        // unmark), so `[~~del~]` does not grow on every round-trip.
+        val textFlow = "[~~del~](u)".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "a"("href" to "u") {
+                    "del" { +"del" }
+                }
+            }
+        }
+    }
+
+    @Test
     fun `should parse highlight or mark text`() = runTest {
         // given
         
