@@ -346,12 +346,23 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
     fun escapeActiveInlineDelimiters(text: String): String {
         if (inPreCode || text.isEmpty()) return text
         // Outside a label all open emphasis is contiguous at the top of the stack,
-        // so the cached full mask applies; inside a label only the label-internal
-        // emphasis must be escaped (see enclosingInlineDelimiterMask) — escaping a
-        // literal delimiter that is content of a label-local em/strong/del/mark span
-        // (`[**a*b**](u)` → `[**a\*b**](u)`), which the parser's label-scoped close
-        // does NOT handle (it only resolves a delimiter at the very label end).
-        val mask = if (inLabel()) enclosingInlineDelimiterMask() else activeDelimiterMask
+        // so the cached full mask applies. Inside a label the mask is two parts:
+        //  (a) label-internal emphasis (`enclosingInlineDelimiterMask`) — escape a
+        //      literal delimiter that is content of a label-local span (`[**a*b**]`
+        //      → `[**a\*b**]`), which the parser's label-scoped close does not cover
+        //      (it only resolves a delimiter at the very label end); plus
+        //  (b) OUTER `del`/`mark`/`sup` (the `~`/`=`/`^` bits of the full mask).
+        //      Those are parser *boolean flags*, NOT scoped by
+        //      `linkLabelOuterStackDepth`, so a matching delimiter in label text
+        //      closes the OUTER span on re-parse — a crossed/unbalanced stream that
+        //      crashes the renderer (`~~[foo~bar](u)~~`). em/strong (`*`) ARE
+        //      watermark-scoped, so an inner `*` can't close an outer em — exclude
+        //      its bit (the residual outer-em crossing is a separate parser
+        //      limitation; escaping `*` here would contradict the watermark).
+        val outerBooleanDelimiters = delimiterBit('~') or delimiterBit('=') or delimiterBit('^')
+        val mask = if (inLabel())
+            enclosingInlineDelimiterMask() or (activeDelimiterMask and outerBooleanDelimiters)
+        else activeDelimiterMask
         if (mask == 0) return text
         // Every literal occurrence of the base char is escaped (not just doubled
         // runs). A single `~` is itself a valid GFM strikethrough delimiter (`~a~`

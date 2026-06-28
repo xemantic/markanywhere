@@ -59,17 +59,17 @@ class EmphasisDelimiterRoundTripTest {
 
     @Test
     fun `should round-trip strong spanning a whole link label`() = runTest {
-        // when
+        // given
         val markdown = "[**bold**](u)"
-        // then
+        // when + then
         assertMarkdownFixpoint(markdown)
     }
 
     @Test
     fun `should round-trip emphasis spanning a whole link label`() = runTest {
-        // when
+        // given
         val markdown = "[*em*](u)"
-        // then
+        // when + then
         assertMarkdownFixpoint(markdown)
     }
 
@@ -79,17 +79,17 @@ class EmphasisDelimiterRoundTripTest {
         // char — but at a label's end the `]` is not that char, so the closing `==`
         // leaked into the committed link as literal content (`<mark>mark</mark>==`)
         // and grew on every round-trip. flushInlineLabelClose must consume it.
-        // when
+        // given
         val markdown = "[==mark==](u)"
-        // then
+        // when + then
         assertMarkdownFixpoint(markdown)
     }
 
     @Test
     fun `should round-trip del spanning a whole link label`() = runTest {
-        // when
+        // given
         val markdown = "[~~del~~](u)"
-        // then
+        // when + then
         assertMarkdownFixpoint(markdown)
     }
 
@@ -97,9 +97,9 @@ class EmphasisDelimiterRoundTripTest {
     fun `should round-trip superscript spanning a whole link label`() = runTest {
         // `sup` (`^`) resolves eagerly (no buffering), so its closer is consumed
         // mid-label and never leaks — locking that this stays a fixpoint.
-        // when
+        // given
         val markdown = "[^sup^](u)"
-        // then
+        // when + then
         assertMarkdownFixpoint(markdown)
     }
 
@@ -154,8 +154,46 @@ class EmphasisDelimiterRoundTripTest {
         }.renderMarkdown()
         // then — render only (no fixpoint): re-parsing `[a*b]` inside `*…*` trips a
         // SEPARATE pre-existing parser bug (the lone label `*` crosses the outer em
-        // → unbalanced stream), unrelated to this renderer-side escaping fix.
+        // → unbalanced stream), unrelated to this renderer-side escaping fix. See
+        // issue #58.
         markdown sameAs "*x [a*b](u) y*"
+    }
+
+    @Test
+    fun `should round-trip del wrapping a link whose label text contains a tilde`() = runTest {
+        // `del`/`mark`/`sup` are parser boolean flags, NOT scoped by the label
+        // watermark — so a matching delimiter in the *label text* of a wrapped link
+        // closes the OUTER span on re-parse (a crossed stream that crashes the
+        // renderer). The renderer must escape against the outer del/mark/sup too.
+        // when
+        val markdown = semanticEvents {
+            "p" { "del" { "a"("href" to "u") { +"foo~bar" } } }
+        }.renderMarkdown()
+        // then
+        markdown sameAs "~~[foo\\~bar](u)~~"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip mark wrapping a link whose label text contains an equals pair`() = runTest {
+        // when
+        val markdown = semanticEvents {
+            "p" { "mark" { "a"("href" to "u") { +"foo==bar" } } }
+        }.renderMarkdown()
+        // then
+        markdown sameAs "==[foo\\=\\=bar](u)=="
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip superscript wrapping a link whose label text contains a caret`() = runTest {
+        // when
+        val markdown = semanticEvents {
+            "p" { "sup" { "a"("href" to "u") { +"foo^bar" } } }
+        }.renderMarkdown()
+        // then
+        markdown sameAs "^[foo\\^bar](u)^"
+        assertMarkdownFixpoint(markdown)
     }
 
     @Test
@@ -164,9 +202,9 @@ class EmphasisDelimiterRoundTripTest {
         // carries a `*`, plus a trailing `*`. The opening `*` (in the URL) and the
         // trailing `*` form a label-local emphasis that must close on the trailing
         // delimiter rather than swallow it as content (which grew the run forever).
-        // when
+        // given
         val markdown = "[![alt](http://x/v3/*app/a.svg)*](http://r/)"
-        // then
+        // when + then
         assertMarkdownFixpoint(markdown)
     }
 
@@ -276,17 +314,17 @@ class EmphasisDelimiterRoundTripTest {
     fun `should round-trip an unmatched trailing mark run as literal`() = runTest {
         // `foo==` (Python equality, math) has no span to close — it must stay
         // literal, not become an empty `<mark></mark>` that renders `foo====`.
-        // when
+        // given
         val markdown = "foo=="
-        // then
+        // when + then
         assertMarkdownFixpoint(markdown)
     }
 
     @Test
     fun `should round-trip an unmatched trailing del run as literal`() = runTest {
-        // when
+        // given
         val markdown = "foo~~"
-        // then
+        // when + then
         assertMarkdownFixpoint(markdown)
     }
 }

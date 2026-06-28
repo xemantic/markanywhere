@@ -157,11 +157,20 @@ Residual divergences within label content:
   `Link`/`Code` frame), NOT the full `activeDelimiterMask`: a literal `*` in
   label content must round-trip a span opened *inside* the label
   (`<a><strong>a*b</strong></a>` → `[**a\*b**](u)`, else it grows
-  `[**a*b**]`→`[**a*b****]`), but must NOT be escaped against an em opened
-  *outside* the `[` (the parser scopes label emphasis by
+  `[**a*b**]`→`[**a*b****]`), but must NOT be escaped against an **em/strong**
+  opened *outside* the `[` (the parser scopes em/strong on `inlineOpenStack` by
   `linkLabelOuterStackDepth`, so an inner `*` can't pair with it). A `Code`
-  frame at the top yields mask 0, keeping inline-code content verbatim. See
-  `EmphasisDelimiterRoundTripTest` "nested in a link label".
+  frame at the top yields mask 0, keeping inline-code content verbatim.
+  **Exception — outer `del`/`mark`/`sup`**: those are parser *boolean flags*,
+  NOT watermark-scoped, so a `~`/`=`/`^` in label text *does* close an OUTER
+  del/mark/sup on re-parse — a crossed/unbalanced stream that **crashes** the
+  renderer (`~~[foo~bar](u)~~`). So inside a label the mask is
+  `enclosingInlineDelimiterMask() or (activeDelimiterMask and ~/=/^ bits)` — add
+  the outer del/mark/sup bits but exclude the `*` bit (em/strong, watermark-
+  scoped). The residual outer-em crossing (`*x [a*b](u) y*`) is a separate
+  parser limitation — **issue #58** (renderer hard-crash). See
+  `EmphasisDelimiterRoundTripTest` "nested in a link label" / "wrapping a link
+  whose label text contains".
 - **Backtick exception**: an unresolved backtick run in `inlineBuffer` falls
   through to the standard dispatcher so the code span opens with `]` as
   content (`[foo``]``](/uri)` etc. work per spec).
