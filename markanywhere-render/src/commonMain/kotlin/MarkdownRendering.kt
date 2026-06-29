@@ -459,6 +459,13 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
 
     fun emitText(rawText: String) {
         if (rawText.isEmpty()) return
+        // CONTRACT: escapeActiveInlineDelimiters runs for ALL text, including
+        // label/inline-code content (it's invoked *before* the inLabel() guard
+        // below — inline code is captured into a label buffer). It must therefore
+        // self-guard every context where escaping is wrong: `inPreCode`,
+        // `inInlineCode()`, and `inLabel()` scoping are all handled inside it. Any
+        // new label-style capture must keep that guarantee or move this call after
+        // the appropriate guard.
         val text = escapeActiveInlineDelimiters(rawText)
         if (inLabel()) { appendLabel(text); return }
         consumeHeadingSpace()

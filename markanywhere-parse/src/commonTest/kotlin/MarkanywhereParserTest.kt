@@ -836,6 +836,27 @@ class MarkanywhereParserTest {
     }
 
     @Test
+    fun `should absorb a longer dangling tilde run at a del label close`() = runTest {
+        // given — a 3+ char homogeneous run (`~~~`) at the label close must be
+        // absorbed *whole*, not just its first 1-2 chars: a leftover `~` flushes as
+        // literal after the unmark and grows the run by 2 every round-trip
+        // (`[~~del~~~]` → `[~~del~~~~~]` → …).
+        val textFlow = "[~~del~~~](u)".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "a"("href" to "u") {
+                    "del" { +"del" }
+                }
+            }
+        }
+    }
+
+    @Test
     fun `should parse highlight or mark text`() = runTest {
         // given
         

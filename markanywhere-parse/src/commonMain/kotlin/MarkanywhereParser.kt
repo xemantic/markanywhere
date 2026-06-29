@@ -6404,20 +6404,20 @@ private class ParserState(
             unmark("del"); strikethrough = false
             // `del`/`mark` resolve their closing run on the *next* char (to size
             // the run), but at a label's end the `]` is not that char — so the
-            // trailing `~`/`~~`/`=`/`==` sits unresolved in inlineBuffer. Absorb it
-            // here, else it flushes as literal text inside the committed link and
-            // grows the run *unboundedly* on every round-trip (`[==foo=]` →
-            // `[==foo===]` → `[==foo=====]` → …; same for `~`). A single dangling
-            // delimiter here is malformed trailing noise, so dropping it is the
-            // round-trip-stable choice. `sup` resolves eagerly (never buffered), so
-            // it needs no such guard.
+            // trailing `~`/`~~`/`=`/`==` (or a longer homogeneous run) sits
+            // unresolved in inlineBuffer. Absorb the *whole* run here, else it
+            // flushes as literal text inside the committed link and grows
+            // *unboundedly* on every round-trip (`[==foo=]` → `[==foo===]` → …;
+            // `[~~del~~~]` → `[~~del~~~~~]` → …). Any trailing dangling delimiter
+            // run here is malformed noise, so dropping it is the round-trip-stable
+            // choice. `sup` resolves eagerly (never buffered), so it needs no guard.
             val run = inlineBuffer.toString()
-            if (run == "~" || run == "~~") inlineBuffer.clear()
+            if (run.isNotEmpty() && run.all { it == '~' }) inlineBuffer.clear()
         }
         if (highlight && !linkLabelOuterHighlight) {
             unmark("mark"); highlight = false
             val run = inlineBuffer.toString()
-            if (run == "=" || run == "==") inlineBuffer.clear()
+            if (run.isNotEmpty() && run.all { it == '=' }) inlineBuffer.clear()
         }
         if (superscript && !linkLabelOuterSuperscript) { unmark("sup"); superscript = false }
         // A pending delimiter run in inlineBuffer that sits in closing position at
