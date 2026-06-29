@@ -315,6 +315,12 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         else -> 0
     }
 
+    // `~`/`=`/`^` bits — the parser *boolean-flag* delimiters (del/mark/sup), which
+    // are NOT watermark-scoped, so they must be escaped against an outer span inside
+    // a label. Excludes the `*` bit (em/strong are watermark-scoped). Constant —
+    // computed once per stream, not per text event.
+    val outerBooleanDelimiters = delimiterBit('~') or delimiterBit('=') or delimiterBit('^')
+
     // Mask of the emphasis delimiters whose span *directly* encloses the current
     // text — the run of `Inline` frames at the top of blockStack, up to the first
     // frame that ends the span. Used inside a link/image label, where the full
@@ -341,6 +347,21 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         return mask
     }
 
+    // True when the current text is inline-code content — the first non-transparent
+    // frame from the top of blockStack is a `Code` frame. A `TaggedInline` (e.g. a
+    // raw `<b>` inside the code) is transparent, so it scans past it: code content
+    // is verbatim whether or not it wraps a raw tag.
+    fun inInlineCode(): Boolean {
+        for (i in blockStack.indices.reversed()) {
+            when (blockStack[i]) {
+                is TaggedInline -> {} // transparent — keep scanning
+                is Code -> return true
+                else -> return false
+            }
+        }
+        return false
+    }
+
     // Backslash-escape every character that is the run delimiter of an enclosing
     // inline emphasis span (`*` for em/strong, `~` for del, `=` for mark, `^` for
     // sup). A literal delimiter inside the span's content would otherwise re-pair
@@ -351,12 +372,14 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
     fun escapeActiveInlineDelimiters(text: String): String {
         // Inline-code content is captured into a label buffer (so `inLabel()` is
         // true) and reaches here via `emitText` *before* its `inLabel()` guard.
-        // Suppress escaping when an inline `Code` frame is on top — code content is
+        // Suppress escaping when inside an inline `Code` frame — code content is
         // verbatim, so a `~`/`=`/`^`/backtick there must pass through unchanged.
+        // `inInlineCode()` scans past a `TaggedInline` (a raw tag like `<b>` inside
+        // the code), since `blockStack.last()` alone would miss `<code><b>…</b>`.
         // (`enclosingInlineDelimiterMask` already returns 0 for a Code frame, but
         // the outer-del/mark/sup bits OR'd in below would otherwise still escape.)
         // Block `pre`/`code` is covered by `inPreCode`.
-        if (inPreCode || blockStack.lastOrNull() is Code || text.isEmpty()) return text
+        if (inPreCode || inInlineCode() || text.isEmpty()) return text
         // Outside a label all open emphasis is contiguous at the top of the stack,
         // so the cached full mask applies. Inside a label the mask is two parts:
         //  (a) label-internal emphasis (`enclosingInlineDelimiterMask`) — escape a
@@ -371,7 +394,6 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         //      watermark-scoped, so an inner `*` can't close an outer em — exclude
         //      its bit (the residual outer-em crossing is a separate parser
         //      limitation; escaping `*` here would contradict the watermark).
-        val outerBooleanDelimiters = delimiterBit('~') or delimiterBit('=') or delimiterBit('^')
         val mask = if (inLabel())
             enclosingInlineDelimiterMask() or (activeDelimiterMask and outerBooleanDelimiters)
         else activeDelimiterMask

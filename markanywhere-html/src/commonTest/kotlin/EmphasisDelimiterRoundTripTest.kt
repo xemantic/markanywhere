@@ -443,4 +443,19 @@ class EmphasisDelimiterRoundTripTest {
         markdown sameAs "^`a^b`^"
         assertMarkdownFixpoint(markdown)
     }
+
+    @Test
+    fun `should keep inline code verbatim inside a del span even with a tagged child`() = runTest {
+        // A raw inline tag (`<b>`) inside the `<code>` pushes a TaggedInline frame
+        // *above* the Code frame, so a top-of-stack `is Code` check would miss it
+        // and the `~` would be escaped against the outer del, corrupting the code.
+        // `inInlineCode()` scans past the transparent TaggedInline to the Code below.
+        // when
+        val markdown = semanticEvents {
+            "p" { "del" { "code" { tag("b") { +"a~b" } } } }
+        }.renderMarkdown()
+        // then
+        markdown sameAs "~~`<b>a~b</b>`~~"
+        assertMarkdownFixpoint(markdown)
+    }
 }
