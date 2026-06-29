@@ -145,7 +145,11 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         var i = 0
         while (i < blockStack.size) {
             when (val frame = blockStack[i]) {
-                is BlockFrame.Blockquote -> sb.append("> ")
+                is Blockquote -> sb.append("> ")
+                // `BlockFrame.` prefix kept here only: bare `is List` resolves to
+                // `kotlin.collections.List` (imported by default), which CSR does not
+                // override — unlike `Blockquote`/`Inline`/`Code`, which have no
+                // colliding top-level name.
                 is BlockFrame.List -> {
                     val next = blockStack.getOrNull(i + 1)
                     val pending = (next as? BlockFrame.ListItem)?.pendingMarker
@@ -321,62 +325,57 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
     // computed once per stream, not per text event.
     val outerBooleanDelimiters = delimiterBit('~') or delimiterBit('=') or delimiterBit('^')
 
-    // Mask of the emphasis delimiters whose span *directly* encloses the current
-    // text — the run of `Inline` frames at the top of blockStack, up to the first
-    // frame that ends the span. Used inside a link/image label, where the full
-    // `activeDelimiterMask` would also include emphasis opened *outside* the label
-    // (before the `[`): a literal `*` in label content must not be escaped against
-    // an *outer* em (the parser scopes label emphasis by `linkLabelOuterStackDepth`,
-    // so an inner `*` can't pair with it), only against an em opened *inside* the
-    // label. Stopping at the enclosing `Link` frame yields exactly the latter; a
-    // `Code` frame yields 0, so inline-code content stays verbatim. A raw inline
-    // tag (`TaggedInline`, e.g. `<b>`) is **transparent** — it doesn't end the
-    // enclosing emphasis, so keep scanning past it to the `Inline` below (a literal
-    // `*` inside `<b>` inside `**…**` still re-pairs with the strong on re-parse).
-    fun enclosingInlineDelimiterMask(): Int {
-        var mask = 0
+    // All four inline-emphasis delimiter bits (`*`/`~`/`=`/`^`). When ANY emphasis
+    // span is open, a literal delimiter of ANY type in the content (not just the
+    // open span's own char) can open a *new* span on re-parse that crosses the
+    // enclosing closer: the parser tracks em/strong on a stack but del/mark/sup as
+    // boolean flags, so the two never co-close — `==a~b==` re-parses to a crossed
+    // mark/del stream, `~~a*b~~` to a crossed del/em stream. So a single open span
+    // means escape all four, not just its own delimiter.
+    val allInlineDelimiters = delimiterBit('*') or outerBooleanDelimiters
+
+    // The first frame from the top of blockStack that is not a transparent inline
+    // raw tag (`TaggedInline`, e.g. a `<b>`) — the real frame directly enclosing the
+    // current text. Both the inline-code check and the label-emphasis check key off
+    // this single frame, so the transparency rule lives in one place: a raw `<b>`
+    // inside the construct must not hide the real enclosing frame. A `Code` frame
+    // means inline-code content (kept verbatim); an `Inline` frame means an emphasis
+    // span opened *inside* the current label directly encloses the text (a literal
+    // `*` inside `<b>` inside `**…**` still re-pairs with the strong on re-parse, so
+    // scanning past the `<b>` to the `Inline` below is required).
+    fun firstOpaqueFrame(): BlockFrame? {
         for (i in blockStack.indices.reversed()) {
-            when (val frame = blockStack[i]) {
-                // `delimiter[0]` (not `firstOrNull()`) avoids boxing the Char on JVM;
-                // the delimiter is always one of the five non-empty literals.
-                is Inline -> if (frame.delimiter.isNotEmpty()) mask = mask or delimiterBit(frame.delimiter[0])
-                is TaggedInline -> {} // transparent — keep scanning to the Inline below
-                else -> break
-            }
+            val frame = blockStack[i]
+            if (frame !is TaggedInline) return frame
         }
-        return mask
+        return null
     }
 
-    // True when the current text is inline-code content — the first non-transparent
-    // frame from the top of blockStack is a `Code` frame. A `TaggedInline` (e.g. a
-    // raw `<b>` inside the code) is transparent, so it scans past it: code content
-    // is verbatim whether or not it wraps a raw tag.
-    fun inInlineCode(): Boolean {
-        for (i in blockStack.indices.reversed()) {
-            when (blockStack[i]) {
-                is TaggedInline -> {} // transparent — keep scanning
-                is Code -> return true
-                else -> return false
-            }
-        }
-        return false
-    }
+    // True when the current text is inline-code content — the enclosing opaque
+    // frame is a `Code` frame. Code content is verbatim, so escaping is suppressed.
+    fun inInlineCode(): Boolean = firstOpaqueFrame() is Code
 
-    // Backslash-escape every character that is the run delimiter of an enclosing
-    // inline emphasis span (`*` for em/strong, `~` for del, `=` for mark, `^` for
-    // sup). A literal delimiter inside the span's content would otherwise re-pair
-    // against the span's own closing run on the next parse — making the run grow
-    // by one every round-trip (the unbounded `…)*` → `…)**` → `…)***` instability
-    // seen in the Brave SERP dump). Suppressed inside verbatim `pre`/`code`, where
-    // a backslash is literal text, not an escape.
+    // Backslash-escape every inline-emphasis delimiter char (`*`/`~`/`=`/`^`) when
+    // any emphasis span is open — not only the open span's own delimiter. A literal
+    // delimiter inside the content would otherwise re-pair against the span's own
+    // closing run (`…)*` → `…)**` → `…)***`, the unbounded Brave SERP instability),
+    // OR — cross-type — open a brand-new span that crosses the enclosing closer on
+    // re-parse (`==a~b==`: the lone `~` opens a del the `==` mark-closer cannot
+    // co-close, since del/mark/sup are boolean flags while em/strong use a stack).
+    // Suppressed inside verbatim `pre`/`code`, where a backslash is literal text.
     fun escapeActiveInlineDelimiters(text: String): String {
         if (inPreCode || text.isEmpty()) return text
-        // Outside a label all open emphasis is contiguous at the top of the stack,
-        // so the cached full mask applies. Inside a label the mask is two parts:
-        //  (a) label-internal emphasis (`enclosingInlineDelimiterMask`) — escape a
-        //      literal delimiter that is content of a label-local span (`[**a*b**]`
-        //      → `[**a\*b**]`), which the parser's label-scoped close does not cover
-        //      (it only resolves a delimiter at the very label end); plus
+        // Which delimiter chars to escape in this text. Outside a label, all open
+        // emphasis is contiguous at the top of the stack, so any open span (mask
+        // non-zero) means escape *all four* delimiter types — cross-type, see
+        // allInlineDelimiters. Inside a label the mask is two parts, because label
+        // emphasis is scoped:
+        //  (a) label-internal span: if an emphasis span opened *inside* this label
+        //      directly encloses the text (the first opaque frame is `Inline`),
+        //      escape all four — a literal delimiter that is content of a label-local
+        //      span (`[**a~b**]`) re-pairs/crosses on re-parse, and the parser's
+        //      label-scoped close only resolves a delimiter at the very label end;
+        //      plus
         //  (b) OUTER `del`/`mark`/`sup` (the `~`/`=`/`^` bits of the full mask).
         //      Those are parser *boolean flags*, NOT scoped by
         //      `linkLabelOuterStackDepth`, so a matching delimiter in label text
@@ -384,10 +383,14 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         //      crashes the renderer (`~~[foo~bar](u)~~`). em/strong (`*`) ARE
         //      watermark-scoped, so an inner `*` can't close an outer em — exclude
         //      its bit (the residual outer-em crossing is a separate parser
-        //      limitation; escaping `*` here would contradict the watermark).
+        //      limitation, issue #58; escaping `*` here would contradict the
+        //      watermark — see "should not escape label content against emphasis
+        //      opened outside the label").
         val mask = if (inLabel())
-            enclosingInlineDelimiterMask() or (activeDelimiterMask and outerBooleanDelimiters)
-        else activeDelimiterMask
+            (if (firstOpaqueFrame() is Inline) allInlineDelimiters else 0) or
+                (activeDelimiterMask and outerBooleanDelimiters)
+        else if (activeDelimiterMask != 0) allInlineDelimiters
+        else 0
         // Nothing to escape (no emphasis open — the common case), or inside inline
         // code (verbatim — its content is captured into a label buffer and reaches
         // here via `emitText` *before* its `inLabel()` guard; `inInlineCode()` scans

@@ -406,9 +406,9 @@ class EmphasisDelimiterRoundTripTest {
 
     @Test
     fun `should escape emphasis text but keep an inline code span verbatim`() = runTest {
-        // An inline `<code>` inside `<em>` pushes a Code frame, so
-        // enclosingInlineDelimiterMask stops at it (mask 0) and the code content
-        // (`x*y`) is NOT escaped, while the em's own text (`a*`, `b*`) IS.
+        // An inline `<code>` inside `<em>` pushes a Code frame, so the inline-code
+        // content (`x*y`) hits the `inInlineCode()` early-return (firstOpaqueFrame
+        // is Code) and is NOT escaped, while the em's own text (`a*`, `b*`) IS.
         // when
         val markdown = semanticEvents {
             "p" { "em" { +"a*"; "code" { +"x*y" }; +"b*" } }
@@ -479,12 +479,14 @@ class EmphasisDelimiterRoundTripTest {
 
     @Test
     fun `should escape an em label content against an outer del wrapping the link`() = runTest {
-        // REGRESSION GUARD for refreshActiveDelimiters scanning the WHOLE stack: an
-        // `em` opens inside a link label that is itself inside a `del`, so when the
-        // em opens the stack is [.., Inline(del), Link, Inline(em)]. The em text's
-        // `~` must be escaped against the OUTER del (below the Link). A reversed
-        // scan that breaks at the first non-Inline frame (like
-        // enclosingInlineDelimiterMask) would stop at the Link and miss the del.
+        // An `em` opens inside a link label that is itself inside a `del`, so when
+        // the em opens the stack is [.., Inline(del), Link, Inline(em)]. The em's
+        // `~` is a cross-type delimiter inside a label-local span, so the
+        // label-internal mask (firstOpaqueFrame is `Inline` → all four delimiter
+        // bits) escapes it. The OUTER del below the Link is also covered, via the
+        // `activeDelimiterMask and outerBooleanDelimiters` term —
+        // refreshActiveDelimiters scans the WHOLE stack, so it still sees the del
+        // beneath the Link + em (locked separately by the del-wrapping-a-link test).
         // when
         val markdown = semanticEvents {
             "p" { "del" { "a"("href" to "u") { "em" { +"a~b" } } } }
@@ -501,6 +503,160 @@ class EmphasisDelimiterRoundTripTest {
         val markdown = semanticEvents { "p" { "mark" { "code" { +"a=b" } } } }.renderMarkdown()
         // then
         markdown sameAs "==`a=b`=="
+        assertMarkdownFixpoint(markdown)
+    }
+
+    // --- Cross-type delimiter escaping ----------------------------------------
+    //
+    // A literal delimiter of a DIFFERENT type than the open span (`~` inside
+    // `<mark>`, `*` inside `<del>`, …) must also be escaped: the parser tracks
+    // em/strong on a stack but del/mark/sup as boolean flags, so the two never
+    // co-close, and an unescaped cross-type delimiter opens a new span that
+    // crosses the enclosing closer on re-parse (the run grows every round-trip).
+    // Escaping the open span's OWN delimiter (covered above) is not enough —
+    // every delimiter type must be escaped whenever any span is open.
+
+    @Test
+    fun `should round-trip mark whose content contains a literal tilde`() = runTest {
+        // The reviewer's headline gap: `~` (a valid lone del opener) inside `<mark>`.
+        // when
+        val markdown = semanticEvents { "p" { "mark" { +"a~b" } } }.renderMarkdown()
+        // then
+        markdown sameAs "==a\\~b=="
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip mark whose content contains a literal caret`() = runTest {
+        // when
+        val markdown = semanticEvents { "p" { "mark" { +"a^b" } } }.renderMarkdown()
+        // then
+        markdown sameAs "==a\\^b=="
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip mark whose content contains a literal asterisk`() = runTest {
+        // `*` inside a boolean-flag span — the case a mask of
+        // `activeDelimiterMask or outerBooleanDelimiters` (the `~`/`=`/`^` bits only)
+        // would MISS, since it never sets the `*` bit when only mark/del/sup is open.
+        // when
+        val markdown = semanticEvents { "p" { "mark" { +"a*b" } } }.renderMarkdown()
+        // then
+        markdown sameAs "==a\\*b=="
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip del whose content contains a literal caret`() = runTest {
+        // when
+        val markdown = semanticEvents { "p" { "del" { +"a^b" } } }.renderMarkdown()
+        // then
+        markdown sameAs "~~a\\^b~~"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip del whose content contains a literal equals pair`() = runTest {
+        // when
+        val markdown = semanticEvents { "p" { "del" { +"a==b" } } }.renderMarkdown()
+        // then
+        markdown sameAs "~~a\\=\\=b~~"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip del whose content contains a literal asterisk`() = runTest {
+        // `*` inside del — another case the `or outerBooleanDelimiters` mask misses.
+        // when
+        val markdown = semanticEvents { "p" { "del" { +"a*b" } } }.renderMarkdown()
+        // then
+        markdown sameAs "~~a\\*b~~"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip emphasis whose content contains a literal tilde`() = runTest {
+        // when
+        val markdown = semanticEvents { "p" { "em" { +"a~b" } } }.renderMarkdown()
+        // then
+        markdown sameAs "*a\\~b*"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip emphasis whose content contains a literal equals pair`() = runTest {
+        // when
+        val markdown = semanticEvents { "p" { "em" { +"a==b" } } }.renderMarkdown()
+        // then
+        markdown sameAs "*a\\=\\=b*"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip emphasis whose content contains a literal caret`() = runTest {
+        // when
+        val markdown = semanticEvents { "p" { "em" { +"a^b" } } }.renderMarkdown()
+        // then
+        markdown sameAs "*a\\^b*"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip superscript whose content contains a literal asterisk`() = runTest {
+        // `*` inside sup — the third boolean-flag span the narrow mask would miss.
+        // when
+        val markdown = semanticEvents { "p" { "sup" { +"a*b" } } }.renderMarkdown()
+        // then
+        markdown sameAs "^a\\*b^"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip superscript whose content contains a literal tilde`() = runTest {
+        // when
+        val markdown = semanticEvents { "p" { "sup" { +"a~b" } } }.renderMarkdown()
+        // then
+        markdown sameAs "^a\\~b^"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    // --- Cross-type escaping inside a link label (label-internal span) ---------
+    //
+    // The same cross-type rule applies to a span opened INSIDE a link label: the
+    // escaping mask for a label-local span is all four delimiter types, not just
+    // the span's own char (the firstOpaqueFrame `is Inline` branch).
+
+    @Test
+    fun `should round-trip emphasis in a link label whose content contains a literal tilde`() = runTest {
+        // when
+        val markdown = semanticEvents {
+            "p" { "a"("href" to "u") { "em" { +"a~b" } } }
+        }.renderMarkdown()
+        // then
+        markdown sameAs "[*a\\~b*](u)"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip mark in a link label whose content contains a literal asterisk`() = runTest {
+        // when
+        val markdown = semanticEvents {
+            "p" { "a"("href" to "u") { "mark" { +"a*b" } } }
+        }.renderMarkdown()
+        // then
+        markdown sameAs "[==a\\*b==](u)"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip del in a link label whose content contains a literal caret`() = runTest {
+        // when
+        val markdown = semanticEvents {
+            "p" { "a"("href" to "u") { "del" { +"a^b" } } }
+        }.renderMarkdown()
+        // then
+        markdown sameAs "[~~a\\^b~~](u)"
         assertMarkdownFixpoint(markdown)
     }
 }
