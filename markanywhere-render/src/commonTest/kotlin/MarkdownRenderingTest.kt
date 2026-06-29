@@ -2576,4 +2576,22 @@ class MarkdownRenderingTest {
             ```
         """.trimIndent()
     }
+
+    @Test
+    fun `should not escape link label content against emphasis opened outside the label`() = runTest {
+        // An `<em>` wrapping a link: a literal `*` in the *link label* must NOT be
+        // escaped against the outer em — only against emphasis opened *inside* the
+        // label (here there is none). escapeActiveInlineDelimiters scopes label
+        // escaping to the enclosing Inline run up to the Link frame, so the label
+        // `*` stays unescaped. Render-only (no parse/fixpoint): re-parsing `[a*b]`
+        // inside `*…*` trips a SEPARATE pre-existing parser bug (the lone label `*`
+        // crosses the outer em → unbalanced stream), unrelated to this renderer-side
+        // escaping scope. See issue #58.
+        // when
+        val markdown = semanticEvents {
+            "p" { "em" { +"x "; "a"("href" to "u") { +"a*b" }; +" y" } }
+        }.renderMarkdown()
+        // then
+        markdown sameAs "*x [a*b](u) y*"
+    }
 }

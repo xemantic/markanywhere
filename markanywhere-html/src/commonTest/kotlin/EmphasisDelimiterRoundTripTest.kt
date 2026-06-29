@@ -167,22 +167,9 @@ class EmphasisDelimiterRoundTripTest {
         assertMarkdownFixpoint(markdown)
     }
 
-    @Test
-    fun `should not escape label content against emphasis opened outside the label`() = runTest {
-        // An `<em>` wrapping a link: a literal `*` in the *link label* must NOT be
-        // escaped against the outer em — only against emphasis opened *inside* the
-        // label (here there is none). The fix scopes escaping to the enclosing
-        // Inline run up to the Link frame, so the label `*` stays unescaped.
-        // when
-        val markdown = semanticEvents {
-            "p" { "em" { +"x "; "a"("href" to "u") { +"a*b" }; +" y" } }
-        }.renderMarkdown()
-        // then — render only (no fixpoint): re-parsing `[a*b]` inside `*…*` trips a
-        // SEPARATE pre-existing parser bug (the lone label `*` crosses the outer em
-        // → unbalanced stream), unrelated to this renderer-side escaping fix. See
-        // issue #58.
-        markdown sameAs "*x [a*b](u) y*"
-    }
+    // NOTE: the pure-renderer guard "should not escape label content against
+    // emphasis opened outside the label" (render-only, no fixpoint) lives in
+    // markanywhere-render's MarkdownRenderingTest — it exercises only the renderer.
 
     @Test
     fun `should round-trip del wrapping a link whose label text contains a tilde`() = runTest {
@@ -657,6 +644,63 @@ class EmphasisDelimiterRoundTripTest {
         }.renderMarkdown()
         // then
         markdown sameAs "[~~a\\^b~~](u)"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    // --- Backtick in link-label text ------------------------------------------
+    //
+    // A bare backtick in link-label text speculatively opens an inline code span
+    // on re-parse that consumes the `]`/`(url)`, so the link never re-forms. It
+    // must be escaped whenever the text is inside a label (independent of the
+    // emphasis mask) — del/mark/sup wrapping a link already escaped it because
+    // their `~`/`=`/`^` bit is in the mask, but em/strong wrapping (the `*` bit is
+    // watermark-excluded → mask 0) and a plain link (no enclosing span → mask 0)
+    // both left it bare and diverged.
+
+    @Test
+    fun `should round-trip a backtick in a plain link label`() = runTest {
+        // No enclosing span at all — mask is 0, but the backtick is still a hazard.
+        // when
+        val markdown = semanticEvents {
+            "p" { "a"("href" to "u") { +"a`b" } }
+        }.renderMarkdown()
+        // then
+        markdown sameAs "[a\\`b](u)"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip a backtick run in a plain link label`() = runTest {
+        // when
+        val markdown = semanticEvents {
+            "p" { "a"("href" to "u") { +"a``b" } }
+        }.renderMarkdown()
+        // then
+        markdown sameAs "[a\\`\\`b](u)"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip a backtick in a link label wrapped by emphasis`() = runTest {
+        // The review's headline case: an outer `<em>` wraps the link, so the label
+        // mask is 0 (the `*` bit is watermark-excluded) and the backtick was bare.
+        // when
+        val markdown = semanticEvents {
+            "p" { "em" { "a"("href" to "u") { +"a`b" } } }
+        }.renderMarkdown()
+        // then
+        markdown sameAs "*[a\\`b](u)*"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip a backtick in a link label wrapped by strong`() = runTest {
+        // when
+        val markdown = semanticEvents {
+            "p" { "strong" { "a"("href" to "u") { +"a`b" } } }
+        }.renderMarkdown()
+        // then
+        markdown sameAs "**[a\\`b](u)**"
         assertMarkdownFixpoint(markdown)
     }
 }

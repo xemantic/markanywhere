@@ -6468,7 +6468,10 @@ private class ParserState(
             // §6.2): a `_` run must not close a `*`-opened em (or vice versa). Leave
             // the mismatched run for the literal-flush fallback (`[*foo_](u)` keeps
             // the `_` as content → `<em>foo_</em>`, not a silently-dropped closer).
-            if (frame.delimChar != null && frame.delimChar != delim) break
+            // `delimChar` is non-null here: tagged frames (delimChar == null) already
+            // broke above, and every non-tagged frame is pushed via openInlineEmphasis
+            // with a non-null delimChar.
+            if (frame.delimChar != delim) break
             // Only `em`/`strong` live on inlineOpenStack — `del`/`mark`/`sup` are
             // tracked as boolean flags and never pushed here, so they cannot match.
             // `delim` is already constrained to `*`/`_` by the guard above.
@@ -6901,6 +6904,14 @@ private class ParserState(
         linkLabelTentativeClose = false
         linkLabelOuterStackDepth = 0
         linkLabelBracketDepth = 0
+        // Outer del/mark/sup snapshots taken in openLinkLabelCapture. Cleared here
+        // for an explicit invariant: today openLinkLabelCapture always overwrites
+        // them before flushInlineLabelClose reads them, but resetting keeps a future
+        // abort path that calls flushInlineLabelClose directly from reading a stale
+        // snapshot left by a prior committed link.
+        linkLabelOuterStrikethrough = false
+        linkLabelOuterHighlight = false
+        linkLabelOuterSuperscript = false
     }
 
     /**

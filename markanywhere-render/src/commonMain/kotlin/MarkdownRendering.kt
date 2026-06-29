@@ -391,12 +391,18 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                 (activeDelimiterMask and outerBooleanDelimiters)
         else if (activeDelimiterMask != 0) allInlineDelimiters
         else 0
-        // Nothing to escape (no emphasis open — the common case), or inside inline
-        // code (verbatim — its content is captured into a label buffer and reaches
-        // here via `emitText` *before* its `inLabel()` guard; `inInlineCode()` scans
-        // past a `TaggedInline` like `<b>`, which `blockStack.last()` would miss).
-        // The `mask == 0` check short-circuits plain text before that stack scan.
-        if (mask == 0 || inInlineCode()) return text
+        // Fast path: nothing to escape when no emphasis span is open AND we are not
+        // inside a label. A backtick is a hazard inside ANY label even when mask is
+        // 0 (see the loop below), so the label case can't short-circuit on mask
+        // alone. inLabel() is a cheap deque check, keeping plain paragraph text off
+        // the `inInlineCode()` stack scan.
+        if (mask == 0 && !inLabel()) return text
+        // Inline-code content is verbatim — it is captured into a label buffer and
+        // reaches here via `emitText` *before* its `inLabel()` guard, so guard it
+        // explicitly. `inInlineCode()` scans past a `TaggedInline` like `<b>`, which
+        // `blockStack.last()` would miss. Off the hot path (only reached when mask
+        // != 0 or inLabel).
+        if (inInlineCode()) return text
         // A single `~` is itself a valid GFM strikethrough delimiter (`~a~`
         // → `<del>a</del>`), so it must always be escaped. A lone `=` is NOT a
         // delimiter (only `==` toggles mark), so escaping it is *conservative* —
@@ -406,13 +412,16 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         // lone `=` (a harmless `\=` in `<mark>x=5</mark>`) keeps the round-trip
         // stable, which the append-only stream cannot trade away.
         //
-        // A literal backtick is also escaped here (we only reach this loop with an
-        // emphasis span open): inside `<em>`/`<strong>`/… a bare `` ` `` would
-        // eagerly open an inline code span on re-parse, and `flushInline` closes
-        // `code` before the emphasis (LIFO), restructuring `<em>a`b</em>` into
-        // `<em>a<code>b</code></em>` and growing every round-trip. Real code-span
-        // *content* returns early above (the `inInlineCode()` guard); only literal
-        // backtick text inside emphasis reaches here.
+        // A literal backtick is also escaped here, regardless of `mask` — we reach
+        // this loop only with an emphasis span open OR inside a label, and a bare
+        // backtick is a hazard in both: inside `<em>`/`<strong>`/… it eagerly opens
+        // an inline code span on re-parse that `flushInline` LIFO-closes *before*
+        // the emphasis (`<em>a`b</em>` → `<em>a<code>b</code></em>`, growing every
+        // round-trip); inside a link/image label it opens a code span that consumes
+        // the `]`/`(url)` so the link never forms (`*[a`b](u)*` — the outer em's `*`
+        // is excluded from the label mask, so mask is 0 yet the backtick must still
+        // be escaped). Real code-span *content* returns early above (the
+        // `inInlineCode()` guard); only literal backtick text reaches here.
         //
         // Pre-scan so plain words inside an emphasis span return without allocating.
         if (text.none { (delimiterBit(it) and mask) != 0 || it == '`' }) return text
