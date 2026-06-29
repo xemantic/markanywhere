@@ -857,6 +857,25 @@ class MarkanywhereParserTest {
     }
 
     @Test
+    fun `should absorb a longer dangling equals run at a mark label close`() = runTest {
+        // given — the mark counterpart of the del 3+ case: `===` at the label close
+        // must be absorbed *whole*, else `[==mark===]` grows by 2 every round-trip.
+        val textFlow = "[==mark===](u)".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "a"("href" to "u") {
+                    "mark" { +"mark" }
+                }
+            }
+        }
+    }
+
+    @Test
     fun `should parse highlight or mark text`() = runTest {
         // given
         

@@ -458,4 +458,49 @@ class EmphasisDelimiterRoundTripTest {
         markdown sameAs "~~`<b>a~b</b>`~~"
         assertMarkdownFixpoint(markdown)
     }
+
+    @Test
+    fun `should keep escaping text after a nested strong closes inside an em`() = runTest {
+        // REGRESSION GUARD for refreshActiveDelimiters' full recompute: `em` and
+        // `strong` BOTH map to the `*` bit, so the text after the inner strong
+        // closes (`c*d`) must still be escaped against the still-open em. An
+        // incremental `mask and bit.inv()` on close would clear the `*` bit on the
+        // strong close and leave `c*d` unescaped — breaking this. (Leading `x`
+        // breaks the `***` collapse so this isolates the recompute, not the
+        // em-vs-strong nesting ambiguity.)
+        // when
+        val markdown = semanticEvents {
+            "p" { "em" { +"x"; "strong" { +"a*b" }; +"c*d" } }
+        }.renderMarkdown()
+        // then
+        markdown sameAs "*x**a\\*b**c\\*d*"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should escape an em label content against an outer del wrapping the link`() = runTest {
+        // REGRESSION GUARD for refreshActiveDelimiters scanning the WHOLE stack: an
+        // `em` opens inside a link label that is itself inside a `del`, so when the
+        // em opens the stack is [.., Inline(del), Link, Inline(em)]. The em text's
+        // `~` must be escaped against the OUTER del (below the Link). A reversed
+        // scan that breaks at the first non-Inline frame (like
+        // enclosingInlineDelimiterMask) would stop at the Link and miss the del.
+        // when
+        val markdown = semanticEvents {
+            "p" { "del" { "a"("href" to "u") { "em" { +"a~b" } } } }
+        }.renderMarkdown()
+        // then
+        markdown sameAs "~~[*a\\~b*](u)~~"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should keep inline code verbatim inside a mark span`() = runTest {
+        // The `=` counterpart of the del/sup inline-code cases.
+        // when
+        val markdown = semanticEvents { "p" { "mark" { "code" { +"a=b" } } } }.renderMarkdown()
+        // then
+        markdown sameAs "==`a=b`=="
+        assertMarkdownFixpoint(markdown)
+    }
 }
