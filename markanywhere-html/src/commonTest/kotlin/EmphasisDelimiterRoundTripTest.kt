@@ -417,4 +417,30 @@ class EmphasisDelimiterRoundTripTest {
         markdown sameAs "*a\\*`x*y`b\\**"
         assertMarkdownFixpoint(markdown)
     }
+
+    @Test
+    fun `should keep inline code verbatim inside a del span`() = runTest {
+        // Inline-code content is captured into a label buffer and reaches
+        // escapeActiveInlineDelimiters *before* its inLabel() guard, so a `~` in the
+        // code content must NOT be escaped against the surrounding del — code is
+        // verbatim (the `is Code` early-return). The em version above passes even
+        // without the fix because `*` is excluded from the outer-delimiter bits;
+        // del/mark/sup are not, which is why this case needs its own guard.
+        // when
+        val markdown = semanticEvents { "p" { "del" { "code" { +"a~b" } } } }.renderMarkdown()
+        // then
+        markdown sameAs "~~`a~b`~~"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should keep inline code verbatim inside a superscript span`() = runTest {
+        // The `^` counterpart — before the fix this was not even a fixpoint
+        // (`^`a\^b`^` re-parsed differently each pass).
+        // when
+        val markdown = semanticEvents { "p" { "sup" { "code" { +"a^b" } } } }.renderMarkdown()
+        // then
+        markdown sameAs "^`a^b`^"
+        assertMarkdownFixpoint(markdown)
+    }
 }

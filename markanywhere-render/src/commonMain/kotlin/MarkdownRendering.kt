@@ -349,7 +349,14 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
     // seen in the Brave SERP dump). Suppressed inside verbatim `pre`/`code`, where
     // a backslash is literal text, not an escape.
     fun escapeActiveInlineDelimiters(text: String): String {
-        if (inPreCode || text.isEmpty()) return text
+        // Inline-code content is captured into a label buffer (so `inLabel()` is
+        // true) and reaches here via `emitText` *before* its `inLabel()` guard.
+        // Suppress escaping when an inline `Code` frame is on top — code content is
+        // verbatim, so a `~`/`=`/`^`/backtick there must pass through unchanged.
+        // (`enclosingInlineDelimiterMask` already returns 0 for a Code frame, but
+        // the outer-del/mark/sup bits OR'd in below would otherwise still escape.)
+        // Block `pre`/`code` is covered by `inPreCode`.
+        if (inPreCode || blockStack.lastOrNull() is Code || text.isEmpty()) return text
         // Outside a label all open emphasis is contiguous at the top of the stack,
         // so the cached full mask applies. Inside a label the mask is two parts:
         //  (a) label-internal emphasis (`enclosingInlineDelimiterMask`) — escape a
@@ -383,9 +390,13 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         // emphasis span open): inside `<em>`/`<strong>`/… a bare `` ` `` would
         // eagerly open an inline code span on re-parse, and `flushInline` closes
         // `code` before the emphasis (LIFO), restructuring `<em>a`b</em>` into
-        // `<em>a<code>b</code></em>` and growing every round-trip. A real code span
-        // never reaches here — its content is captured into a label buffer and
-        // emitted via renderInlineCode, not through this text path.
+        // `<em>a<code>b</code></em>` and growing every round-trip. Real code-span
+        // *content* returns early above (the `is Code` guard); only literal backtick
+        // text inside emphasis reaches here.
+        //
+        // Avoid allocating a new String when nothing needs escaping (the common
+        // case — plain words inside an emphasis span).
+        if (text.none { (delimiterBit(it) and mask) != 0 || it == '`' }) return text
         return buildString(text.length) {
             for (c in text) {
                 if ((delimiterBit(c) and mask) != 0 || c == '`') +'\\'
