@@ -308,32 +308,6 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         pendingBlockSeparator = false
     }
 
-    // The distinct delimiter base char of every inline emphasis frame, as a bit:
-    // `*` (em/strong), `~` (del), `=` (mark), `^` (sup). Any other char → 0, so it
-    // is never escaped. (`_` is never emitted — the renderer always uses `*`.)
-    fun delimiterBit(c: Char): Int = when (c) {
-        '*' -> 1
-        '~' -> 2
-        '=' -> 4
-        '^' -> 8
-        else -> 0
-    }
-
-    // `~`/`=`/`^` bits — the parser *boolean-flag* delimiters (del/mark/sup), which
-    // are NOT watermark-scoped, so they must be escaped against an outer span inside
-    // a label. Excludes the `*` bit (em/strong are watermark-scoped). Constant —
-    // computed once per stream, not per text event.
-    val outerBooleanDelimiters = delimiterBit('~') or delimiterBit('=') or delimiterBit('^')
-
-    // All four inline-emphasis delimiter bits (`*`/`~`/`=`/`^`). When ANY emphasis
-    // span is open, a literal delimiter of ANY type in the content (not just the
-    // open span's own char) can open a *new* span on re-parse that crosses the
-    // enclosing closer: the parser tracks em/strong on a stack but del/mark/sup as
-    // boolean flags, so the two never co-close — `==a~b==` re-parses to a crossed
-    // mark/del stream, `~~a*b~~` to a crossed del/em stream. So a single open span
-    // means escape all four, not just its own delimiter.
-    val allInlineDelimiters = delimiterBit('*') or outerBooleanDelimiters
-
     // The first frame from the top of blockStack that is not a transparent inline
     // raw tag (`TaggedInline`, e.g. a `<b>`) — the real frame directly enclosing the
     // current text. Both the inline-code check and the label-emphasis check key off
@@ -1311,3 +1285,29 @@ private fun String.escapeHtmlText(): String = buildString {
         else -> +c
     }
 }
+
+// The distinct delimiter base char of every inline emphasis frame, as a bit:
+// `*` (em/strong), `~` (del), `=` (mark), `^` (sup). Any other char → 0, so it
+// is never escaped. (`_` is never emitted — the renderer always uses `*`.)
+private fun delimiterBit(c: Char): Int = when (c) {
+    '*' -> 1
+    '~' -> 2
+    '=' -> 4
+    '^' -> 8
+    else -> 0
+}
+
+// `~`/`=`/`^` bits — the parser *boolean-flag* delimiters (del/mark/sup), which
+// are NOT watermark-scoped, so they must be escaped against an outer span inside
+// a label. Excludes the `*` bit (em/strong are watermark-scoped). Constant —
+// computed once per stream, not per text event.
+private val outerBooleanDelimiters = delimiterBit('~') or delimiterBit('=') or delimiterBit('^')
+
+// All four inline-emphasis delimiter bits (`*`/`~`/`=`/`^`). When ANY emphasis
+// span is open, a literal delimiter of ANY type in the content (not just the
+// open span's own char) can open a *new* span on re-parse that crosses the
+// enclosing closer: the parser tracks em/strong on a stack but del/mark/sup as
+// boolean flags, so the two never co-close — `==a~b==` re-parses to a crossed
+// mark/del stream, `~~a*b~~` to a crossed del/em stream. So a single open span
+// means escape all four, not just its own delimiter.
+private val allInlineDelimiters = delimiterBit('*') or outerBooleanDelimiters
