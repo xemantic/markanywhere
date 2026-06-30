@@ -1931,7 +1931,7 @@ class Gfm_06_04_Test {
     }
 
     @Test
-    fun `example 442 - DIVERGENCE - paragraph foo bar`() = runTest {
+    fun `example 442 - paragraph foo bar`() = runTest {
         // given
         val textFlow = "**foo [*bar*](/url)**".chunkedRandomly().asFlow()
 
@@ -1939,17 +1939,16 @@ class Gfm_06_04_Test {
         val parsed = textFlow.parse()
 
         // then
-        // Phase 3a/3b DIVERGENCE: trailing `*` in label position is buffered
-        // as a delimiter when `]` arrives; flushInlineLabelClose flushes it
-        // as literal text (em opens but won't close around it without
-        // delimiter scoping awareness — see CLAUDE.md).
+        // The label's trailing `*` sits in closing position at the label's end,
+        // so `flushInlineLabelClose` (via `closeLabelLocalEmphasisRun`) closes the
+        // label-local em with it — matching the GFM output exactly.
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
                 "strong" {
                     +"foo "
                     "a"("href" to "/url") {
                         "em" {
-                            +"bar*"
+                            +"bar"
                         }
                     }
                 }

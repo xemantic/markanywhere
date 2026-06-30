@@ -651,6 +651,309 @@ class MarkanywhereParserTest {
     }
 
     @Test
+    fun `should parse a superscript wrapping an inline link`() = runTest {
+        // given — citation superscripts (`^[1](url)^`) appear in real content
+        // (e.g. the Bing SERP answer). The closing `^` must close the sup that
+        // wraps the link, producing a balanced, properly-nested stream — not an
+        // unmark leaking into the link label (which previously produced a crossed,
+        // unrenderable stream).
+        val textFlow = "^[1](u)^".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "sup" {
+                    "a"("href" to "u") { +"1" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should parse strikethrough wrapping an inline link`() = runTest {
+        // given
+        val textFlow = "~~[1](u)~~".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "del" {
+                    "a"("href" to "u") { +"1" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should parse highlight wrapping an inline link`() = runTest {
+        // given — `mark` wrapping a whole inline link. (The block-end closer case,
+        // `==…==` with nothing after, is covered separately by "should close a mark
+        // span whose closing run ends the block".)
+        val textFlow = "==[1](u)== ok".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "mark" {
+                    "a"("href" to "u") { +"1" }
+                }
+                +" ok"
+            }
+        }
+    }
+
+    // The three tests below exercise the ABORT path of the linkLabelOuter*
+    // snapshots taken in openLinkLabelCapture: a `del`/`mark`/`sup` span opened
+    // *outside* a `[` whose label never closes (no `]`). flushInlineLabelClose
+    // must leave that outer span open (it was open at capture start) — closing it
+    // would leak its `unmark` into the captured label buffer and replay it inside
+    // the aborted brackets, producing a crossed/unrenderable stream. The outer
+    // span instead closes once, balanced, at the block boundary, and the
+    // unresolved `[bar` replays as literal text. (Commit path covered above.)
+
+    @Test
+    fun `should keep an outer strikethrough open when a link label aborts`() = runTest {
+        // given
+        val textFlow = "~~foo [bar".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "del" { +"foo [bar" }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep an outer highlight open when a link label aborts`() = runTest {
+        // given
+        val textFlow = "==foo [bar".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "mark" { +"foo [bar" }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep an outer superscript open when a link label aborts`() = runTest {
+        // given
+        val textFlow = "^foo [bar".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "sup" { +"foo [bar" }
+            }
+        }
+    }
+
+    @Test
+    fun `should close a label-local mark whose closing run ends the label`() = runTest {
+        // given — `mark` opened *inside* a link label, closer right before `]`.
+        // The `==` resolves on the next char, which `]` is not, so the closing run
+        // sits in inlineBuffer; flushInlineLabelClose must consume it instead of
+        // leaking it as literal content after the span (`<mark>mark</mark>==`),
+        // which grew the run on every round-trip.
+        val textFlow = "[==mark==](u)".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "a"("href" to "u") {
+                    "mark" { +"mark" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should close a label-local del whose closing run ends the label`() = runTest {
+        // given — the `del` parallel of the `mark` test above. The clean full-run
+        // case `[~~del~~](u)` was only covered end-to-end (EmphasisDelimiterRoundTripTest,
+        // markanywhere-html); this pins the del branch of flushInlineLabelClose at the
+        // narrowest altitude so a regression there fails the parser unit suite too.
+        val textFlow = "[~~del~~](u)".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "a"("href" to "u") {
+                    "del" { +"del" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should absorb a dangling single equals at a mark label close`() = runTest {
+        // given — `[==foo=]`: inside the label `==` opens mark, `foo` streams, and a
+        // single trailing `=` lands in inlineBuffer (it resolves on the next char,
+        // which is `]`). A lone `=` is not a mark delimiter, so left in the buffer it
+        // leaks out as literal text *after* the unmark and grows the run unboundedly
+        // every round-trip (`[==foo=]` → `[==foo===]` → `[==foo=====]` → …).
+        // flushInlineLabelClose must drop the dangling delimiter.
+        val textFlow = "[==foo=](u)".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "a"("href" to "u") {
+                    "mark" { +"foo" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should not close a star-opened em with an underscore at a label close`() = runTest {
+        // given — `[*foo_]`: `*` opens em inside the label, `_` lands in inlineBuffer
+        // before `]`. `*` and `_` are distinct delimiter types and never pair
+        // (CommonMark §6.2), so the `_` must NOT close the em (which would also
+        // silently drop it) — it stays literal content of the force-closed em.
+        val textFlow = "[*foo_](u)".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "a"("href" to "u") {
+                    "em" { +"foo_" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should not close an underscore-opened em with an asterisk at a label close`() = runTest {
+        // given — the mirror of the star/underscore case: `_` opens the em, a
+        // trailing `*` must NOT close it (delimiter-type mismatch), staying literal.
+        val textFlow = "[_foo*](u)".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "a"("href" to "u") {
+                    "em" { +"foo*" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should close an underscore-opened em on its own trailing underscore at a label close`() = runTest {
+        // given — matching `_` run closes the label-local `_`-em (`[_em_]`), the
+        // underscore counterpart of the `[*em*]` / `[**bold**]` cases.
+        val textFlow = "[_em_](u)".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "a"("href" to "u") {
+                    "em" { +"em" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should absorb a dangling single tilde at a del label close`() = runTest {
+        // given — the del counterpart of `[==foo=]`: a single trailing `~` after a
+        // label-local del must be absorbed (not leaked as literal text after the
+        // unmark), so `[~~del~]` does not grow on every round-trip.
+        val textFlow = "[~~del~](u)".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "a"("href" to "u") {
+                    "del" { +"del" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should absorb a longer dangling tilde run at a del label close`() = runTest {
+        // given — a 3+ char homogeneous run (`~~~`) at the label close must be
+        // absorbed *whole*, not just its first 1-2 chars: a leftover `~` flushes as
+        // literal after the unmark and grows the run by 2 every round-trip
+        // (`[~~del~~~]` → `[~~del~~~~~]` → …).
+        val textFlow = "[~~del~~~](u)".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "a"("href" to "u") {
+                    "del" { +"del" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should absorb a longer dangling equals run at a mark label close`() = runTest {
+        // given — the mark counterpart of the del 3+ case: `===` at the label close
+        // must be absorbed *whole*, else `[==mark===]` grows by 2 every round-trip.
+        val textFlow = "[==mark===](u)".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "a"("href" to "u") {
+                    "mark" { +"mark" }
+                }
+            }
+        }
+    }
+
+    @Test
     fun `should parse highlight or mark text`() = runTest {
         // given
         
@@ -668,6 +971,71 @@ class MarkanywhereParserTest {
                 "mark" { +"highlighted" }
                 +" text."
             }
+        }
+    }
+
+    @Test
+    fun `should close a mark span whose closing run ends the block`() = runTest {
+        // given — a `==` run is resolved on the *next* char during inline parsing,
+        // but a closing `==` at the very end of a line never sees that char. It must
+        // still close the span at the block boundary (flushInline), like a trailing
+        // `~~` closes del — otherwise the closer leaked in as literal content
+        // (`==a==` → `<mark>a==</mark>`) and grew on every round-trip.
+        val textFlow = "==highlighted==".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "mark" { +"highlighted" }
+            }
+        }
+    }
+
+    @Test
+    fun `should treat an unmatched trailing mark run as literal text`() = runTest {
+        // given — `foo==` has no open `mark` to close: the trailing `==` is literal
+        // (Python equality, math). flushInline must emit it verbatim, NOT open an
+        // empty `<mark></mark>` (which would rewrite `foo==` to `foo====`).
+        val textFlow = "foo==".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" { +"foo==" }
+        }
+    }
+
+    @Test
+    fun `should treat an unmatched trailing del run as literal text`() = runTest {
+        // given — same as the mark case, for `~~` (a trailing `~~` with no open del).
+        val textFlow = "foo~~".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" { +"foo~~" }
+        }
+    }
+
+    @Test
+    fun `should treat an unmatched trailing single tilde as literal text`() = runTest {
+        // given — a lone trailing `~` with no open del (the single-`~` sub-case of
+        // the flushInline fix); it must stay literal, not open an empty `<del></del>`.
+        val textFlow = "foo~".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" { +"foo~" }
         }
     }
 

@@ -16,6 +16,7 @@
 
 package com.xemantic.markanywhere.render
 
+import com.xemantic.kotlin.test.assert
 import com.xemantic.kotlin.test.sameAs
 import com.xemantic.markanywhere.flow.semanticEvents
 import kotlinx.coroutines.test.runTest
@@ -1336,6 +1337,46 @@ class MarkdownRenderingTest {
         """.trimIndent()
     }
 
+    @Test
+    fun `should indent a fenced code opening fence to its list item even after an intervening block`() = runTest {
+        // given — the Bing Copilot shape: a single <pre> wraps both a heading
+        // (the language label) and the <code>, inside a list item. The heading
+        // ends the line, so the fence open must rebuild the item's indent prefix
+        // — otherwise the opening fence dropped to column 0 and, on re-parse,
+        // escaped its list item (the closing fence and body stayed indented).
+        val flow = semanticEvents {
+            "ul" {
+                "li" {
+                    "pre" {
+                        "h5" { +"Javascript" }
+                        "code"("class" to "language-javascript") {
+                            +"x = 1\n"
+                        }
+                    }
+                }
+            }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then — every line of the code block sits at the item's 2-space content
+        // indent. (The bare `- ` first line is a separate artifact of a <pre>
+        // wrapping a block-level heading; the fix here is purely the fence indent.)
+        markdown sameAs /* language=markdown */ """
+            - 
+              ##### Javascript
+              ```javascript
+              x = 1
+              ```
+        """.trimIndent()
+        // The `- ` marker's trailing space is significant but lives at a line end
+        // in the golden above, where "strip trailing whitespace on save" can erase
+        // it — silently weakening the assertion to accept a renderer that drops the
+        // space. Pin it explicitly; the space here sits inside the literal, safe.
+        assert(markdown.lineSequence().first() == "- ")
+    }
+
     // Tables
 
     @Test
@@ -2534,5 +2575,23 @@ class MarkdownRenderingTest {
             val x = 1
             ```
         """.trimIndent()
+    }
+
+    @Test
+    fun `should not escape link label content against emphasis opened outside the label`() = runTest {
+        // An `<em>` wrapping a link: a literal `*` in the *link label* must NOT be
+        // escaped against the outer em — only against emphasis opened *inside* the
+        // label (here there is none). escapeActiveInlineDelimiters scopes label
+        // escaping to the enclosing Inline run up to the Link frame, so the label
+        // `*` stays unescaped. Render-only (no parse/fixpoint): re-parsing `[a*b]`
+        // inside `*…*` trips a SEPARATE pre-existing parser bug (the lone label `*`
+        // crosses the outer em → unbalanced stream), unrelated to this renderer-side
+        // escaping scope. See issue #58.
+        // when
+        val markdown = semanticEvents {
+            "p" { "em" { +"x "; "a"("href" to "u") { +"a*b" }; +" y" } }
+        }.renderMarkdown()
+        // then
+        markdown sameAs "*x [a*b](u) y*"
     }
 }

@@ -780,7 +780,7 @@ class Gfm_06_06_Test {
     }
 
     @Test
-    fun `example 525 - DIVERGENCE - link foo bar`() = runTest {
+    fun `example 525 - link foo bar`() = runTest {
         // given
         val textFlow = "[link *foo **bar** `#`*](/uri)".chunkedRandomly().asFlow()
 
@@ -788,10 +788,9 @@ class Gfm_06_06_Test {
         val parsed = textFlow.parse()
 
         // then
-        // Phase 3a/3b DIVERGENCE: trailing `*` before `]` is buffered as a
-        // delimiter; flushInlineLabelClose flushes it as literal text inside
-        // the em. Spec would close em with that `*`. See CLAUDE.md for the
-        // delimiter-scoping note.
+        // The trailing `*` before `]` sits in closing position at the label's
+        // end and `flushInlineLabelClose` (via `closeLabelLocalEmphasisRun`)
+        // closes the label-local em with it — matching the GFM output exactly.
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
                 "a"("href" to "/uri") {
@@ -805,7 +804,6 @@ class Gfm_06_06_Test {
                         "code" {
                             +"#"
                         }
-                        +"*"
                     }
                 }
             }
@@ -1172,11 +1170,10 @@ class Gfm_06_06_Test {
         val parsed = textFlow.parse()
 
         // then
-        // Forward ref + Phase 3a/3b DIVERGENCE: forward ref means abort.
-        // Trailing `*` before `]` is buffered as a delimiter and flushed as
-        // literal text by `flushInlineLabelClose` (delimiter scoping is
-        // out of scope — see CLAUDE.md). The em opens but doesn't close
-        // around the trailing `*`.
+        // Forward ref DIVERGENCE: the forward ref means the link aborts to
+        // literal `[…][ref]` text. The em inside the label still forms, and the
+        // trailing `*` in closing position now closes it (via
+        // `closeLabelLocalEmphasisRun`) instead of leaking in as literal text.
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
                 +"[link "
@@ -1189,7 +1186,6 @@ class Gfm_06_06_Test {
                     "code" {
                         +"#"
                     }
-                    +"*"
                 }
                 +"][ref]"
             }
@@ -1271,12 +1267,14 @@ class Gfm_06_06_Test {
 
         // then
         // Forward ref + inline content interaction + Phase 3b nested-brackets
-        // DIVERGENCE. The trailing `*]` flushes `*` as literal text inside em.
+        // DIVERGENCE. The trailing `*` in closing position now closes the
+        // label-local em (via `closeLabelLocalEmphasisRun`); the inner `[baz][ref]`
+        // stays literal because nested-link resolution is out of scope.
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
                 +"[foo "
                 "em" {
-                    +"bar [baz][ref]*"
+                    +"bar [baz][ref]"
                 }
                 +"][ref]"
             }

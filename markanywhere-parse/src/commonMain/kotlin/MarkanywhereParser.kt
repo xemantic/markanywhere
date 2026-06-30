@@ -1379,6 +1379,20 @@ private class ParserState(
     private var linkLabelOuterStackDepth = 0
 
     /**
+     * Snapshot of the boolean-tracked inline flags (`del`/`mark`/`sup`) at the
+     * moment `[` (or `![`) opened the current label. Unlike em/strong/HTML — which
+     * live in [inlineOpenStack] and are watermark-scoped by [linkLabelOuterStackDepth]
+     * — these flags have no stack position, so [flushInlineLabelClose] consults this
+     * snapshot to close only the ones opened *inside* the label, leaving a `del`/
+     * `mark`/`sup` opened *before* the `[` alone (otherwise its `unmark` would leak
+     * into the captured label buffer and produce a crossed, unrenderable stream —
+     * e.g. the citation superscript `^[1](url)^`).
+     */
+    private var linkLabelOuterStrikethrough = false
+    private var linkLabelOuterHighlight = false
+    private var linkLabelOuterSuperscript = false
+
+    /**
      * True when the next [processInlineCharImpl] call is the *re-process* leg
      * of the [pendingDeferredChar] protocol — i.e. the same source char is
      * being delivered for a second time so that buffered delimiter resolution
@@ -1447,7 +1461,15 @@ private class ParserState(
     // pairs with an `unmark`, including for sources that omit the closer
     // (e.g. `*foo` with no closing `*` in the same paragraph) or close tags
     // out of order.
-    private data class InlineOpenFrame(val name: String, val isTagged: Boolean)
+    // `delimChar` is the run char that opened an em/strong frame (`*` or `_`),
+    // used by closeLabelLocalEmphasisRun to refuse closing a `*`-opened span with
+    // a `_` run (or vice versa) — `*` and `_` are distinct delimiter types that
+    // never pair (CommonMark §6.2). null for tagged HTML frames.
+    private data class InlineOpenFrame(
+        val name: String,
+        val isTagged: Boolean,
+        val delimChar: Char? = null
+    )
     private val inlineOpenStack = ArrayDeque<InlineOpenFrame>()
 
     private fun isInlineOpen(name: String): Boolean =
@@ -1629,12 +1651,12 @@ private class ParserState(
         when (runLen) {
             1 -> when {
                 canClose && emOpen -> closeInlineDownTo("em", isTagged = false)
-                canOpen && !emOpen -> openInlineEmphasis("em")
+                canOpen && !emOpen -> openInlineEmphasis("em", runChar)
                 else -> +runChar.toString()
             }
             2 -> when {
                 canClose && strongOpen -> closeInlineDownTo("strong", isTagged = false)
-                canOpen && !strongOpen -> openInlineEmphasis("strong")
+                canOpen && !strongOpen -> openInlineEmphasis("strong", runChar)
                 else -> +runChar.toString().repeat(2)
             }
             else -> when {
@@ -1648,18 +1670,18 @@ private class ParserState(
                     // 2 of the 3 delimiters close strong; the remaining 1 opens
                     // em if it can, else falls through as literal.
                     closeInlineDownTo("strong", isTagged = false)
-                    if (canOpen) openInlineEmphasis("em") else +runChar.toString()
+                    if (canOpen) openInlineEmphasis("em", runChar) else +runChar.toString()
                 }
                 canClose && emOpen -> {
                     // 1 of the 3 delimiters closes em; the remaining 2 open
                     // strong if they can, else fall through as literal.
                     closeInlineDownTo("em", isTagged = false)
-                    if (canOpen) openInlineEmphasis("strong") else +runChar.toString().repeat(2)
+                    if (canOpen) openInlineEmphasis("strong", runChar) else +runChar.toString().repeat(2)
                 }
                 canOpen && !strongOpen && !emOpen -> {
                     // ***foo***: outer strong, inner em — closes em first via LIFO.
-                    openInlineEmphasis("strong")
-                    openInlineEmphasis("em")
+                    openInlineEmphasis("strong", runChar)
+                    openInlineEmphasis("em", runChar)
                 }
                 else -> +runChar.toString().repeat(3)
             }
@@ -1669,9 +1691,9 @@ private class ParserState(
     /**
      * Open an emphasis tag and push it onto [inlineOpenStack].
      */
-    private suspend fun SemanticEventScope.openInlineEmphasis(name: String) {
+    private suspend fun SemanticEventScope.openInlineEmphasis(name: String, delimChar: Char) {
         mark(name)
-        inlineOpenStack.addLast(InlineOpenFrame(name, isTagged = false))
+        inlineOpenStack.addLast(InlineOpenFrame(name, isTagged = false, delimChar = delimChar))
     }
 
     /**
@@ -6308,6 +6330,9 @@ private class ParserState(
      */
     private fun openLinkLabelCapture() {
         linkLabelOuterStackDepth = inlineOpenStack.size
+        linkLabelOuterStrikethrough = strikethrough
+        linkLabelOuterHighlight = highlight
+        linkLabelOuterSuperscript = superscript
         linkLabelBracketDepth = 0
         redirector.startCapture()
     }
@@ -6370,10 +6395,43 @@ private class ParserState(
             code = false
             codeRunLength = 0
         }
-        if (strikethrough) { unmark("del"); strikethrough = false }
-        if (highlight) { unmark("mark"); highlight = false }
-        if (superscript) { unmark("sup"); superscript = false }
-        // Any pending delimiter run in inlineBuffer flushes as literal text
+        // Close only the boolean-tracked inline state opened *inside* this label
+        // (see [linkLabelOuterSuperscript] et al.). A `del`/`mark`/`sup` opened
+        // before the `[` stays open — its closer arrives after the label — so its
+        // `unmark` is not captured into the label buffer (which would cross the
+        // link nesting and break the stream).
+        if (strikethrough && !linkLabelOuterStrikethrough) {
+            unmark("del"); strikethrough = false
+            // `del`/`mark` resolve their closing run on the *next* char (to size
+            // the run), but at a label's end the `]` is not that char — so the
+            // trailing `~`/`~~`/`=`/`==` (or a longer homogeneous run) sits
+            // unresolved in inlineBuffer. Absorb the *whole* run here, else it
+            // flushes as literal text inside the committed link and grows
+            // *unboundedly* on every round-trip (`[==foo=]` → `[==foo===]` → …;
+            // `[~~del~~~]` → `[~~del~~~~~]` → …). Any trailing dangling delimiter
+            // run here is malformed noise, so dropping it is the round-trip-stable
+            // choice. `sup` resolves eagerly (never buffered), so it needs no guard.
+            val run = inlineBuffer.toString()
+            if (run.isNotEmpty() && run.all { it == '~' }) inlineBuffer.clear()
+        }
+        if (highlight && !linkLabelOuterHighlight) {
+            unmark("mark"); highlight = false
+            val run = inlineBuffer.toString()
+            if (run.isNotEmpty() && run.all { it == '=' }) inlineBuffer.clear()
+        }
+        if (superscript && !linkLabelOuterSuperscript) { unmark("sup"); superscript = false }
+        // A pending delimiter run in inlineBuffer that sits in closing position at
+        // the label's end (e.g. the `**` of `[**bold**]`, or the trailing `*` of
+        // an image-in-link label like `[![a](u*)*]`) closes the matching emphasis
+        // frame *opened inside this label* (above the watermark), LIFO and
+        // innermost-first. This is the label-scoped counterpart of the normal
+        // delimiter resolver: it only consults label-local frames, so an inner
+        // closer can never pair with an em/strong opened *before* the `[`. Without
+        // it the closer was emitted as literal text inside the still-open span, so
+        // the span's delimiter run grew by one on every render→parse round-trip
+        // (the unbounded `…)*` → `…)**` instability of the Brave SERP dump).
+        closeLabelLocalEmphasisRun()
+        // Any leftover run (no matching label-local frame) flushes as literal text
         // — same fallback the rest of the parser uses when a run can't resolve.
         if (inlineBuffer.isNotEmpty()) {
             +inlineBuffer.toString()
@@ -6383,6 +6441,49 @@ private class ParserState(
         while (inlineOpenStack.size > linkLabelOuterStackDepth) {
             val frame = inlineOpenStack.removeLast()
             unmark(frame.name, isTagged = frame.isTagged)
+        }
+    }
+
+    /**
+     * Consume a trailing emphasis-delimiter run in [inlineBuffer] by closing the
+     * matching label-local frames at the top of [inlineOpenStack] (those above
+     * [linkLabelOuterStackDepth], i.e. opened inside the current label). Each
+     * close pops one frame and removes the delimiter characters it consumed from
+     * the run; matching stops at the first frame the run can't close, leaving the
+     * remainder for the literal-flush fallback. Only `em`/`strong` live on
+     * [inlineOpenStack], so only pure `*`/`_` runs can match — `~`/`=`/`^`
+     * (`del`/`mark`/`sup`) are boolean-flag state closed by the caller before this
+     * runs, so a run of those is left for the literal-flush / buffer-clear path.
+     */
+    private suspend fun SemanticEventScope.closeLabelLocalEmphasisRun() {
+        if (inlineBuffer.isEmpty()) return
+        val delim = inlineBuffer[0]
+        if (delim !in "*_" || !inlineBuffer.all { it == delim }) return
+        while (inlineBuffer.isNotEmpty() &&
+            inlineOpenStack.size > linkLabelOuterStackDepth
+        ) {
+            val frame = inlineOpenStack.last()
+            if (frame.isTagged) break
+            // `*` and `_` are distinct delimiter types and never pair (CommonMark
+            // §6.2): a `_` run must not close a `*`-opened em (or vice versa). Leave
+            // the mismatched run for the literal-flush fallback (`[*foo_](u)` keeps
+            // the `_` as content → `<em>foo_</em>`, not a silently-dropped closer).
+            // `delimChar` is non-null here: tagged frames (delimChar == null) already
+            // broke above, and every non-tagged frame is pushed via openInlineEmphasis
+            // with a non-null delimChar.
+            if (frame.delimChar != delim) break
+            // Only `em`/`strong` live on inlineOpenStack — `del`/`mark`/`sup` are
+            // tracked as boolean flags and never pushed here, so they cannot match.
+            // `delim` is already constrained to `*`/`_` by the guard above.
+            val need = when (frame.name) {
+                "em" -> 1
+                "strong" -> 2
+                else -> break
+            }
+            if (inlineBuffer.length < need) break
+            inlineBuffer.deleteRange(inlineBuffer.length - need, inlineBuffer.length)
+            inlineOpenStack.removeLast()
+            unmark(frame.name)
         }
     }
 
@@ -6803,6 +6904,14 @@ private class ParserState(
         linkLabelTentativeClose = false
         linkLabelOuterStackDepth = 0
         linkLabelBracketDepth = 0
+        // Outer del/mark/sup snapshots taken in openLinkLabelCapture. Cleared here
+        // for an explicit invariant: today openLinkLabelCapture always overwrites
+        // them before flushInlineLabelClose reads them, but resetting keeps a future
+        // abort path that calls flushInlineLabelClose directly from reading a stale
+        // snapshot left by a prior committed link.
+        linkLabelOuterStrikethrough = false
+        linkLabelOuterHighlight = false
+        linkLabelOuterSuperscript = false
     }
 
     /**
@@ -6952,9 +7061,22 @@ private class ParserState(
                 "_" -> resolveEmphasisRun('_', 1, null)
                 "__" -> resolveEmphasisRun('_', 2, null)
                 "___" -> resolveEmphasisRun('_', 3, null)
+                // `del`/`mark` resolve their run on the *next* char during inline
+                // parsing (to size the run), so a run at the very end of a line
+                // never sees that char and lands here. A run that *closes* an open
+                // span (`==a==`, `~~a~~`) must emit the `unmark` — without it the
+                // closer leaked into the span as literal content (`==a==` →
+                // `<mark>a==</mark>`) and grew on every round-trip. But an *unmatched*
+                // run (no span open — `foo==`, `foo~~`) is literal text: opening an
+                // empty span here would rewrite `foo==` to `foo====` on the first
+                // render. So close-if-open, else emit the buffer verbatim.
                 "~", "~~" -> when {
                     strikethrough -> { unmark("del"); strikethrough = false }
-                    else -> { mark("del"); strikethrough = true }
+                    else -> +buf
+                }
+                "==" -> when {
+                    highlight -> { unmark("mark"); highlight = false }
+                    else -> +buf
                 }
                 else -> +buf
             }
