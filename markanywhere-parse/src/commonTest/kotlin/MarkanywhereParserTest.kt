@@ -791,6 +791,27 @@ class MarkanywhereParserTest {
     }
 
     @Test
+    fun `should close a label-local del whose closing run ends the label`() = runTest {
+        // given — the `del` parallel of the `mark` test above. The clean full-run
+        // case `[~~del~~](u)` was only covered end-to-end (EmphasisDelimiterRoundTripTest,
+        // markanywhere-html); this pins the del branch of flushInlineLabelClose at the
+        // narrowest altitude so a regression there fails the parser unit suite too.
+        val textFlow = "[~~del~~](u)".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "a"("href" to "u") {
+                    "del" { +"del" }
+                }
+            }
+        }
+    }
+
+    @Test
     fun `should absorb a dangling single equals at a mark label close`() = runTest {
         // given — `[==foo=]`: inside the label `==` opens mark, `foo` streams, and a
         // single trailing `=` lands in inlineBuffer (it resolves on the next char,

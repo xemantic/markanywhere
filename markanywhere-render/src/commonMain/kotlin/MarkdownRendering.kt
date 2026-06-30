@@ -351,10 +351,6 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         return null
     }
 
-    // True when the current text is inline-code content — the enclosing opaque
-    // frame is a `Code` frame. Code content is verbatim, so escaping is suppressed.
-    fun inInlineCode(): Boolean = firstOpaqueFrame() is Code
-
     // Backslash-escape every inline-emphasis delimiter char (`*`/`~`/`=`/`^`) when
     // any emphasis span is open — not only the open span's own delimiter. A literal
     // delimiter inside the content would otherwise re-pair against the span's own
@@ -386,23 +382,28 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         //      limitation, issue #58; escaping `*` here would contradict the
         //      watermark — see "should not escape label content against emphasis
         //      opened outside the label").
-        val mask = if (inLabel())
-            (if (firstOpaqueFrame() is Inline) allInlineDelimiters else 0) or
+        val mask = if (inLabel()) {
+            // One reversed-stack scan, reused for both the inline-code guard and the
+            // label-internal `Inline` check — the opaque frame is at most one of
+            // `Code`/`Inline`, so a single `firstOpaqueFrame()` decides both. (It
+            // scans past a transparent `TaggedInline` like `<b>` to the real frame.)
+            val opaqueFrame = firstOpaqueFrame()
+            // Inline-code content is verbatim — it is captured into a label buffer
+            // and reaches here via `emitText` *before* its `inLabel()` guard, so
+            // guard it explicitly. (Inline code always opens a label buffer, so this
+            // `Code` case can only arise under `inLabel()` — no non-label check is
+            // needed below.)
+            if (opaqueFrame is Code) return text
+            (if (opaqueFrame is Inline) allInlineDelimiters else 0) or
                 (activeDelimiterMask and outerBooleanDelimiters)
-        else if (activeDelimiterMask != 0) allInlineDelimiters
+        } else if (activeDelimiterMask != 0) allInlineDelimiters
         else 0
         // Fast path: nothing to escape when no emphasis span is open AND we are not
         // inside a label. A backtick is a hazard inside ANY label even when mask is
         // 0 (see the loop below), so the label case can't short-circuit on mask
         // alone. inLabel() is a cheap deque check, keeping plain paragraph text off
-        // the `inInlineCode()` stack scan.
+        // the `firstOpaqueFrame()` stack scan above.
         if (mask == 0 && !inLabel()) return text
-        // Inline-code content is verbatim — it is captured into a label buffer and
-        // reaches here via `emitText` *before* its `inLabel()` guard, so guard it
-        // explicitly. `inInlineCode()` scans past a `TaggedInline` like `<b>`, which
-        // `blockStack.last()` would miss. Off the hot path (only reached when mask
-        // != 0 or inLabel).
-        if (inInlineCode()) return text
         // A single `~` is itself a valid GFM strikethrough delimiter (`~a~`
         // → `<del>a</del>`), so it must always be escaped. A lone `=` is NOT a
         // delimiter (only `==` toggles mark), so escaping it is *conservative* —
@@ -421,7 +422,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         // the `]`/`(url)` so the link never forms (`*[a`b](u)*` — the outer em's `*`
         // is excluded from the label mask, so mask is 0 yet the backtick must still
         // be escaped). Real code-span *content* returns early above (the
-        // `inInlineCode()` guard); only literal backtick text reaches here.
+        // `firstOpaqueFrame() is Code` guard); only literal backtick text reaches here.
         //
         // Pre-scan so plain words inside an emphasis span return without allocating.
         if (text.none { (delimiterBit(it) and mask) != 0 || it == '`' }) return text
@@ -468,8 +469,9 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         // CONTRACT: escapeActiveInlineDelimiters runs for ALL text, including
         // label/inline-code content (it's invoked *before* the inLabel() guard
         // below — inline code is captured into a label buffer). It must therefore
-        // self-guard every context where escaping is wrong: `inPreCode`,
-        // `inInlineCode()`, and `inLabel()` scoping are all handled inside it. Any
+        // self-guard every context where escaping is wrong: `inPreCode`, inline
+        // code (`firstOpaqueFrame() is Code`), and `inLabel()` scoping are all
+        // handled inside it. Any
         // new label-style capture must keep that guarantee or move this call after
         // the appropriate guard.
         val text = escapeActiveInlineDelimiters(rawText)
