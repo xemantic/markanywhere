@@ -21,34 +21,79 @@ import com.xemantic.markanywhere.dump.AccessibilityAnnotations
 import kotlinx.coroutines.flow.Flow
 
 /**
+ * Selects how [transformHtmlToMarkdown] treats a dump's actionable refs
+ * ([AccessibilityAnnotations.REF], stamped on links/controls during capture) —
+ * the two conceptual output contracts of the pipeline.
+ */
+public enum class RefMode {
+
+    /**
+     * Preserve and encode the refs into their compact [ActionableRef] form
+     * (`[label](ref:42:/href)` for inline links, `ref="42"` for everything
+     * else), so an agent that read the Markdown can name an element back and
+     * act on it on the live page. This is the default — a *stateful* proxy of
+     * the DOM tree.
+     */
+    ENCODE,
+
+    /**
+     * Drop the refs entirely for a clean, standard Markdown dump: no `ref:`
+     * destinations and no `ref="…"` attributes anywhere — links carry only
+     * their real href. The ref is **not preserved in the first place** (dropped
+     * from `simplifyHtml`'s keep-set), so there is nothing to encode later.
+     */
+    STRIP,
+
+}
+
+/**
  * Converts an HTML-derived semantic event stream into a Markdown-equivalent one
  * for LLM/agent consumption: icon glyphs resolved, presentational noise
- * simplified away, blank formatting and structural whitespace dropped, and the
- * dump's actionable refs encoded into their compact [ActionableRef] form.
+ * simplified away, blank formatting and structural whitespace dropped.
  *
- * The actionable-ref handling is the only agent-specific step: [simplifyHtml] is
- * asked to preserve [AccessibilityAnnotations.REF], and [encodeActionableRefs]
- * rewrites it last. A human-readable rendering can reuse every other operator
- * and simply drop both (call them directly instead of this helper).
+ * [refMode] picks one of two output contracts for the dump's actionable refs
+ * ([AccessibilityAnnotations.REF]):
+ *
+ * - [RefMode.ENCODE] (default) — a *stateful* proxy of the DOM tree: the ref is
+ *   preserved through [simplifyHtml] and rewritten last by
+ *   [encodeActionableRefs] into its compact [ActionableRef] form, so an agent
+ *   can reference DOM nodes back.
+ * - [RefMode.STRIP] — a *clean* Markdown dump: the ref is dropped from
+ *   `simplifyHtml`'s keep-set (so it is never carried into the output) and the
+ *   [encodeActionableRefs] step is skipped entirely — no `ref:`/`ref="…"`
+ *   appears anywhere, links keep only their real href.
+ *
+ * The actionable-ref handling is the only agent-specific step; every other
+ * operator is ref-agnostic, so a human-readable rendering can reuse the same
+ * machinery and call them directly (the [RefMode.STRIP] pipeline below, minus
+ * the keep-set decision).
  */
 public fun Flow<SemanticEvent>.transformHtmlToMarkdown(
     keepAttributes: Set<String> = emptySet(),
-): Flow<SemanticEvent> = resolveIcons()
-    .applyAccessibility()
-    // After applyAccessibility (aria-hidden SVGs already dropped), before
-    // simplifyHtml (which would otherwise discard the whole svg subtree): turn
-    // an accessible-name-bearing inline <svg> logo/wordmark into an ![name]().
-    .resolveInlineGraphics()
-    // Still before simplifyHtml (which unwraps block boxes and discards their
-    // DISPLAY annotation): inject a separator where flattening an unwrapped
-    // block box would merge inline content from two boxes that share no source
-    // whitespace (e.g. the BBC card metadata `3 hrs ago` + `Europe`, an image
-    // box next to a `LIVE` badge box).
-    .separateUnwrappedBlocks()
-    // DISPLAY is preserved through simplify so dropHtmlStructuralWhitespace can
-    // gate whitespace on the browser's computed block/inline verdict; it strips
-    // the annotation itself.
-    .simplifyHtml(keepAttributes + AccessibilityAnnotations.REF + AccessibilityAnnotations.DISPLAY)
-    .dropBlankInlineFormatting()
-    .dropHtmlStructuralWhitespace()
-    .encodeActionableRefs()
+    refMode: RefMode = RefMode.ENCODE,
+): Flow<SemanticEvent> {
+    // STRIP does not preserve the ref in the first place: dropping it from the
+    // keep-set lets simplifyHtml strip it naturally, rather than keeping it and
+    // discarding it later.
+    val refKeep = if (refMode == RefMode.ENCODE) setOf(AccessibilityAnnotations.REF) else emptySet()
+    val base = resolveIcons()
+        .applyAccessibility()
+        // After applyAccessibility (aria-hidden SVGs already dropped), before
+        // simplifyHtml (which would otherwise discard the whole svg subtree): turn
+        // an accessible-name-bearing inline <svg> logo/wordmark into an ![name]().
+        .resolveInlineGraphics()
+        // Still before simplifyHtml (which unwraps block boxes and discards their
+        // DISPLAY annotation): inject a separator where flattening an unwrapped
+        // block box would merge inline content from two boxes that share no source
+        // whitespace (e.g. the BBC card metadata `3 hrs ago` + `Europe`, an image
+        // box next to a `LIVE` badge box).
+        .separateUnwrappedBlocks()
+        // DISPLAY is preserved through simplify so dropHtmlStructuralWhitespace can
+        // gate whitespace on the browser's computed block/inline verdict; it strips
+        // the annotation itself.
+        .simplifyHtml(keepAttributes + refKeep + AccessibilityAnnotations.DISPLAY)
+        .dropBlankInlineFormatting()
+        .dropHtmlStructuralWhitespace()
+    // ENCODE rewrites the preserved ref last; STRIP has nothing to encode.
+    return if (refMode == RefMode.ENCODE) base.encodeActionableRefs() else base
+}

@@ -16,7 +16,9 @@
 
 package com.xemantic.markanywhere.html
 
+import com.xemantic.kotlin.test.assert
 import com.xemantic.kotlin.test.sameAs
+import com.xemantic.markanywhere.dump.AccessibilityAnnotations
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.render.renderMarkdown
 import kotlinx.coroutines.test.runTest
@@ -51,6 +53,43 @@ class HtmlToMarkdownTest {
             # Weather
 
             ☀️ Sunny and **warm** today — see the [forecast](https://example.com/forecast).
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should strip actionable refs in STRIP mode`() = runTest {
+        // given — both ref surfaces in one hand-built input: a ref-bearing
+        // inline link (folds into the `ref:` destination) and a ref-bearing
+        // block-wrapping link — a link around an <h2>, which renders as a raw
+        // <a> tag carrying a `ref=` attribute. RefMode.STRIP must drop both.
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "p" {
+                    +"See the "
+                    "a"("href" to "https://example.com", AccessibilityAnnotations.REF to "7") { +"site" }
+                    +"."
+                }
+                "a"("href" to "/live", AccessibilityAnnotations.REF to "9") {
+                    "h2" { +"Headline" }
+                }
+            }
+        }
+
+        // when — RefMode.STRIP drops the dump's refs entirely
+        val markdown = page.transformHtmlToMarkdown(refMode = RefMode.STRIP).renderMarkdown()
+
+        // then — no `ref:` scheme destinations and no `ref=` attributes anywhere;
+        // links keep their real href as standard Markdown
+        assert("ref:" !in markdown)
+        assert(" ref=" !in markdown)
+        markdown sameAs """
+            See the [site](https://example.com).
+
+            <a href="/live">
+
+            ## Headline
+
+            </a>
         """.trimIndent()
     }
 
