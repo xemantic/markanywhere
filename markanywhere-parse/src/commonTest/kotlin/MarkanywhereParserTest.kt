@@ -711,6 +711,63 @@ class MarkanywhereParserTest {
         }
     }
 
+    // The three tests below exercise the ABORT path of the linkLabelOuter*
+    // snapshots taken in openLinkLabelCapture: a `del`/`mark`/`sup` span opened
+    // *outside* a `[` whose label never closes (no `]`). flushInlineLabelClose
+    // must leave that outer span open (it was open at capture start) — closing it
+    // would leak its `unmark` into the captured label buffer and replay it inside
+    // the aborted brackets, producing a crossed/unrenderable stream. The outer
+    // span instead closes once, balanced, at the block boundary, and the
+    // unresolved `[bar` replays as literal text. (Commit path covered above.)
+
+    @Test
+    fun `should keep an outer strikethrough open when a link label aborts`() = runTest {
+        // given
+        val textFlow = "~~foo [bar".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "del" { +"foo [bar" }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep an outer highlight open when a link label aborts`() = runTest {
+        // given
+        val textFlow = "==foo [bar".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "mark" { +"foo [bar" }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep an outer superscript open when a link label aborts`() = runTest {
+        // given
+        val textFlow = "^foo [bar".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "sup" { +"foo [bar" }
+            }
+        }
+    }
+
     @Test
     fun `should close a label-local mark whose closing run ends the label`() = runTest {
         // given — `mark` opened *inside* a link label, closer right before `]`.
