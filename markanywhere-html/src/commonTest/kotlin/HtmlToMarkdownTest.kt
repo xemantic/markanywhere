@@ -51,7 +51,7 @@ class HtmlToMarkdownTest {
         // then
         markdown sameAs """
             # Weather
-
+            
             ☀️ Sunny and **warm** today — see the [forecast](https://example.com/forecast).
         """.trimIndent()
     }
@@ -84,11 +84,42 @@ class HtmlToMarkdownTest {
         assert(" ref=" !in markdown)
         markdown sameAs """
             See the [site](https://example.com).
-
+            
             <a href="/live">
-
+            
             ## Headline
+            
+            </a>
+        """.trimIndent()
+    }
 
+    @Test
+    fun `should not let an explicit REF in keepAttributes bypass STRIP`() = runTest {
+        // given — a ref-bearing block-wrapping link (rendered as a raw <a> tag, so
+        // a surviving REF would leak as a `data-markanywhere-ref` attribute), with
+        // the caller contradictorily asking to keep REF *and* selecting STRIP
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "a"("href" to "/live", AccessibilityAnnotations.REF to "9") {
+                    "h2" { +"Headline" }
+                }
+            }
+        }
+
+        // when — STRIP wins: REF is removed from keepAttributes too
+        val markdown = page.transformHtmlToMarkdown(
+            keepAttributes = setOf(AccessibilityAnnotations.REF),
+            refMode = RefMode.STRIP,
+        ).renderMarkdown()
+
+        // then — the raw `data-markanywhere-ref` attribute does not leak through
+        assert(AccessibilityAnnotations.REF !in markdown)
+        assert(" ref=" !in markdown)
+        markdown sameAs """
+            <a href="/live">
+            
+            ## Headline
+            
             </a>
         """.trimIndent()
     }

@@ -45,49 +45,50 @@ class W3cValidatorNoRefsTest {
         // when — RefMode.STRIP drops every actionable ref
         val markdown = events.transformHtmlToMarkdown(refMode = RefMode.STRIP).renderMarkdown()
 
-        // then — no `ref:` link destinations and no `ref="N"` attributes survive
-        assert("(ref:" !in markdown)
+        // then — no `ref:` scheme (in a link destination *or* bare text) and no
+        // `ref="N"` attributes survive
+        assert("ref:" !in markdown)
         assert(" ref=" !in markdown)
         markdown sameAs /* language=markdown */ """
             ---
             lang: en
             title: Ready to check  - Nu Html Checker
             ---
-
+            
             # [Nu Html Checker](.)
-
+            
             This tool is an ongoing experiment in better HTML checking, and its behavior remains subject to change
-
+            
             ## Ready to check
-
+            
             <form method="get" enctype="">
             <fieldset>
             <legend>
-
+            
             Checker Input
-
+            
             </legend>
-
+            
             Show <label for="showsource"><input id="showsource" type="checkbox" name="showsource" value="yes">
             source</label><label for="showoutline"><input id="showoutline" type="checkbox" name="showoutline" value="yes">
              outline</label><label for="showimagereport"><input id="showimagereport" type="checkbox" name="showimagereport" value="yes">
              image report</label><label for="level"><input id="level" type="checkbox" name="level" value="warning">
              errors & warnings only</label><input id="show_options" type="button" value="Options…">
-
+            
             <label id="inputlabel">Check by
-
+            
             <select id="docselect">
             </select>
-
+            
             </label><input id="doc" type="url" name="doc" placeholder="Enter the URL for an HTML, CSS, or SVG document" required="" pattern="(?:(?:https?://.+)|(?:data:.+))?" aria-label="address">
-
+            
             <input id="submit" type="submit" value="Check">
-
+            
             </fieldset>
             </form>
-
+            
             ---
-
+            
             [About this checker](about.html) • [Report an issue](about.html#issues)
         """.trimIndent()
     }

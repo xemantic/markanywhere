@@ -61,22 +61,25 @@ public enum class RefMode {
  * - [RefMode.STRIP] — a *clean* Markdown dump: the ref is dropped from
  *   `simplifyHtml`'s keep-set (so it is never carried into the output) and the
  *   [encodeActionableRefs] step is skipped entirely — no `ref:`/`ref="…"`
- *   appears anywhere, links keep only their real href.
+ *   appears anywhere, links keep only their real href. [AccessibilityAnnotations.REF]
+ *   is removed from [keepAttributes] too, so an explicit `keepAttributes =
+ *   setOf(REF)` cannot smuggle the ref past STRIP.
  *
  * The actionable-ref handling is the only agent-specific step; every other
  * operator is ref-agnostic, so a human-readable rendering can reuse the same
- * machinery and call them directly (the [RefMode.STRIP] pipeline below, minus
- * the keep-set decision).
+ * machinery and call them directly (the [RefMode.STRIP] pipeline, minus the
+ * keep-set decision).
  */
 public fun Flow<SemanticEvent>.transformHtmlToMarkdown(
     keepAttributes: Set<String> = emptySet(),
     refMode: RefMode = RefMode.ENCODE,
 ): Flow<SemanticEvent> {
-    // STRIP does not preserve the ref in the first place: dropping it from the
-    // keep-set lets simplifyHtml strip it naturally, rather than keeping it and
-    // discarding it later.
-    val refKeep = if (refMode == RefMode.ENCODE) setOf(AccessibilityAnnotations.REF) else emptySet()
-    val base = resolveIcons()
+    // The shared, ref-agnostic pipeline up to (but excluding) the ref-encoding
+    // step. [refKeep] is the ref's contribution to `simplifyHtml`'s keep-set;
+    // REF is first removed from the caller's [keepAttributes] so its presence is
+    // governed solely by [refMode] (an explicit `keepAttributes = setOf(REF)`
+    // cannot bypass STRIP).
+    fun base(refKeep: Set<String>) = resolveIcons()
         .applyAccessibility()
         // After applyAccessibility (aria-hidden SVGs already dropped), before
         // simplifyHtml (which would otherwise discard the whole svg subtree): turn
@@ -91,9 +94,13 @@ public fun Flow<SemanticEvent>.transformHtmlToMarkdown(
         // DISPLAY is preserved through simplify so dropHtmlStructuralWhitespace can
         // gate whitespace on the browser's computed block/inline verdict; it strips
         // the annotation itself.
-        .simplifyHtml(keepAttributes + refKeep + AccessibilityAnnotations.DISPLAY)
+        .simplifyHtml((keepAttributes - AccessibilityAnnotations.REF) + refKeep + AccessibilityAnnotations.DISPLAY)
         .dropBlankInlineFormatting()
         .dropHtmlStructuralWhitespace()
-    // ENCODE rewrites the preserved ref last; STRIP has nothing to encode.
-    return if (refMode == RefMode.ENCODE) base.encodeActionableRefs() else base
+    // One `when` couples both ref decisions (keep-set + encode) so they cannot
+    // drift, and stays exhaustive if a third RefMode is ever added.
+    return when (refMode) {
+        RefMode.ENCODE -> base(setOf(AccessibilityAnnotations.REF)).encodeActionableRefs()
+        RefMode.STRIP -> base(emptySet())
+    }
 }
