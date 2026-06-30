@@ -435,7 +435,10 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
     }
 
     // Recompute the open inline emphasis delimiter mask from blockStack — called
-    // only on Inline mark/unmark (rare), so even the recompute is allocation-free.
+    // only on Inline *close* (rare), so even the recompute is allocation-free. The
+    // open path ORs in the new bit incrementally instead (see the mark dispatch):
+    // a close may need to clear the `*` bit shared by em/strong, but an open can
+    // only add bits, never remove them.
     fun refreshActiveDelimiters() {
         var mask = 0
         for (frame in blockStack) {
@@ -471,9 +474,8 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         // below — inline code is captured into a label buffer). It must therefore
         // self-guard every context where escaping is wrong: `inPreCode`, inline
         // code (`firstOpaqueFrame() is Code`), and `inLabel()` scoping are all
-        // handled inside it. Any
-        // new label-style capture must keep that guarantee or move this call after
-        // the appropriate guard.
+        // handled inside it. Any new label-style capture must keep that guarantee
+        // or move this call after the appropriate guard.
         val text = escapeActiveInlineDelimiters(rawText)
         if (inLabel()) { appendLabel(text); return }
         consumeHeadingSpace()
@@ -845,11 +847,16 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                     blockStack.addLast(BlockFrame.Code)
                 }
 
-                "strong" -> { writeRaw("**"); blockStack.addLast(BlockFrame.Inline("**")); refreshActiveDelimiters() }
-                "em" -> { writeRaw("*"); blockStack.addLast(BlockFrame.Inline("*")); refreshActiveDelimiters() }
-                "del" -> { writeRaw("~~"); blockStack.addLast(BlockFrame.Inline("~~")); refreshActiveDelimiters() }
-                "mark" -> { writeRaw("=="); blockStack.addLast(BlockFrame.Inline("==")); refreshActiveDelimiters() }
-                "sup" -> { writeRaw("^"); blockStack.addLast(BlockFrame.Inline("^")); refreshActiveDelimiters() }
+                // Opening an emphasis frame can only *set* a bit in the mask, never
+                // clear one, so the open path is O(1): OR in the new frame's bit. The
+                // full refreshActiveDelimiters() recompute is needed only on *close*,
+                // where em and strong share the `*` bit (clearing it on strong-close
+                // would wrongly drop emphasis while an em is still open).
+                "strong" -> { writeRaw("**"); blockStack.addLast(BlockFrame.Inline("**")); activeDelimiterMask = activeDelimiterMask or delimiterBit('*') }
+                "em" -> { writeRaw("*"); blockStack.addLast(BlockFrame.Inline("*")); activeDelimiterMask = activeDelimiterMask or delimiterBit('*') }
+                "del" -> { writeRaw("~~"); blockStack.addLast(BlockFrame.Inline("~~")); activeDelimiterMask = activeDelimiterMask or delimiterBit('~') }
+                "mark" -> { writeRaw("=="); blockStack.addLast(BlockFrame.Inline("==")); activeDelimiterMask = activeDelimiterMask or delimiterBit('=') }
+                "sup" -> { writeRaw("^"); blockStack.addLast(BlockFrame.Inline("^")); activeDelimiterMask = activeDelimiterMask or delimiterBit('^') }
 
                 "a" -> {
                     labelBuffers.addLast(StringBuilder())

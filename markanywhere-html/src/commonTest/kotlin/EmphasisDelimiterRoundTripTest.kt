@@ -114,6 +114,25 @@ class EmphasisDelimiterRoundTripTest {
     }
 
     @Test
+    fun `should reach a stable fixpoint for mixed asterisk and underscore emphasis in a link label`() = runTest {
+        // A label-local `_`-em opened above a `*`-em is a delimiter-type mismatch:
+        // closeLabelLocalEmphasisRun breaks at the `_` frame (it never pairs a `_`
+        // run with a `*`-em, CommonMark §6.2), so the trailing `*` flushes as literal
+        // label content rather than closing the inner em. That literal `*` does NOT
+        // grow the run on round-trip — the renderer's escapeActiveInlineDelimiters
+        // backslash-escapes it (it sits inside a label-local span), so re-parse keeps
+        // it literal. This pins that two-sided defense (parser break + renderer
+        // escape) against the PR #57 review's "grows by one every round-trip" concern,
+        // which only holds for an *outer* (unescaped) em — the separate issue #58.
+        // when
+        val once = flowOf("[_a *b* c_](u)").parse().renderMarkdown()
+        val twice = flowOf(once).parse().renderMarkdown()
+        // then
+        once sameAs "[*a \\*b* c_](u)"
+        twice sameAs once
+    }
+
+    @Test
     fun `should round-trip emphasis nested in a link label with a literal asterisk`() = runTest {
         // HTML-pipeline shape: an `<em>` *inside* a link label whose content holds a
         // literal `*`. The renderer must escape the inner `*` (`[*a\*b*](u)`) even
