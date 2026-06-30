@@ -20,7 +20,9 @@ import com.xemantic.kotlin.test.sameAs
 import com.xemantic.markanywhere.html.DumpFixtures
 import com.xemantic.markanywhere.html.dumpFlow
 import com.xemantic.markanywhere.html.transformHtmlToMarkdown
+import com.xemantic.markanywhere.parse.parse
 import com.xemantic.markanywhere.render.renderMarkdown
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 
@@ -88,6 +90,61 @@ class W3cValidatorRefsTest {
 
             [About this checker](ref:13:about.html) • [Report an issue](ref:14:about.html#issues)
         """.trimIndent()
+    }
+
+    @Test
+    fun `should round-trip the rendered Markdown with the captured divergence`() = runTest {
+        // given — the Markdown the pipeline produces for the W3C validator dump
+        val markdown = dumpFlow(DumpFixtures.w3cValidator).transformHtmlToMarkdown().renderMarkdown()
+
+        // when
+        val reparsed = flowOf(markdown).parse()
+
+        // then — re-parsing does NOT reproduce the pipeline Markdown verbatim. The
+        // form's interleaved `<label>`/`<input>` re-nests on re-parse (the parser
+        // auto-closes the labels and strips the leading spaces it added) — the same
+        // class of inline-HTML divergence the SERP dumps carry. Asserting the exact
+        // diff pins it down: any new round-trip difference (a regression) changes
+        // this message and fails the test.
+        try {
+            reparsed.renderMarkdown() sameAs markdown
+            error("expected the round-trip to diverge")
+        } catch (e: AssertionError) {
+            e.message sameAs """
+                --- expected
+                +++ actual
+                @@ -18,12 +18,16 @@
+                 </legend>
+                 
+                 Show <label for="showsource"><input id="showsource" type="checkbox" name="showsource" value="yes" ref="2">
+                +</label>
+                 source</label><label for="showoutline"><input id="showoutline" type="checkbox" name="showoutline" value="yes" ref="3">
+                - outline</label><label for="showimagereport"><input id="showimagereport" type="checkbox" name="showimagereport" value="yes" ref="4">
+                - image report</label><label for="level"><input id="level" type="checkbox" name="level" value="warning" ref="5">
+                - errors & warnings only</label><input id="show_options" type="button" value="Options…" ref="6">
+                +</label>
+                +outline</label><label for="showimagereport"><input id="showimagereport" type="checkbox" name="showimagereport" value="yes" ref="4">
+                +</label>
+                +image report</label><label for="level"><input id="level" type="checkbox" name="level" value="warning" ref="5">
+                +</label>
+                +errors & warnings only</label><input id="show_options" type="button" value="Options…" ref="6">
+                 
+                -<label id="inputlabel">Check by
+                +<label id="inputlabel">Check by</label>
+                 
+                 <select id="docselect" ref="7">
+                 </select>
+                @@ -31,7 +35,6 @@
+                 </label><input id="doc" type="url" name="doc" placeholder="Enter the URL for an HTML, CSS, or SVG document" required="" pattern="(?:(?:https?://.+)|(?:data:.+))?" aria-label="address" ref="11">
+                 
+                 <input id="submit" type="submit" value="Check" ref="12">
+                -
+                 </fieldset>
+                 </form>
+                 
+                
+            """.trimIndent()
+        }
     }
 
 }
