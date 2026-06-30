@@ -82,4 +82,36 @@ class SoftBreakRoundTripTest {
             "p" { +"After" }
         }
     }
+
+    @Test
+    fun `should round-trip inline HTML spanning a soft break`() = runTest {
+        // A raw inline tag is an *unambiguous* open (unlike a speculative `*`), so
+        // its mark can stay open across a soft break and close at `</label>` — a
+        // true fixpoint while staying append-only. (Markdown emphasis still
+        // force-closes at the break; see the parser divergence docs.)
+        assertFixpoint("<label>a\nb</label>") {
+            "p" { tag("label") { +"a\nb" } }
+        }
+    }
+
+    @Test
+    fun `should round-trip inline HTML with a leading space after a soft break`() = runTest {
+        // The continuation line's content begins with a space that lives *inside*
+        // the open tag — it must survive (not be stripped as paragraph indent).
+        assertFixpoint("<label>a\n b</label>") {
+            "p" { tag("label") { +"a\n b" } }
+        }
+    }
+
+    @Test
+    fun `should round-trip a chain of inline tags each spanning a soft break`() = runTest {
+        // The W3C-form shape: `</label>` closes one tag and `<label>` opens the
+        // next on the same line, each spanning to the next line.
+        assertFixpoint("<label>a\nb</label><label>c\nd</label>") {
+            "p" {
+                tag("label") { +"a\nb" }
+                tag("label") { +"c\nd" }
+            }
+        }
+    }
 }

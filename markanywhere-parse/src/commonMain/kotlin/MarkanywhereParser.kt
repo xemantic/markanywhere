@@ -2410,7 +2410,7 @@ private class ParserState(
                     paragraphTrailingSpaces = 2
                     paragraphTrailingBackslash = true
                 }
-                flushInline()
+                flushInline(softBreak = true)
                 lineBuffer.clear()
                 atLineStart = true
                 replaceMode(BlockMode.ParagraphContinuation)
@@ -2466,7 +2466,7 @@ private class ParserState(
         paragraphTrailingSpaces = leftTrimmed.length - content.length
         processInlineContent(content)
         captureLineEndBackslash()
-        flushInline()
+        flushInline(softBreak = true)
         replaceMode(BlockMode.ParagraphContinuation)
     }
 
@@ -2526,14 +2526,14 @@ private class ParserState(
             // this closes the paragraph; inside a blockquote the same close happens
             // here and the outer blockquote machinery preserves the blockquote frame.
             flushPendingTrailingBackslash()
-            unmark("p")
+            endParagraph()
             replaceMode(BlockMode.Start)
             paragraphTrailingSpaces = 0
             return
         }
         if (lineInterruptsParagraph(line)) {
             flushPendingTrailingBackslash()
-            unmark("p")
+            endParagraph()
             replaceMode(BlockMode.Start)
             paragraphTrailingSpaces = 0
             // Replay the line through Start so it can be parsed as its own block.
@@ -2542,11 +2542,15 @@ private class ParserState(
             return
         }
         // Continuation line: hard or soft break then inline content.
-        // Leading spaces/tabs are stripped (CommonMark: indented code cannot interrupt
-        // a paragraph, so leading indentation on continuation lines is paragraph content
-        // with the indentation removed). Trailing spaces are stripped here and their
-        // count carried forward for the *next* line's hard-break decision.
-        val leftTrimmed = line.trimStart(' ', '\t')
+        // Leading spaces/tabs are normally stripped (CommonMark: indented code cannot
+        // interrupt a paragraph, so leading indentation on continuation lines is
+        // paragraph content with the indentation removed). Trailing spaces are stripped
+        // here and their count carried forward for the *next* line's hard-break decision.
+        // EXCEPTION: when a tagged inline HTML frame is still open across this soft break
+        // (kept by `flushInline(softBreak = true)`), the leading whitespace is *content*
+        // inside that tag, not paragraph indentation — preserve it so the tag round-trips
+        // (e.g. `<label>…<input>\n outline</label>`).
+        val leftTrimmed = if (inlineOpenStack.any { it.isTagged }) line else line.trimStart(' ', '\t')
         val stripped = leftTrimmed.trimEnd(' ')
         val newTrailing = leftTrimmed.length - stripped.length
         emitParagraphLineBreak()
@@ -2562,7 +2566,7 @@ private class ParserState(
         } else {
             processInlineContent(stripped)
             captureLineEndBackslash()
-            flushInline()
+            flushInline(softBreak = true)
         }
         if (paragraphTrailingBackslash) {
             // captureLineEndBackslash overrode newTrailing — keep the hard-break
@@ -2603,6 +2607,23 @@ private class ParserState(
             +"\\"
             paragraphTrailingBackslash = false
         }
+    }
+
+    /**
+     * Close the current paragraph's `</p>`, first force-closing any inline opens
+     * still on the stack. `flushInline(softBreak = true)` lets a tagged inline
+     * HTML frame (e.g. an unclosed `<label>`) survive soft breaks, so it can
+     * still be open at this hard paragraph boundary and must close here to keep
+     * the event stream balanced. For an ordinary paragraph the stack is already
+     * empty (the soft flush drained every non-tagged frame, and a hard flush ran
+     * on most close paths), so the drain is a no-op and behaviour is unchanged.
+     */
+    private suspend fun SemanticEventScope.endParagraph() {
+        while (inlineOpenStack.isNotEmpty()) {
+            val frame = inlineOpenStack.removeLast()
+            unmark(frame.name, isTagged = frame.isTagged)
+        }
+        unmark("p")
     }
 
     /**
@@ -2879,7 +2900,7 @@ private class ParserState(
         val top = mode.stack.lastOrNull() ?: return
         if (top.paragraphOpen) {
             flushInline()
-            unmark("p")
+            endParagraph()
             top.paragraphOpen = false
         }
     }
@@ -2920,7 +2941,7 @@ private class ParserState(
         if (top.blockquoteOpen) {
             if (top.blockquoteParagraphOpen) {
                 flushInline()
-                unmark("p")
+                endParagraph()
                 top.blockquoteParagraphOpen = false
             }
             unmark("blockquote")
@@ -3982,7 +4003,7 @@ private class ParserState(
                 // example 300) — the next blockquote line starts a fresh `<p>`.
                 if (bqContent.isBlank() && ctx.blockquoteParagraphOpen) {
                     flushInline()
-                    unmark("p")
+                    endParagraph()
                     ctx.blockquoteParagraphOpen = false
                     ctx.hasContent = true
                     mode.blankSeen = false
@@ -4450,12 +4471,12 @@ private class ParserState(
             }
             BlockMode.Paragraph -> {
                 flushInline()
-                unmark("p")
+                endParagraph()
                 replaceMode(BlockMode.Start)
                 paragraphTrailingSpaces = 0
             }
             BlockMode.ParagraphContinuation -> {
-                unmark("p")
+                endParagraph()
                 replaceMode(BlockMode.Start)
                 paragraphTrailingSpaces = 0
             }
@@ -6970,7 +6991,17 @@ private class ParserState(
         resetInlineLinkState()
     }
 
-    private suspend fun SemanticEventScope.flushInline() {
+    private suspend fun SemanticEventScope.flushInline(softBreak: Boolean = false) {
+        // Tagged inline HTML (e.g. `<label>`) is an *unambiguous* open, unlike a
+        // speculative `*`, so at a SOFT line break we may keep its mark open and
+        // let the `\n` flow as content — closing it only at the matching `</tag>`
+        // or a hard boundary. We do this (`preserveTags`) only when no *off-stack*
+        // speculative span is open: the del/mark/sup/code/math booleans and an
+        // in-flight link/image/entity have no stack position, so closing one here
+        // while keeping a tagged frame open would cross the stream. In any other
+        // state we fall through to the full drain below, identical to a hard flush.
+        val preserveTags = softBreak && !code && !math && !strikethrough &&
+            !highlight && !superscript && !inLink && !inImage && !inEntityRef
         // Try shortcut reference resolution for an unresolved `[label]` /
         // `![alt]` at the block boundary before aborting. The block close means
         // there's no further char that could turn it into an inline link or
@@ -7097,11 +7128,16 @@ private class ParserState(
             unmark("del")
             strikethrough = false
         }
-        // Drain any unclosed inline opens — emphasis (`em`/`strong`) and HTML
-        // tags share a single stack so they pop in *opening order*. A
-        // `<strong>` opened inside an outer `<em>` closes *before* the em
-        // here, never after — required to keep the event stream balanced.
-        while (inlineOpenStack.isNotEmpty()) {
+        // Drain unclosed inline opens — emphasis (`em`/`strong`) and HTML tags
+        // share a single stack so they pop in *opening order*. A `<strong>`
+        // opened inside an outer `<em>` closes *before* the em here, never after
+        // — required to keep the event stream balanced. With [preserveTags] (a
+        // soft break in a clean state) keep the topmost tagged frame and
+        // everything below it open, closing only the Markdown frames stacked
+        // above it; `keepThrough == -1` (no tagged frame, or a hard flush) drains
+        // the whole stack as before.
+        val keepThrough = if (preserveTags) inlineOpenStack.indexOfLast { it.isTagged } else -1
+        while (inlineOpenStack.size > keepThrough + 1) {
             val frame = inlineOpenStack.removeLast()
             unmark(frame.name, isTagged = frame.isTagged)
         }
@@ -7144,7 +7180,7 @@ private class ParserState(
                 Paragraph -> {
                     flushInline()
                     flushPendingTrailingBackslash()
-                    unmark("p")
+                    endParagraph()
                     replaceMode(Start)
                     paragraphTrailingSpaces = 0
                 }
@@ -7154,7 +7190,7 @@ private class ParserState(
                         lineBuffer.clear()
                         if (lineInterruptsParagraph(line)) {
                             flushPendingTrailingBackslash()
-                            unmark("p")
+                            endParagraph()
                             replaceMode(Start)
                             paragraphTrailingSpaces = 0
                             replay(line)
@@ -7166,7 +7202,7 @@ private class ParserState(
                         flushInline()
                     }
                     flushPendingTrailingBackslash()
-                    unmark("p")
+                    endParagraph()
                     replaceMode(Start)
                     paragraphTrailingSpaces = 0
                 }
