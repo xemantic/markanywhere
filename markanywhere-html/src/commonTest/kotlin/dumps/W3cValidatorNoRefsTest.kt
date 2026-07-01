@@ -18,6 +18,7 @@ package com.xemantic.markanywhere.html.dumps
 
 import com.xemantic.kotlin.test.assert
 import com.xemantic.kotlin.test.sameAs
+import com.xemantic.markanywhere.html.ActionableRef
 import com.xemantic.markanywhere.html.DumpFixtures
 import com.xemantic.markanywhere.html.RefMode
 import com.xemantic.markanywhere.html.dumpFlow
@@ -47,8 +48,8 @@ class W3cValidatorNoRefsTest {
 
         // then — no `ref:` scheme (in a link destination *or* bare text) and no
         // `ref="N"` attributes survive
-        assert("ref:" !in markdown)
-        assert(" ref=" !in markdown) // leading space: matches a ref= attribute but not href=
+        assert("${ActionableRef.SCHEME}:" !in markdown)
+        assert(" ${ActionableRef.ATTRIBUTE}=" !in markdown) // leading space: matches a ref= attribute but not href=
         markdown sameAs /* language=markdown */ """
             ---
             lang: en

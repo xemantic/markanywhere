@@ -49,7 +49,16 @@ fun main() {
         val dump = markanywhereJson.decodeFromString<SemanticEventDump>(file.readText())
         val base = file.nameWithoutExtension
         runBlocking {
-            for ((suffix, refMode) in listOf("" to RefMode.ENCODE, ".strip" to RefMode.STRIP)) {
+            // Iterate every RefMode (so a new mode is rendered automatically) and
+            // derive its file suffix with an exhaustive `when` — a new mode without
+            // a suffix is a compile error, mirroring transformHtmlToMarkdown's own
+            // exhaustiveness. The suffix stays here rather than on the RefMode enum,
+            // which shouldn't know this dev tool's file-naming convention.
+            for (refMode in RefMode.entries) {
+                val suffix = when (refMode) {
+                    RefMode.ENCODE -> ""
+                    RefMode.STRIP -> ".strip"
+                }
                 val markdown = dump.events.asFlow()
                     .transformHtmlToMarkdown(refMode = refMode)
                     .renderMarkdown()

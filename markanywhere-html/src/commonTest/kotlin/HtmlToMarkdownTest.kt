@@ -80,8 +80,8 @@ class HtmlToMarkdownTest {
 
         // then — no `ref:` scheme destinations and no `ref=` attributes anywhere;
         // links keep their real href as standard Markdown
-        assert("ref:" !in markdown)
-        assert(" ref=" !in markdown) // leading space: matches a ref= attribute but not href=
+        assert("${ActionableRef.SCHEME}:" !in markdown)
+        assert(" ${ActionableRef.ATTRIBUTE}=" !in markdown) // leading space: matches a ref= attribute but not href=
         markdown sameAs """
             See the [site](https://example.com).
             
@@ -114,7 +114,7 @@ class HtmlToMarkdownTest {
 
         // then — the raw `data-markanywhere-ref` attribute does not leak through
         assert(AccessibilityAnnotations.REF !in markdown)
-        assert(" ref=" !in markdown) // leading space: matches a ref= attribute but not href=
+        assert(" ${ActionableRef.ATTRIBUTE}=" !in markdown) // leading space: matches a ref= attribute but not href=
         markdown sameAs """
             <a href="/live">
             
