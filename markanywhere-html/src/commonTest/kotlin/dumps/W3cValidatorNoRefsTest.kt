@@ -48,7 +48,7 @@ class W3cValidatorNoRefsTest {
         // then — no `ref:` scheme (in a link destination *or* bare text) and no
         // `ref="N"` attributes survive
         assert("ref:" !in markdown)
-        assert(" ref=" !in markdown)
+        assert(" ref=" !in markdown) // leading space: matches a ref= attribute but not href=
         markdown sameAs /* language=markdown */ """
             ---
             lang: en
