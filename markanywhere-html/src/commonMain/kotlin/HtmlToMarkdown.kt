@@ -73,34 +73,48 @@ public enum class RefMode {
 public fun Flow<SemanticEvent>.transformHtmlToMarkdown(
     keepAttributes: Set<String> = emptySet(),
     refMode: RefMode = RefMode.ENCODE,
-): Flow<SemanticEvent> {
-    // The shared, ref-agnostic pipeline up to (but excluding) the ref-encoding
-    // step. [refKeep] is the ref's contribution to `simplifyHtml`'s keep-set;
-    // REF is first removed from the caller's [keepAttributes] so its presence is
-    // governed solely by [refMode] (an explicit `keepAttributes = setOf(REF)`
-    // cannot bypass STRIP).
-    fun base(refKeep: Set<String>) = resolveIcons()
-        .applyAccessibility()
-        // After applyAccessibility (aria-hidden SVGs already dropped), before
-        // simplifyHtml (which would otherwise discard the whole svg subtree): turn
-        // an accessible-name-bearing inline <svg> logo/wordmark into an ![name]().
-        .resolveInlineGraphics()
-        // Still before simplifyHtml (which unwraps block boxes and discards their
-        // DISPLAY annotation): inject a separator where flattening an unwrapped
-        // block box would merge inline content from two boxes that share no source
-        // whitespace (e.g. the BBC card metadata `3 hrs ago` + `Europe`, an image
-        // box next to a `LIVE` badge box).
-        .separateUnwrappedBlocks()
-        // DISPLAY is preserved through simplify so dropHtmlStructuralWhitespace can
-        // gate whitespace on the browser's computed block/inline verdict; it strips
-        // the annotation itself.
-        .simplifyHtml((keepAttributes - AccessibilityAnnotations.REF) + refKeep + AccessibilityAnnotations.DISPLAY)
-        .dropBlankInlineFormatting()
-        .dropHtmlStructuralWhitespace()
+): Flow<SemanticEvent> =
     // One `when` couples both ref decisions (keep-set + encode) so they cannot
-    // drift, and stays exhaustive if a third RefMode is ever added.
-    return when (refMode) {
-        RefMode.ENCODE -> base(setOf(AccessibilityAnnotations.REF)).encodeActionableRefs()
-        RefMode.STRIP -> base(emptySet())
+    // drift, and stays exhaustive if a third RefMode is ever added. The shared
+    // ref-agnostic pipeline is [htmlToMarkdownBase]; `refKeep` is the ref's
+    // contribution to its keep-set.
+    when (refMode) {
+        ENCODE ->
+            htmlToMarkdownBase(keepAttributes, refKeep = setOf(AccessibilityAnnotations.REF))
+                .encodeActionableRefs()
+        STRIP ->
+            htmlToMarkdownBase(keepAttributes, refKeep = emptySet())
     }
-}
+
+/**
+ * The shared, ref-agnostic HTML→Markdown pipeline up to (but excluding) the
+ * ref-encoding step. [refKeep] is the ref's contribution to [simplifyHtml]'s
+ * keep-set; [AccessibilityAnnotations.REF] is first removed from [keepAttributes]
+ * so its presence is governed solely by the caller's `refMode` (an explicit
+ * `keepAttributes = setOf(REF)` cannot bypass STRIP).
+ *
+ * A **top-level** function (not a local one closing over `transformHtmlToMarkdown`)
+ * so it captures nothing — no per-call closure allocation — while still keeping
+ * the operator chain defined exactly once.
+ */
+private fun Flow<SemanticEvent>.htmlToMarkdownBase(
+    keepAttributes: Set<String>,
+    refKeep: Set<String>,
+): Flow<SemanticEvent> = resolveIcons()
+    .applyAccessibility()
+    // After applyAccessibility (aria-hidden SVGs already dropped), before
+    // simplifyHtml (which would otherwise discard the whole svg subtree): turn
+    // an accessible-name-bearing inline <svg> logo/wordmark into an ![name]().
+    .resolveInlineGraphics()
+    // Still before simplifyHtml (which unwraps block boxes and discards their
+    // DISPLAY annotation): inject a separator where flattening an unwrapped
+    // block box would merge inline content from two boxes that share no source
+    // whitespace (e.g. the BBC card metadata `3 hrs ago` + `Europe`, an image
+    // box next to a `LIVE` badge box).
+    .separateUnwrappedBlocks()
+    // DISPLAY is preserved through simplify so dropHtmlStructuralWhitespace can
+    // gate whitespace on the browser's computed block/inline verdict; it strips
+    // the annotation itself.
+    .simplifyHtml((keepAttributes - AccessibilityAnnotations.REF) + refKeep + AccessibilityAnnotations.DISPLAY)
+    .dropBlankInlineFormatting()
+    .dropHtmlStructuralWhitespace()

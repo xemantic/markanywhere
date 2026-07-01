@@ -124,4 +124,22 @@ class HtmlToMarkdownTest {
         """.trimIndent()
     }
 
+    @Test
+    fun `should thread a custom keepAttributes entry through the pipeline`() = runTest {
+        // given — a section carrying a custom data attribute the caller wants kept
+        val page = semanticEvents(tagged = true) {
+            "section"("data-foo" to "bar") {
+                "p" { +"Body" }
+            }
+        }
+
+        // when — the caller keeps `data-foo` (default ENCODE); the keep-set
+        // arithmetic `(keepAttributes - REF) + refKeep + DISPLAY` must thread it
+        // through unchanged
+        val markdown = page.transformHtmlToMarkdown(keepAttributes = setOf("data-foo")).renderMarkdown()
+
+        // then — the custom attribute survives to the raw-tag output
+        assert("data-foo=\"bar\"" in markdown)
+    }
+
 }
