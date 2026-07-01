@@ -107,7 +107,10 @@ class W3cValidatorRefsTest {
         // class of inline-HTML divergence the SERP dumps carry. Asserting the exact
         // diff pins it down: any new round-trip difference (a regression) changes
         // this message and fails the test.
-        val divergence = assertFailsWith<AssertionError> {
+        val divergence = assertFailsWith<AssertionError>(
+            "the round-trip no longer diverges — divergence fixed? " +
+                "flip this test to a plain fixpoint assertion (see HackerNewsTest)"
+        ) {
             reparsed.renderMarkdown() sameAs markdown
         }
         divergence.message sameAs """

@@ -78,10 +78,14 @@ class HtmlToMarkdownTest {
         // when — RefMode.STRIP drops the dump's refs entirely
         val markdown = page.transformHtmlToMarkdown(refMode = RefMode.STRIP).renderMarkdown()
 
-        // then — no `ref:` scheme destinations and no `ref=` attributes anywhere;
-        // links keep their real href as standard Markdown
+        // then — no `ref:` scheme destination, no `ref=` attribute, and no raw
+        // dump ref anywhere; links keep their real href as standard Markdown.
+        // The `ref:` guard is deliberately broad (it would also fire on literal
+        // `ref:` body text): a loud false failure on a future fixture beats a
+        // narrower guard silently missing a leaked scheme.
         assert("${ActionableRef.SCHEME}:" !in markdown)
         assert(" ${ActionableRef.ATTRIBUTE}=" !in markdown) // leading space: matches a ref= attribute but not href=
+        assert(AccessibilityAnnotations.REF !in markdown)
         markdown sameAs """
             See the [site](https://example.com).
             
@@ -133,13 +137,18 @@ class HtmlToMarkdownTest {
             }
         }
 
-        // when — the caller keeps `data-foo` (default ENCODE); the keep-set
-        // arithmetic `(keepAttributes - REF) + refKeep + DISPLAY` must thread it
-        // through unchanged
-        val markdown = page.transformHtmlToMarkdown(keepAttributes = setOf("data-foo")).renderMarkdown()
+        // when — the caller keeps `data-foo`; the keep-set arithmetic
+        // `(keepAttributes - REF) + refKeep + DISPLAY` must thread it through
+        // unchanged in BOTH ref modes
+        val encoded = page.transformHtmlToMarkdown(keepAttributes = setOf("data-foo")).renderMarkdown()
+        val stripped = page.transformHtmlToMarkdown(
+            keepAttributes = setOf("data-foo"),
+            refMode = RefMode.STRIP,
+        ).renderMarkdown()
 
-        // then — the custom attribute survives to the raw-tag output
-        assert("data-foo=\"bar\"" in markdown)
+        // then — the custom attribute survives to the raw-tag output in both modes
+        assert("data-foo=\"bar\"" in encoded)
+        assert("data-foo=\"bar\"" in stripped)
     }
 
 }
