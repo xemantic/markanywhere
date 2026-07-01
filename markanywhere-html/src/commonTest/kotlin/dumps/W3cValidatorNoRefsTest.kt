@@ -16,12 +16,10 @@
 
 package com.xemantic.markanywhere.html.dumps
 
-import com.xemantic.kotlin.test.assert
 import com.xemantic.kotlin.test.sameAs
-import com.xemantic.markanywhere.dump.AccessibilityAnnotations
-import com.xemantic.markanywhere.html.ActionableRef
 import com.xemantic.markanywhere.html.DumpFixtures
 import com.xemantic.markanywhere.html.RefMode
+import com.xemantic.markanywhere.html.assertNoActionableRefs
 import com.xemantic.markanywhere.html.dumpFlow
 import com.xemantic.markanywhere.html.transformHtmlToMarkdown
 import com.xemantic.markanywhere.render.renderMarkdown
@@ -47,13 +45,9 @@ class W3cValidatorNoRefsTest {
         // when — RefMode.STRIP drops every actionable ref
         val markdown = events.transformHtmlToMarkdown(refMode = RefMode.STRIP).renderMarkdown()
 
-        // then — no `ref:` scheme (in a link destination *or* bare text — the
-        // deliberately broad guard would fail loudly on literal `ref:` content,
-        // which beats a narrower guard silently missing a leak), no `ref="N"`
-        // attribute, and no raw dump ref survives
-        assert("${ActionableRef.SCHEME}:" !in markdown)
-        assert(" ${ActionableRef.ATTRIBUTE}=" !in markdown) // leading space: matches a ref= attribute but not href=
-        assert(AccessibilityAnnotations.REF !in markdown)
+        // then — no actionable-ref residue survives on any surface (see
+        // assertNoActionableRefs)
+        assertNoActionableRefs(markdown)
         markdown sameAs /* language=markdown */ """
             ---
             lang: en

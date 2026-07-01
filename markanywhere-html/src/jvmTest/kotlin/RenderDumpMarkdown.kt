@@ -48,6 +48,7 @@ fun main() {
     jsonFiles.forEach { file ->
         val dump = markanywhereJson.decodeFromString<SemanticEventDump>(file.readText())
         val base = file.nameWithoutExtension
+        val written = mutableListOf<String>()
         runBlocking {
             // Iterate every RefMode (so a new mode is rendered automatically) and
             // derive its file suffix with an exhaustive `when` — a new mode without
@@ -62,10 +63,12 @@ fun main() {
                 val markdown = dump.events.asFlow()
                     .transformHtmlToMarkdown(refMode = refMode)
                     .renderMarkdown()
-                File(outputDir, "$base$suffix.md").writeText(markdown)
+                val name = "$base$suffix.md"
+                File(outputDir, name).writeText(markdown)
+                written += name
             }
         }
-        println("Rendered ${file.name} (${dump.url}) -> $base.md + $base.strip.md")
+        println("Rendered ${file.name} (${dump.url}) -> ${written.joinToString(" + ")}")
     }
     println("Output written to ${outputDir.absolutePath}")
 }

@@ -78,14 +78,9 @@ class HtmlToMarkdownTest {
         // when — RefMode.STRIP drops the dump's refs entirely
         val markdown = page.transformHtmlToMarkdown(refMode = RefMode.STRIP).renderMarkdown()
 
-        // then — no `ref:` scheme destination, no `ref=` attribute, and no raw
-        // dump ref anywhere; links keep their real href as standard Markdown.
-        // The `ref:` guard is deliberately broad (it would also fire on literal
-        // `ref:` body text): a loud false failure on a future fixture beats a
-        // narrower guard silently missing a leaked scheme.
-        assert("${ActionableRef.SCHEME}:" !in markdown)
-        assert(" ${ActionableRef.ATTRIBUTE}=" !in markdown) // leading space: matches a ref= attribute but not href=
-        assert(AccessibilityAnnotations.REF !in markdown)
+        // then — no actionable-ref residue on any surface (see
+        // assertNoActionableRefs); links keep their real href as standard Markdown
+        assertNoActionableRefs(markdown)
         markdown sameAs """
             See the [site](https://example.com).
             
@@ -117,8 +112,8 @@ class HtmlToMarkdownTest {
         ).renderMarkdown()
 
         // then — the raw `data-markanywhere-ref` attribute does not leak through
-        assert(AccessibilityAnnotations.REF !in markdown)
-        assert(" ${ActionableRef.ATTRIBUTE}=" !in markdown) // leading space: matches a ref= attribute but not href=
+        // (nor any other ref surface)
+        assertNoActionableRefs(markdown)
         markdown sameAs """
             <a href="/live">
             
