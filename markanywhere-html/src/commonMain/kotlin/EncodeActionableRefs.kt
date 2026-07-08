@@ -140,8 +140,10 @@ public fun Flow<SemanticEvent>.encodeActionableRefs(): Flow<SemanticEvent> =
 
 public fun TransformerBuilder.encodeActionableNonLinkRefs() {
 
-    // Every ref-bearing element except <a> (handled by the link pre-pass):
-    // rename the DOM attribute to the short one.
+    // Every ref-bearing element except <a>: rename the DOM attribute to the
+    // short one. No name guard is needed — the link pre-pass consumes the ref
+    // of every <a>, including one nested inside another ref-bearing <a>, so
+    // no ref-bearing <a> ever reaches this matcher.
     match({ this[AccessibilityAnnotations.REF] != null }) { event ->
         val ref = event[AccessibilityAnnotations.REF]!!
         reemit(
@@ -161,6 +163,12 @@ public fun TransformerBuilder.encodeActionableNonLinkRefs() {
  * destination via [ActionableRef.encode]. Ref-less links — and everything
  * outside an `<a>` — stream through untouched. Buffering is bounded to one link
  * subtree at a time (the same bound the renderer's label capture already pays).
+ *
+ * A ref-bearing `<a>` nested inside the buffered subtree (a scripted-DOM shape —
+ * parsed HTML auto-closes an open anchor before nesting another) is encoded
+ * recursively by [emitEncodedLink], each link picking its form by its own
+ * subtree — so no ref-bearing `<a>` ever leaves this pre-pass still carrying
+ * [AccessibilityAnnotations.REF].
  */
 private fun Flow<SemanticEvent>.encodeActionableLinkRefs(): Flow<SemanticEvent> = flow {
     val buffer = mutableListOf<SemanticEvent>()
@@ -193,12 +201,19 @@ private fun Flow<SemanticEvent>.encodeActionableLinkRefs(): Flow<SemanticEvent> 
     if (buffer.isNotEmpty()) emitEncodedLink(buffer)
 }
 
+// Encodes the ref-bearing <a> opening buffer[start] and re-emits its subtree
+// [start+1, end), recursing into each nested ref-bearing <a> so every link
+// picks its encoding by its own subtree — an inner ref left for the non-link
+// pass would take the attribute form, which a rendered inline `[label](url)`
+// then drops (Markdown links carry no attributes), losing the ref.
 private suspend fun FlowCollector<SemanticEvent>.emitEncodedLink(
-    buffer: List<SemanticEvent>
+    buffer: List<SemanticEvent>,
+    start: Int = 0,
+    end: Int = buffer.size
 ) {
-    val open = buffer.first() as Mark
+    val open = buffer[start] as Mark
     val ref = open[AccessibilityAnnotations.REF]!!
-    val wrapsBlockContent = buffer.asSequence().drop(1).any {
+    val wrapsBlockContent = buffer.subList(start + 1, end).any {
         it is Mark && it.name in LINK_BLOCK_CONTENT_TAGS
     }
     val attributes = (open.attributes - AccessibilityAnnotations.REF) +
@@ -212,7 +227,35 @@ private suspend fun FlowCollector<SemanticEvent>.emitEncodedLink(
             "href" to encode(ref, open["href"] ?: "")
         }
     emit(open.copy(attributes = attributes))
-    for (i in 1 until buffer.size) emit(buffer[i])
+    var i = start + 1
+    while (i < end) {
+        val event = buffer[i]
+        if (event is Mark && event.name == "a" && event[AccessibilityAnnotations.REF] != null) {
+            val innerEnd = linkSubtreeEnd(buffer, i, end)
+            emitEncodedLink(buffer, i, innerEnd)
+            i = innerEnd
+        } else {
+            emit(event)
+            i++
+        }
+    }
+}
+
+// Index just past the matching </a> of the <a> mark at [start], or [end] when
+// the close never arrives (an unclosed link in the end-of-stream flush).
+private fun linkSubtreeEnd(buffer: List<SemanticEvent>, start: Int, end: Int): Int {
+    var depth = 0
+    for (i in start until end) {
+        when (val event = buffer[i]) {
+            is Mark if event.name == "a" -> depth++
+            is Unmark if event.name == "a" -> {
+                depth--
+                if (depth == 0) return i + 1
+            }
+            else -> { /* content */ }
+        }
+    }
+    return end
 }
 
 // Re-emits [event] with [attributes], preserving its tagged/untagged form and

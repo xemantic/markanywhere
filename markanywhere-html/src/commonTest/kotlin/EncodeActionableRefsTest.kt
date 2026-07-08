@@ -266,6 +266,80 @@ class EncodeActionableRefsTest {
     }
 
     @Test
+    fun `should encode a ref link nested inside an inline ref link with the scheme form`() = runTest {
+        // given — a nested anchor never comes from parsed HTML (the tree builder
+        // auto-closes an open anchor before nesting another), but a scripted DOM
+        // can carry one, and dumps capture live DOMs
+        val input = semanticEvents {
+            "a"(AccessibilityAnnotations.REF to "1", "href" to "/outer") {
+                +"outer "
+                "a"(AccessibilityAnnotations.REF to "2", "href" to "/inner") { +"inner" }
+            }
+        }
+
+        // when
+        val output = input.encodeActionableRefs()
+
+        // then — the inner link folds its own ref into its destination like any
+        // inline link; the attribute form would lose the ref at render time,
+        // since a Markdown `[label](url)` carries no attributes
+        output sameAs semanticEvents {
+            "a"("href" to "ref:1:/outer") {
+                +"outer "
+                "a"("href" to "ref:2:/inner") { +"inner" }
+            }
+        }
+    }
+
+    @Test
+    fun `should encode an inline ref link nested inside a block-wrapping ref link`() = runTest {
+        // given
+        val input = semanticEvents {
+            "a"(AccessibilityAnnotations.REF to "1", "href" to "/outer") {
+                "h2" { +"Headline" }
+                "a"(AccessibilityAnnotations.REF to "2", "href" to "/inner") { +"inner" }
+            }
+        }
+
+        // when
+        val output = input.encodeActionableRefs()
+
+        // then — each link picks its form by its OWN subtree: the outer wraps a
+        // heading (raw tag, attribute form), the inner wraps only text (scheme)
+        output sameAs semanticEvents {
+            "a"("href" to "/outer", "ref" to "1") {
+                "h2" { +"Headline" }
+                "a"("href" to "ref:2:/inner") { +"inner" }
+            }
+        }
+    }
+
+    @Test
+    fun `should encode a block-wrapping ref link nested inside a block-wrapping ref link`() = runTest {
+        // given — the outer link's block detection sees the heading only through
+        // the inner link's subtree
+        val input = semanticEvents {
+            "a"(AccessibilityAnnotations.REF to "1", "href" to "/outer") {
+                "a"(AccessibilityAnnotations.REF to "2", "href" to "/inner") {
+                    "h2" { +"Headline" }
+                }
+            }
+        }
+
+        // when
+        val output = input.encodeActionableRefs()
+
+        // then — both spill as raw tags, so both carry the attribute form
+        output sameAs semanticEvents {
+            "a"("href" to "/outer", "ref" to "1") {
+                "a"("href" to "/inner", "ref" to "2") {
+                    "h2" { +"Headline" }
+                }
+            }
+        }
+    }
+
+    @Test
     fun `should leave a link without a ref untouched`() = runTest {
         // given
         val input = semanticEvents {
