@@ -27,13 +27,13 @@ import java.io.File
  * Developer utility (run via the `renderDumpMarkdown` Gradle task, not a test)
  * that runs every [SemanticEventDump] JSON under `src/commonTest/dumps` through
  * the full HTML-to-Markdown pipeline and writes the result under
- * `build/renderedMarkdown`.
+ * `build/renderedMarkdown` — in **both** ref modes per dump: `<name>.md`
+ * ([RefMode.ENCODE], the default) and `<name>.strip.md` ([RefMode.STRIP]).
  *
- * Mirrors the pipeline exercised by `HtmlToMarkdownTest`
- * ([transformHtmlToMarkdown] with defaults — icon resolution → simplification
- * renaming the dump ref to `ref` → empty-formatting cleanup →
- * structural-whitespace normalization → Markdown), so it is also the easiest
- * way to regenerate that test's golden output after a pipeline change.
+ * So it is the easiest way to regenerate a dump test's golden after a pipeline
+ * change: use `<name>.md` for an ENCODE-mode golden (e.g. `W3cValidatorRefsTest`,
+ * `OpenjurTest`, the SERP dumps) and `<name>.strip.md` for a STRIP-mode golden
+ * (e.g. `W3cValidatorNoRefsTest`).
  */
 fun main() {
     val inputDir = File("src/commonTest/dumps")
@@ -48,13 +48,27 @@ fun main() {
     jsonFiles.forEach { file ->
         val dump = markanywhereJson.decodeFromString<SemanticEventDump>(file.readText())
         val base = file.nameWithoutExtension
-        val markdown = runBlocking {
-            dump.events.asFlow()
-                .transformHtmlToMarkdown()
-                .renderMarkdown()
+        val written = mutableListOf<String>()
+        runBlocking {
+            // Iterate every RefMode (so a new mode is rendered automatically) and
+            // derive its file suffix with an exhaustive `when` — a new mode without
+            // a suffix is a compile error, mirroring transformHtmlToMarkdown's own
+            // exhaustiveness. The suffix stays here rather than on the RefMode enum,
+            // which shouldn't know this dev tool's file-naming convention.
+            for (refMode in RefMode.entries) {
+                val suffix = when (refMode) {
+                    RefMode.ENCODE -> ""
+                    RefMode.STRIP -> ".strip"
+                }
+                val markdown = dump.events.asFlow()
+                    .transformHtmlToMarkdown(refMode = refMode)
+                    .renderMarkdown()
+                val name = "$base$suffix.md"
+                File(outputDir, name).writeText(markdown)
+                written += name
+            }
         }
-        File(outputDir, "$base.md").writeText(markdown)
-        println("Rendered ${file.name} (${dump.url}) -> $base.md")
+        println("Rendered ${file.name} (${dump.url}) -> ${written.joinToString(" + ")}")
     }
     println("Output written to ${outputDir.absolutePath}")
 }

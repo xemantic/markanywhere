@@ -114,6 +114,8 @@ Will print:
 
 The input here is built by hand, but in practice it comes from a captured page: [`markanywhere-dump`](markanywhere-dump) injects `window.markanywhere.dump()` into any browser, and [`markanywhere-browse`](markanywhere-browse) drives a real Chrome over CDP to produce a `SemanticEventDump`. That capture stamps every actionable element with a reference, and the final `encodeActionableRefs()` step turns those into `[forecast](ref:7:https://…)`-style links (a no-op here, since the hand-built input carries no refs) — so an agent can read the Markdown and then click an element back on the live page by its `ref`. See [`markanywhere-browse`](markanywhere-browse/README.md).
 
+This actionable-ref encoding is the default (`refMode = RefMode.ENCODE`). Pass `transformHtmlToMarkdown(refMode = RefMode.STRIP)` instead for a clean, standard Markdown dump: the refs are dropped from `simplifyHtml`'s keep-set and `encodeActionableRefs()` is skipped, so no `ref:`/`ref="…"` appears anywhere and links carry only their real `href`.
+
 > Backed by the first test in [`HtmlToMarkdownTest`](markanywhere-html/src/commonTest/kotlin/HtmlToMarkdownTest.kt) — `should convert the README HTML to Markdown example`.
 
 ### Rendering Markdown as DOM (Kotlin JS)

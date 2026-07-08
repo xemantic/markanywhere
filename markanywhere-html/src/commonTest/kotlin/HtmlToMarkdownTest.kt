@@ -16,7 +16,9 @@
 
 package com.xemantic.markanywhere.html
 
+import com.xemantic.kotlin.test.assert
 import com.xemantic.kotlin.test.sameAs
+import com.xemantic.markanywhere.dump.AccessibilityAnnotations
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.render.renderMarkdown
 import kotlinx.coroutines.test.runTest
@@ -49,9 +51,99 @@ class HtmlToMarkdownTest {
         // then
         markdown sameAs """
             # Weather
-
+            
             ☀️ Sunny and **warm** today — see the [forecast](https://example.com/forecast).
         """.trimIndent()
+    }
+
+    @Test
+    fun `should strip actionable refs in STRIP mode`() = runTest {
+        // given — both ref surfaces in one hand-built input: a ref-bearing
+        // inline link (folds into the `ref:` destination) and a ref-bearing
+        // block-wrapping link — a link around an <h2>, which renders as a raw
+        // <a> tag carrying a `ref=` attribute. RefMode.STRIP must drop both.
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "p" {
+                    +"See the "
+                    "a"("href" to "https://example.com", AccessibilityAnnotations.REF to "7") { +"site" }
+                    +"."
+                }
+                "a"("href" to "/live", AccessibilityAnnotations.REF to "9") {
+                    "h2" { +"Headline" }
+                }
+            }
+        }
+
+        // when — RefMode.STRIP drops the dump's refs entirely
+        val markdown = page.transformHtmlToMarkdown(refMode = RefMode.STRIP).renderMarkdown()
+
+        // then — no actionable-ref residue on any surface (see
+        // assertNoActionableRefs); links keep their real href as standard Markdown
+        assertNoActionableRefs(markdown)
+        markdown sameAs """
+            See the [site](https://example.com).
+            
+            <a href="/live">
+            
+            ## Headline
+            
+            </a>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should not let an explicit REF in keepAttributes bypass STRIP`() = runTest {
+        // given — a ref-bearing block-wrapping link (rendered as a raw <a> tag, so
+        // a surviving REF would leak as a `data-markanywhere-ref` attribute), with
+        // the caller contradictorily asking to keep REF *and* selecting STRIP
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "a"("href" to "/live", AccessibilityAnnotations.REF to "9") {
+                    "h2" { +"Headline" }
+                }
+            }
+        }
+
+        // when — STRIP wins: REF is removed from keepAttributes too
+        val markdown = page.transformHtmlToMarkdown(
+            keepAttributes = setOf(AccessibilityAnnotations.REF),
+            refMode = RefMode.STRIP,
+        ).renderMarkdown()
+
+        // then — the raw `data-markanywhere-ref` attribute does not leak through
+        // (nor any other ref surface)
+        assertNoActionableRefs(markdown)
+        markdown sameAs """
+            <a href="/live">
+            
+            ## Headline
+            
+            </a>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should thread a custom keepAttributes entry through the pipeline`() = runTest {
+        // given — a section carrying a custom data attribute the caller wants kept
+        val page = semanticEvents(tagged = true) {
+            "section"("data-foo" to "bar") {
+                "p" { +"Body" }
+            }
+        }
+
+        // when — the caller keeps `data-foo`; the keep-set arithmetic
+        // `(keepAttributes - REF) + refKeep + DISPLAY` must thread it through
+        // unchanged in BOTH ref modes
+        val encoded = page.transformHtmlToMarkdown(keepAttributes = setOf("data-foo")).renderMarkdown()
+        val stripped = page.transformHtmlToMarkdown(
+            keepAttributes = setOf("data-foo"),
+            refMode = RefMode.STRIP,
+        ).renderMarkdown()
+
+        // then — the custom attribute survives to the raw-tag output in both modes
+        assert("data-foo=\"bar\"" in encoded)
+        assert("data-foo=\"bar\"" in stripped)
     }
 
 }
