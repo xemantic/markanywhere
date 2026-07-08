@@ -79,6 +79,44 @@ Will print:
 
 > Backed by the first test in [`SemanticEventsRenderingTest`](markanywhere-render/src/commonTest/kotlin/SemanticEventsRenderingTest.kt) — `should render the README HTML example`.
 
+### Wrapping parsed Markdown in a complete HTML document
+
+`wrapInHtmlDocument()` (in `markanywhere-html`) wraps the event stream in an `html`/`head`/`body` structure, populating the `head` from a leading front matter block: `title` becomes `<title>`, `lang` becomes the `<html lang>` attribute, and every other flat key becomes a `<meta name content>` — the exact inverse of `simplifyHtml`'s `<head>`-to-front-matter extraction, so the two round-trip.
+
+```kotlin
+val document = """
+    ---
+    title: Hello
+    author: Alice
+    ---
+    # Heading
+""".trimIndent()
+
+println(flowOf(document).parse().wrapInHtmlDocument().renderHtml())
+```
+
+Will print:
+
+```text
+<html>
+  <head>
+    <title>
+      Hello
+    </title>
+    <meta name="author" content="Alice"/>
+  </head>
+  <body>
+    <h1>
+      Heading
+    </h1>
+  </body>
+</html>
+```
+
+Without a front matter block the `head` is empty and body content streams through untouched; anything beyond the flat `key: value` (YAML) / `key = "value"` (TOML) subset is skipped gracefully.
+
+> Backed by [`WrapInHtmlDocumentTest`](markanywhere-html/src/commonTest/kotlin/WrapInHtmlDocumentTest.kt) — `should wrap parsed Markdown in a complete HTML document`.
+
 ### Converting HTML to Markdown
 
 Because the same `SemanticEvent` stream can carry pure HTML (everything `isTagged = true`), the pipeline runs in reverse too: feed a real page's DOM — presentational wrappers, icon fonts, tracking scripts and all — and get clean Markdown back, ideal for handing a web page to an LLM.
@@ -289,7 +327,7 @@ See [markanywhere-parse/README.md](markanywhere-parse/README.md) for a full list
 | `markanywhere-js`        | Kotlin/JS DOM renderer                                              |
 | `markanywhere-dump`      | Injectable browser bundle exposing `window.markanywhere.dump()` — captures a live page's DOM as `SemanticEventDump` JSON |
 | `markanywhere-browse`    | Drives real Chrome over CDP (via `kdriver`) to capture a live page as a `SemanticEventDump` and act on it by element reference |
-| `markanywhere-html`      | HTML→Markdown pipeline `transformHtmlToMarkdown` (`resolveIcons`, `simplifyHtml`, `dropBlankInlineFormatting`, whitespace normalization, `encodeActionableRefs`), plus `applyAccessibility` |
+| `markanywhere-html`      | HTML→Markdown pipeline `transformHtmlToMarkdown` (`resolveIcons`, `simplifyHtml`, `dropBlankInlineFormatting`, whitespace normalization, `encodeActionableRefs`), plus `applyAccessibility` and `wrapInHtmlDocument` |
 | `markanywhere-test`      | Test helpers: `sameAs` for asserting `Flow<SemanticEvent>` equality |
 
 You can depend only on `markanywhere-parse` and consume the `Flow<SemanticEvent>` with your own renderer — the API surface is a single three-variant sealed class. The `markanywhere-transform` module additionally lets you intercept and rewrite events before they reach any renderer.
