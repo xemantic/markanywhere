@@ -5,19 +5,19 @@ kotlin = "2.4.0"
 # libraries
 kotlinxSerialization = "1.11.0"
 kotlinxCoroutines = "1.11.0"
-kotlinxIo = "0.9.0"
+kotlinxIo = "0.9.1"
 xemanticKotlinTest = "1.17.5"
 xemanticKotlinCore = "0.9.0"
 kdriver = "0.5.11"
 jetbrainsAnnotations = "26.1.0"
 slf4j = "2.0.18"
-logback = "1.5.35"
+logback = "1.5.37"
 # plugins
 versionsPlugin = "0.54.0"
 versionCatalogUpdatePlugin = "1.1.0"
 dokkaPlugin = "2.2.0"
 mavenPublishPlugin = "0.37.0"
-jreleaserPlugin = "1.24.0"
+jreleaserPlugin = "1.25.0"
 xemanticConventionsPlugin = "0.6.8"
 
 [libraries]
