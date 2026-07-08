@@ -198,7 +198,7 @@ class WrapInHtmlDocumentTest {
     }
 
     @Test
-    fun `should skip YAML comments, blank lines, and nested structures`() = runTest {
+    fun `should skip YAML comments blank lines and nested structures`() = runTest {
         // given — only the flat `title` key is representable in head metadata
         val input = semanticEvents {
             "frontmatter"("format" to "yaml") {
