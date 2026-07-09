@@ -42,7 +42,7 @@ class WrapInSectionsTest {
         }
 
         // when
-        val output = input.wrapInSections("h2")
+        val output = input.wrapInSections()
 
         // then
         output sameAs semanticEvents {
@@ -71,7 +71,7 @@ class WrapInSectionsTest {
         }
 
         // when
-        val output = input.wrapInSections("h2")
+        val output = input.wrapInSections()
 
         // then
         output sameAs semanticEvents {
@@ -97,7 +97,7 @@ class WrapInSectionsTest {
         }
 
         // when
-        val output = input.wrapInSections("h2")
+        val output = input.wrapInSections()
 
         // then
         output sameAs semanticEvents {
@@ -124,7 +124,7 @@ class WrapInSectionsTest {
         }
 
         // when
-        val output = input.wrapInSections("h2")
+        val output = input.wrapInSections()
 
         // then
         output sameAs semanticEvents {
@@ -150,7 +150,7 @@ class WrapInSectionsTest {
         }
 
         // when
-        val output = input.wrapInSections("h2")
+        val output = input.wrapInSections()
 
         // then
         output sameAs semanticEvents {
@@ -172,7 +172,7 @@ class WrapInSectionsTest {
 
         // when
         val output = input.wrapInSections { mark ->
-            mark.name == "h2" && mark["class"] == "chapter"
+            if (mark.name == "h2" && mark["class"] == "chapter") 1 else null
         }
 
         // then
@@ -190,6 +190,158 @@ class WrapInSectionsTest {
     }
 
     @Test
+    fun `should rank headings h2 to h6 by default`() = runTest {
+        // given
+        val input = semanticEvents {
+            "h2" { +"A" }
+            "h4" { +"Deep" }
+            "p" { +"Deep body." }
+            "h3" { +"Mid" }
+            "p" { +"Mid body." }
+        }
+
+        // when
+        val output = input.wrapInSections()
+
+        // then
+        output sameAs semanticEvents {
+            "section"("id" to "a") {
+                "h2" { +"A" }
+                "section"("id" to "deep") {
+                    "h4" { +"Deep" }
+                    "p" { +"Deep body." }
+                }
+                "section"("id" to "mid") {
+                    "h3" { +"Mid" }
+                    "p" { +"Mid body." }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should nest a lower-rank section inside the enclosing higher-rank section`() = runTest {
+        // given
+        val input = semanticEvents {
+            "h2" { +"A" }
+            "p" { +"A body." }
+            "h3" { +"A sub" }
+            "p" { +"A sub body." }
+            "h2" { +"B" }
+            "p" { +"B body." }
+        }
+
+        // when
+        val output = input.wrapInSections()
+
+        // then
+        output sameAs semanticEvents {
+            "section"("id" to "a") {
+                "h2" { +"A" }
+                "p" { +"A body." }
+                "section"("id" to "a-sub") {
+                    "h3" { +"A sub" }
+                    "p" { +"A sub body." }
+                }
+            }
+            "section"("id" to "b") {
+                "h2" { +"B" }
+                "p" { +"B body." }
+            }
+        }
+    }
+
+    @Test
+    fun `should close a nested section at its sibling of the same rank`() = runTest {
+        // given
+        val input = semanticEvents {
+            "h2" { +"A" }
+            "h3" { +"First sub" }
+            "p" { +"First sub body." }
+            "h3" { +"Second sub" }
+            "p" { +"Second sub body." }
+        }
+
+        // when
+        val output = input.wrapInSections()
+
+        // then
+        output sameAs semanticEvents {
+            "section"("id" to "a") {
+                "h2" { +"A" }
+                "section"("id" to "first-sub") {
+                    "h3" { +"First sub" }
+                    "p" { +"First sub body." }
+                }
+                "section"("id" to "second-sub") {
+                    "h3" { +"Second sub" }
+                    "p" { +"Second sub body." }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should open a lower-rank section at the top level without a higher-rank parent`() = runTest {
+        // given
+        val input = semanticEvents {
+            "h3" { +"Orphan" }
+            "p" { +"Orphan body." }
+            "h2" { +"Top" }
+            "p" { +"Top body." }
+        }
+
+        // when
+        val output = input.wrapInSections()
+
+        // then
+        output sameAs semanticEvents {
+            "section"("id" to "orphan") {
+                "h3" { +"Orphan" }
+                "p" { +"Orphan body." }
+            }
+            "section"("id" to "top") {
+                "h2" { +"Top" }
+                "p" { +"Top body." }
+            }
+        }
+    }
+
+    @Test
+    fun `should match section ranks with a custom rank matcher`() = runTest {
+        // given
+        val input = semanticEvents {
+            "h2" { +"Chapter" }
+            "h4" { +"Detail" }
+            "p" { +"Detail body." }
+            "h2" { +"Next chapter" }
+        }
+
+        // when
+        val output = input.wrapInSections { mark ->
+            when (mark.name) {
+                "h2" -> 1
+                "h4" -> 2
+                else -> null
+            }
+        }
+
+        // then
+        output sameAs semanticEvents {
+            "section"("id" to "chapter") {
+                "h2" { +"Chapter" }
+                "section"("id" to "detail") {
+                    "h4" { +"Detail" }
+                    "p" { +"Detail body." }
+                }
+            }
+            "section"("id" to "next-chapter") {
+                "h2" { +"Next chapter" }
+            }
+        }
+    }
+
+    @Test
     fun `should strip tags and non-anchor characters when deriving the section id`() = runTest {
         // given
         val input = semanticEvents {
@@ -201,7 +353,7 @@ class WrapInSectionsTest {
         }
 
         // when
-        val output = input.wrapInSections("h2")
+        val output = input.wrapInSections()
 
         // then
         output sameAs semanticEvents {
@@ -228,7 +380,7 @@ class WrapInSectionsTest {
         }
 
         // when
-        val output = input.wrapInSections("h2")
+        val output = input.wrapInSections()
 
         // then
         output sameAs semanticEvents {
@@ -248,21 +400,27 @@ class WrapInSectionsTest {
     }
 
     @Test
-    fun `should omit the id when the heading yields no anchor characters`() = runTest {
+    fun `should assign a synthetic id when the heading yields no anchor characters`() = runTest {
         // given
         val input = semanticEvents {
             "h2" { +"!!!" }
-            "p" { +"Body." }
+            "p" { +"One." }
+            "h2" { +"???" }
+            "p" { +"Two." }
         }
 
         // when
-        val output = input.wrapInSections("h2")
+        val output = input.wrapInSections()
 
         // then
         output sameAs semanticEvents {
-            "section" {
+            "section"("id" to "section") {
                 "h2" { +"!!!" }
-                "p" { +"Body." }
+                "p" { +"One." }
+            }
+            "section"("id" to "section-1") {
+                "h2" { +"???" }
+                "p" { +"Two." }
             }
         }
     }
@@ -276,7 +434,7 @@ class WrapInSectionsTest {
         }
 
         // when
-        val output = input.wrapInSections("h2")
+        val output = input.wrapInSections()
 
         // then
         output sameAs semanticEvents(tagged = true) {
