@@ -418,6 +418,38 @@ class MarkanywhereParserTest {
     }
 
     @Test
+    fun `should keep a literal ampersand in place inside a heading`() = runTest {
+        // given
+        val textFlow = """
+            ### Agentic AI & Creative Coding
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "h3" { +"Agentic AI & Creative Coding" }
+        }
+    }
+
+    @Test
+    fun `should decode an entity reference inside a heading`() = runTest {
+        // given
+        val textFlow = """
+            # Fish &amp; Chips
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "h1" { +"Fish & Chips" }
+        }
+    }
+
+    @Test
     fun `should escape HTML in code blocks`() = runTest {
         // given
         

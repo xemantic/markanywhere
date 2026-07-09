@@ -1860,7 +1860,7 @@ private class ParserState(
             val heading = blockMode
             if (heading is BlockMode.Heading &&
                 inlineBuffer.isEmpty() && !escaped && !code && !math &&
-                !inLink && !inImage && inlineRawSkipTag == null
+                !inLink && !inImage && !inEntityRef && inlineRawSkipTag == null
             ) {
                 if (!heading.contentStarted && heading.pendingSpaces.isEmpty()) {
                     var skip = index
@@ -2358,15 +2358,17 @@ private class ParserState(
             ' ', '\t' -> when {
                 // Leading whitespace before any content or closing-# candidate.
                 !mode.contentStarted && mode.pendingSpaces.isEmpty() -> {}
-                // Pending delimiter or escape needs this char now to resolve
-                // flanking. Route directly — pendingSpaces is reserved for
+                // Pending delimiter, escape, or entity ref needs this char now
+                // to resolve. Route directly — pendingSpaces is reserved for
                 // trailing-or-closing material observed with a clean inline
                 // state.
-                inlineBuffer.isNotEmpty() || escaped -> processInlineChar(char)
+                inlineBuffer.isNotEmpty() || escaped || inEntityRef ->
+                    processInlineChar(char)
                 else -> mode.pendingSpaces.append(char)
             }
             '#' -> when {
-                inlineBuffer.isNotEmpty() || escaped -> processInlineChar(char)
+                inlineBuffer.isNotEmpty() || escaped || inEntityRef ->
+                    processInlineChar(char)
                 // Potential closing-#: a `#` that follows the opening's
                 // whitespace (no content yet) or that follows already-buffered
                 // trailing material. Defer; flushed as content if non-trailing
