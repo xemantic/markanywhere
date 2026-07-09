@@ -183,6 +183,106 @@ class WrapInSectionsTocTest {
     }
 
     @Test
+    fun `should dedup a section id colliding with the toc nav id`() = runTest {
+        // given
+        val input = semanticEvents {
+            "h2" { +"TOC" }
+            "h2" { +"Body" }
+        }
+
+        // when
+        val output = input.wrapInSections(tocDepth = 1)
+
+        // then
+        output sameAs semanticEvents {
+            "section"("id" to "toc-1") {
+                "h2" { +"TOC" }
+            }
+            "section"("id" to "body") {
+                "h2" { +"Body" }
+            }
+            "nav"("id" to "toc") {
+                "ul" {
+                    "li" {
+                        "a"("href" to "#toc-1") { +"TOC" }
+                    }
+                    "li" {
+                        "a"("href" to "#body") { +"Body" }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep the toc id for a section when the toc nav is disabled`() = runTest {
+        // given
+        val input = semanticEvents {
+            "h2" { +"TOC" }
+        }
+
+        // when
+        val output = input.wrapInSections()
+
+        // then
+        output sameAs semanticEvents {
+            "section"("id" to "toc") {
+                "h2" { +"TOC" }
+            }
+        }
+    }
+
+    @Test
+    fun `should step the toc list back multiple levels at once`() = runTest {
+        // given
+        val input = semanticEvents {
+            "h2" { +"A" }
+            "h3" { +"A sub" }
+            "h4" { +"A sub sub" }
+            "h2" { +"B" }
+        }
+
+        // when
+        val output = input.wrapInSections(tocDepth = 3)
+
+        // then
+        output sameAs semanticEvents {
+            "section"("id" to "a") {
+                "h2" { +"A" }
+                "section"("id" to "a-sub") {
+                    "h3" { +"A sub" }
+                    "section"("id" to "a-sub-sub") {
+                        "h4" { +"A sub sub" }
+                    }
+                }
+            }
+            "section"("id" to "b") {
+                "h2" { +"B" }
+            }
+            "nav"("id" to "toc") {
+                "ul" {
+                    "li" {
+                        "a"("href" to "#a") { +"A" }
+                        "ul" {
+                            "li" {
+                                "a"("href" to "#a-sub") { +"A sub" }
+                                "ul" {
+                                    "li" {
+                                        "a"("href" to "#a-sub-sub") { +"A sub sub" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    "li" {
+                        "a"("href" to "#b") { +"B" }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
     fun `should not emit a toc nav when no section was created`() = runTest {
         // given
         val input = semanticEvents {

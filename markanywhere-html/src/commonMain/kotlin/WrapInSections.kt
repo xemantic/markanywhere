@@ -56,8 +56,9 @@ import kotlinx.coroutines.flow.Flow
  * section closes, at the very end of the stream: a `nav` with `id="toc"`
  * holding a `ul` of `<li><a href="#section-id">heading text</a></li>` entries,
  * one per section whose nesting level is at most [tocDepth], with nested `ul`
- * lists mirroring the section nesting. When no section was created, no `nav`
- * is emitted at all. Because the `nav` lands at the absolute end of the stream,
+ * lists mirroring the section nesting. The `toc` id is reserved for the `nav`,
+ * so a heading slugifying to `toc` dedups to `toc-1`. When no section was
+ * created, no `nav` is emitted at all. Because the `nav` lands at the absolute end of the stream,
  * apply this operator *before* any enclosing wrapper (e.g.
  * [wrapInHtmlDocument]) so the `nav` ends up inside the document. The TOC
  * entries are the one piece of state held until the end of the stream — one
@@ -94,7 +95,14 @@ public fun Flow<SemanticEvent>.wrapInSections(
     // open synthetic sections, innermost last
     val openSections = ArrayDeque<OpenSection>()
     val usedIds = mutableSetOf<String>()
+    // the appended nav claims id="toc", so a heading slugifying to "toc"
+    // must dedup to "toc-1" for ids to stay unique within the stream
+    if (tocDepth > 0) usedIds += "toc"
     val tocEntries = mutableListOf<TocEntry>()
+    // the nav must be uniformly tagged to stay a well-formed subtree, so it
+    // mirrors the tagged flag of the first listed section rather than
+    // carrying a per-entry flag
+    var tocIsTagged = false
 
     // the matched mark's subtree, buffered between its mark and balanced
     // unmark so the section id can be derived from the flattened text
@@ -117,7 +125,8 @@ public fun Flow<SemanticEvent>.wrapInSections(
         headingText.clear()
         val level = openSections.size + 1
         if (level <= tocDepth) {
-            tocEntries += TocEntry(id, label, level, headingIsTagged)
+            if (tocEntries.isEmpty()) tocIsTagged = headingIsTagged
+            tocEntries += TocEntry(id, label, level)
         }
         mark(
             "section",
@@ -181,7 +190,7 @@ public fun Flow<SemanticEvent>.wrapInSections(
     }
 
     if (tocEntries.isNotEmpty()) {
-        val isTagged = tocEntries.first().isTagged
+        val isTagged = tocIsTagged
         mark("nav", isTagged = isTagged, attributes = mapOf("id" to "toc"))
         var level = 0
         for (entry in tocEntries) {
@@ -235,8 +244,7 @@ private class OpenSection(
 private class TocEntry(
     val id: String,
     val label: String,
-    val level: Int,
-    val isTagged: Boolean
+    val level: Int
 )
 
 // The GitHub heading-anchor convention: trim, lowercase, keep letters,
