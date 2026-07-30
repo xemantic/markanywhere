@@ -138,6 +138,14 @@ public suspend fun Tab.waitForNetworkIdle(
  * (resolving `true`) or the [timeout] cap is hit (resolving `false`). Running
  * the debounce inside the page avoids round-tripping every mutation over CDP.
  *
+ * The observed target is `document`, not `document.documentElement`: right
+ * after a navigation commits there is a window in which the new document has
+ * no document element yet, and `observe(null)` throws `TypeError: parameter 1
+ * is not of type 'Node'` — which, called on the heels of a click that
+ * navigates, fails the whole wait. A `Document` is always a `Node`, and
+ * `subtree: true` from it covers everything `documentElement` would have,
+ * including a document element that appears (or is replaced) later.
+ *
  * @return `true` if the DOM went quiet, `false` if [timeout] elapsed first.
  */
 public suspend fun Tab.waitForDomIdle(
@@ -163,7 +171,7 @@ public suspend fun Tab.waitForDomIdle(
                 timer = setTimeout(() => finish(true), quiet);
               };
               const observer = new MutationObserver(bump);
-              observer.observe(document.documentElement, {
+              observer.observe(document, {
                 subtree: true, childList: true, attributes: true, characterData: true
               });
               bump();
