@@ -67,6 +67,24 @@ class WaitUntilLoadedTest {
     }
 
     @Test
+    fun `waitForDomIdle should report idle on a document with no document element`() = runTest {
+        val idle = runInBrowser { browser ->
+            // given — a document whose documentElement is gone, standing in for the
+            // window right after a navigation commits, before the new document has
+            // one; observing it directly would throw "parameter 1 is not of type
+            // 'Node'" and fail every click that navigates
+            val tab = browser.get(testPageUrl("simple.html"))
+            tab.rawEvaluate("document.removeChild(document.documentElement)")
+
+            // when
+            tab.waitForDomIdle(quietTime = 300.milliseconds, timeout = 10.seconds)
+        }
+
+        // then — the wait completes normally, and the empty document is quiet
+        assert(idle)
+    }
+
+    @Test
     fun `waitForNetworkIdle should report idle on a page issuing no requests`() = runTest {
         val idle = runInBrowser { browser ->
             // given — a fully static page whose load requests have settled
