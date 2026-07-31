@@ -116,6 +116,8 @@ Will print:
 
 Without a front matter block the `head` is empty and body content streams through untouched; anything beyond the flat `key: value` (YAML) / `key = "value"` (TOML) subset is skipped gracefully.
 
+For a document that carries no front matter (or one without a `title`), `ensureFrontmatterTitle()` derives the missing `title` from the first `h1` — synthesizing a default front matter when none exists — so `parse().ensureFrontmatterTitle().wrapInHtmlDocument()` always produces a `<title>` for a document opening with a heading.
+
 > Backed by [`WrapInHtmlDocumentTest`](markanywhere-html/src/commonTest/kotlin/WrapInHtmlDocumentTest.kt) — `should wrap parsed Markdown in a complete HTML document`.
 
 ### Converting HTML to Markdown
@@ -331,7 +333,7 @@ See [markanywhere-parse/README.md](markanywhere-parse/README.md) for a full list
 | `markanywhere-js`        | Kotlin/JS DOM renderer                                              |
 | `markanywhere-dump`      | Injectable browser bundle exposing `window.markanywhere.dump()` — captures a live page's DOM as `SemanticEventDump` JSON |
 | `markanywhere-browse`    | Drives real Chrome over CDP (via `kdriver`) to capture a live page as a `SemanticEventDump` and act on it by element reference |
-| `markanywhere-html`      | HTML→Markdown pipeline `transformHtmlToMarkdown` (`resolveIcons`, `simplifyHtml`, `dropBlankInlineFormatting`, whitespace normalization, `encodeActionableRefs`), plus `applyAccessibility`, `wrapInHtmlDocument`, and `wrapInSections` (rank-nested sectioning with an optional table-of-contents `nav`) |
+| `markanywhere-html`      | HTML→Markdown pipeline `transformHtmlToMarkdown` (`resolveIcons`, `simplifyHtml`, `dropBlankInlineFormatting`, whitespace normalization, `encodeActionableRefs`), plus `applyAccessibility`, `wrapInHtmlDocument`, `wrapInSections` (rank-nested sectioning with an optional table-of-contents `nav`), and `ensureFrontmatterTitle` (derives a missing front matter `title` from the first `h1`) |
 | `markanywhere-test`      | Test helpers: `sameAs` for asserting `Flow<SemanticEvent>` equality |
 
 You can depend only on `markanywhere-parse` and consume the `Flow<SemanticEvent>` with your own renderer — the API surface is a single three-variant sealed class.
