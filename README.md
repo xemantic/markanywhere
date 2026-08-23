@@ -173,27 +173,16 @@ Note: Typically `markdownFlow: Flow<String>` represents a Markdown text stream, 
 
 ### Transforming the event stream
 
-Each reusable rule set is an extension on `TransformerBuilder` — think of one as an XSLT stylesheet you can compose with others:
-
 ```kotlin
-fun TransformerBuilder.demoteHeadings() {
-    match("h1") { "h2" { children() } } // re-emit <h1> as <h2>, keeping its content
-}
-
-fun TransformerBuilder.emphasizeToStrong() {
-    match("em") { "strong" { children() } } // re-emit <em> as <strong>
-}
-
-println(
-    flowOf(markdown)
-        .parse()
-        .transform {
-            demoteHeadings()
-            emphasizeToStrong()
-            passthrough() // copy every other mark and its text verbatim
-        }
-        .render()
-)
+val transformed = flowOf(markdown)
+    .parse()
+    .transform {
+        match("h1") { "h2" { children() } } // re-emit <h1> as <h2>, keeping its content
+        match("em") { "strong" { children() } } // re-emit <em> as <strong>
+        passthrough() // copy every other mark and its text verbatim
+    }
+    .render()
+println(transformed)
 ```
 
 Will print:
