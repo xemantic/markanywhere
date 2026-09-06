@@ -17,6 +17,7 @@
 import con.xemantic.markanywhere.buildlogic.allTargets
 import groovy.json.JsonSlurper
 import java.net.URI
+import java.time.Year
 
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
@@ -24,7 +25,7 @@ plugins {
 }
 
 
-val devBuild: Boolean by extra
+val devBuild = extra["devBuild"] as Boolean
 
 kotlin {
 
@@ -80,8 +81,9 @@ val namedEntitiesSourceFile =
     layout.projectDirectory.file("src/commonMain/kotlin/NamedEntities.kt")
 val namedEntitiesCacheFile =
     layout.buildDirectory.file("named-entities/entities.json")
+val copyrightProfileDir = rootProject.layout.projectDirectory.dir(".idea/copyright")
 
-val generateNamedEntities by tasks.registering {
+val generateNamedEntities = tasks.register("generateNamedEntities") {
     description = "Rewrites src/commonMain/kotlin/NamedEntities.kt from $namedEntitiesUrl"
     group = "build"
 
@@ -89,8 +91,11 @@ val generateNamedEntities by tasks.registering {
     val pkg = namedEntitiesPackage
     val cacheFile = namedEntitiesCacheFile
     val outFile = namedEntitiesSourceFile
+    val copyrightDir = copyrightProfileDir
 
     inputs.property("url", url)
+    inputs.files(fileTree(copyrightDir) { include("*.xml") })
+        .withPropertyName("copyrightProfiles")
     outputs.file(outFile)
 
     doLast {
@@ -116,6 +121,7 @@ val generateNamedEntities by tasks.registering {
             .toList()
 
         val kotlin = StringBuilder().apply {
+            append(licenseHeader(copyrightDir.asFile, outFile.asFile))
             append(
                 """
                 |// Auto-generated from $url. Do not edit by hand.
@@ -139,6 +145,84 @@ val generateNamedEntities by tasks.registering {
         outFile.asFile.writeText(kotlin.toString())
     }
 }
+
+// The license header is rendered from the IDE's own copyright profile in
+// `.idea/copyright` (both files are committed) rather than hardcoded here, so
+// the two can never drift: the generated file gets exactly the notice the IDE's
+// copyright autosave would stamp on it, and a genuine entity-table refresh
+// shows up as a pure data diff instead of a header churn.
+fun licenseHeader(copyrightDir: File, existing: File): String {
+    val notice = defaultCopyrightNotice(copyrightDir)
+    val body = notice
+        // The profile's `$originalComment.match("Copyright (\d+)", 1, "-")$today.year`
+        // year expression, evaluated the way the IDE evaluates it: keep the year
+        // already present in the file being rewritten, extending it to a range
+        // once the current year moves on.
+        .replace(YEAR_EXPRESSION_REGEX) { copyrightYears(existing) }
+    return buildString {
+        append("/*\n")
+        body.lineSequence().forEach { line ->
+            append(if (line.isEmpty()) " *\n" else " * $line\n")
+        }
+        append(" */\n\n")
+    }
+}
+
+fun defaultCopyrightNotice(copyrightDir: File): String {
+    val profiles = copyrightDir.listFiles { file: File ->
+        file.extension == "xml" && file.name != "profiles_settings.xml"
+    }?.sorted() ?: emptyList()
+    check(profiles.isNotEmpty()) {
+        "No copyright profile found in $copyrightDir"
+    }
+    val default = copyrightDir.resolve("profiles_settings.xml")
+        .takeIf { it.exists() }
+        ?.let { Regex("""<settings\s+default="([^"]+)"""").find(it.readText())?.groupValues?.get(1) }
+    val notices = profiles.associate { profile ->
+        val options = XML_OPTION_REGEX.findAll(profile.readText()).associate { match ->
+            match.groupValues[1] to decodeXmlEntities(match.groupValues[2])
+        }
+        options["myName"] to options["notice"]
+    }
+    val notice = notices[default] ?: notices.values.firstOrNull()
+    return checkNotNull(notice) {
+        "Copyright profile '$default' in $copyrightDir declares no notice"
+    }
+}
+
+fun copyrightYears(existing: File): String {
+    val thisYear = Year.now().value.toString()
+    val firstYear = existing
+        .takeIf { it.exists() }
+        ?.let { Regex("""Copyright (\d+)""").find(it.readText())?.groupValues?.get(1) }
+        ?: thisYear
+    return if (firstYear == thisYear) thisYear else "$firstYear-$thisYear"
+}
+
+// IDEA escapes `$` in the notice as `&#36;`, so the year expression survives one
+// XML-decoding pass in either form.
+val YEAR_EXPRESSION_REGEX =
+    Regex("""(?:\$|&#36;)originalComment\.match\(.*?\)(?:\$|&#36;)today\.year""")
+
+val XML_OPTION_REGEX = Regex("""<option\s+name="([^"]*)"\s+value="([^"]*)"\s*/>""")
+
+// Single left-to-right pass, so a doubly-escaped `&amp;#36;` decodes to the
+// literal `&#36;` the profile actually stores, not all the way through to `$`.
+fun decodeXmlEntities(s: String): String =
+    Regex("""&(?:#(\d+)|#x([0-9a-fA-F]+)|(amp|lt|gt|quot|apos));""").replace(s) { match ->
+        val (decimal, hex, named) = match.destructured
+        when {
+            decimal.isNotEmpty() -> decimal.toInt().toChar().toString()
+            hex.isNotEmpty() -> hex.toInt(16).toChar().toString()
+            else -> when (named) {
+                "amp" -> "&"
+                "lt" -> "<"
+                "gt" -> ">"
+                "quot" -> "\""
+                else -> "'"
+            }
+        }
+    }
 
 fun StringBuilder.appendEscaped(s: String) {
     for (c in s) {

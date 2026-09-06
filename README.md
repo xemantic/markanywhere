@@ -380,7 +380,7 @@ fast-to-build target set for local development:
 - CI passes **`-PdevBuild=false`** to build the full published set.
 
 The convention plugin declares **no Kotlin target itself**. Instead each module
-reads the flag via `val devBuild: Boolean by extra` and branches its own
+reads the flag via `val devBuild = extra["devBuild"] as Boolean` and branches its own
 `kotlin { }` target declarations on it, using two helpers the convention adds to
 `KotlinMultiplatformExtension` — `allTargets()` (the full published set, honoring
 the `targetGroup` flag) and `jsTarget()` (a configured browser+nodejs JS target):
@@ -388,7 +388,7 @@ the `targetGroup` flag) and `jsTarget()` (a configured browser+nodejs JS target)
 ```kotlin
 import con.xemantic.markanywhere.buildlogic.allTargets
 
-val devBuild: Boolean by extra
+val devBuild = extra["devBuild"] as Boolean
 
 kotlin {
     if (devBuild) jvm() else allTargets()   // most modules

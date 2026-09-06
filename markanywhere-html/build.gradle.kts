@@ -22,7 +22,7 @@ plugins {
     id("markanywhere.convention")
 }
 
-val devBuild: Boolean by extra
+val devBuild = extra["devBuild"] as Boolean
 
 kotlin {
 
@@ -110,7 +110,7 @@ private fun String.toLiteral(): String =
 val dumpFixturesInputDir = layout.projectDirectory.dir("src/commonTest/dumps")
 val dumpFixturesOutputDir = layout.buildDirectory.dir("generated/dumpFixtures/commonTest/kotlin")
 
-val generateDumpFixtures by tasks.registering {
+val generateDumpFixtures = tasks.register("generateDumpFixtures") {
     description = "Bakes src/commonTest/dumps/*.json into the DumpFixtures Kotlin object."
     val inputDir = dumpFixturesInputDir
     val outputDir = dumpFixturesOutputDir
@@ -162,7 +162,7 @@ kotlin.sourceSets.commonTest {
 // on the jvmTest classpath (which has markanywhere-render) without polluting the
 // published module's dependencies.
 
-val renderDumpFixtures by tasks.registering(JavaExec::class) {
+val renderDumpFixtures = tasks.register<JavaExec>("renderDumpFixtures") {
     description = "Renders src/commonTest/dumps/*.json DOM dumps back to HTML under build/renderedDumps/."
     group = "documentation"
     val jvmTest = kotlin.jvm().compilations.getByName("test")
@@ -176,7 +176,7 @@ val renderDumpFixtures by tasks.registering(JavaExec::class) {
 // under build/renderedMarkdown/ — the canonical way to regenerate the golden
 // output asserted by HtmlToMarkdownTest after a pipeline change. Entry point:
 // RenderDumpMarkdown.kt in src/jvmTest.
-val renderDumpMarkdown by tasks.registering(JavaExec::class) {
+val renderDumpMarkdown = tasks.register<JavaExec>("renderDumpMarkdown") {
     description = "Renders src/commonTest/dumps/*.json DOM dumps to Markdown under build/renderedMarkdown/."
     group = "documentation"
     val jvmTest = kotlin.jvm().compilations.getByName("test")
@@ -194,7 +194,7 @@ val renderDumpMarkdown by tasks.registering(JavaExec::class) {
 // in src/jvmTest. Runs on the jvmTest classpath (which has markanywhere-browse +
 // kdriver) without polluting the published module's dependencies.
 
-val capture by tasks.registering(JavaExec::class) {
+val capture = tasks.register<JavaExec>("capture") {
     description = "Captures a SemanticEventDump into src/commonTest/dumps/: --args=\"<url> [output.json]\""
     group = "markanywhere"
     val jvmTest = kotlin.jvm().compilations.getByName("test")

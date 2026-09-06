@@ -56,9 +56,9 @@ fun Project.doApply() {
     // development — defaults to true so a bare `./gradlew build` only touches
     // the dev targets each module declares (jvm, or js-browser for js-only
     // modules). CI passes `-PdevBuild=false` to build the full published set.
-    // Each module reads it via `val devBuild: Boolean by extra` and branches its
-    // own `kotlin { }` target declarations on it (the convention no longer
-    // declares any target itself).
+    // Each module reads it via `val devBuild = extra["devBuild"] as Boolean` and
+    // branches its own `kotlin { }` target declarations on it (the convention no
+    // longer declares any target itself).
     val devBuild: Boolean = when ((findProperty("devBuild") as? String)?.lowercase()) {
         null, "true" -> true
         "false" -> false
@@ -118,7 +118,8 @@ fun Project.doApply() {
  *
  * No Kotlin target is declared here — each module declares its own targets in
  * its `kotlin { }` block, branching on the `devBuild` flag (read via
- * `val devBuild: Boolean by extra`):
+ * `val devBuild = extra["devBuild"] as Boolean` — the `by extra` delegate is
+ * deprecated as of Gradle 9.6):
  *
  *     kotlin {
  *         if (devBuild) jvm() else allTargets()   // standard module

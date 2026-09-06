@@ -21,7 +21,7 @@ plugins {
     id("markanywhere.convention")
 }
 
-val devBuild: Boolean by extra
+val devBuild = extra["devBuild"] as Boolean
 
 kotlin {
 
