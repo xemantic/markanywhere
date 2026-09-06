@@ -78,6 +78,21 @@ class W3cValidatorRefsTest {
             <label id="inputlabel">Check by
             
             <select id="docselect" ref="7">
+            <option value="" ref="8">
+            
+            address
+            
+            </option>
+            <option value="file" ref="9">
+            
+            file upload
+            
+            </option>
+            <option value="textarea" ref="10">
+            
+            text input
+            
+            </option>
             </select>
             
             </label><input id="doc" type="url" name="doc" placeholder="Enter the URL for an HTML, CSS, or SVG document" required="" pattern="(?:(?:https?://.+)|(?:data:.+))?" aria-label="address" ref="11">
@@ -136,8 +151,8 @@ class W3cValidatorRefsTest {
             +<label id="inputlabel">Check by</label>
              
              <select id="docselect" ref="7">
-             </select>
-            @@ -31,7 +35,6 @@
+             <option value="" ref="8">
+            @@ -46,7 +50,6 @@
              </label><input id="doc" type="url" name="doc" placeholder="Enter the URL for an HTML, CSS, or SVG document" required="" pattern="(?:(?:https?://.+)|(?:data:.+))?" aria-label="address" ref="11">
              
              <input id="submit" type="submit" value="Check" ref="12">

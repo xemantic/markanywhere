@@ -146,4 +146,88 @@ class HtmlToMarkdownTest {
         assert("data-foo=\"bar\"" in stripped)
     }
 
+    @Test
+    fun `should render the options of a select the browser lays out no box for`() = runTest {
+        // given — the shape a real capture produces: a closed <select> keeps its
+        // popup out of the layout tree, so every <option> is annotated
+        // `display: none` even though nothing is hidden.
+        val page = semanticEvents(tagged = true) {
+            "select"(
+                "id" to "country",
+                AccessibilityAnnotations.REF to "1",
+                AccessibilityAnnotations.DISPLAY to "inline-block"
+            ) {
+                "option"("value" to "pl", AccessibilityAnnotations.DISPLAY to "none") { +"Poland" }
+                "option"(
+                    "value" to "de",
+                    "selected" to "",
+                    AccessibilityAnnotations.DISPLAY to "none"
+                ) { +"Germany" }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then — the options survive with their labels, so an agent can pick one
+        markdown sameAs /* language=markdown */ """
+            <select id="country" ref="1">
+            <option value="pl">
+            
+            Poland
+            
+            </option>
+            <option value="de" selected="">
+            
+            Germany
+            
+            </option>
+            </select>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should render the options of a select nested behind a wrapper`() = runTest {
+        // given — the event shape a real Chrome capture produces when a <div>
+        // sits between <select> and <option> (Chrome's parser keeps one, the
+        // customizable-select content model allows one, and a JS-built DOM can
+        // nest anything): the wrapper, the options and an option's own inline
+        // markup all report the no-layout-box `none`.
+        val page = semanticEvents(tagged = true) {
+            "select"(
+                "id" to "country",
+                AccessibilityAnnotations.REF to "1",
+                AccessibilityAnnotations.DISPLAY to "inline-flex"
+            ) {
+                "div"("class" to "popup", AccessibilityAnnotations.DISPLAY to "none") {
+                    "option"("value" to "pl", AccessibilityAnnotations.DISPLAY to "none") {
+                        "span"("class" to "flag", AccessibilityAnnotations.DISPLAY to "none") { +"PL" }
+                        +" Poland"
+                    }
+                    "option"("value" to "de", AccessibilityAnnotations.DISPLAY to "none") { +"Germany" }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then — the wrapper is unwrapped and the options survive with the inline
+        // markup of their labels intact
+        markdown sameAs /* language=markdown */ """
+            <select id="country" ref="1">
+            <option value="pl">
+            
+            PL Poland
+            
+            </option>
+            <option value="de">
+            
+            Germany
+            
+            </option>
+            </select>
+        """.trimIndent()
+    }
+
 }

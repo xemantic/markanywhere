@@ -77,6 +77,21 @@ class W3cValidatorNoRefsTest {
             <label id="inputlabel">Check by
             
             <select id="docselect">
+            <option value="">
+            
+            address
+            
+            </option>
+            <option value="file">
+            
+            file upload
+            
+            </option>
+            <option value="textarea">
+            
+            text input
+            
+            </option>
             </select>
             
             </label><input id="doc" type="url" name="doc" placeholder="Enter the URL for an HTML, CSS, or SVG document" required="" pattern="(?:(?:https?://.+)|(?:data:.+))?" aria-label="address">
