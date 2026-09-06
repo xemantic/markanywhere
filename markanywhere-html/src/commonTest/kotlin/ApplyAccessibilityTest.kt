@@ -633,6 +633,41 @@ class ApplyAccessibilityTest {
     }
 
     @Test
+    fun `should keep a select nested in another select's popup`() = runTest {
+        // given — a JS-built select whose popup contains a select of its own:
+        // the nested <select> carries the popup's artifact `none` on its *own*
+        // mark, which the select rule must recognise as the artifact it is
+        // (it is the one place the "inside a select" verdict is threaded onto
+        // a mark itself rather than onto its children).
+        val input = semanticEvents(tagged = true) {
+            "select"("id" to "outer", AccessibilityAnnotations.DISPLAY to "inline-block") {
+                "div"(AccessibilityAnnotations.DISPLAY to "none") {
+                    "select"("id" to "inner", AccessibilityAnnotations.DISPLAY to "none") {
+                        "option"("value" to "a", AccessibilityAnnotations.DISPLAY to "none") {
+                            +"Alpha"
+                        }
+                    }
+                }
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then — the nested select survives, and the meaningless `none` is
+        // stripped from it just as it is from every other node in the popup.
+        output sameAs semanticEvents(tagged = true) {
+            "select"("id" to "outer", AccessibilityAnnotations.DISPLAY to "inline-block") {
+                "div" {
+                    "select"("id" to "inner") {
+                        "option"("value" to "a") { +"Alpha" }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
     fun `should drop a script inside a select carrying no display annotation`() = runTest {
         // given — a hand-built or non-Chrome-sourced stream carries no display
         // annotation, but a script is never rendered content in any case.
