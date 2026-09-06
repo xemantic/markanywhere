@@ -32,6 +32,7 @@ include(
     "markanywhere-js",
     "markanywhere-transform",
     "markanywhere-html",
+    "markanywhere-xml",
     "markanywhere-browse",
     "markanywhere-test"
 )
