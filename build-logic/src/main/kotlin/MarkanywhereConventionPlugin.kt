@@ -136,7 +136,8 @@ fun Project.doApply() {
  *
  * No Kotlin target is declared here — each module declares its own targets in
  * its `kotlin { }` block, branching on the `devBuild` flag (read via
- * `val devBuild = extra["devBuild"] as Boolean`):
+ * `val devBuild = extra["devBuild"] as Boolean` — the `by extra` delegate is
+ * deprecated as of Gradle 9.6):
  *
  *     kotlin {
  *         if (devBuild) jvm() else allTargets()   // standard module
