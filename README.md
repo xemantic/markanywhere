@@ -316,19 +316,20 @@ See [markanywhere-parse/README.md](markanywhere-parse/README.md) for a full list
 
 ## Modules
 
-| Module                   | Purpose                                                             |
-|--------------------------|---------------------------------------------------------------------|
-| `markanywhere-api`       | `SemanticEvent` sealed type — the only interface between modules    |
-| `markanywhere-parse`     | Streaming parser: `Flow<String>` → `Flow<SemanticEvent>`            |
-| `markanywhere-render`    | HTML renderer: `Flow<SemanticEvent>` → HTML string                  |
-| `markanywhere-transform` | DSL for rewriting event streams on the fly                          |
-| `markanywhere-flow`      | Utilities for composing and splitting event flows                   |
-| `markanywhere-extract`   | Utilities for extracting structured data from event streams         |
-| `markanywhere-js`        | Kotlin/JS DOM renderer                                              |
-| `markanywhere-dump`      | Injectable browser bundle exposing `window.markanywhere.dump()` — captures a live page's DOM as `SemanticEventDump` JSON |
-| `markanywhere-browse`    | Drives real Chrome over CDP (via `kdriver`) to capture a live page as a `SemanticEventDump` and act on it by element reference |
+| Module                   | Purpose                                                                                                                                                                                                                                                                                                   |
+|--------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `markanywhere-api`       | `SemanticEvent` sealed type — the only interface between modules                                                                                                                                                                                                                                          |
+| `markanywhere-parse`     | Streaming parser: `Flow<String>` → `Flow<SemanticEvent>`                                                                                                                                                                                                                                                  |
+| `markanywhere-render`    | HTML renderer: `Flow<SemanticEvent>` → HTML string                                                                                                                                                                                                                                                        |
+| `markanywhere-transform` | DSL for rewriting event streams on the fly                                                                                                                                                                                                                                                                |
+| `markanywhere-flow`      | Utilities for composing and splitting event flows                                                                                                                                                                                                                                                         |
+| `markanywhere-extract`   | Utilities for extracting structured data from event streams                                                                                                                                                                                                                                               |
+| `markanywhere-js`        | Kotlin/JS DOM renderer                                                                                                                                                                                                                                                                                    |
+| `markanywhere-dump`      | Injectable browser bundle exposing `window.markanywhere.dump()` — captures a live page's DOM as `SemanticEventDump` JSON                                                                                                                                                                                  |
+| `markanywhere-browse`    | Drives real Chrome over CDP (via `kdriver`) to capture a live page as a `SemanticEventDump` and act on it by element reference                                                                                                                                                                            |
 | `markanywhere-html`      | HTML→Markdown pipeline `transformHtmlToMarkdown` (`resolveIcons`, `simplifyHtml`, `dropBlankInlineFormatting`, whitespace normalization, `encodeActionableRefs`), plus `applyAccessibility`, `wrapInHtmlDocument`, and `wrapInSections` (rank-nested sectioning with an optional table-of-contents `nav`) |
-| `markanywhere-test`      | Test helpers: `sameAs` for asserting `Flow<SemanticEvent>` equality |
+| `markanywhere-xml`       | `XmlParser` — XML source → `Flow<SemanticEvent>`: a multiplatform contract plus a shared conformance suite every engine must pass. `MarkanywhereXmlParser` is the multiplatform streaming engine; the JVM-only StAX binding is a reference implementation that pins the contract                          |
+| `markanywhere-test`      | Test helpers: `sameAs` for asserting `Flow<SemanticEvent>` equality                                                                                                                                                                                                                                       |
 
 You can depend only on `markanywhere-parse` and consume the `Flow<SemanticEvent>` with your own renderer — the API surface is a single three-variant sealed class. The `markanywhere-transform` module additionally lets you intercept and rewrite events before they reach any renderer.
 

@@ -14,23 +14,14 @@
  * limitations under the License.
  */
 
-rootProject.name = "markanywhere"
+package com.xemantic.markanywhere.xml
 
-pluginManagement {
-    includeBuild("build-logic")
+/**
+ * Runs the whole [XmlParserTest] conformance suite against the JDK's StAX
+ * implementation.
+ */
+class StaxXmlParserTest : XmlParserTest() {
+
+    override val parser: XmlParser = StaxXmlParser()
+
 }
-
-include(
-    "markanywhere-api",
-    "markanywhere-dump",
-    "markanywhere-flow",
-    "markanywhere-render",
-    "markanywhere-parse",
-    "markanywhere-extract",
-    "markanywhere-js",
-    "markanywhere-transform",
-    "markanywhere-html",
-    "markanywhere-xml",
-    "markanywhere-browse",
-    "markanywhere-test"
-)
