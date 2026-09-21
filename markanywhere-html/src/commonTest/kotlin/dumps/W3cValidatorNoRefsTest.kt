@@ -16,7 +16,7 @@
 
 package com.xemantic.markanywhere.html.dumps
 
-import com.xemantic.kotlin.test.sameAs
+import com.xemantic.kotlin.test.sameAsMarkdown
 import com.xemantic.markanywhere.html.DumpFixtures
 import com.xemantic.markanywhere.html.RefMode
 import com.xemantic.markanywhere.html.assertNoActionableRefs
@@ -48,7 +48,7 @@ class W3cValidatorNoRefsTest {
         // then — no actionable-ref residue survives on any surface (see
         // assertNoActionableRefs)
         assertNoActionableRefs(markdown)
-        markdown sameAs /* language=markdown */ """
+        markdown sameAsMarkdown """
             ---
             lang: en
             title: Ready to check  - Nu Html Checker

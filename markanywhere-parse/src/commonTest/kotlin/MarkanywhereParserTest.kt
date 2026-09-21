@@ -2003,4 +2003,29 @@ class MarkanywhereParserTest {
         }
     }
 
+    @Test
+    fun `should parse inline ruby annotation as nested tagged inline marks`() = runTest {
+        // given - the mirror of MarkdownRenderingTest
+        //   `should render ruby annotations as inline raw HTML`: the Markdown
+        //   that renderer emits for a ruby group, fed back in as source
+        val markdown = "<ruby>\u6f22\u5b57<rt>kanji</rt></ruby> is hard"
+
+        // when
+        val parsed = flowOf(markdown).parse()
+
+        // then - both tags are known HTML5 elements opened mid-line, so they go
+        //   through the inline raw-HTML dispatch as tagged marks nested in the
+        //   paragraph; the closers pop LIFO, and the annotation stays a
+        //   separate child of the base text rather than merging into it
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                tag("ruby") {
+                    +"\u6f22\u5b57"
+                    tag("rt") { +"kanji" }
+                }
+                +" is hard"
+            }
+        }
+    }
+
 }

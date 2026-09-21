@@ -103,7 +103,7 @@ internal val LINK_BLOCK_CONTENT_TAGS: Set<String> = setOf(
     "p", "hr", "blockquote",
     "ul", "ol", "li",
     "pre",
-    "table", "thead", "tbody", "tr",
+    "table", "thead", "tbody", "tr", "caption",
     // BLOCK_TAGGED_ELEMENTS (block-level raw HTML tags)
     "section", "nav", "article", "aside",
     "header", "footer", "main", "hgroup",
@@ -112,6 +112,7 @@ internal val LINK_BLOCK_CONTENT_TAGS: Set<String> = setOf(
     "form", "fieldset", "legend",
     "button", "select", "textarea",
     "optgroup", "option", "datalist",
+    "menu",
     "address", "search"
 )
 

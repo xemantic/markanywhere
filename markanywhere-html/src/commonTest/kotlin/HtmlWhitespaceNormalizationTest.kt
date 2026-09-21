@@ -190,6 +190,29 @@ class HtmlWhitespaceNormalizationTest {
     }
 
     @Test
+    fun `should preserve whitespace inside an untagged pre`() = runTest {
+        // given - `simplifyHtml` untags everything it keeps, so by the time this
+        // operator runs in the HTML pipeline a real HTML <pre> is untagged; an
+        // untagged `pre` from the parser is a fenced code block. Both are
+        // verbatim, so `pre` cannot be gated on isTagged.
+        val input = semanticEvents {
+            "pre" {
+                "code" { +"fun main() {\n    println()\n}" }
+            }
+        }
+
+        // when
+        val output = input.dropHtmlStructuralWhitespace()
+
+        // then
+        output sameAs semanticEvents {
+            "pre" {
+                "code" { +"fun main() {\n    println()\n}" }
+            }
+        }
+    }
+
+    @Test
     fun `should not preserve whitespace inside a non-tagged code mark`() = runTest {
         // given
         // A Markdown-native inline `code` mark (isTagged = false) is not an

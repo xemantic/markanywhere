@@ -17,6 +17,7 @@
 package com.xemantic.markanywhere.html.dumps
 
 import com.xemantic.kotlin.test.sameAs
+import com.xemantic.kotlin.test.sameAsMarkdown
 import com.xemantic.markanywhere.html.DumpFixtures
 import com.xemantic.markanywhere.html.dumpFlow
 import com.xemantic.markanywhere.html.transformHtmlToMarkdown
@@ -49,7 +50,7 @@ class W3cValidatorRefsTest {
 
         // then — inline links fold the ref into the destination (`ref:N:href`)
         // and form controls carry it as a `ref="N"` attribute
-        markdown sameAs /* language=markdown */ """
+        markdown sameAsMarkdown """
             ---
             lang: en
             title: Ready to check  - Nu Html Checker

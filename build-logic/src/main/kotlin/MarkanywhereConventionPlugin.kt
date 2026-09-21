@@ -56,7 +56,7 @@ fun Project.doApply() {
     // development — defaults to true so a bare `./gradlew build` only touches
     // the dev targets each module declares (jvm, or js-browser for js-only
     // modules). CI passes `-PdevBuild=false` to build the full published set.
-    // Each module reads it via `val devBuild: Boolean by extra` and branches its
+    // Each module reads it via `val devBuild = extra["devBuild"] as Boolean` and branches its
     // own `kotlin { }` target declarations on it (the convention no longer
     // declares any target itself).
     val devBuild: Boolean = when ((findProperty("devBuild") as? String)?.lowercase()) {
@@ -79,6 +79,24 @@ fun Project.doApply() {
 
     plugins.apply("org.jetbrains.dokka")
     plugins.apply(MavenPublishPlugin::class.java)
+
+    // Public API tracking: every module keeps a checked-in `api/*.api` dump,
+    // regenerated with `./gradlew apiDump` and verified by `apiCheck`, which
+    // `build` depends on — so an accidental change to the published API surface
+    // fails the build instead of shipping.
+    plugins.apply("org.jetbrains.kotlinx.binary-compatibility-validator")
+
+    // The validator reads class files with ASM; the version it bundles predates
+    // the class-file format the current JDK emits, so pin the whole ASM family
+    // to a release that understands it.
+    val asmVersion = libs.findVersion("asm").get().toString()
+    configurations.all {
+        resolutionStrategy.eachDependency {
+            if (requested.group == "org.ow2.asm") {
+                useVersion(asmVersion)
+            }
+        }
+    }
 
     tasks.withType<JavaCompile> {
         options.release.set(javaTargetVersion.toInt())
@@ -118,7 +136,7 @@ fun Project.doApply() {
  *
  * No Kotlin target is declared here — each module declares its own targets in
  * its `kotlin { }` block, branching on the `devBuild` flag (read via
- * `val devBuild: Boolean by extra`):
+ * `val devBuild = extra["devBuild"] as Boolean`):
  *
  *     kotlin {
  *         if (devBuild) jvm() else allTargets()   // standard module

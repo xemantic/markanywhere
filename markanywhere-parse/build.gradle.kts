@@ -23,8 +23,7 @@ plugins {
     id("markanywhere.convention")
 }
 
-
-val devBuild: Boolean by extra
+val devBuild = extra["devBuild"] as Boolean
 
 kotlin {
 
@@ -81,7 +80,7 @@ val namedEntitiesSourceFile =
 val namedEntitiesCacheFile =
     layout.buildDirectory.file("named-entities/entities.json")
 
-val generateNamedEntities by tasks.registering {
+val generateNamedEntities = tasks.register("generateNamedEntities") {
     description = "Rewrites src/commonMain/kotlin/NamedEntities.kt from $namedEntitiesUrl"
     group = "build"
 

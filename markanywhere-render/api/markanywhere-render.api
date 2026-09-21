@@ -1,0 +1,12 @@
+public final class com/xemantic/markanywhere/render/HtmlRenderingKt {
+	public static final fun asHtml (Lkotlinx/coroutines/flow/Flow;)Lkotlinx/coroutines/flow/Flow;
+	public static final fun renderHtml (Lkotlinx/coroutines/flow/Flow;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/xemantic/markanywhere/render/MarkdownRenderingKt {
+	public static final fun asMarkdown (Lkotlinx/coroutines/flow/Flow;)Lkotlinx/coroutines/flow/Flow;
+	public static final fun getMARKDOWN_BLOCK_CONTENT_TAGS ()Ljava/util/Set;
+	public static final fun getMARKDOWN_NATIVE_MARK_NAMES ()Ljava/util/Set;
+	public static final fun renderMarkdown (Lkotlinx/coroutines/flow/Flow;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+

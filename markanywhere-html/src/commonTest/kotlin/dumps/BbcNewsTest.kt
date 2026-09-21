@@ -17,6 +17,7 @@
 package com.xemantic.markanywhere.html.dumps
 
 import com.xemantic.kotlin.test.sameAs
+import com.xemantic.kotlin.test.sameAsMarkdown
 import com.xemantic.markanywhere.html.DumpFixtures
 import com.xemantic.markanywhere.html.dumpFlow
 import com.xemantic.markanywhere.html.transformHtmlToMarkdown
@@ -37,15 +38,16 @@ class BbcNewsTest {
         val markdown = events.transformHtmlToMarkdown().renderMarkdown()
 
         // then
-        markdown sameAs /* language=markdown */ """
+        markdown sameAsMarkdown """
             ---
             lang: en-GB
             title: BBC News - Breaking news, video and the latest top stories from the U.S. and around the world
+            description: Visit BBC News for the latest news, breaking news, video, audio and analysis. BBC News provides trusted World, U.S. and U.K. news as well as local and regional perspectives. Also entertainment, climate, business, science, technology and health news.
+            pagetype: Section
             page.section: News
             "twitter:title": BBC News - Breaking news, video and the latest top stories from the U.S. and around the world
-            description: Visit BBC News for the latest news, breaking news, video, audio and analysis. BBC News provides trusted World, U.S. and U.K. news as well as local and regional perspectives. Also entertainment, climate, business, science, technology and health news.
             "twitter:description": Visit BBC News for the latest news, breaking news, video, audio and analysis. BBC News provides trusted World, U.S. and U.K. news as well as local and regional perspectives. Also entertainment, climate, business, science, technology and health news.
-            version: web-3.9.0-5
+            version: web-3.21.0
             "cXenseParse:pageclass": frontpage
             ---
             
@@ -53,6 +55,9 @@ class BbcNewsTest {
             
             <header id="bbc-header">
             <button aria-label="Open menu" aria-expanded="false" ref="2">
+            
+            Open menu
+            
             </button>
             
             [![British Broadcasting Corporation]()](ref:3:/)
@@ -78,35 +83,34 @@ class BbcNewsTest {
             
             - [Home](ref:8:/)
             - [News](ref:9:/news)
-            - [Football 2026](ref:10:/sport/football/world-cup)
-            - [Sport](ref:11:/sport)
-            - [Business](ref:12:/business)
-            - [Technology](ref:13:/technology)
-            - [Health](ref:14:/health)
-            - [Culture](ref:15:/culture)
-            - [Arts](ref:16:/arts)
-            - [Travel](ref:17:/travel)
-            - [Earth](ref:18:/future-planet)
-            - [Audio](ref:19:/audio)
-            - [Video](ref:20:/video)
-            - [Live](ref:21:/live)
+            - [Sport](ref:10:/sport)
+            - [Business](ref:11:/business)
+            - [Technology](ref:12:/technology)
+            - [Health](ref:13:/health)
+            - [Culture](ref:14:/culture)
+            - [Arts](ref:15:/arts)
+            - [Travel](ref:16:/travel)
+            - [Earth](ref:17:/future-planet)
+            - [Audio](ref:18:/audio)
+            - [Video](ref:19:/video)
+            - [Live](ref:20:/live)
             
             </nav>
             </section>
             <nav>
             <nav>
             
-            - [US & Canada](ref:22:/news/us-canada)
-            - [UK](ref:23:/news/uk)
-            - [Africa](ref:24:/news/world/africa)
-            - [Asia](ref:25:/news/world/asia)
-            - [Australia](ref:26:/news/world/australia)
-            - [Europe](ref:27:/news/world/europe)
-            - [Latin America](ref:28:/news/world/latin_america)
-            - [Middle East](ref:29:/news/world/middle_east)
-            - [In Pictures](ref:30:/news/in_pictures)
-            - [BBC InDepth](ref:31:/news/bbcindepth)
-            - [BBC Verify](ref:32:/news/bbcverify)
+            - [US & Canada](ref:21:/news/us-canada)
+            - [UK](ref:22:/news/uk)
+            - [Africa](ref:23:/news/world/africa)
+            - [Asia](ref:24:/news/world/asia)
+            - [Australia](ref:25:/news/world/australia)
+            - [Europe](ref:26:/news/world/europe)
+            - [Latin America](ref:27:/news/world/latin_america)
+            - [Middle East](ref:28:/news/world/middle_east)
+            - [In Pictures](ref:29:/news/in_pictures)
+            - [BBC InDepth](ref:30:/news/bbcindepth)
+            - [BBC Verify](ref:31:/news/bbcverify)
             
             </nav>
             </nav>
@@ -119,157 +123,116 @@ class BbcNewsTest {
             <section>
             <section>
             
-            [![Russian frigate Admiral Grigorovich](https://ichef.bbci.co.uk/news/480/cpsprodpb/9b77/live/208679c0-699a-11f1-9685-4f5a66750059.jpg.webp)](ref:33:/news/articles/c20yzm84r7lo)
+            [![German Chancellor Friedrich Merz gives a statement after first exit polls of the Berlin and Mecklenburg Western Pomerania state elections, at the CDU headquarters in Berlin](https://ichef.bbci.co.uk/news/480/cpsprodpb/78b8/live/cb4d6df0-b526-11f1-b1d1-571ed4d7ff2c.jpg.webp)](ref:32:/news/articles/cvwyz29n0nn2o)
             
-            <a href="/news/articles/c20yzm84r7lo" ref="34">
+            <a href="/news/articles/cvwyz29n0nn2o" ref="33">
             
-            ## UK investigating reports Russian warship fired warning shots near yacht in English Channel
+            ## German Chancellor Merz calls state election a 'disaster' for his party but vows to stay on
             
-            BBC News understands the yacht had drifted towards the Admiral Grigorovich, a Russian frigate which has been operating in the Channel.
+            Exit polls show damaging losses for Merz's centre-right CDU party in the states of Berlin and Mecklenburg-Vorpommern.
             
-            Just now Europe
-            
-            </a>
-            <a href="/news/articles/c20ydx06ym2o" ref="35">
-            
-            ![Sir Richard Knighton, in RAF uniform, addresses a defence conference](https://ichef.bbci.co.uk/news/480/cpsprodpb/fa3e/live/1b787b00-698a-11f1-8e1d-bbbb1017d210.jpg.webp)
-            
-            ## UK forces face operational cuts without more cash, defence chief warns
-            
-            It comes as ex-defence secretary John Healey says the UK's enemies "do not follow timetables set by the Treasury".
-            
-            3 hrs ago UK
+            1 hr ago Europe
             
             </a>
-            <a href="/news/articles/c20yzm58vk3o" ref="36">
+            <a href="/news/articles/c34gdjk1ne8yo" ref="34">
             
-            ## Hundreds of cats stolen for food in Vietnam rescued by police, welfare group says
+            ![Plumes of smoke rise from fires at an oil refinery in Moscow after an overnight Ukrainian drone attack. Photo: 20 September 2026](https://ichef.bbci.co.uk/news/480/cpsprodpb/15c3/live/41153930-b4bb-11f1-b1d1-571ed4d7ff2c.jpg.webp)
             
-            Police have arrested nine people and rescued more than 400 cats destined for slaughter, with more than 40 reunited with their owners.
+            ## Largest attack on Moscow sees Ukraine fire hundreds of drones, mayor says
             
-            3 hrs ago Asia
+            Moscow's mayor says 450 drones were downed during the overnight barrage, in which two people died.
             
-            </a>
-            <a href="/news/articles/c621zplqrrno" ref="37">
-            
-            ## Hungary's MPs block return of Orbán, limiting rule of PM to eight years
-            
-            The vote fulfils a promise by new PM Péter Magyar to stop his predecessor from becoming prime minister again.
-            
-            8 hrs ago Europe
+            10 hrs ago Europe
             
             </a>
-            <a href="/news/articles/cn4rwzxvl8ko" ref="38">
+            <a href="/news/articles/cm36l2pye2kwo" ref="35">
             
-            ![A woman holds an Iranian flag on a street in Tehran, Iran.](https://ichef.bbci.co.uk/news/480/cpsprodpb/bd69/live/fa1ab490-698f-11f1-bf78-b9ee73ed2967.jpg.webp)
+            ## Sister of Pakistan's ex-PM Imran Khan arrested
             
-            ## Tehran selling deal with US as victory – but for Iranians it was necessity
+            Aleema Khanum is accused of mobilising her brother’s supporters ahead of country-wide protests.
             
-            For many Iranians, the question is not whether the deal means victory, but whether it lowers prices and reduces fear of another war.
-            
-            5 hrs ago World
+            2 hrs ago Asia
             
             </a>
-            <a href="/news/articles/cn4rw784nj2o" ref="39">
+            <a href="/news/articles/cw62m6z7m7zjo" ref="36">
             
-            ![Ships on the Strait of Hormuz at sunset](https://ichef.bbci.co.uk/news/480/cpsprodpb/939d/live/e5acdee0-6983-11f1-b1db-af71d47507d6.png.webp)
+            ## Mum's viral barefoot race sparks debate over India's education crisis
             
-            ## Three reasons ships are not going through the Strait of Hormuz yet
+            The 47-year-old ran - and won - a 3km race where she hoped to win enough prize money to buy study books for her daughter.
             
-            Experts say that there are significant obstacles preventing traffic from returning to the levels seen before the conflict began – security, mines and tolls.
-            
-            6 hrs ago BBC Verify
+            21 hrs ago Asia
             
             </a>
-            <a href="/news/articles/c0jyzp9z9deo" ref="40">
+            <a href="/news/articles/cwj3d7zrgvk1o" ref="37">
             
-            ![A man in a suit and tie stares at his phone while sitting down opposite a man in a blue jacket in Beijing](https://ichef.bbci.co.uk/news/480/cpsprodpb/c8f4/live/3b494590-6994-11f1-a716-b5396926119a.jpg.webp)
+            ![Britain's Prince Harry and Meghan, the Duke and Duchess of Sussex, disembark after sailing on Sydney Harbour with veterans from the Invictus Australia community, in Sydney, Australia, April 17, 2026.](https://ichef.bbci.co.uk/news/480/cpsprodpb/6eff/live/165a3eb0-b520-11f1-b1e2-034207760e32.jpg.webp)
             
-            ## German broadcaster removes TV intro after Elon Musk takes legal action
+            ## Harry and Meghan's media treatment echoes what happened to Diana, Earl Spencer tells BBC
             
-            ZDF TV responded to a "cease and desist" letter after the tech trillionaire condemned the broadcaster's "outrageous lies".
+            Princess Diana's brother describes press coverage of Prince Harry and Meghan as a "cancerous influence in their life" and says he saw his sister cry "tears of despair" over interest in her.
             
-            2 hrs ago Europe
+            8 hrs ago UK
             
             </a>
-            <a href="https://www.bbc.com/sport/football/live/cze9nr5eg2xt" ref="41">
+            <a href="/news/videos/cw62mdrjll18o" ref="38">
             
-            ![Nicolas Jackson hits the post](https://ichef.bbci.co.uk/ace/standard/480/cpsprodpb/8381/live/59947b60-69bb-11f1-8e1d-bbbb1017d210.jpg.webp) LIVE
+            ![Man with white hair wearing blue shirt and navy cardigan](https://ichef.bbci.co.uk/news/480/cpsprodpb/04b4/live/dbe02390-b4f6-11f1-947c-4906c0564be0.jpg.webp)
             
-            ## Watch as Senegal miss chances to take lead against France
+            ## Watch: Emotional Earl Spencer says he misses sister Diana every day
             
-            Watch France versus Senegal in World Cup Group I live on BBC One, listen to BBC Radio 5 Live commentary and follow live text coverage.
+            "This is my swan song too. I'm not here to bang on about Diana, this is my final word, celebration of her", Earl Spencer told presenter Laura Kuenssberg.
+            
+            6 hrs ago UK
+            
+            </a>
+            <a href="/news/articles/cqdj4pez00dzo" ref="39">
+            
+            ![Trump holding up a tiny model of a triumphal arch in the White House](https://ichef.bbci.co.uk/news/480/cpsprodpb/2e12/live/3a464990-b4f8-11f1-947c-4906c0564be0.jpg.webp)
+            
+            ## Trump says triumphal arch will be military complex with drones and snipers
+            
+            Trump said the updated plans were at the request of the US military and for national security purposes.
+            
+            4 hrs ago US & Canada
+            
+            </a>
+            <a href="/sport/swimming/articles/cqx2z1ky4d6lo" ref="40">
+            
+            ![Yu Zidi of China wins gold medal after competing in the Women's 200m butterfly final on day one of the 20th Asian Games ](https://ichef.bbci.co.uk/news/480/cpsprodpb/9b63/live/c69b10a0-b4fe-11f1-afad-1d9cb3111733.jpg.webp)
+            
+            ## Yu, 13, wins record-breaking first major swimming gold medal
+            
+            China’s Yu Zidi, 13, wins a record‑breaking 200m women’s butterfly gold at the Asian Games in Tokyo.
+            
+            6 hrs ago Swimming
             
             </a>
             </section>
-            </section>
-            <section>
-            <a href="/news/articles/cvgd5g7d7gyo" ref="42">
-            
-            ## Musk's SpaceX overtakes Amazon to become world's fifth most valuable firm
-            
-            </a>
-            <a href="/news/articles/clyrzd5g6k2o" ref="43">
-            
-            ## Russian artist and Putin critic shot dead in Poland
-            
-            </a>
-            <a href="/news/articles/cqx10xlje1lo" ref="44">
-            
-            ## Group planned to attack White House UFC event using snipers and drones, FBI says
-            
-            </a>
-            <a href="/news/articles/crlwxg721eeo" ref="45">
-            
-            ## Swedish man jailed for four years for coercing wife into sex with 120 men
-            
-            </a>
-            <a href="/news/articles/cn074j04l3eo" ref="46">
-            
-            ## India temporarily bans Telegram over exam paper leak concerns
-            
-            </a>
             </section>
             <section>
+            <a href="/news/articles/c8207255rq5lo" ref="41">
             
-            ---
-            
-            ## World Cup 2026
-            
-            <a href="/news/articles/cy73xe2006po" ref="47">
-            
-            ![Iain Bagwell, right, is a man in his 50s. He takes a selfie with his teenage son, pictured left. Both smile for the camera.](https://ichef.bbci.co.uk/news/480/cpsprodpb/e3a9/live/d284ded0-68f7-11f1-b777-eb5f33120f12.jpg.webp)
-            
-            ## 'Daylight robbery but worth it' - what fans are spending on World Cup
-            
-            Fans in the US, Canada and Mexico are spending big on tickets, transport and accommodation - is it worth it?
+            ## UK PM hails Greenland deal ahead of expected first Trump meeting
             
             </a>
-            <a href="/sport/football/articles/c24y18g9v03o" ref="48">
+            <a href="/news/articles/cg4d9vly636o" ref="42">
             
-            ![Scoreboard of Belgium and Egypt's result](https://ichef.bbci.co.uk/news/480/cpsprodpb/4f91/live/61e48460-698c-11f1-bf78-b9ee73ed2967.jpg.webp)
-            
-            ## Record draws and Europe's slow start - is the World Cup lacking jeopardy?
-            
-            Seven of the 10 European teams to have played at the World Cup so far have failed to win - is heat the issue?
+            ## Our head teacher was an abuser. We joined forces to get justice - now we're married
             
             </a>
-            <a href="/sport/football/articles/ckg42nvgx77o" ref="49">
+            <a href="/news/articles/c65y5084x8e0o" ref="43">
             
-            ![Argentina's Lionel Messi](https://ichef.bbci.co.uk/news/480/cpsprodpb/46f9/live/b1f7db30-6281-11f1-86be-0da436fa9788.jpg.webp)
-            
-            ## From dazzling winger to veteran who barely runs - the evolution of Messi
-            
-            Lionel Messi is set for his sixth World Cup with Argentina. Guillem Balague looks at how the Argentine has evolved.
+            ## Top Gear star Richard Hammond thanks emergency crews 20 years on from crash
             
             </a>
-            <a href="/sport/football/articles/ckg48wvv0v2o" ref="50">
+            <a href="/news/articles/cm5y7qj54klpo" ref="44">
             
-            ![Iran head coach Amir Ghalenoei, wearing a black jumper, frowns after his side's World Cup draw with New Zealand](https://ichef.bbci.co.uk/news/480/cpsprodpb/2255/live/1b608800-694f-11f1-82ab-bf70ea527fb6.jpg.webp)
+            ## Not all AI workers think the tech could kill everyone
             
-            ## Iran 'most oppressed' team at World Cup, head coach says
+            </a>
+            <a href="/news/articles/cvgy1q2k2z0o" ref="45">
             
-            Iran head coach Amir Ghalenoei says his team were told to leave LA "immediately" after their match against New Zealand.
+            ## Cultural treasures are being destroyed worldwide - so why is no-one being punished?
             
             </a>
             </section>
@@ -281,77 +244,124 @@ class BbcNewsTest {
             
             <section>
             
-            [![](https://static.files.bbci.co.uk/bbcdotcom/web/20260609-143108-fe43574f32-web-3.9.0-5/grey-placeholder.png)![A man looks at the remains of a building destroyed by an Israeli strike in Kfar Sir, in Nabatieh district, southern Lebanon (16 June 2026)](https://ichef.bbci.co.uk/news/480/cpsprodpb/16f0/live/d36dc9e0-6994-11f1-b1db-af71d47507d6.jpg.webp)](ref:51:/news/articles/cvgepl5gdp1o)
+            [![The BBC's Laura Kuenssberg sits opposite Earl Spencer in a room at the Althorp estate. ](https://ichef.bbci.co.uk/news/480/cpsprodpb/f04c/live/5fddaaf0-b506-11f1-91cc-c5691e33b858.png.webp)](ref:46:/news/articles/cry4z1xykeleo)
             
-            <a href="/news/articles/cvgepl5gdp1o" ref="52">
+            <a href="/news/articles/cry4z1xykeleo" ref="47">
             
-            ## Fragile quiet in Lebanon as US-Iran truce leaves unanswered questions
+            ## Key takeaways from BBC interview as Earl Spencer defends claims about King
             
-            Many Lebanese remain doubtful that the agreement could finally mean the end of the fighting between Israel and Hezbollah.
+            Earl Spencer speaks to the BBC's Laura Kuenssberg ahead of the publication of his book about his sister Diana, Princess of Wales.
             
-            4 hrs ago Middle East
-            
-            </a>
-            <a href="/news/articles/cp3xyvww1lqo" ref="53">
-            
-            ![](https://static.files.bbci.co.uk/bbcdotcom/web/20260609-143108-fe43574f32-web-3.9.0-5/grey-placeholder.png)![A health workers wearing green scrubs smiles and dances as she waves hr left hand in the air.](https://ichef.bbci.co.uk/news/480/cpsprodpb/23f6/live/0200a2a0-68c8-11f1-8e1d-bbbb1017d210.jpg.webp)
-            
-            ## Recovery of Ebola patients offers rare moments of joy at epicentre of outbreak
-            
-            There are glimpses of happiness in the Democratic Republic of Congo's fight against the virus that has killed more than 170.
-            
-            21 hrs ago Africa
+            5 hrs ago UK
             
             </a>
-            <a href="/news/videos/clyr5v7k00zo" ref="54">
+            <a href="/news/articles/czxz0zq9y6do" ref="48">
             
-            ## How Prince George will follow in his father's footsteps at Eton College
+            ![Sharon Horgan in Youth, she is wearing a black top and has her brown hair down](https://ichef.bbci.co.uk/news/480/cpsprodpb/8a8a/live/b0fcfca0-b0f2-11f1-9707-2187f52634c5.jpg.webp)
             
-            The prince is set to attend the elite boarding school from September, Kensington Palace has announced.
+            ## Sex and dating for the sandwich generation - Sharon Horgan on her latest comedy Youth
             
-            3 hrs ago Berkshire
+            "It's really weird watching yourself age on screen because that's not fun," Horgan reveals.
             
-            </a>
-            <a href="/news/articles/c9824zvpz9po" ref="55">
-            
-            ## Five big questions about the UK's under-16s social media ban
-            
-            A ban is coming - but it's still not clear what it will mean for sites including Roblox, YouTube and WhatsApp.
-            
-            5 hrs ago Technology
+            21 hrs ago Culture
             
             </a>
-            <a href="/news/articles/c6214prydklo" ref="56">
+            <a href="/news/articles/cmn8ed1xpxnyo" ref="49">
             
-            ![](https://static.files.bbci.co.uk/bbcdotcom/web/20260609-143108-fe43574f32-web-3.9.0-5/grey-placeholder.png)![FILE PHOTO: The Air India Boeing 787 Dreamliner plane that crashed in Ahmedabad on June 12, 2025, flies over Melbourne, Australia, on December 29, 2024, in this handout picture. RYAN ZHANG/via REUTERS/File Photo](https://ichef.bbci.co.uk/news/480/cpsprodpb/3a0a/live/fbecc040-4b4c-11f0-8bdb-73c0815c1d31.jpg.webp)
+            ![Image shows President Donald Trump](https://ichef.bbci.co.uk/news/480/cpsprodpb/3c72/live/446b36e0-b44b-11f1-a430-4d16ee157c41.jpg.webp)
             
-            ## A year on, six questions still haunt the Air India crash investigation
+            ## Trump escalates media fight after week of setbacks
             
-            From fuel switches to engine failures, here are the biggest mysteries around the Air India crash inquiry.
+            An embattled Trump has injected his fight with the news media with new acrimony, writes the BBC's Anthony Zurcher.
             
-            21 hrs ago Asia
-            
-            </a>
-            <a href="/news/articles/c5yzdr4ygdno" ref="57">
-            
-            ![](https://static.files.bbci.co.uk/bbcdotcom/web/20260609-143108-fe43574f32-web-3.9.0-5/grey-placeholder.png)![On the right is a treated image of some swings which are empty on a red background and on the left is a black and white image of a toddler](https://ichef.bbci.co.uk/news/480/cpsprodpb/d66b/live/93a2db20-65ac-11f1-8546-8f19e4fe30f4.jpg.webp)
-            
-            ## What one country's experiment says about attempts to boost birth rates
-            
-            Why did Hungary’s pronatalist approach deliver an early rise in births only then to fall back? And what lessons does it offer to other countries desperate to lift fertility?
-            
-            20 hrs ago BBC InDepth
+            1 day ago US & Canada
             
             </a>
-            <a href="/news/articles/c87q7g48y4po" ref="58">
+            <a href="/news/articles/cx1l6762jeq4o" ref="50">
             
-            ![](https://static.files.bbci.co.uk/bbcdotcom/web/20260609-143108-fe43574f32-web-3.9.0-5/grey-placeholder.png)![Ruth has dark hair and is looking directly at the camera.](https://ichef.bbci.co.uk/news/480/cpsprodpb/91c8/live/6e77b680-6977-11f1-8e1d-bbbb1017d210.jpg.webp)
+            ![Aster Yohannes and Petros Solomon smiling and dressed in white](https://ichef.bbci.co.uk/news/480/cpsprodpb/6132/live/ba962470-b355-11f1-bc1f-3f186ca4140c.png.webp)
             
-            ## Woman left traumatised by swinging says website 'facilitated abuse'
+            ## 'I don't even know if my parents are alive' - the war heroes jailed 25 years ago
             
-            She wants to warn others after her husband pressured her into sex she did not want, she says.
+            The children of key politicians jailed 25 years ago without a trace in Eritrea want answers.
             
-            15 hrs ago Wales
+            22 hrs ago Africa
+            
+            </a>
+            <a href="/news/articles/c62e04wkj803o" ref="51">
+            
+            ![A tightly cropped photo of a woman in her 70s with short grey hair looking up at the sky, smiling. She has sunglasses on, and bright red lipstick that matches her leather jacket. Graffiti is in the background, slightly out of focus.](https://ichef.bbci.co.uk/news/480/cpsprodpb/55eb/live/fb40eb10-b28b-11f1-8096-b33a1297275a.jpg.webp)
+            
+            ## 'People forget we exist': Why older LGBTQ+ people fear losing identity
+            
+            A report suggests older LGBTQ+ people experience more social isolation than their heterosexual peers.
+            
+            21 hrs ago Health
+            
+            </a>
+            </section>
+            </section>
+            <section>
+            
+            ---
+            
+            ## Also in news
+            
+            <section>
+            
+            [![](https://static.files.bbci.co.uk/bbcdotcom/web/20260907-085256-bea8b058c0-web-3.21.0/grey-placeholder.png)![Ed Sheeran, in a long sleeved white T-shirt, holds a guitar and sings into a microphone. He is looking slightly off to one side. ](https://ichef.bbci.co.uk/news/480/cpsprodpb/846c/live/65039890-b494-11f1-8153-85d44903e598.jpg.webp)](ref:52:/news/articles/cm780ll1de18o)
+            
+            <a href="/news/articles/cm780ll1de18o" ref="53">
+            
+            ## Ed Sheeran admits he made 'mistakes' as he addresses Macklemore row at Philadelphia show
+            
+            The singer spoke about Israel and Gaza after Macklemore was dropped from his tour for making pro-Palestinian remarks on stage.
+            
+            16 hrs ago US & Canada
+            
+            </a>
+            <a href="/sport/football/articles/cr93e70xv21ko" ref="54">
+            
+            ![](https://static.files.bbci.co.uk/bbcdotcom/web/20260907-085256-bea8b058c0-web-3.21.0/grey-placeholder.png)![Andros Townsend playing for Kanchanaburi Power](https://ichef.bbci.co.uk/news/480/cpsprodpb/dffc/live/8ec1f110-b4d3-11f1-b55d-81b847f392df.jpg.webp)
+            
+            ## Ex-England player Townsend unhurt after being run over by pitch roller
+            
+            Former England winger Andros Townsend jokes that playing Stoke away "wasn't so bad after all" following a bizarre incident before a game in Thailand.
+            
+            11 hrs ago Football
+            
+            </a>
+            <a href="/news/articles/crwyzj53pl1lo" ref="55">
+            
+            ![](https://static.files.bbci.co.uk/bbcdotcom/web/20260907-085256-bea8b058c0-web-3.21.0/grey-placeholder.png)![The Converse name is seen on a storefront at an airport in Singapore earlier this month](https://ichef.bbci.co.uk/news/480/cpsprodpb/3993/live/0f1fa560-b433-11f1-9fa0-111a12dcb7b0.jpg.webp)
+            
+            ## Converse pulls 'deeply upsetting' advert after backlash
+            
+            Social media users say an image from the brand's Instagram account resembled a KKK hood and hanging.
+            
+            1 day ago US & Canada
+            
+            </a>
+            <a href="/news/articles/cj4gklz9dxplo" ref="56">
+            
+            ![](https://static.files.bbci.co.uk/bbcdotcom/web/20260907-085256-bea8b058c0-web-3.21.0/grey-placeholder.png)![The White House press room full of reporters with their hands raised](https://ichef.bbci.co.uk/news/480/cpsprodpb/1b27/live/d8b31f40-b435-11f1-9fa0-111a12dcb7b0.jpg.webp)
+            
+            ## Journalists denied White House access after Trump banned some media outlets
+            
+            CNN, MS NOW and Politico reporters' White House press badges were confiscated, the outlets reported.
+            
+            1 day ago US & Canada
+            
+            </a>
+            <a href="/news/articles/cwly5d9v7r43o" ref="57">
+            
+            ![](https://static.files.bbci.co.uk/bbcdotcom/web/20260907-085256-bea8b058c0-web-3.21.0/grey-placeholder.png)![arge plume of black smoke rises from the fuel storage area at King Khalid International Airport](https://ichef.bbci.co.uk/news/480/cpsprodpb/39c5/live/a0844fe0-b45d-11f1-b213-1db858c3e27c.jpg.webp)
+            
+            ## Houthis say they targeted Saudi capital with ballistic missiles
+            
+            A reported strike on a fuel depot at Riyadh airport caused delays on Saturday, as Saudi Arabia says it shot down a ballistic missile aimed at the capital.
+            
+            21 hrs ago Middle East
             
             </a>
             </section>
@@ -362,124 +372,41 @@ class BbcNewsTest {
             
             ## Most watched
             
-            <a href="/news/videos/clyr5v7k00zo" ref="59">
+            <a href="/news/videos/cw62mdrjll18o" ref="58">
             
             1
             
-            ## How Prince George will follow in his father's footsteps at Eton College
+            ## Watch: Emotional Earl Spencer says he misses sister Diana every day
             
             </a>
-            <a href="/news/videos/ced4y9ljye9o" ref="60">
+            <a href="/news/videos/cmy0z2ljelgko" ref="59">
             
             2
             
-            ## Drones create the first-ever Fifa scoreboard in Seattle sky
+            ## Earl Spencer's claims about King's reaction to Diana's death opens old wounds
             
             </a>
-            <a href="/news/videos/c1dygrpd19go" ref="61">
+            <a href="/news/videos/c6q8jpxxv9k2o" ref="60">
             
             3
             
-            ## Royal Family joined by thousands at Trooping the Colour
+            ## Watch: Earl Spencer says he felt Charles had 'giddy tone' during call after Diana's death
             
             </a>
-            <a href="/news/videos/cn94vqzev5lo" ref="62">
+            <a href="/news/videos/cv1j4794gn6po" ref="61">
             
             4
             
-            ## What did Trump do differently to Obama on Iran?
+            ## Watch: Diana's brother says press has 'cancerous influence' on Harry and Meghan's lives
             
             </a>
-            <a href="/news/videos/cn8q909jld2o" ref="63">
+            <a href="/news/videos/ckd68l9g0gy5o" ref="62">
             
             5
             
-            ## Watch: California wildfires rage near passing vehicles
+            ## Watch: Concertgoers and pro-Palestinian activists arrive at Ed Sheeran concert
             
             </a>
-            </section>
-            <section>
-            
-            ---
-            
-            ## Also in news
-            
-            <section>
-            
-            [![](https://static.files.bbci.co.uk/bbcdotcom/web/20260609-143108-fe43574f32-web-3.9.0-5/grey-placeholder.png)![Abdirahman Mohamed Abdullahi and Benjamin Netanyahu shake hands. In the backdrop are the flags of Somaliland and Israel.](https://ichef.bbci.co.uk/news/480/cpsprodpb/1f4f/live/5af064b0-6975-11f1-a610-610c6ec6d3a5.jpg.webp)](ref:64:/news/articles/cj4gn4d54y0o)
-            
-            <a href="/news/articles/cj4gn4d54y0o" ref="65">
-            
-            ## Somaliland opens Jerusalem embassy after Israel's recognition of its independence
-            
-            The move comes six months after Israel became the first country to recognise the breakaway East African state.
-            
-            6 hrs ago World
-            
-            </a>
-            <a href="/news/articles/c0jyzpv52yyo" ref="66">
-            
-            ![](https://static.files.bbci.co.uk/bbcdotcom/web/20260609-143108-fe43574f32-web-3.9.0-5/grey-placeholder.png)![A spider web of power lines can be seen in front of a billboard calling for the releas of ousted Venezuelan President Nicolas Maduro and his wife, Cilia Flores, inthe Petare neighborhood, Caracas. ](https://ichef.bbci.co.uk/news/480/cpsprodpb/206d/live/4711bd90-6993-11f1-bf78-b9ee73ed2967.jpg.webp)
-            
-            ## Venezuela signs deal with US energy giant to rebuild power grid
-            
-            The deal with General Electric is the latest sign of co-operation between US firms and Venezuela's interim government.
-            
-            5 hrs ago World
-            
-            </a>
-            <a href="/sport/tennis/articles/clyerm8lym9o" ref="67">
-            
-            ## Williams sisters receive Wimbledon doubles wildcard
-            
-            Serena Williams is given a wildcard to play alongside older sister Venus in the Wimbledon women's doubles.
-            
-            10 hrs ago Tennis
-            
-            </a>
-            <a href="/news/articles/c7vyzgl2142o" ref="68">
-            
-            ## 'Dancing girl's' bare torso restored in Indian textbook after backlash
-            
-            A picture in a new school textbook had covered up the naked torso of the famous figurine with dark shading.
-            
-            13 hrs ago Asia
-            
-            </a>
-            <a href="/news/articles/ckg8zrm20jjo" ref="69">
-            
-            ![](https://static.files.bbci.co.uk/bbcdotcom/web/20260609-143108-fe43574f32-web-3.9.0-5/grey-placeholder.png)![An old car drives past debris from a demolished house occupying part of the seaside promenade in the Centro Habana neighbourhood in Havana on 9 June , 2026](https://ichef.bbci.co.uk/news/480/cpsprodpb/5724/live/1d7d1180-6972-11f1-8cc2-edef34f05c3f.jpg.webp)
-            
-            ## Cuba tourism collapses as US pressure campaign bites
-            
-            The number of foreign visitors is down by 58% compared to last year, Cuban officials say, amid sanctions and an effective oil blockade.
-            
-            9 hrs ago Latin America
-            
-            </a>
-            <a href="/news/videos/cn8q909jld2o" ref="70">
-            
-            ![](https://static.files.bbci.co.uk/bbcdotcom/web/20260609-143108-fe43574f32-web-3.9.0-5/grey-placeholder.png)![Aerial night time image of vehicles driving on a road close to orange wildfire flames.](https://ichef.bbci.co.uk/news/480/cpsprodpb/07d9/live/e691eab0-6962-11f1-9f4a-21531e88e991.jpg.webp)
-            
-            ## Watch: California wildfires rage near passing vehicles
-            
-            The fires in Riverside County cover over 2,000 acres, say authorities.
-            
-            11 hrs ago US & Canada
-            
-            </a>
-            <a href="/news/articles/clyx4jd9kkdo" ref="71">
-            
-            ![](https://static.files.bbci.co.uk/bbcdotcom/web/20260609-143108-fe43574f32-web-3.9.0-5/grey-placeholder.png)![Prince George of Wales during Trooping The Colour on June 13, 2026 in London, England.](https://ichef.bbci.co.uk/news/480/cpsprodpb/f648/live/78800c50-6994-11f1-a716-b5396926119a.jpg.webp)
-            
-            ## Prince George to attend Eton College from September
-            
-            He will follow in the footsteps of his father, the Prince of Wales, who also attended the private school.
-            
-            3 hrs ago UK
-            
-            </a>
-            </section>
             </section>
             <section>
             
@@ -487,74 +414,74 @@ class BbcNewsTest {
             
             ## Most read
             
-            <a href="/news/articles/c20yzm84r7lo" ref="72">
+            <a href="/news/articles/cvwyz29n0nn2o" ref="63">
             
             1
             
-            ## Russian warship fires warning shots near UK-registered yacht in Channel
+            ## German Chancellor Merz calls state election a 'disaster' for his party but vows to stay on
             
             </a>
-            <a href="/news/articles/cqx10xlje1lo" ref="73">
+            <a href="/news/articles/c34gdjk1ne8yo" ref="64">
             
             2
             
-            ## Group planned to attack White House UFC event using snipers and drones, FBI says
+            ## Largest attack on Moscow sees Ukraine fire hundreds of drones, mayor says
             
             </a>
-            <a href="/news/articles/clyrzd5g6k2o" ref="74">
+            <a href="/news/articles/cqdj4pez00dzo" ref="65">
             
             3
             
-            ## Russian artist and Putin critic shot dead in Poland
+            ## Trump says triumphal arch will be military complex with drones and snipers
             
             </a>
-            <a href="/news/articles/c0jyzp9z9deo" ref="75">
+            <a href="/news/articles/cm780ll1de18o" ref="66">
             
             4
             
-            ## German broadcaster removes TV intro after Elon Musk takes legal action
+            ## Ed Sheeran admits 'mistakes' at first show since Macklemore controversy
             
             </a>
-            <a href="/news/articles/cy73xe2006po" ref="76">
+            <a href="/news/articles/cry4z1xykeleo" ref="67">
             
             5
             
-            ## 'Daylight robbery but worth it' - what fans are spending on World Cup
+            ## Key takeaways from BBC interview as Earl Spencer defends claims about King
             
             </a>
-            <a href="/news/articles/c87q7g48y4po" ref="77">
+            <a href="/news/articles/cwj3d7zrgvk1o" ref="68">
             
             6
             
-            ## Woman left traumatised by swinging says website 'facilitated abuse'
+            ## Harry and Meghan's media treatment echoes what happened to Diana, Earl Spencer tells BBC
             
             </a>
-            <a href="/news/articles/cqx10gg2r2vo" ref="78">
+            <a href="/news/articles/cm0463619r1no" ref="69">
             
             7
             
-            ## Dozens walk out as Google boss Pichai addresses Stanford graduates
+            ## Billionaire Man United owner says he has lost confidence in the UK
             
             </a>
-            <a href="/news/articles/cn4rw784nj2o" ref="79">
+            <a href="/news/articles/c39w4n07ekeno" ref="70">
             
             8
             
-            ## Three reasons ships are not going through the Strait of Hormuz yet
+            ## The deadly new drugs making Scotland's fight against addiction even harder
             
             </a>
-            <a href="/news/articles/cvgd5g7d7gyo" ref="80">
+            <a href="/news/articles/crwyzj53pl1lo" ref="71">
             
             9
             
-            ## Musk's SpaceX overtakes Amazon to become world's fifth most valuable firm
+            ## Converse pulls 'deeply upsetting' advert after backlash
             
             </a>
-            <a href="/news/articles/cn4rwzxvl8ko" ref="81">
+            <a href="/news/articles/ckvgyr6m9jmeo" ref="72">
             
             10
             
-            ## Tehran selling deal with US as victory – but for Iranians it was necessity
+            ## I loved capybaras before they were viral - I'm so glad they're having a moment
             
             </a>
             </section>
@@ -566,75 +493,73 @@ class BbcNewsTest {
             
             <section>
             
-            [![Nicolas Jackson hits the post](https://ichef.bbci.co.uk/ace/standard/480/cpsprodpb/8381/live/59947b60-69bb-11f1-8e1d-bbbb1017d210.jpg.webp)](ref:82:https://www.bbc.com/sport/football/live/cze9nr5eg2xt)
+            [![](https://static.files.bbci.co.uk/bbcdotcom/web/20260907-085256-bea8b058c0-web-3.21.0/grey-placeholder.png)![Matheus Cunha](https://ichef.bbci.co.uk/ace/standard/480/cpsprodpb/765e/live/020d3aa0-b518-11f1-aae2-bf700d72ca2a.jpg.webp)](ref:73:https://www.bbc.com/sport/football/live/cqvgy1vzey9rt)
             
-            <a href="https://www.bbc.com/sport/football/live/cze9nr5eg2xt" ref="83">
+            <a href="https://www.bbc.com/sport/football/live/cqvgy1vzey9rt" ref="74">
             
-            LIVE
+            ## Cunha rescues point for Man Utd at Fulham
             
-            ## Watch as Senegal miss chances to take lead against France
-            
-            Watch France versus Senegal in World Cup Group I live on BBC One, listen to BBC Radio 5 Live commentary and follow live text coverage.
+            Matheus Cunha's deflected strike rescues a point for Manchester United late on to deny Fulham a first Premier League win of the season.
             
             </a>
-            <a href="/sport/football/articles/cy4ev318qd2o" ref="84">
+            <a href="/sport/football/articles/cvp8d4116zglo" ref="75">
             
-            ![](https://static.files.bbci.co.uk/bbcdotcom/web/20260609-143108-fe43574f32-web-3.9.0-5/grey-placeholder.png)![England head coach Thomas Tuchel speaks to Trent Alexander-Arnold on the touchline](https://ichef.bbci.co.uk/news/480/cpsprodpb/5835/live/c227dec0-69a1-11f1-938e-83ab58a2163c.jpg.webp)
+            ![](https://static.files.bbci.co.uk/bbcdotcom/web/20260907-085256-bea8b058c0-web-3.21.0/grey-placeholder.png)![Brighton celebrate goal against Arsenal](https://ichef.bbci.co.uk/news/480/cpsprodpb/9b6b/live/4871c290-b51d-11f1-b01b-6bc45d07eb85.jpg.webp)
             
-            ## Tuchel's defensive gambles and what do they say about Alexander-Arnold?
+            ## What have we learned from the Premier League so far?
             
-            England head coach Thomas Tuchel's high-risk defensive selection for World Cup exposed by Tino Livramento's injury as Trent Alexander-Arnold is snubbed again, says Phil McNulty.
+            BBC Sport takes a look at the opening weeks of the Premier League season as a long international break arrives.
             
-            2 hrs ago England Men
-            
-            </a>
-            <a href="/sport/tennis/articles/clyerm8lym9o" ref="85">
-            
-            ## Williams sisters to play together at Wimbledon
-            
-            Serena Williams is given a wildcard to play alongside older sister Venus in the Wimbledon women's doubles.
-            
-            10 hrs ago Tennis
+            1 hr ago Premier League
             
             </a>
-            <a href="/sport/football/articles/c99lzern58eo" ref="86">
+            <a href="/sport/football/articles/cxddvp49gg1ro" ref="76">
             
-            ## Meet the Iraq player set to make history for Pakistan
+            ## Last-minute Cunha goal saves Man Utd from another defeat - who rated highest at Fulham?
             
-            Zidane Iqbal, a former Manchester United player, will make history when he plays for Iraq this summer, becoming the first player of Pakistani heritage to feature at a men's World Cup.
+            Last minute Cunha goal saves Man Utd from another defeat - who rated highest at Fulham?
             
-            13 hrs ago World Cup
-            
-            </a>
-            <a href="https://www.bbc.com/sport/cricket/live/cy510923w0pt" ref="87">
-            
-            ![](https://static.files.bbci.co.uk/bbcdotcom/web/20260609-143108-fe43574f32-web-3.9.0-5/grey-placeholder.png)![England's Amy Jones and Danni Wyatt-Hodge run between the wickets](https://ichef.bbci.co.uk/ace/standard/480/cpsprodpb/5b8f/live/9d5ca300-69bf-11f1-bd62-216646a5e7ca.jpg.webp) LIVE
-            
-            ## Women's T20 World Cup: England chasing 119 to beat Ireland
-            
-            Follow live text, BBC Radio 5 Live Sport commentary and in-play video highlights as England face Ireland in the Women's T20 World Cup in Southampton.
+            3 hrs ago Premier League
             
             </a>
-            <a href="/sport/cricket/articles/c3ry8lyd7j0o" ref="88">
+            <a href="/sport/darts/articles/cr5ye91l200go" ref="77">
             
-            ![](https://static.files.bbci.co.uk/bbcdotcom/web/20260609-143108-fe43574f32-web-3.9.0-5/grey-placeholder.png)![England captain Ben Stokes looks on at Lord's during the first Test against New Zealand](https://ichef.bbci.co.uk/news/480/cpsprodpb/9368/live/c9996ed0-6997-11f1-9f1e-3f3de09371ef.jpg.webp)
+            ## Littler could boycott Dutch events over booing
             
-            ## Spectre of Stokes hangs over England at The Oval
+            Luke Littler threatens a boycott of playing in the Netherlands after being booed and whistled at the World Series of Darts Finals in Amsterdam.
             
-            England have handed out four debuts in two Tests this summer but Ben Stokes' role in the latest revolution remains a mystery and will hang over England at The Oval.
-            
-            3 hrs ago England
+            12 hrs ago Darts
             
             </a>
-            <a href="/sport/articles/cpwez2pg8x1o" ref="89">
+            <a href="https://www.bbc.com/sport/football/live/c61mv7p2k4dlt" ref="78">
             
-            ![](https://static.files.bbci.co.uk/bbcdotcom/web/20260609-143108-fe43574f32-web-3.9.0-5/grey-placeholder.png)![Jan Paul van Hecke](https://ichef.bbci.co.uk/news/480/cpsprodpb/7a4d/live/882c1cc0-69b7-11f1-9a2b-c1fb07dd1b47.jpg.webp)
+            ![](https://static.files.bbci.co.uk/bbcdotcom/web/20260907-085256-bea8b058c0-web-3.21.0/grey-placeholder.png)![Atletico Madrid players celebrate](https://ichef.bbci.co.uk/ace/standard/480/cpsprodpb/d8e1/live/0949cd70-b50d-11f1-91cc-c5691e33b858.jpg.webp)
             
-            ## Spurs agree £52m Van Hecke deal with Brighton
+            ## Atletico beat 10-man Real in feisty Madrid derby
             
-            Netherlands World Cup defender Jan Paul van Hecke is set to leave Brighton for Tottenham Hotspur after the two clubs agree a £52m deal.
+            Atletico Madrid move above Real in La Liga with 2-1 derby win over their 10-man neighbours
             
-            45 mins ago Premier League
+            </a>
+            <a href="/sport/football/articles/c6z7z2we5lgwo" ref="79">
+            
+            ![](https://static.files.bbci.co.uk/bbcdotcom/web/20260907-085256-bea8b058c0-web-3.21.0/grey-placeholder.png)![Rayan Cherki and Enzo Fernandez](https://ichef.bbci.co.uk/news/480/cpsprodpb/1732/live/e8376180-b50a-11f1-91cc-c5691e33b858.jpg.webp)
+            
+            ## Perfect 24 hours for Maresca as Man City put pressure on Arsenal
+            
+            Manchester City head into the international break in a jubilant mood after enjoying the perfect 24 hours this weekend.
+            
+            4 hrs ago Man City
+            
+            </a>
+            <a href="/sport/football/articles/c317j2lzg8rdo" ref="80">
+            
+            ![](https://static.files.bbci.co.uk/bbcdotcom/web/20260907-085256-bea8b058c0-web-3.21.0/grey-placeholder.png)![Ryan Naderi scores for Rangers](https://ichef.bbci.co.uk/news/480/cpsprodpb/7d6a/live/78a0d860-b50f-11f1-b1d1-571ed4d7ff2c.jpg.webp)
+            
+            ## Rangers look like they know where they want to go - Celtic just look lost
+            
+            Tom English reflects on the first Old Firm league game of the season, in which Rangers repeated their League Cup win over Celtic.
+            
+            4 hrs ago Football
             
             </a>
             </section>
@@ -642,9 +567,9 @@ class BbcNewsTest {
             <section>
             <section>
             
-            [![](https://static.files.bbci.co.uk/bbcdotcom/web/20260609-143108-fe43574f32-web-3.9.0-5/grey-placeholder.png)![A collage of images and illustrations](https://ichef.bbci.co.uk/ace/standard/480/cpsprodpb/4234/live/ccb11760-566c-11f0-9074-8989d8c97d87.png.webp)](ref:90:https://cloud.email.bbc.com/bbcnewsignup2?&at_bbc_team=studios&at_medium=display&at_objective=acquisition&at_ptr_type=&at_ptr_name=bbc.comhp&at_format=Module&at_link_origin=intlfront&at_campaign=newsbriefing&at_campaign_type=owned)
+            [![](https://static.files.bbci.co.uk/bbcdotcom/web/20260907-085256-bea8b058c0-web-3.21.0/grey-placeholder.png)![A collage of images and illustrations](https://ichef.bbci.co.uk/ace/standard/480/cpsprodpb/4234/live/ccb11760-566c-11f0-9074-8989d8c97d87.png.webp)](ref:81:https://cloud.email.bbc.com/bbcnewsignup2?&at_bbc_team=studios&at_medium=display&at_objective=acquisition&at_ptr_type=&at_ptr_name=bbc.comhp&at_format=Module&at_link_origin=intlfront&at_campaign=newsbriefing&at_campaign_type=owned)
             
-            <a href="https://cloud.email.bbc.com/bbcnewsignup2?&amp;at_bbc_team=studios&amp;at_medium=display&amp;at_objective=acquisition&amp;at_ptr_type=&amp;at_ptr_name=bbc.comhp&amp;at_format=Module&amp;at_link_origin=intlfront&amp;at_campaign=newsbriefing&amp;at_campaign_type=owned" ref="91">
+            <a href="https://cloud.email.bbc.com/bbcnewsignup2?&amp;at_bbc_team=studios&amp;at_medium=display&amp;at_objective=acquisition&amp;at_ptr_type=&amp;at_ptr_name=bbc.comhp&amp;at_format=Module&amp;at_link_origin=intlfront&amp;at_campaign=newsbriefing&amp;at_campaign_type=owned" ref="82">
             
             ## Sign up to News Briefing
             
@@ -660,33 +585,32 @@ class BbcNewsTest {
             
             <footer id="bbc-footer">
             
-            [![British Broadcasting Corporation]()](ref:92:/)
+            [![British Broadcasting Corporation]()](ref:83:/)
             
             <section>
             <nav aria-label="Footer navigation">
             
-            - [Home](ref:93:https://www.bbc.com/)
-            - [News](ref:94:/news)
-            - [Football 2026](ref:95:/sport/football/world-cup)
-            - [Business](ref:96:/business)
-            - [Technology](ref:97:/technology)
-            - [Health](ref:98:/health)
-            - [Culture](ref:99:/culture)
-            - [Arts](ref:100:/arts)
-            - [Travel](ref:101:/travel)
-            - [Earth](ref:102:/future-planet)
-            - [Sport](ref:103:/sport)
-            - [Audio](ref:104:/audio)
-            - [Video](ref:105:/video)
-            - [Live](ref:106:/live)
-            - [Weather](ref:107:https://www.bbc.com/weather)
-            - [BBC Shop](ref:108:https://shop.bbc.com/)
-            - [BritBox](ref:109:https://www.britbox.com/?utm_source=bbc.com&utm_medium=referral&utm_campaign=footer)
+            - [Home](ref:84:https://www.bbc.com/)
+            - [News](ref:85:/news)
+            - [Sport](ref:86:/sport)
+            - [Business](ref:87:/business)
+            - [Technology](ref:88:/technology)
+            - [Health](ref:89:/health)
+            - [Culture](ref:90:/culture)
+            - [Arts](ref:91:/arts)
+            - [Travel](ref:92:/travel)
+            - [Earth](ref:93:/future-planet)
+            - [Audio](ref:94:/audio)
+            - [Video](ref:95:/video)
+            - [Live](ref:96:/live)
+            - [Weather](ref:97:https://www.bbc.com/weather)
+            - [BBC Shop](ref:98:https://shop.bbc.com/)
+            - [BritBox](ref:99:https://www.britbox.com/?utm_source=bbc.com&utm_medium=referral&utm_campaign=footer)
             
             </nav>
             </section>
             <section>
-            <button type="button" ref="110">
+            <button type="button" ref="100">
             
             BBC in other languages
             
@@ -695,58 +619,77 @@ class BbcNewsTest {
             
             Follow BBC on:
             
-            <button aria-label="Follow BBC on x" ref="111">
+            <button aria-label="Follow BBC on x" ref="101">
+            
+            Follow BBC on x
+            
             </button>
-            <button aria-label="Follow BBC on facebook" ref="112">
+            <button aria-label="Follow BBC on facebook" ref="102">
+            
+            Follow BBC on facebook
+            
             </button>
-            <button aria-label="Follow BBC on instagram" ref="113">
+            <button aria-label="Follow BBC on instagram" ref="103">
+            
+            Follow BBC on instagram
+            
             </button>
-            <button aria-label="Follow BBC on tiktok" ref="114">
+            <button aria-label="Follow BBC on tiktok" ref="104">
+            
+            Follow BBC on tiktok
+            
             </button>
-            <button aria-label="Follow BBC on linkedin" ref="115">
+            <button aria-label="Follow BBC on linkedin" ref="105">
+            
+            Follow BBC on linkedin
+            
             </button>
-            <button aria-label="Follow BBC on youtube" ref="116">
+            <button aria-label="Follow BBC on youtube" ref="106">
+            
+            Follow BBC on youtube
+            
             </button>
             <section>
             <nav>
             
-            - [Terms of Use](ref:117:https://www.bbc.com/pages/terms-of-use)
-            - [Subscription Terms](ref:118:https://www.bbc.com/pages/subscription-terms)
-            - [About the BBC](ref:119:https://www.bbc.co.uk/aboutthebbc)
-            - [Privacy Policy](ref:120:https://www.bbc.com/pages/privacy-policy)
-            - [Cookies](ref:121:https://www.bbc.com/usingthebbc/cookies/)
-            - [Accessibility Help](ref:122:https://www.bbc.co.uk/accessibility/)
-            - [Contact the BBC](ref:123:https://www.bbc.co.uk/contact)
-            - [Advertise with us](ref:124:https://advertising.bbcstudios.com/)
-            - [Do not share or sell my info](ref:125:https://www.bbc.com/usingthebbc/cookies/how-can-i-change-my-bbc-cookie-settings/)
-            - [BBC.com Help & FAQs](ref:126:https://help.bbc.com/hc/)
-            - [Content Index](ref:127:https://www.bbc.com/pages/content-index)
-            - [Set Preferred Source](ref:128:https://www.bbc.com/future/article/20260128-how-to-make-google-put-trusted-sources-up-top-when-you-search)
+            - [Terms of Use](ref:107:https://www.bbc.com/pages/terms-of-use)
+            - [About the BBC](ref:108:https://www.bbc.co.uk/aboutthebbc)
+            - [Privacy Policy](ref:109:https://www.bbc.com/pages/privacy-policy)
+            - [Cookies](ref:110:https://www.bbc.com/usingthebbc/cookies/)
+            - [Accessibility Help](ref:111:https://www.bbc.co.uk/accessibility/)
+            - [Contact the BBC](ref:112:https://www.bbc.co.uk/contact)
+            - [Advertise with us](ref:113:https://advertising.bbcstudios.com/)
+            - [Do not share or sell my info](ref:114:https://www.bbc.com/usingthebbc/cookies/how-can-i-change-my-bbc-cookie-settings/)
+            - [BBC.com Help & FAQs](ref:115:https://help.bbc.com/hc/)
+            - [Content Index](ref:116:https://www.bbc.com/pages/content-index)
+            - [Set Preferred Source](ref:117:https://www.bbc.com/future/article/20260128-how-to-make-google-put-trusted-sources-up-top-when-you-search)
             
             </nav>
             </section>
             
-            Copyright 2026 BBC. All rights reserved. The BBC is not responsible for the content of external sites. [:DACi:](ref:129:https://www.bbc.com/editorialguidelines/guidance/links-and-feeds)
-
+            Copyright 2026 BBC. All rights reserved. The BBC is not responsible for the content of external sites. [:DACi:](ref:118:https://www.bbc.com/editorialguidelines/guidance/links-and-feeds)
+            
             </footer>
             <section>
             
             ## Let us know you agree to cookies
             
-            We use [cookies](ref:130:https://www.bbc.com/usingthebbc/cookies/what-do-i-need-to-know-about-cookies/) to give you the best online experience.
+            We use [cookies](ref:119:https://www.bbc.com/usingthebbc/cookies/what-do-i-need-to-know-about-cookies/) to give you the best online experience.
             
             Please let us know if you agree to all of these cookies.
             
             
-            - <button id="bbccookies-continue-button" type="button" ref="131">
+            - <button id="bbccookies-continue-button" type="button" ref="120">
             
               Yes, I agree
             
               </button>
             
-            - [No, take me to settings](ref:132:https://www.bbc.com/usingthebbc/cookies/how-can-i-change-my-bbc-cookie-settings/)
+            - [No, take me to settings](ref:121:https://www.bbc.com/usingthebbc/cookies/how-can-i-change-my-bbc-cookie-settings/)
             
             </section>
+            
+            <iframe id="sp_message_iframe_1489022" src="https://cdn.privacy-mgmt.com/index.html?hasCsp=true&amp;message_id=1489022&amp;consentUUID=null&amp;consent_origin=https%3A%2F%2Fcdn.privacy-mgmt.com%2Fconsent%2Ftcfv2&amp;preload_message=true&amp;version=v1" title="SP Consent Message"></iframe>
         """.trimIndent()
     }
 

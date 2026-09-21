@@ -18,6 +18,7 @@ package com.xemantic.markanywhere.render
 
 import com.xemantic.kotlin.test.assert
 import com.xemantic.kotlin.test.sameAs
+import com.xemantic.kotlin.test.sameAsMarkdown
 import com.xemantic.markanywhere.flow.semanticEvents
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -1363,7 +1364,7 @@ class MarkdownRenderingTest {
         // then — every line of the code block sits at the item's 2-space content
         // indent. (The bare `- ` first line is a separate artifact of a <pre>
         // wrapping a block-level heading; the fix here is purely the fence indent.)
-        markdown sameAs /* language=markdown */ """
+        markdown sameAsMarkdown """
             - 
               ##### Javascript
               ```javascript
@@ -2594,4 +2595,156 @@ class MarkdownRenderingTest {
         // then
         markdown sameAs "*x [a*b](u) y*"
     }
+
+    @Test
+    fun `should render a table caption as a paragraph above the table`() = runTest {
+        // GFM has no caption syntax, so the caption degrades to the block that
+        // precedes the table. It must be blank-line separated: a caption line
+        // directly above the header row makes the whole table paragraph
+        // continuation text on re-parse (tables never interrupt a paragraph).
+        // when
+        val markdown = semanticEvents {
+            "table" {
+                "caption" { +"Q3 revenue" }
+                "tr" { "th" { +"a" }; "th" { +"b" } }
+                "tr" { "td" { +"1" }; "td" { +"2" } }
+            }
+        }.renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            Q3 revenue
+            
+            | a | b |
+            | --- | --- |
+            | 1 | 2 |
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should render inline content of a table caption`() = runTest {
+        // when
+        val markdown = semanticEvents {
+            "table" {
+                "caption" { +"See "; "strong" { +"note" } }
+                "tr" { "td" { +"1" } }
+            }
+        }.renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            See **note**
+            
+            |  |
+            | --- |
+            | 1 |
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should synthesize a list for a list item whose list wrapper is missing`() = runTest {
+        // An upstream operator that unwraps a list container while keeping its
+        // items leaves `li` marks with no enclosing list. The renderer must
+        // degrade to a plain list instead of failing the whole document.
+        // when
+        val markdown = semanticEvents {
+            "p" { +"before" }
+            "li" { +"Home" }
+            "li" { +"About" }
+            "p" { +"after" }
+        }.renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            before
+            
+            - Home
+            
+            - About
+            
+            after
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should render a dialog as a block level raw tag`() = runTest {
+        // when
+        val markdown = semanticEvents {
+            "dialog"("id" to "consent") {
+                "h2" { +"Cookies" }
+                "p" { +"We use cookies." }
+            }
+        }.renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            <dialog id="consent">
+            
+            ## Cookies
+            
+            We use cookies.
+            
+            </dialog>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `MARKDOWN_NATIVE_MARK_NAMES must match the names rendered as Markdown`() = runTest {
+        // The set is a public contract producers key `isTagged` off, but it is
+        // hand-maintained beside a `when` that cannot be derived from it. Pin it
+        // to behaviour: an untagged mark named in the set must NOT emit its own
+        // literal tag, and one outside it must.
+        // when
+        val rendersAsTag = mutableSetOf<String>()
+        for (name in MARKDOWN_NATIVE_MARK_NAMES + NON_NATIVE_SAMPLE) {
+            val markdown = semanticEvents { name("id" to "x") { +"content" } }.renderMarkdown()
+            if ("<$name" in markdown) rendersAsTag += name
+        }
+
+        // then
+        assert(rendersAsTag.intersect(MARKDOWN_NATIVE_MARK_NAMES).isEmpty())
+        assert(rendersAsTag == NON_NATIVE_SAMPLE)
+    }
+
+    @Test
+    fun `should render a tagged mark as a literal tag even when Markdown native`() = runTest {
+        // The flag, not the name, decides: the same `em` renders both ways.
+        // when
+        val untagged = semanticEvents { "p" { "em" { +"x" } } }.renderMarkdown()
+        val tagged = semanticEvents(tagged = true) { "p" { "em" { +"x" } } }.renderMarkdown()
+
+        // then
+        untagged sameAs "*x*"
+        tagged sameAs "<p><em>x</em></p>"
+    }
+
+    @Test
+    fun `should render ruby annotations as inline raw HTML`() = runTest {
+        // when
+        val markdown = semanticEvents {
+            "p" {
+                "ruby" { +"漢字"; "rt" { +"kanji" } }
+                +" is hard"
+            }
+        }.renderMarkdown()
+
+        // then
+        markdown sameAs "<ruby>漢字<rt>kanji</rt></ruby> is hard"
+    }
 }
+
+// A spread of names the renderer has no Markdown syntax for: sectioning,
+// interactive, form-associated, definition lists, inline formatting without a
+// Markdown delimiter, and the table parts GFM cannot express.
+private val NON_NATIVE_SAMPLE = setOf(
+    "section", "nav", "article", "aside", "header", "footer", "main",
+    "figure", "figcaption", "details", "summary", "address", "hgroup",
+    "dialog", "search",
+    "form", "fieldset", "legend", "button", "select", "textarea",
+    "dl", "dt", "dd",
+    "sub", "u", "s", "i", "b", "small", "cite", "abbr", "kbd", "samp",
+    "var", "time", "q", "dfn", "ins",
+    "ruby", "rt", "rp",
+    "menu",
+    "tfoot", "colgroup",
+)

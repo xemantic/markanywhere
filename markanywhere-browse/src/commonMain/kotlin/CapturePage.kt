@@ -75,8 +75,11 @@ internal suspend fun Tab.capturePage(
         computedStyles = listOf("display", "visibility")
     )
     val dom = SnapshotDom(snapshot)
+    val documents = mutableMapOf(0 to dom)
     val builder = DomEventBuilder(
-        dom = dom,
+        documents = { index ->
+            documents.getOrPut(index) { SnapshotDom(snapshot, index) }
+        },
         axIndex = buildMap {
             axNodes.forEach { node ->
                 node.backendDOMNodeId?.let {
@@ -88,7 +91,7 @@ internal suspend fun Tab.capturePage(
         refAttribute = refAttribute,
         isActionable = isActionable
     )
-    builder.walkElement(dom.htmlIndex, annotate = true)
+    builder.walkElement(dom, dom.htmlIndex, annotate = true)
     return PageCapture(
         dump = SemanticEventDump(
             url = url ?: "",
@@ -112,11 +115,29 @@ private suspend fun Accessibility.getAxTree(): List<Accessibility.AXNode> {
  * Random-access view over the flattened parallel arrays of a
  * `DOMSnapshot.captureSnapshot` main-frame document.
  */
-private class SnapshotDom(snapshot: DOMSnapshot.CaptureSnapshotReturn) {
+private class SnapshotDom(
+    snapshot: DOMSnapshot.CaptureSnapshotReturn,
+    /**
+     * Which of the snapshot's documents this view covers. `captureSnapshot`
+     * returns index 0 for the main frame plus one document per **same-origin**
+     * frame, each named by its embedding element through [contentDocumentIndex].
+     *
+     * **Cross-origin frames are not included** — verified against a live
+     * bbc.com/news capture, where the snapshot held 3 documents (the page and
+     * its two `about:blank` frames) while the Optimizely and consent frames had
+     * no `contentDocumentIndex` and no document of their own. Disabling site
+     * isolation does not change this: it is what `DOMSnapshot.captureSnapshot`
+     * exposes for one target, not a process-boundary artifact. Reaching them
+     * needs `Target.setAutoAttach(flatten = true)`, a snapshot per frame target
+     * and stitching the results by frame id.
+     */
+    documentIndex: Int = 0,
+) {
 
-    private val strings = snapshot.strings
-    private val nodes = snapshot.documents.first().nodes
-    private val layout = snapshot.documents.first().layout
+    private val strings = snapshot.strings // shared across all documents
+    private val document = snapshot.documents[documentIndex]
+    private val nodes = document.nodes
+    private val layout = document.layout
 
     private val nodeType = requireNotNull(nodes.nodeType) { "no nodeType in snapshot" }
     private val nodeName = requireNotNull(nodes.nodeName) { "no nodeName in snapshot" }
@@ -147,7 +168,7 @@ private class SnapshotDom(snapshot: DOMSnapshot.CaptureSnapshotReturn) {
         layout.nodeIndex.forEachIndexed { i, node ->
             val styles = layout.styles.getOrNull(i) ?: return@forEachIndexed
             styles.getOrNull(0)?.let {
-                put(node, string(it.toInt()) ?: return@forEachIndexed)
+                put(node, string(it) ?: return@forEachIndexed)
             }
         }
     }
@@ -157,7 +178,7 @@ private class SnapshotDom(snapshot: DOMSnapshot.CaptureSnapshotReturn) {
         layout.nodeIndex.forEachIndexed { i, node ->
             val styles = layout.styles.getOrNull(i) ?: return@forEachIndexed
             styles.getOrNull(1)?.let {
-                put(node, string(it.toInt()) ?: return@forEachIndexed)
+                put(node, string(it) ?: return@forEachIndexed)
             }
         }
     }
@@ -181,11 +202,18 @@ private class SnapshotDom(snapshot: DOMSnapshot.CaptureSnapshotReturn) {
         }
     }
 
-    val htmlIndex: Int = requireNotNull(
-        nodeType.indices.firstOrNull {
-            isElement(it) && name(it) == "html"
-        }
-    ) { "no <html> element in the captured DOM" }
+    /**
+     * The document's root element, or `null` when it has none — a frame that
+     * never committed a document still yields an (empty) snapshot document, so
+     * only the main frame is required to have one (see [htmlIndex]).
+     */
+    val htmlIndexOrNull: Int? = nodeType.indices.firstOrNull {
+        isElement(it) && name(it) == "html"
+    }
+
+    val htmlIndex: Int = requireNotNull(htmlIndexOrNull) {
+        "no <html> element in the captured DOM"
+    }
 
     private fun string(index: Int): String? = strings.getOrNull(index)
 
@@ -213,8 +241,8 @@ private class SnapshotDom(snapshot: DOMSnapshot.CaptureSnapshotReturn) {
         return buildMap {
             for (i in 0 until flat.size - 1 step 2) {
                 put(
-                    string(flat[i].toInt()).orEmpty(),
-                    string(flat[i + 1].toInt()).orEmpty()
+                    string(flat[i]).orEmpty(),
+                    string(flat[i + 1]).orEmpty()
                 )
             }
         }
@@ -242,10 +270,30 @@ private class SnapshotDom(snapshot: DOMSnapshot.CaptureSnapshotReturn) {
     /** Whether the element is laid out with computed `visibility:hidden`. */
     fun isVisibilityHidden(index: Int): Boolean = visibility[index] == "hidden"
 
+    /**
+     * For an `<iframe>` / `<object>` / `<embed>`, the index in the snapshot's
+     * `documents` of the document it embeds, or `null` when it embeds none
+     * (or the frame produced no snapshot — a frame that never committed a
+     * document, for instance).
+     */
+    fun contentDocumentIndex(index: Int): Int? = contentDocuments[index]
+
+    private val contentDocuments: Map<Int, Int> = buildMap {
+        val rare = nodes.contentDocumentIndex ?: return@buildMap
+        rare.index.forEachIndexed { i, node ->
+            rare.value.getOrNull(i)?.let { put(node, it) }
+        }
+    }
+
 }
 
 private class DomEventBuilder(
-    private val dom: SnapshotDom,
+    /**
+     * The snapshot's documents, indexed as CDP indexes them: `[0]` is the main
+     * frame and an `<iframe>`'s content document is looked up by the index its
+     * element carries. Built lazily — a page with no frames pays for one view.
+     */
+    private val documents: (Int) -> SnapshotDom,
     private val axIndex: Map<Int, Accessibility.AXNode>,
     private val refAttribute: String? = null,
     private val isActionable: (Accessibility.AXNode?) -> Boolean = { false },
@@ -266,19 +314,30 @@ private class DomEventBuilder(
      * since it computes to `display:none` wholesale and annotating it would let
      * a downstream filter drop the `<title>` / `<meta>` provenance.
      */
-    fun walkElement(element: Int, annotate: Boolean) {
+    fun walkElement(dom: SnapshotDom, element: Int, annotate: Boolean) {
         val annotated = annotate && dom.name(element) != "head"
-        mark(element, annotated)
+        mark(dom, element, annotated)
         dom.children[element].forEach { child ->
             when {
                 dom.isText(child) -> events += SemanticEvent.Text(dom.text(child))
-                dom.isElement(child) -> walkElement(child, annotated)
+                dom.isElement(child) -> walkElement(dom, child, annotated)
             }
         }
-        unmark(element)
+        // A frame's document is nested inside the element that embeds it, the
+        // way a screen reader reads an iframe: its content is part of the same
+        // accessibility tree, not a separate page. The embedding element has no
+        // children of its own in the parent document (its markup is fallback
+        // content, which the snapshot does not carry), so this always follows
+        // an empty child loop. Recursion handles a frame inside a frame; a
+        // cross-origin frame has no document here at all (see documentIndex).
+        dom.contentDocumentIndex(element)?.let { contentIndex ->
+            val content = documents(contentIndex)
+            content.htmlIndexOrNull?.let { walkElement(content, it, annotated) }
+        }
+        unmark(dom, element)
     }
 
-    private fun mark(element: Int, annotate: Boolean) {
+    private fun mark(dom: SnapshotDom, element: Int, annotate: Boolean) {
         val backendNodeId = dom.backendNodeId(element)
         // a dense, document-order ref on every actionable element, recorded so
         // PageSession can resolve it back to a live node for click / type
@@ -288,7 +347,7 @@ private class DomEventBuilder(
         val attributes = buildMap {
             putAll(dom.attributeMap(element))
             if (ref != null) put(refAttribute!!, ref)
-        }.let { if (annotate) it.withAccessibilityAnnotations(element) else it }
+        }.let { if (annotate) it.withAccessibilityAnnotations(dom, element) else it }
         events += SemanticEvent.Mark(
             name = dom.name(element),
             isTagged = true,
@@ -296,11 +355,11 @@ private class DomEventBuilder(
         )
     }
 
-    private fun unmark(element: Int) {
+    private fun unmark(dom: SnapshotDom, element: Int) {
         events += SemanticEvent.Unmark(name = dom.name(element), isTagged = true)
     }
 
-    private fun Int.axNode(): Accessibility.AXNode? =
+    private fun Int.axNode(dom: SnapshotDom): Accessibility.AXNode? =
         axIndex[dom.backendNodeId(this)]
 
     /**
@@ -315,11 +374,12 @@ private class DomEventBuilder(
      * attribute the consumer can read directly.
      */
     private fun Map<String, String>.withAccessibilityAnnotations(
+        dom: SnapshotDom,
         element: Int
     ): Map<String, String> {
         val result = LinkedHashMap(this)
         if (dom.name(element) == "table") {
-            element.axNode()?.roleName?.let {
+            element.axNode(dom)?.roleName?.let {
                 result[AccessibilityAnnotations.ROLE] = it
             }
         }
@@ -332,10 +392,10 @@ private class DomEventBuilder(
         // Blink's own decorative-image verdict: an <img> kept out of the
         // accessibility tree is decorative / redundant. Recorded for images
         // only — most other ignored nodes are structurally meaningful.
-        if (dom.name(element) == "img" && element.axNode()?.ignored == true) {
+        if (dom.name(element) == "img" && element.axNode(dom)?.ignored == true) {
             result[AccessibilityAnnotations.IGNORED] = "true"
         }
-        return result.withResolvedAccessibleName(element)
+        return result.withResolvedAccessibleName(dom, element)
     }
 
     /**
@@ -346,12 +406,13 @@ private class DomEventBuilder(
      * returned unchanged.
      */
     private fun Map<String, String>.withResolvedAccessibleName(
+        dom: SnapshotDom,
         element: Int
     ): Map<String, String> = when {
         "aria-label" in this -> this
         "aria-labelledby" !in this -> this
         else -> {
-            val name = element.axNode()?.computedName?.trim()
+            val name = element.axNode(dom)?.computedName?.trim()
             if (name.isNullOrEmpty()) this else this + ("aria-label" to name)
         }
     }

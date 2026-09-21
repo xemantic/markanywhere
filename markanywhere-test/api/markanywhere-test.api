@@ -1,0 +1,4 @@
+public final class com/xemantic/markanywhere/test/MarkanywhereTestsKt {
+	public static final fun sameAs (Lkotlinx/coroutines/flow/Flow;Lkotlinx/coroutines/flow/Flow;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+

@@ -165,14 +165,26 @@ private fun String.collapseWhitespace(): String = buildString {
     }
 }
 
-// Opens a whitespace-preserving region: tagged HTML `<pre>`/`<code>`/`<textarea>`
-// (their content whitespace is significant), plus the synthetic `frontmatter`
-// block, whose newline-separated YAML must survive verbatim regardless of
-// `isTagged` (`simplifyHtml` emits it untagged).
+// Opens a whitespace-preserving region, whose watermark covers the whole
+// subtree — so a `code` nested in a `pre` needs no rule of its own.
+//
+// `pre` and `textarea` are verbatim whatever their origin, so neither may be
+// gated on `isTagged`: an untagged `pre` is a Markdown fenced/indented code
+// block, and in the HTML pipeline `simplifyHtml` has already untagged the HTML
+// one by the time this operator runs — gating there collapsed every captured
+// code block onto a single line.
+//
+// A *bare* `code` is the exception that still needs the flag: untagged it is a
+// Markdown inline span, whose whitespace-only content is structural noise
+// rather than significant text.
+//
+// `frontmatter` is synthetic and always untagged; its newline-separated YAML
+// must survive verbatim.
 private fun SemanticEvent.Mark.isPreserveRegion(): Boolean =
-    name == "frontmatter" || (isTagged && name in WHITESPACE_PRESERVE_TAGS)
-
-private val WHITESPACE_PRESERVE_TAGS = setOf("pre", "code", "textarea")
+    name == "frontmatter"
+            || name == "pre"
+            || name == "textarea"
+            || (isTagged && name == "code")
 
 // Decides whether an element is inline-level for whitespace gating. Prefers the
 // browser's *computed* `display` captured in the dump (`data-markanywhere-display`):

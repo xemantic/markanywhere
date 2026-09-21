@@ -19,25 +19,28 @@ package com.xemantic.markanywhere.html
 import com.xemantic.kotlin.core.text.unaryPlus
 import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.dump.AccessibilityAnnotations
-import com.xemantic.markanywhere.transform.TransformerBuilder
+import com.xemantic.markanywhere.transform.MatcherScope
 import com.xemantic.markanywhere.transform.transform
 import kotlinx.coroutines.flow.Flow
-
-public fun Flow<SemanticEvent>.simplifyHtml(
-    keepAttributes: Set<String> = emptySet(),
-): Flow<SemanticEvent> = transform {
-    simplifyHtml(keepAttributes)
-}
 
 /**
  * Simplifies an HTML-derived semantic event stream by keeping only the
  * tags that carry semantic meaning and discarding presentational noise.
  *
- * The resulting stream emits **untagged** events (`isTagged = false`).
- * Downstream consumers — notably `renderMarkdown()` — treat the
- * Markdown-equivalent tags (`p`, `h1`–`h6`, `ul`, `ol`, `li`, `em`,
- * `strong`, `a`, `img`, tables, etc.) as native Markdown and pass the
- * remaining structural / form tags through as their HTML form.
+ * Each surviving mark carries **how it must render** in its `isTagged` flag,
+ * decided here rather than by a name lookup downstream (see [preserve]):
+ *
+ * - a name the Markdown renderer has syntax for ([MARKDOWN_NATIVE_TAGS]: `p`,
+ *   `h1`–`h6`, `ul`, `ol`, `li`, `em`, `strong`, `a`, `img`, the table family,
+ *   …) is emitted **untagged**, so it renders as Markdown — `*…*`, `- `, `## `;
+ * - every other preserved element (`section`, `nav`, `dialog`, `form`,
+ *   `button`, `dl`/`dt`/`dd`, `ruby`, `b`/`i`/`u`/`cite`, …) is emitted
+ *   **tagged**, so it renders as the literal XML wrapper it is.
+ *
+ * The output is therefore self-describing: a consumer reads `isTagged` instead
+ * of replicating the renderer's name map. `renderMarkdown()` keeps a fallback
+ * (an untagged mark it has no syntax for still renders as a raw tag), so a
+ * hand-built stream that does not set the flag behaves as before.
  *
  * Behaviour by tag class:
  *
@@ -45,20 +48,37 @@ public fun Flow<SemanticEvent>.simplifyHtml(
  *   the accessibility tree (decorative / duplicate / off-screen), so it and its
  *   whole subtree are discarded, like `display:none`. Checked first, before the
  *   per-tag rules below.
- * - **Drop**: `script`, `style`, `link`, `noscript` — the wrapper and all
- *   of its content are discarded.
+ * - **Drop**: `script`, `style`, `link`, `noscript`, `template`, `canvas` and
+ *   `svg` — the wrapper and all of its content are discarded (see
+ *   [DROPPED_TAGS]).
+ * - **Keep the source, drop the fallbacks**: `iframe`, `video`, `audio`,
+ *   `object`, `embed` survive as void elements carrying what they embed (see
+ *   [EMBEDDED_CONTENT_ATTRS]); their children are fallback content for a
+ *   renderer we have no equivalent for and are discarded.
  * - **Unwrap**: `body`, `div`, `span`, `font`, `center`, `tt` — the
  *   wrapper is removed, children flow through unchanged.
+ * - **Unwrap (catch-all)**: any element matched by none of the rules — custom
+ *   elements / web components, `picture`, `slot`, and whatever HTML gains next.
+ *   The wrapper is removed and its whole subtree survives; only [DROPPED_TAGS]
+ *   loses its content.
+ * - **Wrap**: `menu` keeps its tag (a toolbar of commands is not a bullet list,
+ *   and Markdown cannot say so) with a synthetic untagged `ul` nested inside to
+ *   carry the items, since an `li` needs a list to take its bullet from.
  * - **Preserve with `id` only**:
  *   - structural: `article`, `aside`, `footer`, `header`, `main`, `nav`,
- *     `section`, `figure`, `figcaption`, `details`, `summary`, `address`,
- *     `hgroup`
+ *     `section`, `search`, `figure`, `figcaption`, `details`, `summary`,
+ *     `address`, `hgroup`
+ *   - `dialog` — a closed one is `display:none` per the UA stylesheet and never
+ *     reaches this operator, so a surviving dialog is on screen (usually a
+ *     modal blocking the rest of the page), which is content-level information
  *   - block content: `p`, `blockquote`, `pre`, `hr`, `br`, `h1`–`h6`,
  *     `ul`, `li`, `dl`, `dt`, `dd`, table family (`table`, `thead`,
- *     `tbody`, `tfoot`, `tr`)
+ *     `tbody`, `tfoot`, `tr`, `caption`)
  * - **Preserve, drop all attributes**: inline emphasis — `em`, `strong`,
  *   `del`, `mark`, `sub`, `sup`, `u`, `s`, `i`, `b`, `small`, `cite`,
- *   `abbr`, `kbd`, `samp`, `var`, `time`, `q`, `dfn`, `ins`
+ *   `abbr`, `kbd`, `samp`, `var`, `time`, `q`, `dfn`, `ins` — and the ruby
+ *   annotation group ([RUBY_TAGS]), whose annotation is parallel to its base
+ *   text and so cannot be flattened into it
  * - **Preserve with attribute whitelist**:
  *   - `a` — `href`, `title`, `id`
  *   - `img` — `src`, `alt`, `title`, `id`
@@ -80,7 +100,8 @@ public fun Flow<SemanticEvent>.simplifyHtml(
  * - **ARIA keep-set (every preserved element)**: on top of each element's own
  *   whitelist, the accessible name and actionable state survive — `aria-label`,
  *   `aria-expanded`, `aria-haspopup`, `aria-current`, `aria-checked`,
- *   `aria-selected`, `aria-pressed`, `aria-disabled` (see [ARIA_KEEP]). These
+ *   `aria-selected`, `aria-pressed`, `aria-disabled`, `aria-modal` (see
+ *   [ARIA_KEEP]). These
  *   are often the only label on an icon control and the state an LLM-driven
  *   agent needs to decide how to interact. Inline emphasis carries no
  *   attributes, so it does not surface these. Other `aria-*` (id-reference,
@@ -112,25 +133,35 @@ public fun Flow<SemanticEvent>.simplifyHtml(
  * Matcher registration is grouped: per-tag explicit matchers come first
  * (so they win the `firstOrNull` race), then a small number of
  * expression-based matchers handle whole tag families via set / map
- * lookup — one matcher per family, not one per tag.
+ * lookup — one matcher per family, not one per tag. A `match("*")` unwrap
+ * closes the list, so an element no earlier rule claims keeps its content
+ * instead of taking it down with it.
  *
- * Registers its rules on the receiving [TransformerBuilder]; use it inside a
- * [com.xemantic.markanywhere.transform.transform] block — e.g.
- * `flow.simplifyHtml()`. The per-collection rebuild of the
- * transform pipeline reinitialises the `metadata` / `titleText` accumulators
- * captured below on every run, so the same flow can be collected repeatedly
- * without state leaking between collections.
+ * A plain stream operator, so it composes with the rest of the HTML pipeline
+ * by chaining — e.g. `flow.applyAccessibility().simplifyHtml()`. The rule
+ * block is rebuilt on **every collection**, which reinitialises the
+ * `metadata` / `titleText` / `inHead` state captured below on each run, so the
+ * same flow can be collected repeatedly without state leaking between
+ * collections.
  *
  * @param keepAttributes application-specific attribute names to preserve on
  *   every element that survives simplification (see the "Caller keep-set"
  *   behaviour above). Empty by default.
+ * @param svgMode what to do with an inline `<svg>`. [SvgMode.RESOLVE] (the
+ *   default) drops the subtree, having let `resolveInlineGraphics` lift any
+ *   accessible name out of it first; [SvgMode.PRESERVE] keeps it verbatim and
+ *   tagged, for a consumer that renders graphics rather than reading them.
  */
-public fun TransformerBuilder.simplifyHtml(
-    keepAttributes: Set<String> = emptySet()
-) {
+public fun Flow<SemanticEvent>.simplifyHtml(
+    keepAttributes: Set<String> = emptySet(),
+    svgMode: SvgMode = SvgMode.RESOLVE,
+): Flow<SemanticEvent> = transform {
 
     val metadata = mutableMapOf<String, String>()
     val titleText = StringBuilder()
+    // True while streaming `<head>`, so the catch-all unwrap below cannot leak
+    // head noise into the body content (see the default matchText rule).
+    var inHead = false
 
     // Attribute map kept on a preserved element: its own [names] whitelist, the
     // ARIA name/state keep-set, and any caller-requested [keepAttributes]. An
@@ -168,6 +199,26 @@ public fun TransformerBuilder.simplifyHtml(
     // the subtree (no `children()` call).
     match({ this["aria-hidden"]?.equals("true", ignoreCase = true) == true }) { /* drop */ }
 
+    // --- vector graphics passthrough (before the DROPPED_TAGS group) ----
+
+    // In PRESERVE the whole `<svg>` subtree is kept verbatim and tagged, for a
+    // consumer rendering the graphics rather than reading them as text.
+    //
+    // A rule is not enough on its own: the catch-all would *unwrap* every
+    // `<path>` / `<defs>` / `<linearGradient>` below it and spill the vector
+    // data as text, so the subtree descends in its own mode whose wildcard
+    // keeps each element instead. Attributes pass through untouched — `viewBox`
+    // and `d` are the content here, not presentational noise.
+    if (svgMode == SvgMode.PRESERVE) {
+        match("svg") { event ->
+            tag("svg", event.attributes) { children(mode = "svg") }
+        }
+        match("*", mode = "svg") { event ->
+            tag(event.name, event.attributes) { children(mode = "svg") }
+        }
+        matchText(mode = "svg") { +it }
+    }
+
     // --- metadata extraction (explicit per-tag) -------------------------
 
     match("html") { event ->
@@ -178,8 +229,10 @@ public fun TransformerBuilder.simplifyHtml(
     match("head") {
         // Descend in "head" mode so title/meta resolve and loose text is
         // swallowed (see the mode-scoped matchText below); emit no mark.
+        inHead = true
         children(mode = "head")
         afterClose {
+            inHead = false
             if (metadata.isNotEmpty()) {
                 val yaml = renderYamlFrontmatter(metadata)
                 "frontmatter"(mapOf("format" to "yaml")) {
@@ -220,29 +273,45 @@ public fun TransformerBuilder.simplifyHtml(
     // --- tags with custom attribute whitelists (explicit per-tag) -------
 
     match("a") { event ->
-        "a"(preserveAttrs(event, "href", "title", "id")) { children() }
+        preserve("a", preserveAttrs(event, "href", "title", "id")) { children() }
     }
 
     match("img") { event ->
-        "img"(preserveAttrs(event, "src", "alt", "title", "id")) { /* void */ }
+        preserve("img", preserveAttrs(event, "src", "alt", "title", "id")) { /* void */ }
     }
 
     match("code") { event ->
-        "code"(preserveAttrs(event, "class", "id")) { children() }
+        preserve("code", preserveAttrs(event, "class", "id")) { children() }
     }
 
     match("ol") { event ->
-        "ol"(preserveAttrs(event, "start", "id")) { children() }
+        preserve("ol", preserveAttrs(event, "start", "id")) { children() }
+    }
+
+    // `<menu>` is a toolbar of commands, not a bullet list — a distinction
+    // Markdown cannot express, so the tag is kept (it has no Markdown syntax,
+    // hence `preserve` tags it) and a `ul` is nested inside to carry the items.
+    // The nested list is what makes them render as `- ` items: `li` is a
+    // Markdown-native mark and the renderer takes an item's bullet from the
+    // enclosing list frame, which only `ul`/`ol` opens. Renaming `menu` to `ul`
+    // would render identically but throw the semantics away; emitting the bare
+    // `li`s instead would fall back on the renderer's orphan-item recovery,
+    // which yields a loose list. The whole child run is wrapped — a `<menu>`
+    // whose content model is anything but `li` is malformed HTML anyway.
+    match("menu") { event ->
+        preserve("menu", preserveAttrs(event, "id")) {
+            preserve("ul") { children() }
+        }
     }
 
     match("th") { event ->
-        "th"(preserveAttrs(event, "align", "colspan", "rowspan", "scope", "headers", "id")) {
+        preserve("th", preserveAttrs(event, "align", "colspan", "rowspan", "scope", "headers", "id")) {
             children()
         }
     }
 
     match("td") { event ->
-        "td"(preserveAttrs(event, "align", "colspan", "rowspan", "scope", "headers", "id")) {
+        preserve("td", preserveAttrs(event, "align", "colspan", "rowspan", "scope", "headers", "id")) {
             children()
         }
     }
@@ -262,32 +331,32 @@ public fun TransformerBuilder.simplifyHtml(
     match({ name !in DROPPED_TAGS && this["role"]?.lowercase() in PRESENTATION_ROLES }) { event ->
         val kept = extraKept(event)
         if (kept.isEmpty()) children()
-        else event.name(kept) { children() }
+        else preserve(event.name, kept) { children() }
     }
 
     // `role="heading"` + `aria-level` → `h1`–`h6` (ARIA's default level is 2).
     match({ name in UNWRAPPED_TAGS && this["role"]?.lowercase() == "heading" }) { event ->
         val level = event["aria-level"]?.toIntOrNull()?.coerceIn(1, 6) ?: 2
-        "h$level"(preserveAttrs(event, "id")) { children() }
+        preserve("h$level", preserveAttrs(event, "id")) { children() }
     }
 
     // `role="img"` → image; its accessible name becomes the alt text.
     match({ name in UNWRAPPED_TAGS && this["role"]?.lowercase() == "img" }) { event ->
         val attrs = preserveAttrs(event, "id").toMutableMap()
         event["aria-label"]?.let { attrs["alt"] = it }
-        "img"(attrs) { /* void — descriptive children collapse to the name */ }
+        preserve("img", attrs) { /* void — descriptive children collapse to the name */ }
     }
 
     // `role="separator"` → thematic break (void).
     match({ name in UNWRAPPED_TAGS && this["role"]?.lowercase() == "separator" }) { event ->
-        "hr"(preserveAttrs(event, "id")) { /* void */ }
+        preserve("hr", preserveAttrs(event, "id")) { /* void */ }
     }
 
     // Remaining promotable roles are straight renames to the semantic tag,
     // keeping `id` (+ ARIA name/state via preserveAttrs); children flow through.
     match({ name in UNWRAPPED_TAGS && this["role"]?.lowercase() in ROLE_TO_TAG }) { event ->
         val target = ROLE_TO_TAG.getValue(event["role"]!!.lowercase())
-        target(preserveAttrs(event, "id")) { children() }
+        preserve(target, preserveAttrs(event, "id")) { children() }
     }
 
     // --- group rules (one matcher per family, name lookup) --------------
@@ -305,33 +374,139 @@ public fun TransformerBuilder.simplifyHtml(
         // element (and is dropped with the unwrapped tag, as it's no longer
         // needed once the element is gone).
         if (kept.keys.all { it == AccessibilityAnnotations.DISPLAY }) children()
-        else event.name(kept) { children() }
+        else preserve(event.name, kept) { children() }
     }
 
     match({ name in PRESERVE_WITH_ID_TAGS }) { event ->
-        event.name(preserveAttrs(event, "id")) { children() }
+        preserve(event.name, preserveAttrs(event, "id")) { children() }
     }
 
     match({ name in INLINE_FORMATTING_TAGS }) { event ->
-        event.name(extraKept(event)) { children() }
+        preserve(event.name, extraKept(event)) { children() }
+    }
+
+    // Ruby annotations are preserved as inline raw HTML rather than unwrapped:
+    // the annotation is *parallel* to its base text, not sequential, so
+    // flattening glues the two together (`漢字` + `kanji` → `漢字kanji`) and no
+    // separator can repair it. Keeping the group intact is also the only option
+    // that does not decide on the consumer's behalf whether pronunciation is
+    // content. Markdown carries them as inline HTML and the parser recognises
+    // all three as inline elements, so they round-trip.
+    match({ name in RUBY_TAGS }) { event ->
+        preserve(event.name, extraKept(event)) { children() }
+    }
+
+    // Embedded content: keep the element and the resource it points at, drop
+    // the subtree. Its children are *fallback* content for a renderer we have
+    // no equivalent for (HTML §4.8) — but the element itself names something a
+    // reader may want to follow: a video to fetch, an embedded PDF, or the
+    // cross-origin frame a consent dialog lives in. `applyAccessibility` has
+    // already removed the hidden analytics and SSO frames upstream, so what
+    // reaches here is what a person would actually see on the page.
+    match({ name in EMBEDDED_CONTENT_ATTRS }) { event ->
+        val allowed = EMBEDDED_CONTENT_ATTRS.getValue(event.name)
+        // No children() — the fallback subtree is dropped.
+        preserve(event.name, preserveAttrs(event, *allowed)) { }
     }
 
     match({ name in FORM_ELEMENT_ATTRS }) { event ->
         val allowed = FORM_ELEMENT_ATTRS.getValue(event.name)
-        event.name(preserveAttrs(event, *allowed)) { children() }
+        preserve(event.name, preserveAttrs(event, *allowed)) { children() }
     }
 
     match("icon") {
         children()
     }
 
-    // Body content text passes through unchanged.
-    matchText { +it }
+    // --- catch-all (registered last, so every rule above wins) ----------
+
+    // An element in none of the sets above is *unwrapped*, not dropped: the
+    // transform framework skips the whole subtree of a mark that has no
+    // matcher, so without this rule an unrecognised element would swallow its
+    // text, headings, images and controls along with itself. The open set of
+    // custom elements / web components (`acf-button-standard`, `g-snackbar`,
+    // `svelte-css-wrapper`, …) can't be enumerated by an allowlist, and those
+    // wrappers — frequently `display: contents` — are exactly what unwrapping
+    // is for. Elements whose content genuinely carries no meaning must be
+    // listed in [DROPPED_TAGS] instead.
+    match("*") { children() }
+
+    // Body content text passes through unchanged. Text inside `<head>` does
+    // not: the mode-scoped rule above only sees text sitting *directly* in the
+    // head, while an unrecognised head child (say an `<x-config>` payload) is
+    // unwrapped by the catch-all back into the default mode — so the head
+    // guard has to be checked here too.
+    matchText { if (!inHead) +it }
 }
 
-private val DROPPED_TAGS = setOf(
-    "script", "style", "link", "noscript",
+/**
+ * Emits a preserved element, letting the mark itself carry how it must render.
+ *
+ * A name the Markdown renderer has syntax for stays **untagged**, so it renders
+ * as Markdown (`em` → `*…*`, `ul` → `- `, `h2` → `## `); every other name is
+ * **tagged**, so it renders as the literal XML wrapper it is. Deciding here —
+ * where the HTML knowledge lives — is what makes the output stream
+ * self-describing: a consumer reads `isTagged` instead of replicating the
+ * renderer's name map, and the two can no longer drift apart silently.
+ *
+ * Every preserved element goes through this helper, so no call site can forget
+ * the decision.
+ */
+private suspend fun MatcherScope.preserve(
+    name: String,
+    attributes: Map<String, String> = emptyMap(),
+    block: suspend MatcherScope.() -> Unit,
+) {
+    if (name in MARKDOWN_NATIVE_TAGS) name(attributes, block)
+    else tag(name, attributes, block)
+}
+
+/**
+ * Mark names the Markdown renderer has native syntax for, so [simplifyHtml]
+ * leaves them untagged.
+ *
+ * This MUST mirror `MARKDOWN_NATIVE_MARK_NAMES` in markanywhere-render's
+ * `MarkdownRendering.kt` — the two modules are siblings with no shared home for
+ * the set, the same arrangement as [LINK_BLOCK_CONTENT_TAGS]. `SimplifyHtmlTest`
+ * asserts the two are equal, so a drift fails CI instead of silently emitting a
+ * `<ul>` tag where a `- ` list was meant.
+ */
+internal val MARKDOWN_NATIVE_TAGS: Set<String> = setOf(
+    "frontmatter",
+    "h1", "h2", "h3", "h4", "h5", "h6",
+    "p", "blockquote", "hr", "br",
+    "ul", "ol", "li",
+    "pre", "code",
+    "strong", "em", "del", "mark", "sup",
+    "a", "img",
+    "table", "thead", "tbody", "tr", "th", "td", "caption",
 )
+
+// Elements dropped together with their whole subtree. Everything not listed
+// here is either matched by a rule above or unwrapped by the catch-all, so
+// this set is what keeps the catch-all from spilling noise into the output.
+private val DROPPED_TAGS = setOf(
+    // no rendered content
+    "script", "style", "link", "noscript",
+    // inert content, only instantiated by script
+    "template",
+    // Pixels drawn by script: unlike the other embedded content there is no
+    // source to point a reader at, and the fallback children are boilerplate
+    // far more often than the accessible representation the spec intends.
+    "canvas",
+    // Vector graphics. Dropping the root is enough — the whole `<path>` /
+    // `<defs>` / `<symbol>` family below it is skipped with it, so the SVG
+    // element names (several of which collide with HTML ones: `title`, `a`,
+    // `image`) need no listing. An `<svg>` carrying an accessible name is
+    // already turned into an `<img>` by `resolveInlineGraphics`, upstream of
+    // this operator in `transformHtmlToMarkdown`.
+    "svg",
+)
+
+// The ruby annotation group (HTML §4.5.10-12): base text plus its annotation
+// (`rt`) and the parenthesis fallback (`rp`). Preserved as inline raw HTML —
+// see the matcher for why flattening is not an option.
+private val RUBY_TAGS = setOf("ruby", "rt", "rp")
 
 // `role` values that strip an element's semantics while keeping its children.
 private val PRESENTATION_ROLES = setOf("presentation", "none")
@@ -350,7 +525,7 @@ private val ROLE_TO_TAG = mapOf(
     "main" to "main",
     "navigation" to "nav",
     "region" to "section",
-    "search" to "section",
+    "search" to "search",
     // grouping / block content
     "list" to "ul",
     "listitem" to "li",
@@ -379,12 +554,34 @@ private val PRESERVE_WITH_ID_TAGS = setOf(
     // structural
     "article", "aside", "footer", "header", "main", "nav", "section",
     "figure", "figcaption", "details", "summary", "address", "hgroup",
+    "search",
+    // A closed `<dialog>` is `display:none` per the UA stylesheet, so one that
+    // reaches this operator is on screen — usually a modal blocking the rest of
+    // the page. That is content-level information (and, for an agent, the first
+    // thing to act on), so the tag is kept rather than flattened into a stray
+    // paragraph.
+    "dialog",
     // Markdown-equivalent blocks
     "p", "blockquote", "pre", "hr", "br",
     "h1", "h2", "h3", "h4", "h5", "h6",
     "ul", "li",
     "table", "thead", "tbody", "tfoot", "tr",
+    // A data table's accessible name. The renderer has no GFM syntax for it and
+    // degrades it to the block before the table, but that decision needs the
+    // mark to survive this far.
+    "caption",
     "dl", "dt", "dd",
+)
+
+// Embedded content elements and the attributes naming what they embed. The
+// dimensions (`width`/`height`) are presentational and dropped; `title` /
+// `aria-label` arrive via preserveAttrs' ARIA keep-set.
+private val EMBEDDED_CONTENT_ATTRS: Map<String, Array<String>> = mapOf(
+    "iframe" to arrayOf("id", "src", "srcdoc", "name", "title"),
+    "video" to arrayOf("id", "src", "poster", "controls", "title"),
+    "audio" to arrayOf("id", "src", "controls", "title"),
+    "object" to arrayOf("id", "data", "type", "name", "title"),
+    "embed" to arrayOf("id", "src", "type", "title"),
 )
 
 private val FORM_ELEMENT_ATTRS: Map<String, Array<String>> = mapOf(
@@ -416,6 +613,9 @@ private val FORM_ELEMENT_ATTRS: Map<String, Array<String>> = mapOf(
 private val ARIA_KEEP = arrayOf(
     "aria-label", "aria-expanded", "aria-haspopup", "aria-current",
     "aria-checked", "aria-selected", "aria-pressed", "aria-disabled",
+    // Separates a blocking modal from an ordinary in-page dialog — the one
+    // state that changes what a reader (or an agent) should do about it.
+    "aria-modal",
 )
 
 // Technical `<meta name>` values that carry no content signal for an LLM and

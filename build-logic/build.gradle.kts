@@ -30,6 +30,7 @@ dependencies {
     implementation(libs.kotlin.power.assert)
     implementation(libs.maven.publish.plugin)
     implementation(libs.dokka.gradle.plugin)
+    implementation(libs.kotlinx.binary.compatibility.validator.plugin)
 }
 
 gradlePlugin {

@@ -16,7 +16,9 @@
 
 package com.xemantic.markanywhere.html
 
+import com.xemantic.kotlin.test.assert
 import com.xemantic.markanywhere.flow.semanticEvents
+import com.xemantic.markanywhere.render.MARKDOWN_NATIVE_MARK_NAMES
 import com.xemantic.markanywhere.test.sameAs
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -24,6 +26,14 @@ import kotlin.test.Test
 class SimplifyHtmlTest {
 
     // --- drop ---------------------------------------------------------------
+
+    @Test
+    fun `MARKDOWN_NATIVE_TAGS must stay in sync with the renderer native mark names`() {
+        // The two modules are siblings with no shared home for the set, so the
+        // mirror is asserted rather than shared (see LINK_BLOCK_CONTENT_TAGS).
+        // then
+        assert(MARKDOWN_NATIVE_TAGS == MARKDOWN_NATIVE_MARK_NAMES)
+    }
 
     @Test
     fun `should drop script tag and its text content entirely`() = runTest {
@@ -150,8 +160,8 @@ class SimplifyHtmlTest {
 
         // then
         output sameAs semanticEvents {
-            "nav"("id" to "main-nav") { +"navigation" }
-            "section"("id" to "intro") { +"intro body" }
+            tag("nav", "id" to "main-nav") { +"navigation" }
+            tag("section", "id" to "intro") { +"intro body" }
         }
     }
 
@@ -169,7 +179,7 @@ class SimplifyHtmlTest {
 
         // then
         output sameAs semanticEvents {
-            "nav" { +"navigation" }
+            tag("nav") { +"navigation" }
         }
     }
 
@@ -268,13 +278,13 @@ class SimplifyHtmlTest {
         // then
         output sameAs semanticEvents {
             "p" {
-                "b" { +"bring attention to element" }
+                tag("b") { +"bring attention to element" }
                 +" "
-                "i" { +"idiomatic text element" }
+                tag("i") { +"idiomatic text element" }
                 +" "
-                "s" { +"strikethrough element" }
+                tag("s") { +"strikethrough element" }
                 +" "
-                "strike" { +"depreciated strike" }
+                tag("strike") { +"depreciated strike" }
             }
         }
     }
@@ -437,15 +447,15 @@ class SimplifyHtmlTest {
 
         // then
         output sameAs semanticEvents {
-            "form"("action" to "/submit", "method" to "post") {
-                "label"("for" to "n") { +"Name" }
-                "input"(
+            tag("form", "action" to "/submit", "method" to "post") {
+                tag("label", "for" to "n") { +"Name" }
+                tag("input",
                     "id" to "n",
                     "type" to "text",
                     "name" to "name",
                     "required" to "",
                 ) { }
-                "button"("type" to "submit") { +"Go" }
+                tag("button", "type" to "submit") { +"Go" }
             }
         }
     }
@@ -476,7 +486,7 @@ class SimplifyHtmlTest {
         // then — id + accessible-name + actionable state survive; id-reference
         // aria (controls/labelledby), live regions, role, and class are dropped.
         output sameAs semanticEvents {
-            "button"(
+            tag("button",
                 "id" to "menu",
                 "aria-label" to "Open menu",
                 "aria-expanded" to "false",
@@ -501,7 +511,7 @@ class SimplifyHtmlTest {
 
         // then — aria keep-set applies to every preserved element, not just forms.
         input.simplifyHtml() sameAs semanticEvents {
-            "nav"("id" to "n", "aria-label" to "Primary") {
+            tag("nav", "id" to "n", "aria-label" to "Primary") {
                 "a"("href" to "/", "aria-label" to "Home", "aria-current" to "page") { +"Home" }
             }
         }
@@ -550,7 +560,7 @@ class SimplifyHtmlTest {
 
         // then — the hidden subtree (and its link/text) is gone entirely.
         output sameAs semanticEvents {
-            "section"("id" to "keep") {
+            tag("section", "id" to "keep") {
                 "p" { +"visible" }
                 "p" { +"also visible" }
             }
@@ -621,7 +631,7 @@ class SimplifyHtmlTest {
 
         // then
         output sameAs semanticEvents {
-            "nav"("id" to "n") {
+            tag("nav", "id" to "n") {
                 "ul" {
                     "li" { +"Home" }
                     "li" { +"About" }
@@ -730,7 +740,7 @@ class SimplifyHtmlTest {
 
         // then — stays nav with id; role and class dropped.
         output sameAs semanticEvents {
-            "nav"("id" to "main-nav") { +"links" }
+            tag("nav", "id" to "main-nav") { +"links" }
         }
     }
 
@@ -996,7 +1006,7 @@ class SimplifyHtmlTest {
 
         // then — tracked span preserved (golemId only), plain span still unwrapped
         output sameAs semanticEvents {
-            "span"("golemId" to "1") { +"tracked" }
+            tag("span", "golemId" to "1") { +"tracked" }
             +"plain"
         }
     }
@@ -1020,6 +1030,349 @@ class SimplifyHtmlTest {
         // then — the keep-attribute does not override drop / aria-hidden
         output sameAs semanticEvents {
             "p" { +"visible" }
+        }
+    }
+
+    // --- unrecognised elements ----------------------------------------------
+
+    @Test
+    fun `should unwrap a custom element keeping its whole subtree`() = runTest {
+        // given
+        val input = semanticEvents(tagged = true) {
+            "body" {
+                "my-widget" {
+                    "h2" { +"Heading inside a web component" }
+                    "p" { +"paragraph inside a web component" }
+                }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "h2" { +"Heading inside a web component" }
+            "p" { +"paragraph inside a web component" }
+        }
+    }
+
+    @Test
+    fun `should unwrap a display contents wrapper keeping the button inside`() = runTest {
+        // given — the Brave SERP shape: buttons wrapped in a Svelte wrapper
+        val input = semanticEvents(tagged = true) {
+            "body" {
+                "svelte-css-wrapper"("style" to "display: contents;") {
+                    "button"("id" to "go") { +"Search" }
+                }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            tag("button", "id" to "go") { +"Search" }
+        }
+    }
+
+    @Test
+    fun `should unwrap picture keeping the responsive image`() = runTest {
+        // given
+        val input = semanticEvents(tagged = true) {
+            "body" {
+                "picture" {
+                    "source"("srcset" to "wide.png", "media" to "(min-width: 800px)") { }
+                    "img"("src" to "narrow.png", "alt" to "A cat") { }
+                }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "img"("src" to "narrow.png", "alt" to "A cat") { }
+        }
+    }
+
+    @Test
+    fun `should unwrap a slot keeping its fallback content`() = runTest {
+        // given - a `<slot>` lives inside a shadow root, which the DOM walker
+        // never enters, so it only reaches here from parsed HTML source. Its
+        // children are then fallback content and the tag itself means nothing
+        // to a reader.
+        val input = semanticEvents(tagged = true) {
+            "body" {
+                "slot"("name" to "label") { +"in slot" }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            +"in slot"
+        }
+    }
+
+    @Test
+    fun `should keep menu as a tag wrapping a Markdown list`() = runTest {
+        // given - `<menu>` is a toolbar of commands, not a bullet list, and
+        // Markdown cannot express that: renaming it to `ul` would render the
+        // items correctly but throw the distinction away. Keeping the tag and
+        // nesting a synthetic `ul` inside it preserves both — the wrapper says
+        // what the fragment is, the list renders as `- ` items.
+        val input = semanticEvents(tagged = true) {
+            "body" {
+                "menu"("id" to "toolbar", "class" to "bar") {
+                    "li" { +"Home" }
+                    "li" { +"About" }
+                }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            tag("menu", "id" to "toolbar") {
+                "ul" {
+                    "li" { +"Home" }
+                    "li" { +"About" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should preserve a dialog that survived accessibility filtering`() = runTest {
+        // given - a closed dialog is `display:none` per the UA stylesheet, so
+        // anything reaching this operator is on screen; that it is a dialog
+        // (usually a blocking modal) is content-level information.
+        val input = semanticEvents(tagged = true) {
+            "body" {
+                "dialog"("id" to "consent", "open" to "true", "aria-modal" to "true") {
+                    "p" { +"in dialog" }
+                }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            tag("dialog", "id" to "consent", "aria-modal" to "true") {
+                "p" { +"in dialog" }
+            }
+        }
+    }
+
+    @Test
+    fun `should preserve the search element`() = runTest {
+        // given
+        val input = semanticEvents(tagged = true) {
+            "body" {
+                "search"("id" to "site-search", "class" to "box") { "p" { +"in search" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            tag("search", "id" to "site-search") { "p" { +"in search" } }
+        }
+    }
+
+    @Test
+    fun `should promote role search to the search element`() = runTest {
+        // given
+        val input = semanticEvents(tagged = true) {
+            "body" {
+                "div"("role" to "search") { "p" { +"find" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            tag("search") { "p" { +"find" } }
+        }
+    }
+
+    @Test
+    fun `should preserve a table caption`() = runTest {
+        // given - the caption is a data table's accessible name, so flattening
+        // it into the table's content loses real information.
+        val input = semanticEvents(tagged = true) {
+            "body" {
+                "table" {
+                    "caption"("id" to "cap", "class" to "cap") { +"Q3 revenue" }
+                    "tr" { "td" { +"1" } }
+                }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "table" {
+                "caption"("id" to "cap") { +"Q3 revenue" }
+                "tr" { "td" { +"1" } }
+            }
+        }
+    }
+
+    @Test
+    fun `should preserve ruby annotations`() = runTest {
+        // given - unwrapping glues the annotation onto its base text
+        // (`漢字` + `kanji` -> `漢字kanji`); the annotation is parallel to
+        // the base, not sequential, so no separator can repair it.
+        val input = semanticEvents(tagged = true) {
+            "body" {
+                "p" {
+                    "ruby"("class" to "furigana") {
+                        +"漢字"
+                        "rp" { +"(" }
+                        "rt" { +"kanji" }
+                        "rp" { +")" }
+                    }
+                    +" is hard"
+                }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "p" {
+                tag("ruby") {
+                    +"漢字"
+                    tag("rp") { +"(" }
+                    tag("rt") { +"kanji" }
+                    tag("rp") { +")" }
+                }
+                +" is hard"
+            }
+        }
+    }
+
+    @Test
+    fun `should drop an svg subtree instead of unwrapping it`() = runTest {
+        // given
+        val input = semanticEvents(tagged = true) {
+            "body" {
+                "svg"("viewBox" to "0 0 16 16") {
+                    "defs" {
+                        "linearGradient"("id" to "g") {
+                            "stop"("offset" to "0") { }
+                        }
+                    }
+                    "title" { +"Logo" }
+                    "path"("d" to "M0 0h16v16H0z") { }
+                }
+                "p" { +"after" }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then — no vector noise, and the nested <title> does not leak
+        // into the frontmatter
+        output sameAs semanticEvents {
+            "p" { +"after" }
+        }
+    }
+
+    @Test
+    fun `should keep the source of embedded content and drop only its fallbacks`() = runTest {
+        // given - the children of these elements are fallback content for a
+        // renderer we have no equivalent for, but the element itself points at
+        // a resource a reader may want to fetch.
+        val input = semanticEvents(tagged = true) {
+            "body" {
+                "iframe"("src" to "embed.html", "title" to "Consent", "class" to "x") { +"fallback" }
+                "video"("src" to "clip.mp4", "poster" to "p.jpg") { "track"("src" to "c.vtt") { } }
+                "audio"("src" to "a.mp3") { +"no audio support" }
+                "object"("data" to "a.pdf", "type" to "application/pdf") { +"no object support" }
+                "embed"("src" to "a.swf", "type" to "application/x-shockwave-flash") { }
+                "p" { +"after" }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            tag("iframe", "src" to "embed.html", "title" to "Consent") { }
+            tag("video", "src" to "clip.mp4", "poster" to "p.jpg") { }
+            tag("audio", "src" to "a.mp3") { }
+            tag("object", "data" to "a.pdf", "type" to "application/pdf") { }
+            tag("embed", "src" to "a.swf", "type" to "application/x-shockwave-flash") { }
+            "p" { +"after" }
+        }
+    }
+
+    @Test
+    fun `should still drop a canvas and a template with their content`() = runTest {
+        // given - a `<canvas>` has no source to point at (its pixels are drawn
+        // by script) and a `<template>` is inert until script instantiates it,
+        // so neither has a resource a reader could follow.
+        val input = semanticEvents(tagged = true) {
+            "body" {
+                "canvas"("id" to "chart") { +"no canvas support" }
+                "template" { "p" { +"inert" } }
+                "p" { +"after" }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "p" { +"after" }
+        }
+    }
+
+    @Test
+    fun `should keep swallowing head noise reached through an unrecognised element`() = runTest {
+        // given — the catch-all unwraps <x-config>, but head content is not
+        // document content
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    "title" { +"Page" }
+                    "x-config" { +"""{"tracking":true}""" }
+                }
+                "body" {
+                    "p" { +"content" }
+                }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter"("format" to "yaml") { +"title: Page\n" }
+            "p" { +"content" }
         }
     }
 
