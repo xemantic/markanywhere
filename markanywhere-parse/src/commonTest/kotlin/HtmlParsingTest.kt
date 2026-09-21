@@ -477,6 +477,46 @@ class HtmlParsingTest {
      * **Place 17** — a self-closing / void-shaped disallowed tag has no body to
      * skip; it is simply dropped and the surrounding text flows through.
      */
+    /**
+     * An `<iframe>` at a block boundary is a structural HTML block, not GFM
+     * §6.11 literal text: the HTML→Markdown pipeline renders the document a
+     * same-origin frame embeds inside its `<iframe>` tag, and that block must
+     * read back as the same events for the round-trip to hold. Before this the
+     * open tag came back as text and the `</iframe>` line vanished.
+     */
+    @Test
+    fun `block-level iframe is a structural HTML block wrapping its content`() = runTest {
+        // given
+        val src = "<iframe src=\"x\" title=\"t\">\n\nAccept cookies?\n\n</iframe>\n"
+
+        // when
+        val parsed = flowOf(src).parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            tag("iframe", "src" to "x", "title" to "t") {
+                +"\n\n"
+                "p" { +"Accept cookies?" }
+            }
+        }
+    }
+
+    @Test
+    fun `block-level iframe closed on the next line is an empty structural block`() = runTest {
+        // given - the shape the renderer emits for a frame with no document
+        val src = "before\n\n<iframe src=\"x\">\n</iframe>\n\nafter\n"
+
+        // when
+        val parsed = flowOf(src).parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" { +"before" }
+            tag("iframe", "src" to "x") { +"\n" }
+            "p" { +"after" }
+        }
+    }
+
     @Test
     fun `inline self-closing disallowed tag is dropped without skipping a body`() = runTest {
         // given

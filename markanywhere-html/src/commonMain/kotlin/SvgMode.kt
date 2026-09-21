@@ -38,7 +38,9 @@ public enum class SvgMode {
     RESOLVE,
 
     /**
-     * Keep every `<svg>` subtree verbatim, tagged, attributes intact.
+     * Keep every `<svg>` subtree tagged, its own attributes intact — minus a
+     * `script`, an `aria-hidden` part and the capture's annotations, which
+     * follow the same rules as everywhere else in the pipeline.
      *
      * For a simplified *reader* rather than a Markdown rendering for a model —
      * logos, diagrams and icons survive and can be displayed. [resolveIcons]

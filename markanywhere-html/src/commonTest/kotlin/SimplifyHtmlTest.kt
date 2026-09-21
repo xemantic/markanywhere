@@ -1376,4 +1376,57 @@ class SimplifyHtmlTest {
         }
     }
 
+
+    @Test
+    fun `should keep a preserved svg minus scripts, hidden parts and capture annotations`() = runTest {
+        // given - PRESERVE keeps the graphic for a reader, which is no reason
+        // to hand that reader a script, a part the author hid, or the capture's
+        // own bookkeeping
+        val input = semanticEvents(tagged = true) {
+            "body" {
+                "svg"("viewBox" to "0 0 16 16", "data-markanywhere-display" to "inline") {
+                    "g"("aria-hidden" to "true") { "path"("d" to "M1 1") { } }
+                    "script" { +"alert(1)" }
+                    "path"("d" to "M0 0", "data-markanywhere-ref" to "7") { }
+                }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml(svgMode = SvgMode.PRESERVE)
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "svg"("viewBox" to "0 0 16 16") {
+                "path"("d" to "M0 0") { }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep a requested attribute on a preserved svg element`() = runTest {
+        // given - the pipeline asks simplify to carry the ref through so the
+        // encode step can rewrite it
+        val input = semanticEvents(tagged = true) {
+            "body" {
+                "svg"("data-markanywhere-ref" to "7", "data-markanywhere-display" to "inline") {
+                    "path"("d" to "M0 0") { }
+                }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml(
+            keepAttributes = setOf("data-markanywhere-ref"),
+            svgMode = SvgMode.PRESERVE,
+        )
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "svg"("data-markanywhere-ref" to "7") {
+                "path"("d" to "M0 0") { }
+            }
+        }
+    }
+
 }

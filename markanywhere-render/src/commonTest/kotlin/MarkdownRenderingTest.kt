@@ -2654,15 +2654,40 @@ class MarkdownRenderingTest {
             "p" { +"after" }
         }.renderMarkdown()
 
-        // then
+        // then - consecutive orphan items share one synthesized list
         markdown sameAsMarkdown """
             before
             
             - Home
-            
             - About
             
             after
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should nest orphan list items under the enclosing list item`() = runTest {
+        // An unwrapped nested list container (a custom element the catch-all
+        // flattens) leaves its items directly inside the parent item. They
+        // are the parent's sub-list, not its siblings.
+        // when
+        val markdown = semanticEvents {
+            "ul" {
+                "li" {
+                    +"Parent"
+                    "li" { +"a" }
+                    "li" { +"b" }
+                }
+                "li" { +"Sibling" }
+            }
+        }.renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            - Parent
+              - a
+              - b
+            - Sibling
         """.trimIndent()
     }
 

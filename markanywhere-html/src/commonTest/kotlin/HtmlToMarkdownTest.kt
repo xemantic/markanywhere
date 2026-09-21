@@ -532,7 +532,8 @@ class HtmlToMarkdownTest {
         markdown sameAsMarkdown """
             Article.
             
-            <iframe src="https://consent.example/dialog.html" title="Consent"></iframe>
+            <iframe src="https://consent.example/dialog.html" title="Consent">
+            </iframe>
             
             <video src="clip.mp4" poster="p.jpg"></video>
         """.trimIndent()
@@ -553,8 +554,104 @@ class HtmlToMarkdownTest {
         val markdown = page.transformHtmlToMarkdown(refMode = RefMode.STRIP).renderMarkdown()
         val reRendered = flowOf(markdown).parse().renderMarkdown()
 
-        // then - GFM deletes a disallowed `<iframe>` only in the mid-line
-        // inline dispatch; one that starts its own block survives re-reading
+        // then - the parser reads a block-level `<iframe>` back as the same
+        // structural block (mid-line it is dropped, as GFM §6.11 wants)
         reRendered sameAs markdown
     }
+
+
+    @Test
+    fun `should label a link whose svg is named only by a title attribute`() = runTest {
+        // given - the name is on the svg's `title` attribute, which neither
+        // resolveInlineGraphics nor simplifyHtml carries into the output
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "a"("href" to "/search") {
+                    "svg"("title" to "Search") { "path"("d" to "M0 0") { } }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown(refMode = RefMode.STRIP).renderMarkdown()
+
+        // then
+        markdown sameAs "[Search](/search)"
+    }
+
+    @Test
+    fun `should render the document a same-origin frame embeds`() = runTest {
+        // given - a capture nests a same-origin frame's document inside its
+        // <iframe> (there is no fallback markup in a captured stream); the
+        // frame's <head> belongs to the frame, not to the page's frontmatter
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "p" { +"Article." }
+                "iframe"("src" to "https://consent.example/dialog.html", "title" to "Consent") {
+                    "html"("lang" to "de") {
+                        "head" { "title" { +"Consent dialog" } }
+                        "body" {
+                            "p" { +"Accept cookies?" }
+                            "button" { +"Accept" }
+                        }
+                    }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown(refMode = RefMode.STRIP).renderMarkdown()
+
+        // then - the frame's content is on the page, its metadata is not
+        markdown sameAsMarkdown """
+            Article.
+            
+            <iframe src="https://consent.example/dialog.html" title="Consent">
+            
+            Accept cookies?
+            
+            <button>
+            
+            Accept
+            
+            </button>
+            </iframe>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should strip capture annotations and refs inside a preserved svg`() = runTest {
+        // given - a captured svg carries the same annotations as any other
+        // element, plus a script that must never reach a reader
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "svg"(
+                    "viewBox" to "0 0 24 24",
+                    AccessibilityAnnotations.DISPLAY to "inline",
+                    AccessibilityAnnotations.REF to "3",
+                ) {
+                    "a"("href" to "/home", AccessibilityAnnotations.REF to "4") {
+                        "path"("d" to "M0 0", AccessibilityAnnotations.DISPLAY to "inline") { }
+                    }
+                    "script" { +"alert(1)" }
+                }
+            }
+        }
+
+        // when
+        val stripped = page
+            .transformHtmlToMarkdown(refMode = RefMode.STRIP, svgMode = SvgMode.PRESERVE)
+            .renderMarkdown()
+        val encoded = page
+            .transformHtmlToMarkdown(refMode = RefMode.ENCODE, svgMode = SvgMode.PRESERVE)
+            .renderMarkdown()
+
+        // then
+        stripped sameAs "<svg viewBox=\"0 0 24 24\"><a href=\"/home\"><path d=\"M0 0\"></path></a></svg>"
+        assert(AccessibilityAnnotations.REF !in encoded)
+        assert(AccessibilityAnnotations.DISPLAY !in encoded)
+        assert("ref=\"3\"" in encoded)
+        assert("alert" !in encoded)
+    }
+
 }

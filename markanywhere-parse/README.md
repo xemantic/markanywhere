@@ -189,4 +189,10 @@ encountered mid-line (as in minified `outerHTML`) is dropped by the inline
 parser. The skip is bounded to a single line — an *unclosed* disallowed opener
 drops only the rest of its line — so it never buffers past a soft break.
 
+`iframe` is the exception at a block boundary: GFM lists it for sanitisation,
+but its content model is ordinary markup,
+and the HTML→Markdown pipeline renders the document a same-origin frame embeds inside its `<iframe>` tag,
+so a block-level `<iframe>` is a structural HTML block like `<div>` (its content is parsed as Markdown) and reads back as the same events.
+A mid-line `<iframe>` is still dropped.
+
 See `Gfm_06_11_Test.kt` (ex 657) and `HtmlParsingTest.kt` (Places 13–18).

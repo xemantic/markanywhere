@@ -19,7 +19,6 @@ package com.xemantic.markanywhere.html
 import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.SemanticEvent.*
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.flow
 
 /**
@@ -40,9 +39,9 @@ import kotlinx.coroutines.flow.flow
  * everything held so far and the rest of the control streams through untouched
  * (for the common text-labelled link that is the first text node). Only a
  * control that shows no label all the way to its close is held whole — bounded:
- * one control at a time, the same pre-pass shape [encodeActionableRefs] uses for
- * links. For that control the operator inserts a label as the element's first
- * child, in this order:
+ * one control's subtree at a time, the same pre-pass shape [encodeActionableRefs]
+ * uses for links. For that control the operator inserts a label as the element's
+ * first child, in this order:
  *
  * 1. the element's own `aria-label`, then its own `title`;
  * 2. the first `aria-label` / `title` on any descendant (the Hacker News shape);
@@ -55,12 +54,19 @@ import kotlinx.coroutines.flow.flow
  *    empty link visible for what it is.
  *
  * "Would render as a label" means non-blank text, an `img` with a non-blank
- * `alt`, or an `<svg>` carrying an accessible name — the last because
- * [resolveInlineGraphics] turns exactly those into a labelled `img` downstream.
+ * `alt`, or an `<svg>` carrying an `aria-label` or a `<title>` child — exactly
+ * the names [resolveInlineGraphics] turns into a labelled `img` downstream. An
+ * svg named only by a `title` *attribute* does not count: that name is read by
+ * rule 2 and inserted here, since downstream it would vanish with the graphic.
  * A control that already has one is emitted verbatim: the BBC follow button
  * (`<button aria-label="Follow BBC on x"><svg/></button>`) keeps its own label
  * and its decorative icon still vanishes, and the many links that pair a text
  * label with a decorative chevron never sprout a placeholder.
+ *
+ * Controls nest (a card link holding an icon-only button, a `<summary>` with a
+ * button in it), and each is judged on its own: an inner control is held and
+ * labelled by the same rules, and the label inserted into it is content of the
+ * enclosing control too, which therefore needs none of its own.
  *
  * Runs **after** [resolveIcons] and [applyAccessibility] (so an icon font has
  * already become emoji text and hidden subtrees are gone — neither should be
@@ -71,44 +77,73 @@ import kotlinx.coroutines.flow.flow
 public fun Flow<SemanticEvent>.labelActionableElements(
     svgMode: SvgMode = SvgMode.RESOLVE,
 ): Flow<SemanticEvent> = flow {
-    val buffer = mutableListOf<SemanticEvent>()
-    var depth = 0 // nesting depth inside the current control; 0 = outside any
-    var labelled = false // the control has shown a label: nothing left to hold
-    collect { event ->
-        if (depth == 0) {
-            if (event is Mark && event.name in ACTIONABLE_TAGS) {
-                buffer.add(event)
-                depth = 1
-                labelled = false
-            } else {
-                emit(event)
+    // One frame per open control, innermost last. An event arriving inside a
+    // control is offered to the innermost frame; a frame that has shown its
+    // label passes events on to the frame below (or downstream when it is the
+    // outermost), one that has not holds them until it is settled.
+    val frames = ArrayDeque<Control>()
+
+    suspend fun pass(event: SemanticEvent, level: Int) {
+        if (level < 0) {
+            emit(event)
+            return
+        }
+        val frame = frames[level]
+        when {
+            frame.labelled -> pass(event, level - 1)
+            event.rendersALabel() -> {
+                frame.labelled = true
+                val held = frame.buffer.toList()
+                frame.buffer.clear()
+                held.forEach { pass(it, level - 1) }
+                pass(event, level - 1)
             }
+            else -> frame.buffer.add(event)
+        }
+    }
+
+    collect { event ->
+        if (event is Mark && event.name in ACTIONABLE_TAGS) {
+            frames.addLast(Control().also { it.buffer.add(event) })
+            return@collect
+        }
+        val top = frames.lastOrNull()
+        if (top == null) {
+            emit(event)
             return@collect
         }
         when (event) {
-            is Mark -> depth++
-            is Unmark -> depth--
+            is Mark -> top.depth++
+            is Unmark -> top.depth--
             else -> { /* text does not nest */ }
         }
-        when {
-            labelled -> emit(event)
-            event.rendersALabel() -> {
-                labelled = true
-                buffer.forEach { emit(it) }
-                buffer.clear()
-                emit(event)
-            }
-            else -> {
-                buffer.add(event)
-                if (depth == 0) {
-                    emitUnlabelled(buffer, svgMode)
-                    buffer.clear()
-                }
-            }
+        if (top.depth > 0) {
+            pass(event, frames.lastIndex)
+            return@collect
+        }
+        // The control's own close settles it.
+        frames.removeLast()
+        if (top.labelled) {
+            pass(event, frames.lastIndex)
+        } else {
+            top.buffer.add(event)
+            labelled(top.buffer, svgMode).forEach { pass(it, frames.lastIndex) }
         }
     }
-    // An unclosed control at end-of-stream (synthetic edge): flush what we have.
-    if (buffer.isNotEmpty()) emitUnlabelled(buffer, svgMode)
+    // Controls unclosed at end-of-stream (synthetic edge): flush what we have,
+    // innermost first so its events reach the enclosing frame's buffer.
+    while (frames.isNotEmpty()) {
+        val top = frames.removeLast()
+        val held = if (top.labelled) top.buffer else labelled(top.buffer, svgMode)
+        held.forEach { pass(it, frames.lastIndex) }
+    }
+}
+
+/** An open actionable element and what it has held back so far. */
+private class Control {
+    val buffer = mutableListOf<SemanticEvent>()
+    var depth = 1 // nesting depth inside the control, 1 = its own open mark
+    var labelled = false // the control has shown a label: nothing left to hold
 }
 
 /** Elements whose whole point is to be activated by the reader. */
@@ -126,33 +161,26 @@ public const val GRAPHIC_PLACEHOLDER_ALT: String = ":svg:"
 private val NAME_ATTRIBUTES = listOf("aria-label", "title")
 
 /**
- * Emits a control none of whose held events [rendersALabel] — the buffer is
- * only ever handed over here on that condition — inserting one where a name or
- * a vanishing graphic gives us something to say.
+ * A control none of whose held events [rendersALabel] — the buffer is only ever
+ * handed over here on that condition — with a label inserted where a name or a
+ * vanishing graphic gives us something to say.
  */
-private suspend fun FlowCollector<SemanticEvent>.emitUnlabelled(
+private fun labelled(
     buffer: List<SemanticEvent>,
     svgMode: SvgMode,
-) {
+): List<SemanticEvent> {
     val open = buffer.first() as Mark
     val name = open.accessibleName() ?: buffer.descendantName()
-    when {
-        name != null -> {
-            emit(open)
-            emit(Text(name))
-            buffer.drop(1).forEach { emit(it) }
-            return
-        }
-        svgMode == SvgMode.RESOLVE && buffer.holdsAVanishingGraphic() -> {
-            emit(open)
-            emit(Mark("img", isTagged = open.isTagged,
-                attributes = mapOf("alt" to GRAPHIC_PLACEHOLDER_ALT)))
-            emit(Unmark("img", isTagged = open.isTagged))
-            buffer.drop(1).forEach { emit(it) }
-            return
-        }
+    val label = when {
+        name != null -> listOf(Text(name))
+        svgMode == SvgMode.RESOLVE && buffer.holdsAVanishingGraphic() -> listOf(
+            Mark("img", isTagged = open.isTagged,
+                attributes = mapOf("alt" to GRAPHIC_PLACEHOLDER_ALT)),
+            Unmark("img", isTagged = open.isTagged),
+        )
+        else -> return buffer
     }
-    buffer.forEach { emit(it) }
+    return listOf(open) + label + buffer.drop(1)
 }
 
 /** The first non-blank [NAME_ATTRIBUTES] value on this mark, if any. */
@@ -168,7 +196,7 @@ private fun List<SemanticEvent>.descendantName(): String? = asSequence()
 /**
  * Whether this event, inside a control, reaches the output as the control's
  * label: non-blank text, an `img` with a non-blank `alt`, or an `<svg>` whose
- * own accessible name [resolveInlineGraphics] will turn into one downstream.
+ * `aria-label` [resolveInlineGraphics] will turn into one downstream.
  */
 private fun SemanticEvent.rendersALabel(): Boolean = when (this) {
     // Ordinary content, or the text of an `<svg><title>` — that one names its
@@ -178,7 +206,9 @@ private fun SemanticEvent.rendersALabel(): Boolean = when (this) {
     is Text -> !text.isHtmlBlank()
     is Mark -> when (name) {
         "img" -> !(this["alt"] ?: "").isHtmlBlank()
-        "svg" -> accessibleName() != null
+        // Only what resolveInlineGraphics honours: a `title` attribute names
+        // the graphic to nobody once it is dropped, so it is left for rule 2.
+        "svg" -> this["aria-label"]?.trim()?.isNotEmpty() == true
         else -> false
     }
     else -> false

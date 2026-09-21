@@ -282,4 +282,101 @@ class LabelActionableElementsTest {
         // then - open, inserted label, svg open, svg close, close: all at once
         assert(arrivals == listOf(4, 4, 4, 4, 4))
     }
+
+
+    @Test
+    fun `should label a link whose svg carries only a title attribute`() = runTest {
+        // given - a `title` attribute names the graphic to a hover, but
+        // resolveInlineGraphics reads only `aria-label` and a <title> child, so
+        // downstream the svg vanishes and the link would be left empty unless
+        // the name is lifted out here (rule 2 reads the same attribute).
+        val input = semanticEvents(tagged = true) {
+            "a"("href" to "/search") {
+                "svg"("title" to "Search") { "path"("d" to "M0 0") { } }
+            }
+        }
+
+        // when
+        val output = input.labelActionableElements()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "a"("href" to "/search") {
+                +"Search"
+                "svg"("title" to "Search") { "path"("d" to "M0 0") { } }
+            }
+        }
+    }
+
+    @Test
+    fun `should label an unlabelled control nested inside a labelled one`() = runTest {
+        // given - a card link whose text settles its own label, holding an
+        // icon-only button whose name sits on a div simplifyHtml unwraps
+        val input = semanticEvents(tagged = true) {
+            "a"("href" to "/card") {
+                +"Story title"
+                "button" { "div"("title" to "Save") { } }
+            }
+        }
+
+        // when
+        val output = input.labelActionableElements()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "a"("href" to "/card") {
+                +"Story title"
+                "button" {
+                    +"Save"
+                    "div"("title" to "Save") { }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should let an inserted inner label settle the enclosing control`() = runTest {
+        // given - neither control has a label of its own; the one inserted into
+        // the button is content of the link too, so the link needs none
+        val input = semanticEvents(tagged = true) {
+            "a"("href" to "/card", "title" to "Open card") {
+                "button" { "div"("title" to "Save") { } }
+            }
+        }
+
+        // when
+        val output = input.labelActionableElements()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "a"("href" to "/card", "title" to "Open card") {
+                "button" {
+                    +"Save"
+                    "div"("title" to "Save") { }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should label both an unlabelled control and its unlabelled parent`() = runTest {
+        // given - the inner control has nothing to say, the outer has a name
+        val input = semanticEvents(tagged = true) {
+            "a"("href" to "/card", "aria-label" to "Open card") {
+                "button" { "span"("class" to "spacer") { } }
+            }
+        }
+
+        // when
+        val output = input.labelActionableElements()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "a"("href" to "/card", "aria-label" to "Open card") {
+                +"Open card"
+                "button" { "span"("class" to "spacer") { } }
+            }
+        }
+    }
+
 }

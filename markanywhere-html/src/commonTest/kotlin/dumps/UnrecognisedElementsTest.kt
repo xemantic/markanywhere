@@ -81,8 +81,8 @@ class UnrecognisedElementsTest {
         // then — the wrapper is unwrapped and the button survives, ref and all
         // (before the catch-all unwrap rule the whole wrapper subtree vanished);
         // the collapsed answer is display:none and goes, and the nameless icon
-        // is decorative and goes with it, so the button renders empty — its ref
-        // is the point
+        // is decorative and goes with it — so the button, a control of its own
+        // even inside the labelled summary, gets the graphic placeholder
         markdown sameAsMarkdown """
             <details>
             <summary ref="17">
@@ -90,6 +90,9 @@ class UnrecognisedElementsTest {
             Can I export markdown to PDF or HTML?
             
             <button ref="18">
+            
+            ![:svg:]()
+            
             </button>
             </summary>
             </details>

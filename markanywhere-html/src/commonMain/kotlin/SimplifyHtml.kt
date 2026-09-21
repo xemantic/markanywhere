@@ -52,9 +52,13 @@ import kotlinx.coroutines.flow.Flow
  *   `svg` — the wrapper and all of its content are discarded (see
  *   [DROPPED_TAGS]).
  * - **Keep the source, drop the fallbacks**: `iframe`, `video`, `audio`,
- *   `object`, `embed` survive as void elements carrying what they embed (see
+ *   `object`, `embed` survive as elements carrying what they embed (see
  *   [EMBEDDED_CONTENT_ATTRS]); their children are fallback content for a
- *   renderer we have no equivalent for and are discarded.
+ *   renderer we have no equivalent for and are discarded. The one exception
+ *   is the **document a same-origin frame embeds**, which a capture nests
+ *   inside its `iframe` / `object` as an `html` element: its body is content
+ *   of the page (a consent dialog lives there) and is simplified in place,
+ *   while its `head` is the frame's metadata, not the page's, and is dropped.
  * - **Unwrap**: `body`, `div`, `span`, `font`, `center`, `tt` — the
  *   wrapper is removed, children flow through unchanged.
  * - **Unwrap (catch-all)**: any element matched by none of the rules — custom
@@ -149,8 +153,10 @@ import kotlinx.coroutines.flow.Flow
  *   behaviour above). Empty by default.
  * @param svgMode what to do with an inline `<svg>`. [SvgMode.RESOLVE] (the
  *   default) drops the subtree, having let `resolveInlineGraphics` lift any
- *   accessible name out of it first; [SvgMode.PRESERVE] keeps it verbatim and
- *   tagged, for a consumer that renders graphics rather than reading them.
+ *   accessible name out of it first; [SvgMode.PRESERVE] keeps it tagged with
+ *   its own attributes intact, for a consumer that renders graphics rather
+ *   than reading them — minus a `script`, an `aria-hidden` part, and the
+ *   capture's annotations, which obey the same rules as everywhere else.
  */
 public fun Flow<SemanticEvent>.simplifyHtml(
     keepAttributes: Set<String> = emptySet(),
@@ -201,21 +207,33 @@ public fun Flow<SemanticEvent>.simplifyHtml(
 
     // --- vector graphics passthrough (before the DROPPED_TAGS group) ----
 
-    // In PRESERVE the whole `<svg>` subtree is kept verbatim and tagged, for a
-    // consumer rendering the graphics rather than reading them as text.
+    // In PRESERVE the whole `<svg>` subtree is kept tagged, for a consumer
+    // rendering the graphics rather than reading them as text.
     //
     // A rule is not enough on its own: the catch-all would *unwrap* every
     // `<path>` / `<defs>` / `<linearGradient>` below it and spill the vector
     // data as text, so the subtree descends in its own mode whose wildcard
-    // keeps each element instead. Attributes pass through untouched — `viewBox`
-    // and `d` are the content here, not presentational noise.
+    // keeps each element instead. The element's own attributes pass through —
+    // `viewBox` and `d` are the content here, not presentational noise — but
+    // the capture's annotations do not, unless the caller asked for one (the
+    // pipeline asks for the ref it will encode): a mode-scoped wildcard
+    // shadows every default-mode rule, so the ref / annotation contract, the
+    // `aria-hidden` drop and the `script` drop are repeated here.
+    //
+    // Not `passthrough(mode = "svg")` for two reasons: it keeps attributes
+    // verbatim, and it keeps each mark's `isTagged` — while the SVG names that
+    // collide with Markdown-native ones (`a`, `title`) must render as literal
+    // tags, so an untagged hand-built svg is re-tagged on purpose.
     if (svgMode == SvgMode.PRESERVE) {
-        match("svg") { event ->
-            tag("svg", event.attributes) { children(mode = "svg") }
+        fun svgAttributes(event: SemanticEvent.Mark): Map<String, String> =
+            event.attributes.filterKeys { it !in CAPTURE_ANNOTATIONS || it in keepAttributes }
+        suspend fun MatcherScope.keepSvgElement(event: SemanticEvent.Mark) {
+            tag(event.name, svgAttributes(event)) { children(mode = "svg") }
         }
-        match("*", mode = "svg") { event ->
-            tag(event.name, event.attributes) { children(mode = "svg") }
-        }
+        match("svg") { event -> keepSvgElement(event) }
+        match({ this["aria-hidden"]?.equals("true", ignoreCase = true) == true }, mode = "svg") { /* drop */ }
+        match("script", mode = "svg") { /* drop */ }
+        match("*", mode = "svg") { event -> keepSvgElement(event) }
         matchText(mode = "svg") { +it }
     }
 
@@ -397,17 +415,33 @@ public fun Flow<SemanticEvent>.simplifyHtml(
     }
 
     // Embedded content: keep the element and the resource it points at, drop
-    // the subtree. Its children are *fallback* content for a renderer we have
-    // no equivalent for (HTML §4.8) — but the element itself names something a
-    // reader may want to follow: a video to fetch, an embedded PDF, or the
-    // cross-origin frame a consent dialog lives in. `applyAccessibility` has
-    // already removed the hidden analytics and SSO frames upstream, so what
-    // reaches here is what a person would actually see on the page.
+    // the fallbacks. Its markup children are *fallback* content for a renderer
+    // we have no equivalent for (HTML §4.8) — but the element itself names
+    // something a reader may want to follow: a video to fetch, an embedded
+    // PDF, or the cross-origin frame a consent dialog lives in.
+    // `applyAccessibility` has already removed the hidden analytics and SSO
+    // frames upstream, so what reaches here is what a person would actually
+    // see on the page.
+    //
+    // A frame is different: a capture nests the document a *same-origin*
+    // frame embeds inside its element (the way a screen reader reads it — a
+    // captured stream carries no fallback markup at all), and that document's
+    // body is page content. So `iframe` / `object` descend in "frame" mode,
+    // where the frame's `html` unwraps, its `head` (the frame's title and
+    // metadata, not the page's) is dropped, its `body` returns to the default
+    // rules, and anything else — fallback markup, in a hand-built stream — is
+    // discarded as before.
     match({ name in EMBEDDED_CONTENT_ATTRS }) { event ->
         val allowed = EMBEDDED_CONTENT_ATTRS.getValue(event.name)
-        // No children() — the fallback subtree is dropped.
-        preserve(event.name, preserveAttrs(event, *allowed)) { }
+        preserve(event.name, preserveAttrs(event, *allowed)) {
+            if (event.name in FRAME_TAGS) children(mode = "frame")
+        }
     }
+    match("html", mode = "frame") { children(mode = "frame") }
+    match("head", mode = "frame") { /* the frame's metadata, not the page's */ }
+    match("body", mode = "frame") { children() }
+    match("*", mode = "frame") { /* fallback markup */ }
+    matchText(mode = "frame") { /* structural whitespace or fallback text */ }
 
     match({ name in FORM_ELEMENT_ATTRS }) { event ->
         val allowed = FORM_ELEMENT_ATTRS.getValue(event.name)
@@ -571,6 +605,22 @@ private val PRESERVE_WITH_ID_TAGS = setOf(
     // mark to survive this far.
     "caption",
     "dl", "dt", "dd",
+)
+
+// The embedded-content elements that can embed a whole document, which a
+// capture nests inside them (see the "frame" mode).
+private val FRAME_TAGS = setOf("iframe", "object")
+
+// The capture's own bookkeeping (see [AccessibilityAnnotations]): stripped from
+// a preserved svg element unless the caller asked for one through
+// `keepAttributes`, the way every other preserved element only keeps them
+// through `preserveAttrs`.
+private val CAPTURE_ANNOTATIONS = setOf(
+    AccessibilityAnnotations.ROLE,
+    AccessibilityAnnotations.DISPLAY,
+    AccessibilityAnnotations.VISIBILITY,
+    AccessibilityAnnotations.IGNORED,
+    AccessibilityAnnotations.REF,
 )
 
 // Embedded content elements and the attributes naming what they embed. The

@@ -499,6 +499,17 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         lastBlock = BLOCK_MARKDOWN
     }
 
+    // Ends a list whose frame has just been popped: nested in an item it only
+    // ends the line (the item's own close separates), at top level it is a
+    // block like any other.
+    fun closeList() {
+        val nestedInItem = blockStack.lastOrNull() is BlockFrame.ListItem
+        if (nestedInItem) {
+            ensureLineStart()
+            pendingBlockSeparator = false
+        } else endBlock()
+    }
+
     // When a block-level mark arrives while one or more `<a>` frames are
     // still collecting Markdown into label buffers, the Markdown `[label](url)`
     // form can't represent the block content. Spill every open link as a raw
@@ -588,8 +599,8 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         // block inside the table (a `<caption>` renders as one): glued to the
         // caption line, the whole table becomes paragraph continuation text on
         // re-parse, since a table never interrupts a paragraph.
-        if (table != null && !table.headerEmitted) ensureBlankLine() else ensureLineStart()
         if (table != null && !table.headerEmitted) {
+            ensureBlankLine()
             table.headerEmitted = true
             if (row.hadHeaderCell) {
                 out(buildPrefix(consumeMarker = true)); out(rowText); out("\n")
@@ -603,12 +614,25 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                 out(buildPrefix(consumeMarker = false)); out(rowText); out("\n")
             }
         } else {
+            ensureLineStart()
             out(buildPrefix(consumeMarker = true)); out(rowText); out("\n")
         }
         atLineStart = true
     }
 
     collect { event ->
+
+        // A list synthesized for an orphan `li` stays open across its
+        // siblings — the next orphan joins it instead of opening a list of
+        // its own — and closes on the first event that is not another item:
+        // left on the stack its indent would apply to everything that follows.
+        // One event of lookahead over the stack top, nothing buffered.
+        if ((blockStack.lastOrNull() as? BlockFrame.List)?.synthetic == true &&
+            !(event is Mark && event.name == "li")
+        ) {
+            blockStack.removeLast()
+            closeList()
+        }
 
         // A `<table>` nested inside a table cell can't be expressed in
         // Markdown — emit it as raw single-line HTML into the cell buffer.
@@ -790,12 +814,19 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                 "li" -> {
                     // An item whose list wrapper was unwrapped upstream (a
                     // container no rule preserved) has no list to take its
-                    // marker from. Degrade to a one-item list rather than
+                    // marker from. Degrade to a synthesized list rather than
                     // failing the whole render — a missing wrapper must never
-                    // cost the document.
+                    // cost the document. Inside an open item the orphans are
+                    // that item's sub-list (an unwrapped nested container),
+                    // so the synthesized list nests exactly as a `ul` would;
+                    // consecutive orphans share it (see the lazy pop above).
                     val list = blockStack.lastOrNull() as? BlockFrame.List
                         ?: BlockFrame.List(ordered = false, synthetic = true).also {
-                            ensureBlankLine()
+                            val parent = blockStack.lastOrNull()
+                            if (parent is BlockFrame.ListItem) {
+                                parent.firstChild = false
+                                ensureLineStart()
+                            } else ensureBlankLine()
                             blockStack.addLast(it)
                         }
                     ensureLineStart()
@@ -958,24 +989,9 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
 
                     "blockquote" -> endBlock()
 
-                    "ul", "ol" -> {
-                        val nestedInItem = blockStack.lastOrNull() is BlockFrame.ListItem
-                        if (nestedInItem) {
-                            ensureLineStart()
-                            pendingBlockSeparator = false
-                        } else endBlock()
-                    }
+                    "ul", "ol" -> closeList()
 
-                    "li" -> {
-                        ensureLineStart()
-                        // Pop the wrapper synthesized for an orphan item: left
-                        // on the stack its indent would apply to everything
-                        // that follows.
-                        if ((blockStack.lastOrNull() as? BlockFrame.List)?.synthetic == true) {
-                            blockStack.removeLast()
-                            endBlock()
-                        }
-                    }
+                    "li" -> ensureLineStart()
 
                     "pre" -> endBlock()
 
@@ -1164,6 +1180,10 @@ private val BLOCK_TAGGED_ELEMENTS = setOf(
     // `<menu>` wrapper and nests a `ul` inside it, so the tag must be
     // block-level for the blank line that lets that list parse on re-read
     "menu",
+    // embedded documents — `simplifyHtml` renders the document a same-origin
+    // frame embeds inside its tag, so the tag needs the blank line that lets
+    // that content parse as Markdown on re-read
+    "iframe", "object",
     // misc block-level semantics
     "address", "search"
 )

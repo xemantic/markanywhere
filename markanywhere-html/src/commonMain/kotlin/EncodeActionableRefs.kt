@@ -113,6 +113,7 @@ internal val LINK_BLOCK_CONTENT_TAGS: Set<String> = setOf(
     "button", "select", "textarea",
     "optgroup", "option", "datalist",
     "menu",
+    "iframe", "object",
     "address", "search"
 )
 

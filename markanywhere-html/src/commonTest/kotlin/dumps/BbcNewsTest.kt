@@ -688,8 +688,8 @@ class BbcNewsTest {
             - [No, take me to settings](ref:121:https://www.bbc.com/usingthebbc/cookies/how-can-i-change-my-bbc-cookie-settings/)
             
             </section>
-            
-            <iframe id="sp_message_iframe_1489022" src="https://cdn.privacy-mgmt.com/index.html?hasCsp=true&amp;message_id=1489022&amp;consentUUID=null&amp;consent_origin=https%3A%2F%2Fcdn.privacy-mgmt.com%2Fconsent%2Ftcfv2&amp;preload_message=true&amp;version=v1" title="SP Consent Message"></iframe>
+            <iframe id="sp_message_iframe_1489022" src="https://cdn.privacy-mgmt.com/index.html?hasCsp=true&amp;message_id=1489022&amp;consentUUID=null&amp;consent_origin=https%3A%2F%2Fcdn.privacy-mgmt.com%2Fconsent%2Ftcfv2&amp;preload_message=true&amp;version=v1" title="SP Consent Message">
+            </iframe>
         """.trimIndent()
     }
 

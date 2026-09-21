@@ -74,6 +74,29 @@ internal suspend fun Tab.capturePage(
     val snapshot = dOMSnapshot.captureSnapshot(
         computedStyles = listOf("display", "visibility")
     )
+    val builder = captureEvents(snapshot, axNodes, refAttribute, isActionable)
+    return PageCapture(
+        dump = SemanticEventDump(
+            url = url ?: "",
+            dumpedAt = Clock.System.now(),
+            events = builder.events
+        ),
+        refs = builder.refs
+    )
+}
+
+/**
+ * Walks the main-frame document of [snapshot] (and, through their embedding
+ * elements, every same-origin frame document it carries) into a
+ * [DomEventBuilder] holding the event stream and the ref registry. Separated
+ * from [capturePage] so the walk can be exercised on a hand-built snapshot.
+ */
+internal fun captureEvents(
+    snapshot: DOMSnapshot.CaptureSnapshotReturn,
+    axNodes: List<Accessibility.AXNode>,
+    refAttribute: String?,
+    isActionable: (Accessibility.AXNode?) -> Boolean
+): DomEventBuilder {
     val dom = SnapshotDom(snapshot)
     val documents = mutableMapOf(0 to dom)
     val builder = DomEventBuilder(
@@ -92,14 +115,7 @@ internal suspend fun Tab.capturePage(
         isActionable = isActionable
     )
     builder.walkElement(dom, dom.htmlIndex, annotate = true)
-    return PageCapture(
-        dump = SemanticEventDump(
-            url = url ?: "",
-            dumpedAt = Clock.System.now(),
-            events = builder.events
-        ),
-        refs = builder.refs
-    )
+    return builder
 }
 
 private suspend fun Accessibility.getAxTree(): List<Accessibility.AXNode> {
@@ -115,7 +131,7 @@ private suspend fun Accessibility.getAxTree(): List<Accessibility.AXNode> {
  * Random-access view over the flattened parallel arrays of a
  * `DOMSnapshot.captureSnapshot` main-frame document.
  */
-private class SnapshotDom(
+internal class SnapshotDom(
     snapshot: DOMSnapshot.CaptureSnapshotReturn,
     /**
      * Which of the snapshot's documents this view covers. `captureSnapshot`
@@ -211,9 +227,16 @@ private class SnapshotDom(
         isElement(it) && name(it) == "html"
     }
 
-    val htmlIndex: Int = requireNotNull(htmlIndexOrNull) {
-        "no <html> element in the captured DOM"
-    }
+    /**
+     * The main frame's root element. A getter, not an eager property: a view is
+     * also constructed for a frame document, and one that never committed has
+     * no root — requiring it at construction would fail the whole capture on
+     * the way to the [htmlIndexOrNull] check that skips such a frame.
+     */
+    val htmlIndex: Int
+        get() = requireNotNull(htmlIndexOrNull) {
+            "no <html> element in the captured DOM"
+        }
 
     private fun string(index: Int): String? = strings.getOrNull(index)
 
@@ -287,7 +310,7 @@ private class SnapshotDom(
 
 }
 
-private class DomEventBuilder(
+internal class DomEventBuilder(
     /**
      * The snapshot's documents, indexed as CDP indexes them: `[0]` is the main
      * frame and an `<iframe>`'s content document is looked up by the index its
