@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package con.xemantic.markanywhere.buildlogic
+package com.xemantic.markanywhere.buildlogic
 
 import com.vanniktech.maven.publish.MavenPublishPlugin
 import org.gradle.api.Plugin

@@ -74,7 +74,9 @@ internal suspend fun Tab.capturePage(
         computedStyles = listOf("display", "visibility")
     )
     val axNodes = accessibility.getAxTree(
-        frameIds = snapshot.documents.map { snapshot.strings.getOrNull(it.frameId) }
+        frameIds = snapshot.documents
+            .map { snapshot.strings.getOrNull(it.frameId) }
+            .distinct()
     )
     val builder = captureEvents(snapshot, axNodes, refAttribute, isActionable)
     return PageCapture(
@@ -128,7 +130,9 @@ internal fun captureEvents(
  * `<iframe>` had no node in it, so it got no ref), so the frames the snapshot
  * carries are fetched by their own ids. The merged list is later keyed by
  * `backendDOMNodeId`, which is unique across the frames of one target. A
- * `null` id (a snapshot document without one) falls back to the root frame.
+ * `null` id (a snapshot document without one) falls back to the root frame,
+ * so the caller passes the ids deduplicated — two such documents would
+ * otherwise fetch the root tree twice.
  */
 private suspend fun Accessibility.getAxTree(
     frameIds: List<String?>

@@ -1329,6 +1329,34 @@ class SimplifyHtmlTest {
     }
 
     @Test
+    fun `should drop the srcdoc of an iframe whose document is already nested`() = runTest {
+        // given - a `srcdoc` frame is same-origin by definition, so the capture
+        // nests the document the attribute describes inside the `<iframe>`;
+        // keeping the attribute would emit that whole document a second time,
+        // as an escaped HTML string on the raw tag
+        val input = semanticEvents(tagged = true) {
+            "body" {
+                "iframe"("id" to "frame", "srcdoc" to "<button>Inner</button>") {
+                    "html" {
+                        "head" { }
+                        "body" { "button" { +"Inner" } }
+                    }
+                }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then - the document is rendered in place, the attribute is not
+        output sameAs semanticEvents {
+            tag("iframe", "id" to "frame") {
+                tag("button") { +"Inner" }
+            }
+        }
+    }
+
+    @Test
     fun `should render the document a legacy frame embeds like an iframe`() = runTest {
         // given - a frameset page: the JS walker and the CDP capture both nest a
         // same-origin document inside a `<frame>` exactly as inside an `<iframe>`

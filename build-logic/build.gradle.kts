@@ -37,7 +37,7 @@ gradlePlugin {
     plugins {
         register("MarkanywhereConventionPlugin") {
             id = "markanywhere.convention"
-            implementationClass = "con.xemantic.markanywhere.buildlogic.MarkanywhereConventionPlugin"
+            implementationClass = "com.xemantic.markanywhere.buildlogic.MarkanywhereConventionPlugin"
         }
     }
 }

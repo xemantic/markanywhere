@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import con.xemantic.markanywhere.buildlogic.allTargets
-import con.xemantic.markanywhere.buildlogic.fixturePropertyName
-import con.xemantic.markanywhere.buildlogic.toKotlinStringLiteral
+import com.xemantic.markanywhere.buildlogic.allTargets
+import com.xemantic.markanywhere.buildlogic.fixturePropertyName
+import com.xemantic.markanywhere.buildlogic.toKotlinStringLiteral
 
 plugins {
     alias(libs.plugins.kotlin.multiplatform)

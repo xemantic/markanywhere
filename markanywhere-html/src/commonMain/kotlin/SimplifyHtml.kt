@@ -629,7 +629,11 @@ private val CAPTURE_ANNOTATIONS = AccessibilityAnnotations.ALL + AccessibilityAn
 // dimensions (`width`/`height`) are presentational and dropped; `title` /
 // `aria-label` arrive via preserveAttrs' ARIA keep-set.
 private val EMBEDDED_CONTENT_ATTRS: Map<String, Array<String>> = mapOf(
-    "iframe" to arrayOf("id", "src", "srcdoc", "name", "title"),
+    // no `srcdoc`: a srcdoc frame is same-origin by definition, so a capture
+    // already nests the document it describes inside the `iframe` and it is
+    // rendered in place — the attribute would repeat the whole document as an
+    // escaped HTML string on the tag
+    "iframe" to arrayOf("id", "src", "name", "title"),
     "frame" to arrayOf("id", "src", "name", "title"),
     "video" to arrayOf("id", "src", "poster", "controls", "title"),
     "audio" to arrayOf("id", "src", "controls", "title"),

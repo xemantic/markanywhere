@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package con.xemantic.markanywhere.buildlogic
+package com.xemantic.markanywhere.buildlogic
 
 /**
  * Derives a camelCase Kotlin property name from a fixture file name,

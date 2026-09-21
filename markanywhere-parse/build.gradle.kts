@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import con.xemantic.markanywhere.buildlogic.allTargets
+import com.xemantic.markanywhere.buildlogic.allTargets
 import groovy.json.JsonSlurper
 import java.net.URI
 
