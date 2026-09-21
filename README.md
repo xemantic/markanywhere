@@ -56,7 +56,8 @@ Will print:
 {"type":"unmark","name":"p"}
 ```
 
-The stream is append-only: each event is emitted as soon as the parser commits to it, so `<h1>` opens before `Hello` arrives and `<em>` opens the moment the `*` resolves. The Markdown `*streaming*` and the literal `<b>` tag produce the same kind of `mark`/`unmark` events — the only difference is `"tagged":true`, flagging the `b` as real HTML in the source rather than Markdown-derived (the `em`, being Markdown, omits it).
+The stream is append-only: each event is emitted as soon as the parser commits to it, so `<h1>` opens before `Hello` arrives and `<em>` opens the moment the `*` resolves.
+The Markdown `*streaming*` and the literal `<b>` tag produce the same kind of `mark`/`unmark` events — the only difference is `"tagged":true`, flagging the `b` as real HTML in the source rather than Markdown-derived (the `em`, being Markdown, omits it).
 
 > Backed by the first test in [`MarkanywhereParserTest`](markanywhere-parse/src/commonTest/kotlin/MarkanywhereParserTest.kt) — `should parse the README parsing example`.
 
@@ -148,11 +149,15 @@ Will print:
 ☀️ Sunny and **warm** today — see the [forecast](https://example.com/forecast).
 ```
 
-`transformHtmlToMarkdown()` (in `markanywhere-html`) is a fixed chain of stream operators: `resolveIcons()` maps icon-font glyphs to emoji (`fa-sun` → ☀️), `simplifyHtml()` unwraps the presentational `<body>` and drops the `<script>` noise while keeping semantic tags and link `href`s, blank inline formatting and structural whitespace are dropped, and `encodeActionableRefs()` runs last; `renderMarkdown()` then serializes the result. Each operator is a plain `Flow<SemanticEvent>` extension, so you can compose your own subset — the module also ships `applyAccessibility()` (honour the browser's hidden-subtree and layout-table verdicts) for when you start from a raw capture.
+`transformHtmlToMarkdown()` (in `markanywhere-html`) is a fixed chain of stream operators: `resolveIcons()` maps icon-font glyphs to emoji (`fa-sun` → ☀️), `simplifyHtml()` unwraps the presentational `<body>` and drops the `<script>` noise while keeping semantic tags and link `href`s, blank inline formatting and structural whitespace are dropped, and `encodeActionableRefs()` runs last; `renderMarkdown()` then serializes the result.
+Each operator is a plain `Flow<SemanticEvent>` extension, so you can compose your own subset — the module also ships `applyAccessibility()` (honour the browser's hidden-subtree and layout-table verdicts) for when you start from a raw capture.
 
-The input here is built by hand, but in practice it comes from a captured page: [`markanywhere-dump`](markanywhere-dump) injects `window.markanywhere.dump()` into any browser, and [`markanywhere-browse`](markanywhere-browse) drives a real Chrome over CDP to produce a `SemanticEventDump`. That capture stamps every actionable element with a reference, and the final `encodeActionableRefs()` step turns those into `[forecast](ref:7:https://…)`-style links (a no-op here, since the hand-built input carries no refs) — so an agent can read the Markdown and then click an element back on the live page by its `ref`. See [`markanywhere-browse`](markanywhere-browse/README.md).
+The input here is built by hand, but in practice it comes from a captured page: [`markanywhere-dump`](markanywhere-dump) injects `window.markanywhere.dump()` into any browser, and [`markanywhere-browse`](markanywhere-browse) drives a real Chrome over CDP to produce a `SemanticEventDump`.
+That capture stamps every actionable element with a reference, and the final `encodeActionableRefs()` step turns those into `[forecast](ref:7:https://…)`-style links (a no-op here, since the hand-built input carries no refs) — so an agent can read the Markdown and then click an element back on the live page by its `ref`.
+See [`markanywhere-browse`](markanywhere-browse/README.md).
 
-This actionable-ref encoding is the default (`refMode = RefMode.ENCODE`). Pass `transformHtmlToMarkdown(refMode = RefMode.STRIP)` instead for a clean, standard Markdown dump: the refs are dropped from `simplifyHtml`'s keep-set and `encodeActionableRefs()` is skipped, so no `ref:`/`ref="…"` appears anywhere and links carry only their real `href`.
+This actionable-ref encoding is the default (`refMode = RefMode.ENCODE`).
+Pass `transformHtmlToMarkdown(refMode = RefMode.STRIP)` instead for a clean, standard Markdown dump: the refs are dropped from `simplifyHtml`'s keep-set and `encodeActionableRefs()` is skipped, so no `ref:`/`ref="…"` appears anywhere and links carry only their real `href`.
 
 > Backed by the first test in [`HtmlToMarkdownTest`](markanywhere-html/src/commonTest/kotlin/HtmlToMarkdownTest.kt) — `should convert the README HTML to Markdown example`.
 
@@ -196,11 +201,17 @@ Will print:
 </p>
 ```
 
-Each `match` is like an XSLT template: it selects marks by name (`"em"`), by the `"*"` wildcard, or by a predicate over the mark's attributes (`match({ name == "p" && this["role"] == "note" })`), and emits replacement marks and text in their place. `children()` mirrors `<xsl:apply-templates/>` — it descends into the matched subtree, and only there: an unmatched mark stops traversal unless a `"*"` rule opts into transparent descent. Raw text survives at exactly one place — a `matchText { +it }` rule — so `children()` alone never leaks text. Rules are tried in registration order with the first match winning, which is why the specific rules above sit ahead of `passthrough()`, the catch-all that copies every remaining mark (preserving its `isTagged` origin) and its text verbatim — here the literal `<b>` flows through untouched while the Markdown `*streaming*` is rewritten to `<strong>`.
+Each `match` is like an XSLT template: it selects marks by name (`"em"`), by the `"*"` wildcard, or by a predicate over the mark's attributes (`match({ name == "p" && this["role"] == "note" })`), and emits replacement marks and text in their place.
+`children()` mirrors `<xsl:apply-templates/>` — it descends into the matched subtree, and only there: an unmatched mark stops traversal unless a `"*"` rule opts into transparent descent.
+Raw text survives at exactly one place — a `matchText { +it }` rule — so `children()` alone never leaks text.
+Rules are tried in registration order with the first match winning, which is why the specific rules above sit ahead of `passthrough()`, the catch-all that copies every remaining mark (preserving its `isTagged` origin) and its text verbatim — here the literal `<b>` flows through untouched while the Markdown `*streaming*` is rewritten to `<strong>`.
 
-Because the rule sets are plain extension functions, they compose — `transform { demoteHeadings(); emphasizeToStrong(); passthrough() }`. The block also runs per collection, so stateful rule sets stay correct when a flow is collected more than once: a sequence counter, text captured for an `afterClose { … }` summary emitted once the subtree closes, or a mode-scoped sub-pipeline (`children(mode = "capture")` routing a subtree to its own set of rules). The same machinery normalizes HTML down to Markdown (`simplifyHtml()` in `markanywhere-html`), redacts spans, or routes a tagged block to a separate sink.
+Because the rule sets are plain extension functions, they compose — `transform { demoteHeadings(); emphasizeToStrong(); passthrough() }`.
+The block also runs per collection, so stateful rule sets stay correct when a flow is collected more than once: a sequence counter, text captured for an `afterClose { … }` summary emitted once the subtree closes, or a mode-scoped sub-pipeline (`children(mode = "capture")` routing a subtree to its own set of rules).
+The same machinery normalizes HTML down to Markdown (`simplifyHtml()` in `markanywhere-html`), redacts spans, or routes a tagged block to a separate sink.
 
-> Backed by the first test in [`TransformerTest`](markanywhere-transform/src/commonTest/kotlin/TransformerTest.kt) — `should transform the README example`. The remaining tests there exercise each DSL feature mentioned above.
+> Backed by the first test in [`TransformerTest`](markanywhere-transform/src/commonTest/kotlin/TransformerTest.kt) — `should transform the README example`.
+> The remaining tests there exercise each DSL feature mentioned above.
 
 ### Asserting event streams in tests
 
@@ -243,7 +254,9 @@ testImplementation("com.xemantic.markanywhere:markanywhere-test:0.1.3")
 
 ## Supported Markdown features
 
-GFM is the dialect LLMs were trained on, which is why we take it as the baseline — not as a conformance target. The parser diverges where spec-correct behaviour would force buffering past the next emitted event (which would break streaming, the whole point of the library), and those divergent shapes are ones LLMs effectively never emit. The long-term aim is a separate spec, anchored on this parser, defined to fit the streaming model rather than the document model.
+GFM is the dialect LLMs were trained on, which is why we take it as the baseline — not as a conformance target.
+The parser diverges where spec-correct behaviour would force buffering past the next emitted event (which would break streaming, the whole point of the library), and those divergent shapes are ones LLMs effectively never emit.
+The long-term aim is a separate spec, anchored on this parser, defined to fit the streaming model rather than the document model.
 
 ### GFM baseline
 
@@ -286,7 +299,9 @@ GFM is the dialect LLMs were trained on, which is why we take it as the baseline
 | Namespaced tags     | `<ns:tag attr="val">`                | `Mark(name="ns:tag", isTagged=true)`  |
 | DOCTYPE declaration | `<!DOCTYPE html>` (case-insensitive) | `Mark(name="doctype", isTagged=true)` |
 
-**Namespaced tags** let you embed arbitrary custom markup in a Markdown document. Any `<namespace:tagname …>` / `</namespace:tagname>` pair passes through as `Mark`/`Unmark` events with `isTagged = true` and parsed attributes — your renderer handles them however it wants. This covers use cases like custom card components, alert boxes, or any domain-specific block type without requiring new parser syntax.
+**Namespaced tags** let you embed arbitrary custom markup in a Markdown document.
+Any `<namespace:tagname …>` / `</namespace:tagname>` pair passes through as `Mark`/`Unmark` events with `isTagged = true` and parsed attributes — your renderer handles them however it wants.
+This covers use cases like custom card components, alert boxes, or any domain-specific block type without requiring new parser syntax.
 
 ### GFM features not supported
 
@@ -319,18 +334,28 @@ See [markanywhere-parse/README.md](markanywhere-parse/README.md) for a full list
 | `markanywhere-html`      | HTML→Markdown pipeline `transformHtmlToMarkdown` (`resolveIcons`, `simplifyHtml`, `dropBlankInlineFormatting`, whitespace normalization, `encodeActionableRefs`), plus `applyAccessibility`, `wrapInHtmlDocument`, and `wrapInSections` (rank-nested sectioning with an optional table-of-contents `nav`) |
 | `markanywhere-test`      | Test helpers: `sameAs` for asserting `Flow<SemanticEvent>` equality |
 
-You can depend only on `markanywhere-parse` and consume the `Flow<SemanticEvent>` with your own renderer — the API surface is a single three-variant sealed class. The `markanywhere-transform` module additionally lets you intercept and rewrite events before they reach any renderer.
+You can depend only on `markanywhere-parse` and consume the `Flow<SemanticEvent>` with your own renderer — the API surface is a single three-variant sealed class.
+The `markanywhere-transform` module additionally lets you intercept and rewrite events before they reach any renderer.
 
 ## Elaborate rationale
 
-We use language to convey meaning, and we use text to express language. The document-whether scroll, codex, or book-established a paradigm for how text is preserved as a packaged unit. Documents also introduced formatting: visual and structural conventions that signal the intent behind particular fragments of text within a larger context.
+We use language to convey meaning, and we use text to express language.
+The document-whether scroll, codex, or book-established a paradigm for how text is preserved as a packaged unit.
+Documents also introduced formatting: visual and structural conventions that signal the intent behind particular fragments of text within a larger context.
 
-When we built machines to process text, we formalized this into "document formats". These formats naturally inherited the hierarchical structure of books-parts, chapters, sections, paragraphs-and the software we built assumed that documents exist as complete artifacts to be parsed, transformed, and rendered.
+When we built machines to process text, we formalized this into "document formats".
+These formats naturally inherited the hierarchical structure of books-parts, chapters, sections, paragraphs-and the software we built assumed that documents exist as complete artifacts to be parsed, transformed, and rendered.
 
-But something new has emerged. We started texting each other, and text became a stream of information: received, comprehended, and often discarded in the moment of reception. This is also the communication paradigm between humans and LLMs. The text is not a document to be opened and read-it is an unfolding stream, with alternating modalities, comprehended while being generated.
+But something new has emerged.
+We started texting each other, and text became a stream of information: received, comprehended, and often discarded in the moment of reception.
+This is also the communication paradigm between humans and LLMs.
+The text is not a document to be opened and read-it is an unfolding stream, with alternating modalities, comprehended while being generated.
 
-Structured documents are not the right abstraction here. What we need instead is an ontology of expressive meaning as a stream of events: each event signaling either an incremental fragment of text or a transition between modalities of linguistic expression (from prose to code, from paragraph to heading, from plain text to emphasis).
-markanywhere inverts the traditional document processing flow. Rather than consuming complete documents and producing structure, it consumes streaming tokens and emits semantic events in real-time. These events can then be transformed-also as a stream-into various output formats: HTML, Markdown, XML, or whatever the receiving context requires.
+Structured documents are not the right abstraction here.
+What we need instead is an ontology of expressive meaning as a stream of events: each event signaling either an incremental fragment of text or a transition between modalities of linguistic expression (from prose to code, from paragraph to heading, from plain text to emphasis).
+markanywhere inverts the traditional document processing flow.
+Rather than consuming complete documents and producing structure, it consumes streaming tokens and emits semantic events in real-time.
+These events can then be transformed-also as a stream-into various output formats: HTML, Markdown, XML, or whatever the receiving context requires.
 
 ## The ontology of a meaningful stream of text
 
@@ -340,7 +365,8 @@ The `SemanticEvent` can be a:
 - `Mark` (e.g. `<em>` tag, with optional attributes)
 - `Unmark` (e.g. `</div>`, indicating that previously opened mark is closed)
 
-`Mark` and `Unmark` carry an `isTagged` flag distinguishing the origin of the event: `true` when it comes from an actual HTML/XML tag in the source, `false` when it is derived from Markdown syntax (e.g. `*text*` yields an `em` mark with `isTagged = false`, while `<em>text</em>` yields `isTagged = true`). The same `SemanticEvent` stream can therefore represent pure Markdown, pure HTML/XML (everything `isTagged = true`), or HTML embedded in Markdown — with the distinction preserved end-to-end so downstream renderers can treat each origin appropriately.
+`Mark` and `Unmark` carry an `isTagged` flag distinguishing the origin of the event: `true` when it comes from an actual HTML/XML tag in the source, `false` when it is derived from Markdown syntax (e.g. `*text*` yields an `em` mark with `isTagged = false`, while `<em>text</em>` yields `isTagged = true`).
+The same `SemanticEvent` stream can therefore represent pure Markdown, pure HTML/XML (everything `isTagged = true`), or HTML embedded in Markdown — with the distinction preserved end-to-end so downstream renderers can treat each origin appropriately.
 
 See the [SemanticEvent](markanywhere-api/src/commonMain/kotlin/SemanticEvents.kt) definition.
 
@@ -356,66 +382,7 @@ dependencies {
 
 ## Development
 
-### Build target sets: `devBuild`
-
-This is a Kotlin Multiplatform project published for JVM, JS, Wasm, and Native.
-Building every target on every local run is slow, so the `markanywhere.convention`
-plugin exposes a **`devBuild`** Gradle property that selects a minimal,
-fast-to-build target set for local development:
-
-- `devBuild` **defaults to `true`**, so a bare `./gradlew build` only touches the
-  dev targets each module declares — JVM, plus browser-JS for the JS modules and
-  the chain they depend on.
-- CI passes **`-PdevBuild=false`** to build the full published set.
-
-The convention plugin declares **no Kotlin target itself**. Instead each module
-reads the flag via `val devBuild: Boolean by extra` and branches its own
-`kotlin { }` target declarations on it, using two helpers the convention adds to
-`KotlinMultiplatformExtension` — `allTargets()` (the full published set, honoring
-the `targetGroup` flag) and `jsTarget()` (a configured browser+nodejs JS target):
-
-```kotlin
-import con.xemantic.markanywhere.buildlogic.allTargets
-
-val devBuild: Boolean by extra
-
-kotlin {
-    if (devBuild) jvm() else allTargets()   // most modules
-    sourceSets { /* … */ }
-}
-```
-
-Variations:
-
-- **JS-only modules** (and the modules in their dependency chain, which need a JS
-  variant available in dev builds) declare browser-JS in dev too:
-  `if (devBuild) { jvm(); js { browser() } } else allTargets()`, or for a JS-only
-  module `if (devBuild) js { browser() } else allTargets()`.
-- **Modules whose dependencies don't cover the whole set** list their targets by
-  hand instead of calling `allTargets()`. For example `markanywhere-browse`
-  depends on `kdriver` (`dev.kdriver:core`), which publishes only JVM, JS, and the
-  desktop-native triples — no Wasm, Apple-mobile, or android-native — so it
-  declares exactly that intersection in its `else` branch.
-
-To build (or just configure) the complete multiplatform set locally, run any task
-with `-PdevBuild=false`.
-
-### DOM-dump fixtures and the `renderDumpFixtures` task
-
-The end-to-end HTML→Markdown tests run against **captured DOM dumps**, not raw
-HTML. Each fixture in `markanywhere-html/src/commonTest/dumps/*.json` is a
-[`SemanticEventDump`](markanywhere-html/src/commonTest/kotlin/SemanticEventDump.kt):
-the semantic event stream of a real page's rendered DOM tree, plus the `url` it
-was captured from and the `dumpedAt` instant of the capture. The events — not any
-original HTML — are the source of truth, so the bloated source HTML is not kept
-in the repository.
-
-A raw event stream is hard to read, so to regenerate the human-readable HTML a
-dump represents (for example to see what input produced a given Markdown output):
-
-```shell
-./gradlew :markanywhere-html:renderDumpFixtures
-```
-
-This renders every dump back to pretty-printed HTML under
-`markanywhere-html/build/renderedDumps/<name>.html`.
+See [DEVELOPMENT.md](DEVELOPMENT.md) for the build layout
+(the `devBuild` target-set flag and the DOM-dump fixtures with their developer tasks),
+the documentation conventions,
+and the maintenance notes on updating the gradle wrapper, the project dependencies, and the public API dumps.

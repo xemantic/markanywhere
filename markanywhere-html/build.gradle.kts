@@ -14,7 +14,9 @@
  * limitations under the License.
  */
 
-import con.xemantic.markanywhere.buildlogic.allTargets
+import com.xemantic.markanywhere.buildlogic.allTargets
+import com.xemantic.markanywhere.buildlogic.fixturePropertyName
+import com.xemantic.markanywhere.buildlogic.toKotlinStringLiteral
 
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
@@ -22,7 +24,7 @@ plugins {
     id("markanywhere.convention")
 }
 
-val devBuild: Boolean by extra
+val devBuild = extra["devBuild"] as Boolean
 
 kotlin {
 
@@ -70,35 +72,6 @@ kotlin {
 
 }
 
-// --- Test fixture generation helpers ----------------------------------------
-
-private fun propertyName(
-    fileName: String
-): String = fileName
-    .substringBeforeLast('.')
-    .split('-', '_', '.', ' ')
-    .filter { it.isNotEmpty() }
-    .mapIndexed { i, p ->
-        if (i == 0) p.replaceFirstChar { it.lowercase() }
-        else p.replaceFirstChar { it.uppercase() }
-    }.joinToString("")
-
-// A single string literal is capped at 65535 UTF-8 bytes in a JVM class
-// file (CONSTANT_Utf8), so we chunk and concatenate. 12000 chars stays
-// well under the limit even at 4 bytes/char worst case.
-private fun String.toLiteral(): String =
-    if (isEmpty()) "\"\""
-    else chunked(12000)
-        .joinToString(" +\n        ") { chunk ->
-        // Quotes and backslashes pass through a triple-quoted string literally;
-        // only `$` can start interpolation. A multi-dollar string with N leading
-        // `$` requires N consecutive `$` to interpolate, so picking N one greater
-        // than the longest `$` run in the chunk makes every `$` literal.
-        val longestDollarRun = Regex("\\$+").findAll(chunk).maxOfOrNull { it.value.length } ?: 0
-        val prefix = "$".repeat(longestDollarRun + 1)
-        "$prefix\"\"\"$chunk\"\"\""
-    }
-
 // --- DOM dump (JSON) test fixture generation --------------------------------
 //
 // Drop SemanticEventDump *.json files into src/commonTest/dumps/ and this task
@@ -110,7 +83,7 @@ private fun String.toLiteral(): String =
 val dumpFixturesInputDir = layout.projectDirectory.dir("src/commonTest/dumps")
 val dumpFixturesOutputDir = layout.buildDirectory.dir("generated/dumpFixtures/commonTest/kotlin")
 
-val generateDumpFixtures by tasks.registering {
+val generateDumpFixtures = tasks.register("generateDumpFixtures") {
     description = "Bakes src/commonTest/dumps/*.json into the DumpFixtures Kotlin object."
     val inputDir = dumpFixturesInputDir
     val outputDir = dumpFixturesOutputDir
@@ -140,8 +113,8 @@ val generateDumpFixtures by tasks.registering {
         jsonFiles.forEach { file ->
             val content = file.readText()
             sb.append("    /** Generated from `${file.name}` (${content.length} chars). */\n")
-            sb.append("    val ${propertyName(file.name)}: String =\n        ")
-            sb.append(content.toLiteral())
+            sb.append("    val ${fixturePropertyName(file.name)}: String =\n        ")
+            sb.append(content.toKotlinStringLiteral())
             sb.append("\n\n")
         }
         sb.append("}\n")
@@ -162,7 +135,7 @@ kotlin.sourceSets.commonTest {
 // on the jvmTest classpath (which has markanywhere-render) without polluting the
 // published module's dependencies.
 
-val renderDumpFixtures by tasks.registering(JavaExec::class) {
+val renderDumpFixtures = tasks.register<JavaExec>("renderDumpFixtures") {
     description = "Renders src/commonTest/dumps/*.json DOM dumps back to HTML under build/renderedDumps/."
     group = "documentation"
     val jvmTest = kotlin.jvm().compilations.getByName("test")
@@ -176,7 +149,7 @@ val renderDumpFixtures by tasks.registering(JavaExec::class) {
 // under build/renderedMarkdown/ — the canonical way to regenerate the golden
 // output asserted by HtmlToMarkdownTest after a pipeline change. Entry point:
 // RenderDumpMarkdown.kt in src/jvmTest.
-val renderDumpMarkdown by tasks.registering(JavaExec::class) {
+val renderDumpMarkdown = tasks.register<JavaExec>("renderDumpMarkdown") {
     description = "Renders src/commonTest/dumps/*.json DOM dumps to Markdown under build/renderedMarkdown/."
     group = "documentation"
     val jvmTest = kotlin.jvm().compilations.getByName("test")
@@ -194,7 +167,7 @@ val renderDumpMarkdown by tasks.registering(JavaExec::class) {
 // in src/jvmTest. Runs on the jvmTest classpath (which has markanywhere-browse +
 // kdriver) without polluting the published module's dependencies.
 
-val capture by tasks.registering(JavaExec::class) {
+val capture = tasks.register<JavaExec>("capture") {
     description = "Captures a SemanticEventDump into src/commonTest/dumps/: --args=\"<url> [output.json]\""
     group = "markanywhere"
     val jvmTest = kotlin.jvm().compilations.getByName("test")

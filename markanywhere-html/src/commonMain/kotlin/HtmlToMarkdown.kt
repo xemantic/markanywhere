@@ -73,6 +73,7 @@ public enum class RefMode {
 public fun Flow<SemanticEvent>.transformHtmlToMarkdown(
     keepAttributes: Set<String> = emptySet(),
     refMode: RefMode = RefMode.ENCODE,
+    svgMode: SvgMode = SvgMode.RESOLVE,
 ): Flow<SemanticEvent> =
     // One `when` couples both ref decisions (keep-set + encode) so they cannot
     // drift, and stays exhaustive if a third RefMode is ever added. The shared
@@ -80,10 +81,10 @@ public fun Flow<SemanticEvent>.transformHtmlToMarkdown(
     // contribution to its keep-set.
     when (refMode) {
         ENCODE ->
-            htmlToMarkdownBase(keepAttributes, refKeep = setOf(AccessibilityAnnotations.REF))
+            htmlToMarkdownBase(keepAttributes, setOf(AccessibilityAnnotations.REF), svgMode)
                 .encodeActionableRefs()
         STRIP ->
-            htmlToMarkdownBase(keepAttributes, refKeep = emptySet())
+            htmlToMarkdownBase(keepAttributes, refKeep = emptySet(), svgMode)
     }
 
 /**
@@ -100,12 +101,21 @@ public fun Flow<SemanticEvent>.transformHtmlToMarkdown(
 private fun Flow<SemanticEvent>.htmlToMarkdownBase(
     keepAttributes: Set<String>,
     refKeep: Set<String>,
+    svgMode: SvgMode,
 ): Flow<SemanticEvent> = resolveIcons()
     .applyAccessibility()
+    // After applyAccessibility (hidden subtrees gone, so nothing hidden is read
+    // as a name) and before resolveInlineGraphics (which drops the nameless
+    // <svg> this needs as evidence) and simplifyHtml (which strips the `title`
+    // it reads): give an icon-only link or button the accessible name it would
+    // otherwise lose, so no control reaches the output as a bare `[](…)`.
+    .labelActionableElements(svgMode)
     // After applyAccessibility (aria-hidden SVGs already dropped), before
     // simplifyHtml (which would otherwise discard the whole svg subtree): turn
     // an accessible-name-bearing inline <svg> logo/wordmark into an ![name]().
-    .resolveInlineGraphics()
+    // Skipped under PRESERVE, which keeps the graphic itself rather than
+    // reducing it to its accessible name.
+    .let { if (svgMode == SvgMode.RESOLVE) it.resolveInlineGraphics() else it }
     // Still before simplifyHtml (which unwraps block boxes and discards their
     // DISPLAY annotation): inject a separator where flattening an unwrapped
     // block box would merge inline content from two boxes that share no source
@@ -115,6 +125,9 @@ private fun Flow<SemanticEvent>.htmlToMarkdownBase(
     // DISPLAY is preserved through simplify so dropHtmlStructuralWhitespace can
     // gate whitespace on the browser's computed block/inline verdict; it strips
     // the annotation itself.
-    .simplifyHtml((keepAttributes - AccessibilityAnnotations.REF) + refKeep + AccessibilityAnnotations.DISPLAY)
+    .simplifyHtml(
+        (keepAttributes - AccessibilityAnnotations.REF) + refKeep + AccessibilityAnnotations.DISPLAY,
+        svgMode,
+    )
     .dropBlankInlineFormatting()
     .dropHtmlStructuralWhitespace()

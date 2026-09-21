@@ -430,11 +430,25 @@ private val HTML_BLOCK_TYPE1_TAGS = setOf(
  * already filtered upstream because they're in [HTML_BLOCK_TYPE1_TAGS] or
  * [HTML_BLOCK_TYPE6_TAGS] — listing them here is redundant but harmless;
  * `xmp`, `noembed`, `plaintext` are the names not covered elsewhere.
+ *
+ * `iframe` is deliberately absent (DIVERGENCE): GFM lists it for sanitisation,
+ * but its content model is ordinary markup, not raw text, and the HTML→Markdown
+ * pipeline renders the document a same-origin frame embeds inside its
+ * `<iframe>` tag — so at a block boundary an `<iframe>` is a structural HTML
+ * block like `<div>`, and the rendered block reads back as the same events.
+ * Mid-line it is still dropped, see [INLINE_DISALLOWED_TAGS].
  */
 private val GFM_DISALLOWED_TAGS = setOf(
-    "title", "textarea", "style", "xmp", "iframe",
+    "title", "textarea", "style", "xmp",
     "noembed", "noframes", "script", "plaintext"
 )
+
+/**
+ * The tags the inline `<…>` dispatch drops together with their body: the GFM
+ * §6.11 set plus `iframe`, which mid-line (minified `outerHTML`) is embedding
+ * plumbing rather than content — only a block-level one carries a document.
+ */
+private val INLINE_DISALLOWED_TAGS = GFM_DISALLOWED_TAGS + "iframe"
 
 // CommonMark HTML block type 6 block-level tag names
 private val HTML_BLOCK_TYPE6_TAGS = setOf(
@@ -5964,7 +5978,7 @@ private class ParserState(
                         val open = tryParseOpenTag(full, 0)
                         val close = if (open == null) tryParseCloseTag(full, 0) else null
                         if (open != null && open.first == full.length &&
-                            open.second.name.lowercase() in GFM_DISALLOWED_TAGS
+                            open.second.name.lowercase() in INLINE_DISALLOWED_TAGS
                         ) {
                             // GFM §6.11 disallowed raw HTML reached mid-line. Drop the
                             // element and its raw-text body (emit nothing) rather than
@@ -5986,7 +6000,7 @@ private class ParserState(
                             }
                         } else if (close != null && close.first == full.length &&
                             close.second.name.lowercase() !in INLINE_HTML_BLOCK_ELEMENTS &&
-                            close.second.name.lowercase() !in GFM_DISALLOWED_TAGS
+                            close.second.name.lowercase() !in INLINE_DISALLOWED_TAGS
                         ) {
                             // Match against the most recent open whose name equals (case-insensitive).
                             // `closeInlineDownTo` pops every inline frame above the match —

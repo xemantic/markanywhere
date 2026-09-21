@@ -1,0 +1,15 @@
+public final class com/xemantic/markanywhere/browse/PageSession {
+	public fun <init> (Ldev/kdriver/core/tab/Tab;)V
+	public final fun dump (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun element (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/xemantic/markanywhere/browse/WaitUntilLoadedKt {
+	public static final fun waitForDomIdle-vLdBGDU (Ldev/kdriver/core/tab/Tab;JJLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun waitForDomIdle-vLdBGDU$default (Ldev/kdriver/core/tab/Tab;JJLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public static final fun waitForNetworkIdle-jKevqZI (Ldev/kdriver/core/tab/Tab;JJILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun waitForNetworkIdle-jKevqZI$default (Ldev/kdriver/core/tab/Tab;JJILkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public static final fun waitUntilLoaded-D9DMEZw (Ldev/kdriver/core/tab/Tab;JJJLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun waitUntilLoaded-D9DMEZw$default (Ldev/kdriver/core/tab/Tab;JJJLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+}
+

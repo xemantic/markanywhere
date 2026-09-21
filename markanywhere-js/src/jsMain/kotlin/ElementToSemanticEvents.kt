@@ -21,6 +21,7 @@ import com.xemantic.markanywhere.flow.SemanticEventScope
 import com.xemantic.markanywhere.flow.semanticEvents
 import kotlinx.coroutines.flow.Flow
 import org.w3c.dom.Element
+import org.w3c.dom.Node
 import org.w3c.dom.Text
 import org.w3c.dom.asList
 
@@ -54,12 +55,74 @@ private suspend fun SemanticEventScope.flowElement(
 private suspend fun SemanticEventScope.flowChildren(
     element: Element
 ) {
-    element.childNodes.asList().forEach {
-        when (it) {
-            is Text -> +it.wholeText // unescaped, escaping done on render
-            is Element -> {
-                flowElement(it)
-            }
-        }
+    // A frame's document belongs inside the element that embeds it, the way a
+    // screen reader reads an iframe — its content is part of the same
+    // accessibility tree, not a separate page. It is not reachable through
+    // `childNodes` (the frame holds a whole separate document), so it is
+    // descended explicitly, and only when same-origin: `contentDocument` is
+    // `null` for a cross-origin frame by the same-origin policy, which page
+    // script cannot lift. A capture that must reach cross-origin frames has to
+    // come from the CDP side (`CapturePage`), which is not bound by it.
+    //
+    // Unlike a CDP snapshot, the live DOM does hold the element's own children
+    // — the fallback markup an `<object>` shows only when it fails to load,
+    // and the text an `<iframe>` shows only in a browser without frames — so
+    // when a document did load, that markup is *not rendered* and is skipped
+    // rather than emitted alongside the document.
+    val embedded = element.frameDocumentElement()
+    if (embedded != null) {
+        flowElement(embedded)
+        return
+    }
+    element.childNodes.asList().forEach { node ->
+        node.asTextOrNull?.let { +it.data } // escaping done on render
+        node.asElementOrNull?.let { flowElement(it) }
     }
 }
+
+/**
+ * The root element of the document this element embeds, or `null` when it
+ * embeds none, when the frame is cross-origin, or when it has not yet
+ * committed a document.
+ *
+ * Reading `contentDocument` on a cross-origin frame is not an error — the
+ * browser simply hands back `null` (unlike `contentWindow.document`, which
+ * throws a `SecurityError`) — so no origin comparison or guard is needed.
+ */
+private fun Element.frameDocumentElement(): Element? =
+    // The typed DOM API, not `asDynamic()`: a `dynamic as? Element` cast is
+    // always `null` in Kotlin/JS, because an external interface carries no
+    // runtime type information for the check to succeed.
+    // Same reason as the walk above: `is HTMLIFrameElement` would be false for a
+    // frame *nested inside another frame*, so the element is recognised by name
+    // and its `contentDocument` read dynamically.
+    when (localName) {
+        "iframe", "frame", "object" ->
+            asDynamic().contentDocument?.documentElement.unsafeCast<Element?>()
+        else -> null
+    }
+
+/**
+ * This node as a [Text], or `null` when it is not one.
+ *
+ * Dispatches on `nodeType`, never on `is Text`: an iframe's document is a
+ * separate JS realm with its own DOM constructors, so `instanceof Text` —
+ * which is what a Kotlin/JS `is` compiles to — is **false** for every node
+ * inside a frame. Keying the walk off the type check silently emitted each
+ * frame as an empty `<html></html>`. The `unsafeCast` is a compile-time
+ * no-op, so this costs nothing at runtime.
+ *
+ * Read its [Text.data], not `wholeText`: the latter concatenates every
+ * logically adjacent text node, so walking two adjacent siblings (the shape
+ * a runtime renderer leaves behind) would emit their combined text twice.
+ */
+private val Node.asTextOrNull: Text?
+    get() = if (nodeType == Node.TEXT_NODE) unsafeCast<Text>() else null
+
+/**
+ * This node as an [Element], or `null` when it is not one.
+ *
+ * Same realm-agnostic `nodeType` dispatch as [asTextOrNull].
+ */
+private val Node.asElementOrNull: Element?
+    get() = if (nodeType == Node.ELEMENT_NODE) unsafeCast<Element>() else null

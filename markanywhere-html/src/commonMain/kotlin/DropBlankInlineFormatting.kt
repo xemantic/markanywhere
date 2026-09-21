@@ -41,8 +41,10 @@ import kotlinx.coroutines.flow.flow
  * candidates — `a`, `img`, `code`, `span`, and every block / structural element
  * are left untouched (an empty `<a href>` or a `<span golemId>` may still carry
  * meaning the caller asked to keep). Matching is by tag name regardless of
- * `isTagged`, since [simplifyHtml] emits untagged events; place this operator
- * *after* `simplifyHtml`.
+ * `isTagged`: [simplifyHtml] emits the Markdown-native emphasis untagged
+ * (`em`, `strong`, `del`, `mark`, `sup`) but the rest tagged (`b`, `i`, `u`,
+ * `cite`, …), and a blank wrapper is equally meaningless either way. Place this
+ * operator *after* `simplifyHtml`.
  *
  * Note: attributes on inline emphasis are already dropped at Markdown render
  * time (Markdown syntax can't carry them), so removing an empty `<em golemId>`

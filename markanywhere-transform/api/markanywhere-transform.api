@@ -1,0 +1,46 @@
+public abstract interface class com/xemantic/markanywhere/transform/MatcherScope {
+	public abstract fun afterClose (Lkotlin/jvm/functions/Function2;)V
+	public abstract fun children (Ljava/lang/String;)V
+	public static synthetic fun children$default (Lcom/xemantic/markanywhere/transform/MatcherScope;Ljava/lang/String;ILjava/lang/Object;)V
+	public abstract fun invoke (Ljava/lang/String;Ljava/util/Map;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun invoke (Ljava/lang/String;[Lkotlin/Pair;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun invoke$default (Lcom/xemantic/markanywhere/transform/MatcherScope;Ljava/lang/String;Ljava/util/Map;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public abstract fun tag (Ljava/lang/String;Ljava/util/Map;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun tag (Ljava/lang/String;[Lkotlin/Pair;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun tag$default (Lcom/xemantic/markanywhere/transform/MatcherScope;Ljava/lang/String;Ljava/util/Map;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public abstract fun tagged (Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun unaryPlus (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun untagged (Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/xemantic/markanywhere/transform/MatcherScope$DefaultImpls {
+	public static synthetic fun children$default (Lcom/xemantic/markanywhere/transform/MatcherScope;Ljava/lang/String;ILjava/lang/Object;)V
+	public static fun invoke (Lcom/xemantic/markanywhere/transform/MatcherScope;Ljava/lang/String;[Lkotlin/Pair;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun invoke$default (Lcom/xemantic/markanywhere/transform/MatcherScope;Ljava/lang/String;Ljava/util/Map;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public static synthetic fun tag$default (Lcom/xemantic/markanywhere/transform/MatcherScope;Ljava/lang/String;Ljava/util/Map;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+}
+
+public abstract interface annotation class com/xemantic/markanywhere/transform/SemanticEventMatcherScopeDsl : java/lang/annotation/Annotation {
+}
+
+public final class com/xemantic/markanywhere/transform/TransformMatchingMarksKt {
+	public static final fun toFirstMatchSelect (Ljava/lang/Iterable;)Lkotlin/jvm/functions/Function1;
+	public static final fun transformMatchingMarks (Lkotlinx/coroutines/flow/Flow;Lkotlin/jvm/functions/Function1;)Lkotlinx/coroutines/flow/Flow;
+}
+
+public final class com/xemantic/markanywhere/transform/TransformationKt {
+	public static final fun transform (Lkotlinx/coroutines/flow/Flow;Lkotlin/jvm/functions/Function1;)Lkotlinx/coroutines/flow/Flow;
+}
+
+public final class com/xemantic/markanywhere/transform/TransformerBuilder {
+	public fun <init> ()V
+	public final fun match (Ljava/lang/String;Ljava/lang/String;Lkotlin/jvm/functions/Function3;)V
+	public final fun match (Lkotlin/jvm/functions/Function1;Ljava/lang/String;Lkotlin/jvm/functions/Function3;)V
+	public static synthetic fun match$default (Lcom/xemantic/markanywhere/transform/TransformerBuilder;Ljava/lang/String;Ljava/lang/String;Lkotlin/jvm/functions/Function3;ILjava/lang/Object;)V
+	public static synthetic fun match$default (Lcom/xemantic/markanywhere/transform/TransformerBuilder;Lkotlin/jvm/functions/Function1;Ljava/lang/String;Lkotlin/jvm/functions/Function3;ILjava/lang/Object;)V
+	public final fun matchText (Ljava/lang/String;Lkotlin/jvm/functions/Function3;)V
+	public static synthetic fun matchText$default (Lcom/xemantic/markanywhere/transform/TransformerBuilder;Ljava/lang/String;Lkotlin/jvm/functions/Function3;ILjava/lang/Object;)V
+	public final fun passthrough (Ljava/lang/String;)V
+	public static synthetic fun passthrough$default (Lcom/xemantic/markanywhere/transform/TransformerBuilder;Ljava/lang/String;ILjava/lang/Object;)V
+}
+

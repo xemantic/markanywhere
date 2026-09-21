@@ -1,0 +1,27 @@
+public abstract interface class com/xemantic/markanywhere/extract/Extractor {
+	public abstract fun getAttributes ()Ljava/util/Map;
+	public abstract fun getContent ()Ljava/lang/String;
+	public abstract fun getExtractedEvents ()Ljava/util/List;
+	public fun getSucceeded ()Z
+	public abstract fun isExtracting ()Z
+	public abstract fun process (Lcom/xemantic/markanywhere/SemanticEvent;)V
+}
+
+public final class com/xemantic/markanywhere/extract/Extractor$DefaultImpls {
+	public static fun getSucceeded (Lcom/xemantic/markanywhere/extract/Extractor;)Z
+}
+
+public final class com/xemantic/markanywhere/extract/MarkupContentExtractor : com/xemantic/markanywhere/extract/Extractor {
+	public fun <init> (Ljava/lang/String;)V
+	public fun getAttributes ()Ljava/util/Map;
+	public fun getContent ()Ljava/lang/String;
+	public fun getExtractedEvents ()Ljava/util/List;
+	public fun getSucceeded ()Z
+	public fun isExtracting ()Z
+	public fun process (Lcom/xemantic/markanywhere/SemanticEvent;)V
+}
+
+public final class com/xemantic/markanywhere/extract/SemanticEventsExtractorKt {
+	public static final fun extract (Lkotlinx/coroutines/flow/Flow;Lcom/xemantic/markanywhere/extract/Extractor;)Lkotlinx/coroutines/flow/Flow;
+}
+

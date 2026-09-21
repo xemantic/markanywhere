@@ -17,6 +17,7 @@
 package com.xemantic.markanywhere.html.dumps
 
 import com.xemantic.kotlin.test.sameAs
+import com.xemantic.kotlin.test.sameAsMarkdown
 import com.xemantic.markanywhere.html.DumpFixtures
 import com.xemantic.markanywhere.html.dumpFlow
 import com.xemantic.markanywhere.html.transformHtmlToMarkdown
@@ -37,7 +38,7 @@ class OpenjurTest {
         val markdown = events.transformHtmlToMarkdown().renderMarkdown()
 
         // then
-        markdown sameAs /* language=markdown */ """
+        markdown sameAsMarkdown """
             ---
             lang: de
             title: KG, Urteil vom 15.09.2021 - 5 U 35/20 - openJur

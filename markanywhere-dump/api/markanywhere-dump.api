@@ -1,0 +1,41 @@
+public final class com/xemantic/markanywhere/dump/AccessibilityAnnotations {
+	public static final field DISPLAY Ljava/lang/String;
+	public static final field IGNORED Ljava/lang/String;
+	public static final field INSTANCE Lcom/xemantic/markanywhere/dump/AccessibilityAnnotations;
+	public static final field REF Ljava/lang/String;
+	public static final field ROLE Ljava/lang/String;
+	public static final field VISIBILITY Ljava/lang/String;
+	public final fun getALL ()Ljava/util/Set;
+}
+
+public final class com/xemantic/markanywhere/dump/SemanticEventDump {
+	public static final field Companion Lcom/xemantic/markanywhere/dump/SemanticEventDump$Companion;
+	public fun <init> (Ljava/lang/String;Lkotlin/time/Instant;Ljava/util/List;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Lkotlin/time/Instant;
+	public final fun component3 ()Ljava/util/List;
+	public final fun copy (Ljava/lang/String;Lkotlin/time/Instant;Ljava/util/List;)Lcom/xemantic/markanywhere/dump/SemanticEventDump;
+	public static synthetic fun copy$default (Lcom/xemantic/markanywhere/dump/SemanticEventDump;Ljava/lang/String;Lkotlin/time/Instant;Ljava/util/List;ILjava/lang/Object;)Lcom/xemantic/markanywhere/dump/SemanticEventDump;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDumpedAt ()Lkotlin/time/Instant;
+	public final fun getEvents ()Ljava/util/List;
+	public final fun getUrl ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final synthetic class com/xemantic/markanywhere/dump/SemanticEventDump$$serializer : kotlinx/serialization/internal/GeneratedSerializer {
+	public static final field INSTANCE Lcom/xemantic/markanywhere/dump/SemanticEventDump$$serializer;
+	public final fun childSerializers ()[Lkotlinx/serialization/KSerializer;
+	public final fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Lcom/xemantic/markanywhere/dump/SemanticEventDump;
+	public synthetic fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;
+	public final fun getDescriptor ()Lkotlinx/serialization/descriptors/SerialDescriptor;
+	public final fun serialize (Lkotlinx/serialization/encoding/Encoder;Lcom/xemantic/markanywhere/dump/SemanticEventDump;)V
+	public synthetic fun serialize (Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V
+	public fun typeParametersSerializers ()[Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/xemantic/markanywhere/dump/SemanticEventDump$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+

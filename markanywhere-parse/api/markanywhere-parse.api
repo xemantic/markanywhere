@@ -1,0 +1,9 @@
+public final class com/xemantic/markanywhere/parse/DefaultMarkanywhereParser {
+	public fun <init> ()V
+	public final fun parse (Lkotlinx/coroutines/flow/Flow;)Lkotlinx/coroutines/flow/Flow;
+}
+
+public final class com/xemantic/markanywhere/parse/MarkanywhereParserKt {
+	public static final fun parse (Lkotlinx/coroutines/flow/Flow;)Lkotlinx/coroutines/flow/Flow;
+}
+

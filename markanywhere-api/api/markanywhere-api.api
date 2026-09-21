@@ -1,0 +1,117 @@
+public final class com/xemantic/markanywhere/MarkClassListKt {
+	public static final fun getClassList (Lcom/xemantic/markanywhere/SemanticEvent$Mark;)Ljava/util/List;
+}
+
+public final class com/xemantic/markanywhere/MarkanywhereJsonKt {
+	public static final fun getMarkanywhereJson ()Lkotlinx/serialization/json/Json;
+}
+
+public abstract interface class com/xemantic/markanywhere/SemanticEvent {
+	public static final field Companion Lcom/xemantic/markanywhere/SemanticEvent$Companion;
+}
+
+public final class com/xemantic/markanywhere/SemanticEvent$Companion {
+	public final fun fromJson (Ljava/lang/String;)Lcom/xemantic/markanywhere/SemanticEvent;
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/xemantic/markanywhere/SemanticEvent$Mark : com/xemantic/markanywhere/SemanticEvent, com/xemantic/markanywhere/SemanticEvent$Marked {
+	public static final field Companion Lcom/xemantic/markanywhere/SemanticEvent$Mark$Companion;
+	public fun <init> (Ljava/lang/String;ZLjava/util/Map;)V
+	public synthetic fun <init> (Ljava/lang/String;ZLjava/util/Map;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Z
+	public final fun component3 ()Ljava/util/Map;
+	public final fun copy (Ljava/lang/String;ZLjava/util/Map;)Lcom/xemantic/markanywhere/SemanticEvent$Mark;
+	public static synthetic fun copy$default (Lcom/xemantic/markanywhere/SemanticEvent$Mark;Ljava/lang/String;ZLjava/util/Map;ILjava/lang/Object;)Lcom/xemantic/markanywhere/SemanticEvent$Mark;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun get (Ljava/lang/String;)Ljava/lang/String;
+	public final fun getAttributes ()Ljava/util/Map;
+	public fun getName ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun isTagged ()Z
+	public fun toString ()Ljava/lang/String;
+}
+
+public final synthetic class com/xemantic/markanywhere/SemanticEvent$Mark$$serializer : kotlinx/serialization/internal/GeneratedSerializer {
+	public static final field INSTANCE Lcom/xemantic/markanywhere/SemanticEvent$Mark$$serializer;
+	public final fun childSerializers ()[Lkotlinx/serialization/KSerializer;
+	public final fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Lcom/xemantic/markanywhere/SemanticEvent$Mark;
+	public synthetic fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;
+	public final fun getDescriptor ()Lkotlinx/serialization/descriptors/SerialDescriptor;
+	public final fun serialize (Lkotlinx/serialization/encoding/Encoder;Lcom/xemantic/markanywhere/SemanticEvent$Mark;)V
+	public synthetic fun serialize (Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V
+	public fun typeParametersSerializers ()[Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/xemantic/markanywhere/SemanticEvent$Mark$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public abstract interface class com/xemantic/markanywhere/SemanticEvent$Marked {
+	public abstract fun getName ()Ljava/lang/String;
+	public abstract fun isTagged ()Z
+}
+
+public final class com/xemantic/markanywhere/SemanticEvent$Text : com/xemantic/markanywhere/SemanticEvent {
+	public static final field Companion Lcom/xemantic/markanywhere/SemanticEvent$Text$Companion;
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lcom/xemantic/markanywhere/SemanticEvent$Text;
+	public static synthetic fun copy$default (Lcom/xemantic/markanywhere/SemanticEvent$Text;Ljava/lang/String;ILjava/lang/Object;)Lcom/xemantic/markanywhere/SemanticEvent$Text;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getText ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final synthetic class com/xemantic/markanywhere/SemanticEvent$Text$$serializer : kotlinx/serialization/internal/GeneratedSerializer {
+	public static final field INSTANCE Lcom/xemantic/markanywhere/SemanticEvent$Text$$serializer;
+	public final fun childSerializers ()[Lkotlinx/serialization/KSerializer;
+	public final fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Lcom/xemantic/markanywhere/SemanticEvent$Text;
+	public synthetic fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;
+	public final fun getDescriptor ()Lkotlinx/serialization/descriptors/SerialDescriptor;
+	public final fun serialize (Lkotlinx/serialization/encoding/Encoder;Lcom/xemantic/markanywhere/SemanticEvent$Text;)V
+	public synthetic fun serialize (Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V
+	public fun typeParametersSerializers ()[Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/xemantic/markanywhere/SemanticEvent$Text$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/xemantic/markanywhere/SemanticEvent$Unmark : com/xemantic/markanywhere/SemanticEvent, com/xemantic/markanywhere/SemanticEvent$Marked {
+	public static final field Companion Lcom/xemantic/markanywhere/SemanticEvent$Unmark$Companion;
+	public fun <init> (Ljava/lang/String;Z)V
+	public synthetic fun <init> (Ljava/lang/String;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Z
+	public final fun copy (Ljava/lang/String;Z)Lcom/xemantic/markanywhere/SemanticEvent$Unmark;
+	public static synthetic fun copy$default (Lcom/xemantic/markanywhere/SemanticEvent$Unmark;Ljava/lang/String;ZILjava/lang/Object;)Lcom/xemantic/markanywhere/SemanticEvent$Unmark;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun getName ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun isTagged ()Z
+	public fun toString ()Ljava/lang/String;
+}
+
+public final synthetic class com/xemantic/markanywhere/SemanticEvent$Unmark$$serializer : kotlinx/serialization/internal/GeneratedSerializer {
+	public static final field INSTANCE Lcom/xemantic/markanywhere/SemanticEvent$Unmark$$serializer;
+	public final fun childSerializers ()[Lkotlinx/serialization/KSerializer;
+	public final fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Lcom/xemantic/markanywhere/SemanticEvent$Unmark;
+	public synthetic fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;
+	public final fun getDescriptor ()Lkotlinx/serialization/descriptors/SerialDescriptor;
+	public final fun serialize (Lkotlinx/serialization/encoding/Encoder;Lcom/xemantic/markanywhere/SemanticEvent$Unmark;)V
+	public synthetic fun serialize (Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V
+	public fun typeParametersSerializers ()[Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/xemantic/markanywhere/SemanticEvent$Unmark$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/xemantic/markanywhere/SemanticEventsKt {
+	public static final fun textContent (Ljava/lang/Iterable;)Ljava/lang/String;
+	public static final fun toJson (Lcom/xemantic/markanywhere/SemanticEvent;)Ljava/lang/String;
+}
+

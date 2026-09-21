@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import con.xemantic.markanywhere.buildlogic.allTargets
+import com.xemantic.markanywhere.buildlogic.allTargets
 
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
@@ -22,7 +22,7 @@ plugins {
     id("markanywhere.convention")
 }
 
-val devBuild: Boolean by extra
+val devBuild = extra["devBuild"] as Boolean
 
 kotlin {
 

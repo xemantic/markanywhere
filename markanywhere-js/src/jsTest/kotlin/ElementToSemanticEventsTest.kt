@@ -1026,4 +1026,30 @@ class ElementToSemanticEventsTest {
         }
     }
 
+    @Test
+    fun `should emit each of two adjacent text nodes once`() = runTest {
+        // given
+        // innerHTML always merges adjacent text into one node, so the two
+        // siblings are built with the DOM API — the shape a runtime renderer
+        // (React `{a}{b}`, DOM patching) leaves behind.
+        val paragraph = document.createElement("p")
+        paragraph.appendChild(document.createTextNode("Hello, "))
+        paragraph.appendChild(document.createTextNode("world"))
+        document.body!!.innerHTML = ""
+        document.body!!.appendChild(paragraph)
+
+        // when
+        val events = document.body!!.toSemanticEvents()
+
+        // then
+        events sameAs semanticEvents(tagged = true) {
+            "body" {
+                "p" {
+                    +"Hello, "
+                    +"world"
+                }
+            }
+        }
+    }
+
 }

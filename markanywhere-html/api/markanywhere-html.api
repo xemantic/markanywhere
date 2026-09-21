@@ -1,0 +1,103 @@
+public final class com/xemantic/markanywhere/html/ActionableRef {
+	public static final field ATTRIBUTE Ljava/lang/String;
+	public static final field INSTANCE Lcom/xemantic/markanywhere/html/ActionableRef;
+	public static final field SCHEME Ljava/lang/String;
+	public final fun decode (Ljava/lang/String;)Lkotlin/Pair;
+	public final fun encode (Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+}
+
+public final class com/xemantic/markanywhere/html/ApplyAccessibilityKt {
+	public static final fun applyAccessibility (Lcom/xemantic/markanywhere/transform/TransformerBuilder;)V
+	public static final fun applyAccessibility (Lkotlinx/coroutines/flow/Flow;)Lkotlinx/coroutines/flow/Flow;
+}
+
+public final class com/xemantic/markanywhere/html/DropBlankInlineFormattingKt {
+	public static final fun dropBlankInlineFormatting (Lkotlinx/coroutines/flow/Flow;)Lkotlinx/coroutines/flow/Flow;
+}
+
+public final class com/xemantic/markanywhere/html/EncodeActionableRefsKt {
+	public static final fun encodeActionableNonLinkRefs (Lcom/xemantic/markanywhere/transform/TransformerBuilder;)V
+	public static final fun encodeActionableRefs (Lkotlinx/coroutines/flow/Flow;)Lkotlinx/coroutines/flow/Flow;
+}
+
+public final class com/xemantic/markanywhere/html/HtmlToMarkdownKt {
+	public static final fun transformHtmlToMarkdown (Lkotlinx/coroutines/flow/Flow;Ljava/util/Set;Lcom/xemantic/markanywhere/html/RefMode;Lcom/xemantic/markanywhere/html/SvgMode;)Lkotlinx/coroutines/flow/Flow;
+	public static synthetic fun transformHtmlToMarkdown$default (Lkotlinx/coroutines/flow/Flow;Ljava/util/Set;Lcom/xemantic/markanywhere/html/RefMode;Lcom/xemantic/markanywhere/html/SvgMode;ILjava/lang/Object;)Lkotlinx/coroutines/flow/Flow;
+}
+
+public final class com/xemantic/markanywhere/html/HtmlWhitespaceKt {
+	public static final fun getHTML_WHITESPACE_CHARS ()[C
+	public static final fun isHtmlBlank (Ljava/lang/String;)Z
+	public static final fun isHtmlWhitespace (C)Z
+}
+
+public final class com/xemantic/markanywhere/html/HtmlWhitespaceNormalizationKt {
+	public static final fun dropHtmlStructuralWhitespace (Lkotlinx/coroutines/flow/Flow;)Lkotlinx/coroutines/flow/Flow;
+}
+
+public final class com/xemantic/markanywhere/html/IconResolutionKt {
+	public static final fun getDEFAULT_ICON_RESOLVER ()Lkotlin/jvm/functions/Function1;
+	public static final fun resolveIcons (Lkotlinx/coroutines/flow/Flow;)Lkotlinx/coroutines/flow/Flow;
+}
+
+public final class com/xemantic/markanywhere/html/LabelActionableElementsKt {
+	public static final field GRAPHIC_PLACEHOLDER_ALT Ljava/lang/String;
+	public static final fun labelActionableElements (Lkotlinx/coroutines/flow/Flow;Lcom/xemantic/markanywhere/html/SvgMode;)Lkotlinx/coroutines/flow/Flow;
+	public static synthetic fun labelActionableElements$default (Lkotlinx/coroutines/flow/Flow;Lcom/xemantic/markanywhere/html/SvgMode;ILjava/lang/Object;)Lkotlinx/coroutines/flow/Flow;
+}
+
+public final class com/xemantic/markanywhere/html/RefMode : java/lang/Enum {
+	public static final field ENCODE Lcom/xemantic/markanywhere/html/RefMode;
+	public static final field STRIP Lcom/xemantic/markanywhere/html/RefMode;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/xemantic/markanywhere/html/RefMode;
+	public static fun values ()[Lcom/xemantic/markanywhere/html/RefMode;
+}
+
+public final class com/xemantic/markanywhere/html/ResolveInlineGraphicsKt {
+	public static final fun getINLINE_GRAPHIC_RESOLVER ()Lkotlin/jvm/functions/Function1;
+	public static final fun resolveInlineGraphics (Lkotlinx/coroutines/flow/Flow;)Lkotlinx/coroutines/flow/Flow;
+}
+
+public final class com/xemantic/markanywhere/html/SeparateUnwrappedBlocksKt {
+	public static final fun separateUnwrappedBlocks (Lkotlinx/coroutines/flow/Flow;)Lkotlinx/coroutines/flow/Flow;
+}
+
+public final class com/xemantic/markanywhere/html/SimplifyHtmlKt {
+	public static final fun simplifyHtml (Lkotlinx/coroutines/flow/Flow;Ljava/util/Set;Lcom/xemantic/markanywhere/html/SvgMode;)Lkotlinx/coroutines/flow/Flow;
+	public static synthetic fun simplifyHtml$default (Lkotlinx/coroutines/flow/Flow;Ljava/util/Set;Lcom/xemantic/markanywhere/html/SvgMode;ILjava/lang/Object;)Lkotlinx/coroutines/flow/Flow;
+}
+
+public final class com/xemantic/markanywhere/html/SvgMode : java/lang/Enum {
+	public static final field PRESERVE Lcom/xemantic/markanywhere/html/SvgMode;
+	public static final field RESOLVE Lcom/xemantic/markanywhere/html/SvgMode;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/xemantic/markanywhere/html/SvgMode;
+	public static fun values ()[Lcom/xemantic/markanywhere/html/SvgMode;
+}
+
+public final class com/xemantic/markanywhere/html/WrapInHtmlDocumentKt {
+	public static final fun wrapInHtmlDocument (Lkotlinx/coroutines/flow/Flow;)Lkotlinx/coroutines/flow/Flow;
+}
+
+public final class com/xemantic/markanywhere/html/WrapInSectionsKt {
+	public static final fun wrapInSections (Lkotlinx/coroutines/flow/Flow;ILkotlin/jvm/functions/Function1;)Lkotlinx/coroutines/flow/Flow;
+	public static synthetic fun wrapInSections$default (Lkotlinx/coroutines/flow/Flow;ILkotlin/jvm/functions/Function1;ILjava/lang/Object;)Lkotlinx/coroutines/flow/Flow;
+}
+
+public final class com/xemantic/markanywhere/html/icons/BootstrapKt {
+	public static final fun getBootstrapIconResolver ()Lkotlin/jvm/functions/Function1;
+}
+
+public final class com/xemantic/markanywhere/html/icons/FontAwesomeKt {
+	public static final fun getFontAwesomeIconResolver ()Lkotlin/jvm/functions/Function1;
+}
+
+public final class com/xemantic/markanywhere/html/icons/GlyphiconsKt {
+	public static final fun getGlyphiconResolver ()Lkotlin/jvm/functions/Function1;
+}
+
+public final class com/xemantic/markanywhere/html/icons/MaterialDesignKt {
+	public static final fun getMaterialIconResolver ()Lkotlin/jvm/functions/Function1;
+}
+
