@@ -17,12 +17,17 @@
 package com.xemantic.markanywhere.js
 
 import com.xemantic.kotlin.test.assert
+import com.xemantic.markanywhere.SemanticEvent
 import kotlinx.browser.document
 import kotlinx.browser.window
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.test.runTest
-import org.w3c.dom.HTMLIFrameElement
+import org.w3c.dom.Element
+import org.w3c.dom.HTMLElement
+import org.w3c.dom.url.URL
+import org.w3c.files.Blob
+import org.w3c.files.BlobPropertyBag
 import kotlin.test.Test
 
 class FrameToSemanticEventsTest {
@@ -76,16 +81,55 @@ class FrameToSemanticEventsTest {
         assert(open.isEmpty())
     }
 
-    /** Installs [html] in the body and suspends until its frame has parsed. */
-    private suspend fun loadFrame(html: String): HTMLIFrameElement {
+    @Test
+    fun `should skip the fallback text of an iframe that loaded its document`() = runTest {
+        // given - the live DOM keeps an iframe's own text child (shown only by
+        // a browser without frames), which a CDP snapshot never carries
+        loadFrame("""<iframe id="h" srcdoc="&lt;p&gt;inside&lt;/p&gt;">fallback</iframe>""")
+
+        // when
+        val texts = document.body!!.toSemanticEvents().toList().filterIsInstance<SemanticEvent.Text>().map { it.text }
+
+        // then - the document is emitted, the unrendered fallback is not
+        assert(texts.contains("inside"))
+        assert(!texts.contains("fallback"))
+    }
+
+    @Test
+    fun `should skip the fallback markup of an object that loaded its document`() = runTest {
+        // given - an object's children are the fallback shown only when it
+        // fails to load; a same-origin (blob) document loads instead of them
+        val url = URL.createObjectURL(Blob(arrayOf("<p>inside</p>"), BlobPropertyBag(type = "text/html")))
+        loadFrame("""<object id="o" type="text/html" data="$url"><p>fallback</p></object>""")
+
+        // when
+        val names = document.body!!.toSemanticEvents().toList().map {
+            when (it) {
+                is Mark -> "<${it.name}>"
+                is Unmark -> "</${it.name}>"
+                is Text -> it.text
+            }
+        }
+
+        // then - the document is nested in the object, the fallback is gone
+        assert(names.indexOf("<object>") < names.indexOf("<html>"))
+        assert(names.contains("inside"))
+        assert(!names.contains("fallback"))
+    }
+
+    /**
+     * Installs [html] in the body and suspends until its frame (an `<iframe>`
+     * or an `<object>`, read dynamically) has parsed a document.
+     */
+    private suspend fun loadFrame(html: String): Element {
         document.body!!.innerHTML = html
-        val frame = document.body!!.firstElementChild as HTMLIFrameElement
+        val frame = document.body!!.firstElementChild!!
         // Real time, not `delay`: `runTest` runs on a virtual clock that skips
         // `delay` entirely, so the frame would never get a chance to parse. The
         // load event alone is not enough either — it can fire while the frame
         // still holds its initial empty document — so poll the content.
         repeat(200) {
-            val body = frame.contentDocument?.body
+            val body = frame.asDynamic().contentDocument?.body.unsafeCast<HTMLElement?>()
             if (body != null && body.innerHTML.isNotEmpty()) return frame
             realDelay(10)
         }

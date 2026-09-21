@@ -1329,6 +1329,37 @@ class SimplifyHtmlTest {
     }
 
     @Test
+    fun `should render the document a legacy frame embeds like an iframe`() = runTest {
+        // given - a frameset page: the JS walker and the CDP capture both nest a
+        // same-origin document inside a `<frame>` exactly as inside an `<iframe>`
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" { "title" { +"Page" } }
+                "frameset"("cols" to "20%,80%") {
+                    "frame"("src" to "nav.html", "name" to "nav", "noresize" to "noresize") {
+                        "html" {
+                            "head" { "title" { +"Navigation" } }
+                            "body" { "p" { +"nav content" } }
+                        }
+                    }
+                }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then - the frame's body is page content, its head is not the page's
+        // frontmatter
+        output sameAs semanticEvents {
+            "frontmatter"("format" to "yaml") { +"title: Page\n" }
+            tag("frame", "src" to "nav.html", "name" to "nav") {
+                "p" { +"nav content" }
+            }
+        }
+    }
+
+    @Test
     fun `should still drop a canvas and a template with their content`() = runTest {
         // given - a `<canvas>` has no source to point at (its pixels are drawn
         // by script) and a `<template>` is inert until script instantiates it,
@@ -1372,6 +1403,36 @@ class SimplifyHtmlTest {
         // then
         output sameAs semanticEvents {
             "frontmatter"("format" to "yaml") { +"title: Page\n" }
+            "p" { +"content" }
+        }
+    }
+
+    @Test
+    fun `should keep swallowing a head element nested in an unrecognised head element`() = runTest {
+        // given - a hand-built or `parse()`-sourced stream (Chrome's parser
+        // relocates unknown elements out of <head>) where an unrecognised head
+        // child holds a real tag: still head content, not a paragraph
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    "title" { +"Page" }
+                    "x-config" {
+                        "p" { +"not content" }
+                        "meta"("name" to "description", "content" to "still metadata") { }
+                    }
+                }
+                "body" {
+                    "p" { +"content" }
+                }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter"("format" to "yaml") { +"title: Page\ndescription: still metadata\n" }
             "p" { +"content" }
         }
     }

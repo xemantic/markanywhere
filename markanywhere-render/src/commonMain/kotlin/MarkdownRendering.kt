@@ -1183,7 +1183,7 @@ private val BLOCK_TAGGED_ELEMENTS = setOf(
     // embedded documents — `simplifyHtml` renders the document a same-origin
     // frame embeds inside its tag, so the tag needs the blank line that lets
     // that content parse as Markdown on re-read
-    "iframe", "object",
+    "iframe", "frame", "object",
     // misc block-level semantics
     "address", "search"
 )

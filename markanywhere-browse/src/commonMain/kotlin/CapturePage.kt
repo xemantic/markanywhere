@@ -70,9 +70,11 @@ internal suspend fun Tab.capturePage(
     refAttribute: String?,
     isActionable: (Accessibility.AXNode?) -> Boolean
 ): PageCapture {
-    val axNodes = accessibility.getAxTree()
     val snapshot = dOMSnapshot.captureSnapshot(
         computedStyles = listOf("display", "visibility")
+    )
+    val axNodes = accessibility.getAxTree(
+        frameIds = snapshot.documents.map { snapshot.strings.getOrNull(it.frameId) }
     )
     val builder = captureEvents(snapshot, axNodes, refAttribute, isActionable)
     return PageCapture(
@@ -118,10 +120,22 @@ internal fun captureEvents(
     return builder
 }
 
-private suspend fun Accessibility.getAxTree(): List<Accessibility.AXNode> {
+/**
+ * The accessibility nodes of every document in a snapshot, one
+ * `getFullAXTree` per frame in [frameIds], merged. Blink keeps an AX tree per
+ * document and `getFullAXTree` walks one: the root frame's tree stops at a
+ * same-origin frame's boundary (verified live — a `<button>` in a same-origin
+ * `<iframe>` had no node in it, so it got no ref), so the frames the snapshot
+ * carries are fetched by their own ids. The merged list is later keyed by
+ * `backendDOMNodeId`, which is unique across the frames of one target. A
+ * `null` id (a snapshot document without one) falls back to the root frame.
+ */
+private suspend fun Accessibility.getAxTree(
+    frameIds: List<String?>
+): List<Accessibility.AXNode> {
     enable()
     return try {
-        getFullAXTree().nodes
+        frameIds.flatMap { getFullAXTree(frameId = it).nodes }
     } finally {
         disable()
     }

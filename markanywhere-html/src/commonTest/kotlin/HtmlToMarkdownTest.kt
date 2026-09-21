@@ -620,6 +620,35 @@ class HtmlToMarkdownTest {
     }
 
     @Test
+    fun `should render and round-trip the document a legacy frame embeds`() = runTest {
+        // given - a frameset page, captured the same way as an iframe
+        val page = semanticEvents(tagged = true) {
+            "frameset"("cols" to "20%,80%") {
+                "frame"("src" to "nav.html", "name" to "nav") {
+                    "html" {
+                        "head" { "title" { +"Navigation" } }
+                        "body" { "h2" { +"Sections" } }
+                    }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown(refMode = RefMode.STRIP).renderMarkdown()
+        val reRendered = flowOf(markdown).parse().renderMarkdown()
+
+        // then - the frame is a block-level tag whose content parses back
+        markdown sameAsMarkdown """
+            <frame src="nav.html" name="nav">
+            
+            ## Sections
+            
+            </frame>
+        """.trimIndent()
+        reRendered sameAs markdown
+    }
+
+    @Test
     fun `should strip capture annotations and refs inside a preserved svg`() = runTest {
         // given - a captured svg carries the same annotations as any other
         // element, plus a script that must never reach a reader

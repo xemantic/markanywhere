@@ -144,7 +144,7 @@ import kotlinx.coroutines.flow.Flow
  * A plain stream operator, so it composes with the rest of the HTML pipeline
  * by chaining — e.g. `flow.applyAccessibility().simplifyHtml()`. The rule
  * block is rebuilt on **every collection**, which reinitialises the
- * `metadata` / `titleText` / `inHead` state captured below on each run, so the
+ * `metadata` / `titleText` state captured below on each run, so the
  * same flow can be collected repeatedly without state leaking between
  * collections.
  *
@@ -165,9 +165,6 @@ public fun Flow<SemanticEvent>.simplifyHtml(
 
     val metadata = mutableMapOf<String, String>()
     val titleText = StringBuilder()
-    // True while streaming `<head>`, so the catch-all unwrap below cannot leak
-    // head noise into the body content (see the default matchText rule).
-    var inHead = false
 
     // Attribute map kept on a preserved element: its own [names] whitelist, the
     // ARIA name/state keep-set, and any caller-requested [keepAttributes]. An
@@ -247,10 +244,8 @@ public fun Flow<SemanticEvent>.simplifyHtml(
     match("head") {
         // Descend in "head" mode so title/meta resolve and loose text is
         // swallowed (see the mode-scoped matchText below); emit no mark.
-        inHead = true
         children(mode = "head")
         afterClose {
-            inHead = false
             if (metadata.isNotEmpty()) {
                 val yaml = renderYamlFrontmatter(metadata)
                 "frontmatter"(mapOf("format" to "yaml")) {
@@ -281,6 +276,16 @@ public fun Flow<SemanticEvent>.simplifyHtml(
 
     // Loose text directly inside <head> is structural noise — swallow it.
     matchText(mode = "head") { /* discard */ }
+
+    // An unrecognised head child (say an `<x-config>` payload) is still head
+    // content: unwrap it *in head mode*, so a tag nested inside it — a `<p>`,
+    // in a hand-built or `parse()`-sourced stream (Chrome's parser relocates
+    // unknown elements out of `<head>`) — meets these head rules and not the
+    // body ones, which would emit it as content. The default catch-all at the
+    // bottom would reset the mode. An expression, not `match("*", mode =
+    // "head")`: a mode-scoped wildcard shadows every default-mode rule, and
+    // the `title` / `meta` rules above must keep resolving in here.
+    match({ name !in HEAD_METADATA_TAGS }, mode = "head") { children(mode = "head") }
 
     // <title> text (including text inside nested inline marks) is captured
     // into metadata rather than emitted; the wildcard unwraps any nested
@@ -426,7 +431,8 @@ public fun Flow<SemanticEvent>.simplifyHtml(
     // A frame is different: a capture nests the document a *same-origin*
     // frame embeds inside its element (the way a screen reader reads it — a
     // captured stream carries no fallback markup at all), and that document's
-    // body is page content. So `iframe` / `object` descend in "frame" mode,
+    // body is page content. So `iframe` / `frame` / `object` descend in
+    // "frame" mode,
     // where the frame's `html` unwraps, its `head` (the frame's title and
     // metadata, not the page's) is dropped, its `body` returns to the default
     // rules, and anything else — fallback markup, in a hand-built stream — is
@@ -465,12 +471,8 @@ public fun Flow<SemanticEvent>.simplifyHtml(
     // listed in [DROPPED_TAGS] instead.
     match("*") { children() }
 
-    // Body content text passes through unchanged. Text inside `<head>` does
-    // not: the mode-scoped rule above only sees text sitting *directly* in the
-    // head, while an unrecognised head child (say an `<x-config>` payload) is
-    // unwrapped by the catch-all back into the default mode — so the head
-    // guard has to be checked here too.
-    matchText { if (!inHead) +it }
+    // Body content text passes through unchanged.
+    matchText { +it }
 }
 
 /**
@@ -607,27 +609,28 @@ private val PRESERVE_WITH_ID_TAGS = setOf(
     "dl", "dt", "dd",
 )
 
+// The head children with a rule of their own, which the head-mode unwrap of an
+// unrecognised head element must not shadow.
+private val HEAD_METADATA_TAGS = setOf("title", "meta")
+
 // The embedded-content elements that can embed a whole document, which a
-// capture nests inside them (see the "frame" mode).
-private val FRAME_TAGS = setOf("iframe", "object")
+// capture nests inside them (see the "frame" mode) — the same three the JS
+// walker (`frameDocumentElement`) descends into, the legacy frameset `<frame>`
+// included.
+private val FRAME_TAGS = setOf("iframe", "frame", "object")
 
 // The capture's own bookkeeping (see [AccessibilityAnnotations]): stripped from
 // a preserved svg element unless the caller asked for one through
 // `keepAttributes`, the way every other preserved element only keeps them
 // through `preserveAttrs`.
-private val CAPTURE_ANNOTATIONS = setOf(
-    AccessibilityAnnotations.ROLE,
-    AccessibilityAnnotations.DISPLAY,
-    AccessibilityAnnotations.VISIBILITY,
-    AccessibilityAnnotations.IGNORED,
-    AccessibilityAnnotations.REF,
-)
+private val CAPTURE_ANNOTATIONS = AccessibilityAnnotations.ALL + AccessibilityAnnotations.REF
 
 // Embedded content elements and the attributes naming what they embed. The
 // dimensions (`width`/`height`) are presentational and dropped; `title` /
 // `aria-label` arrive via preserveAttrs' ARIA keep-set.
 private val EMBEDDED_CONTENT_ATTRS: Map<String, Array<String>> = mapOf(
     "iframe" to arrayOf("id", "src", "srcdoc", "name", "title"),
+    "frame" to arrayOf("id", "src", "name", "title"),
     "video" to arrayOf("id", "src", "poster", "controls", "title"),
     "audio" to arrayOf("id", "src", "controls", "title"),
     "object" to arrayOf("id", "data", "type", "name", "title"),

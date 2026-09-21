@@ -55,10 +55,6 @@ private suspend fun SemanticEventScope.flowElement(
 private suspend fun SemanticEventScope.flowChildren(
     element: Element
 ) {
-    element.childNodes.asList().forEach { node ->
-        node.asTextOrNull?.let { +it.data } // escaping done on render
-        node.asElementOrNull?.let { flowElement(it) }
-    }
     // A frame's document belongs inside the element that embeds it, the way a
     // screen reader reads an iframe — its content is part of the same
     // accessibility tree, not a separate page. It is not reachable through
@@ -67,7 +63,21 @@ private suspend fun SemanticEventScope.flowChildren(
     // `null` for a cross-origin frame by the same-origin policy, which page
     // script cannot lift. A capture that must reach cross-origin frames has to
     // come from the CDP side (`CapturePage`), which is not bound by it.
-    element.frameDocumentElement()?.let { flowElement(it) }
+    //
+    // Unlike a CDP snapshot, the live DOM does hold the element's own children
+    // — the fallback markup an `<object>` shows only when it fails to load,
+    // and the text an `<iframe>` shows only in a browser without frames — so
+    // when a document did load, that markup is *not rendered* and is skipped
+    // rather than emitted alongside the document.
+    val embedded = element.frameDocumentElement()
+    if (embedded != null) {
+        flowElement(embedded)
+        return
+    }
+    element.childNodes.asList().forEach { node ->
+        node.asTextOrNull?.let { +it.data } // escaping done on render
+        node.asElementOrNull?.let { flowElement(it) }
+    }
 }
 
 /**
