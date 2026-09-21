@@ -1378,7 +1378,7 @@ class SimplifyHtmlTest {
 
 
     @Test
-    fun `should keep a preserved svg minus scripts, hidden parts and capture annotations`() = runTest {
+    fun `should keep a preserved svg minus scripts and hidden parts and capture annotations`() = runTest {
         // given - PRESERVE keeps the graphic for a reader, which is no reason
         // to hand that reader a script, a part the author hid, or the capture's
         // own bookkeeping
