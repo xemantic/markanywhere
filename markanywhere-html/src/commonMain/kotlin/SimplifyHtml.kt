@@ -16,7 +16,6 @@
 
 package com.xemantic.markanywhere.html
 
-import com.xemantic.kotlin.core.text.unaryPlus
 import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.dump.AccessibilityAnnotations
 import com.xemantic.markanywhere.transform.MatcherScope
@@ -127,8 +126,9 @@ import kotlinx.coroutines.flow.Flow
  *
  * Metadata extraction: `<html lang>` and any `<meta name="…"
  * content="…">` inside `<head>`, along with `<title>` text, are collected
- * and emitted as a single synthetic `frontmatter` mark with those values
- * as attributes just before `<body>` content streams through. Technical meta
+ * and emitted as a single synthetic `frontmatter` mark holding one `entry`
+ * (`key` attribute, value as text) per item — the parser's structured front
+ * matter vocabulary — just before `<body>` content streams through. Technical meta
  * names that carry no content signal (rendering hints, crawler / verification
  * directives, platform tile metadata — see [isNoiseMetaName]) are dropped so
  * they don't inflate the frontmatter. If `<head>` is absent or yields no
@@ -247,9 +247,10 @@ public fun Flow<SemanticEvent>.simplifyHtml(
         children(mode = "head")
         afterClose {
             if (metadata.isNotEmpty()) {
-                val yaml = renderYamlFrontmatter(metadata)
-                "frontmatter"(mapOf("format" to "yaml")) {
-                    +yaml
+                "frontmatter" {
+                    for ((key, value) in metadata) {
+                        "entry"("key" to key) { +value }
+                    }
                 }
             }
         }
@@ -699,57 +700,3 @@ private val NOISE_META_NAMES = setOf(
 private val NOISE_META_PREFIXES = setOf(
     "msapplication-", "apple-", "mobile-web-app-",
 )
-
-private fun renderYamlFrontmatter(
-    metadata: Map<String, String>
-): String = buildString {
-    for ((key, value) in metadata) {
-        yamlScalar(key)
-        +": "
-        yamlScalar(value)
-        +'\n'
-    }
-}
-
-// YAML 1.2 reserved boolean / null literals. Must be quoted to keep them as
-// strings instead of decoding to `true`/`false`/`null`.
-private val YAML_RESERVED_LITERALS = setOf(
-    "true", "True", "TRUE", "false", "False", "FALSE",
-    "yes", "Yes", "YES", "no", "No", "NO",
-    "on", "On", "ON", "off", "Off", "OFF",
-    "null", "Null", "NULL", "~"
-)
-
-// Plain-scalar indicator characters: starting with any of these forces
-// double-quoted output (see YAML 1.2 §6.4 / §6.6).
-private const val YAML_INDICATORS = "-?:,[]{}#&*!|>'\"%@`"
-
-private fun Appendable.yamlScalar(s: String) {
-    if (s.isEmpty()) +"\"\""
-    else if (s in YAML_RESERVED_LITERALS) yamlQuoted(s)
-    else {
-        val first = s.first()
-        val last = s.last()
-        val needsQuoting = first.isWhitespace()
-                || last.isWhitespace()
-                || first in YAML_INDICATORS
-                || s.any { c ->
-            c == ':' || c == '#' || c == '"' || c == '\\'
-                    || c == '\n' || c == '\r' || c == '\t'
-        }
-        if (needsQuoting) yamlQuoted(s) else +s
-    }
-}
-
-private fun Appendable.yamlQuoted(s: String) {
-    +'"'
-    for (c in s) when (c) {
-        '\\' -> +"\\\\"
-        '"' -> +"\\\""
-        '\n' -> +"\\n"
-        '\r' -> +"\\r"
-        '\t' -> +"\\t"
-        else -> +c
-    }
-    +'"'
-}

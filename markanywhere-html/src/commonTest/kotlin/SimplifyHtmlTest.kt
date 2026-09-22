@@ -766,12 +766,15 @@ class SimplifyHtmlTest {
         val output = input.simplifyHtml()
 
         // then
-        // The renderer reads YAML text from inside the frontmatter mark;
-        // metadata is emitted there, not as attributes, so the final
-        // Markdown shows actual key/value lines between the `---` fences.
+        // Metadata is emitted as the parser's structured front matter (one
+        // `entry` per item), so the Markdown renderer writes actual key/value
+        // lines between the `---` fences.
         output sameAs semanticEvents {
-            "frontmatter"("format" to "yaml") {
-                +"lang: en\ntitle: Hello\nauthor: Alice\ndescription: A doc\n"
+            "frontmatter" {
+                "entry"("key" to "lang") { +"en" }
+                "entry"("key" to "title") { +"Hello" }
+                "entry"("key" to "author") { +"Alice" }
+                "entry"("key" to "description") { +"A doc" }
             }
             "p" { +"body text" }
         }
@@ -796,8 +799,8 @@ class SimplifyHtmlTest {
 
         // then — only the name+content meta survives
         output sameAs semanticEvents {
-            "frontmatter"("format" to "yaml") {
-                +"description: A doc\n"
+            "frontmatter" {
+                "entry"("key" to "description") { +"A doc" }
             }
             "p" { +"text" }
         }
@@ -827,8 +830,9 @@ class SimplifyHtmlTest {
 
         // then — only the content-bearing names survive
         output sameAs semanticEvents {
-            "frontmatter"("format" to "yaml") {
-                +"description: A doc\nauthor: Alice\n"
+            "frontmatter" {
+                "entry"("key" to "description") { +"A doc" }
+                "entry"("key" to "author") { +"Alice" }
             }
             "p" { +"text" }
         }
@@ -874,8 +878,9 @@ class SimplifyHtmlTest {
 
         // then — no stray text in output
         output sameAs semanticEvents {
-            "frontmatter"("format" to "yaml") {
-                +"lang: en\ntitle: T\n"
+            "frontmatter" {
+                "entry"("key" to "lang") { +"en" }
+                "entry"("key" to "title") { +"T" }
             }
             "p" { +"body" }
         }
@@ -898,8 +903,8 @@ class SimplifyHtmlTest {
 
         // then
         output sameAs semanticEvents {
-            "frontmatter"("format" to "yaml") {
-                +"title: Spaced Title\n"
+            "frontmatter" {
+                "entry"("key" to "title") { +"Spaced Title" }
             }
             "p" { +"x" }
         }
@@ -925,25 +930,23 @@ class SimplifyHtmlTest {
 
         // then — the nested <em> is dropped, its text is captured into title
         output sameAs semanticEvents {
-            "frontmatter"("format" to "yaml") {
-                +"title: Hello World\n"
+            "frontmatter" {
+                "entry"("key" to "title") { +"Hello World" }
             }
             "p" { +"x" }
         }
     }
 
     @Test
-    fun `should quote YAML-unsafe keys and values in frontmatter`() = runTest {
-        // given
+    fun `should emit metadata keys and values verbatim`() = runTest {
+        // given — YAML quoting is the Markdown renderer's concern; here a key
+        // with `:`, a value with `:` and `"`, and a reserved literal are all
+        // plain strings
         val input = semanticEvents(tagged = true) {
             "html" {
                 "head" {
-                    // Key contains `:` — must be quoted in YAML output.
                     "meta"("name" to "og:title", "content" to "Hello") { }
-                    // Value contains `:` and `"` — must be quoted/escaped.
                     "meta"("name" to "summary", "content" to "Title: \"Special\"") { }
-                    // Value is a YAML reserved literal — must be quoted to
-                    // stay a string instead of decoding to boolean `true`.
                     "meta"("name" to "live", "content" to "true") { }
                 }
                 "body" { "p" { +"x" } }
@@ -955,8 +958,10 @@ class SimplifyHtmlTest {
 
         // then
         output sameAs semanticEvents {
-            "frontmatter"("format" to "yaml") {
-                +"\"og:title\": Hello\nsummary: \"Title: \\\"Special\\\"\"\nlive: \"true\"\n"
+            "frontmatter" {
+                "entry"("key" to "og:title") { +"Hello" }
+                "entry"("key" to "summary") { +"Title: \"Special\"" }
+                "entry"("key" to "live") { +"true" }
             }
             "p" { +"x" }
         }
@@ -1380,7 +1385,9 @@ class SimplifyHtmlTest {
         // then - the frame's body is page content, its head is not the page's
         // frontmatter
         output sameAs semanticEvents {
-            "frontmatter"("format" to "yaml") { +"title: Page\n" }
+            "frontmatter" {
+                "entry"("key" to "title") { +"Page" }
+            }
             tag("frame", "src" to "nav.html", "name" to "nav") {
                 "p" { +"nav content" }
             }
@@ -1430,7 +1437,9 @@ class SimplifyHtmlTest {
 
         // then
         output sameAs semanticEvents {
-            "frontmatter"("format" to "yaml") { +"title: Page\n" }
+            "frontmatter" {
+                "entry"("key" to "title") { +"Page" }
+            }
             "p" { +"content" }
         }
     }
@@ -1460,7 +1469,10 @@ class SimplifyHtmlTest {
 
         // then
         output sameAs semanticEvents {
-            "frontmatter"("format" to "yaml") { +"title: Page\ndescription: still metadata\n" }
+            "frontmatter" {
+                "entry"("key" to "title") { +"Page" }
+                "entry"("key" to "description") { +"still metadata" }
+            }
             "p" { +"content" }
         }
     }

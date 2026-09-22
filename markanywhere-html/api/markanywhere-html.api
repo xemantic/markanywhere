@@ -20,6 +20,10 @@ public final class com/xemantic/markanywhere/html/EncodeActionableRefsKt {
 	public static final fun encodeActionableRefs (Lkotlinx/coroutines/flow/Flow;)Lkotlinx/coroutines/flow/Flow;
 }
 
+public final class com/xemantic/markanywhere/html/EnsureFrontmatterTitleKt {
+	public static final fun ensureFrontmatterTitle (Lkotlinx/coroutines/flow/Flow;)Lkotlinx/coroutines/flow/Flow;
+}
+
 public final class com/xemantic/markanywhere/html/HtmlToMarkdownKt {
 	public static final fun transformHtmlToMarkdown (Lkotlinx/coroutines/flow/Flow;Ljava/util/Set;Lcom/xemantic/markanywhere/html/RefMode;Lcom/xemantic/markanywhere/html/SvgMode;)Lkotlinx/coroutines/flow/Flow;
 	public static synthetic fun transformHtmlToMarkdown$default (Lkotlinx/coroutines/flow/Flow;Ljava/util/Set;Lcom/xemantic/markanywhere/html/RefMode;Lcom/xemantic/markanywhere/html/SvgMode;ILjava/lang/Object;)Lkotlinx/coroutines/flow/Flow;

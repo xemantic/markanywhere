@@ -72,20 +72,48 @@ $$
 
 → `<math display="block">\frac{a}{b} = c</math>`
 
-### Front matter (YAML / TOML)
+### Front matter (YAML)
 
-A `---` (YAML) or `+++` (TOML) fence at the very start of the document is captured as a `frontmatter` block when the second line looks like a valid key — `word:` (or `word : value`) for YAML, or `word =` / `[section]` for TOML. If the second line does not match, the fence falls through to a thematic break or paragraph as normal Markdown:
+A `---` fence at the very start of the document is captured as a `frontmatter` block when the second line is a mapping key — an identifier such as `title:` / `date-published:` / `page.section:` (any letters), or a quoted key such as `"og:title":` — followed by `:` and whitespace or the end of the line (`isYamlKeyLine` in `markanywhere-yaml`, which its writer also honours when quoting keys).
+A front matter is therefore always a mapping: `---` followed by `- item` is a thematic break and a list, as it is in Markdown, so a `frontmatter` holding a root sequence has no round-trip.
+If the second line does not match (prose, a `# heading`, a comment, a URL), the fence falls through to a thematic break as normal Markdown.
+Only YAML is recognised; a `+++` (TOML) fence is ordinary Markdown.
+
+The body is parsed into **structured events**, not kept as text:
 
 ```markdown
 ---
 title: My Post
 date: 2026-05-10
+draft: true
+tags: [kotlin, markdown]
+author:
+  name: Alice
 ---
 
 Normal Markdown content here.
 ```
 
-→ `Mark("frontmatter", attributes={"format": "yaml"})` + text content + `Unmark("frontmatter")`, followed by the regular document events.
+→
+
+```text
+Mark("frontmatter")
+  Mark("entry", key="title")                    Text("My Post")   Unmark("entry")
+  Mark("entry", key="date", type="timestamp")   Text("2026-05-10") Unmark("entry")
+  Mark("entry", key="draft", type="bool")       Text("true")      Unmark("entry")
+  Mark("entry", key="tags")
+    Mark("item") Text("kotlin") Unmark("item")
+    Mark("item") Text("markdown") Unmark("item")
+  Unmark("entry")
+  Mark("entry", key="author")
+    Mark("entry", key="name") Text("Alice") Unmark("entry")
+  Unmark("entry")
+Unmark("frontmatter")
+```
+
+followed by the regular document events.
+The YAML itself — the `entry` / `item` vocabulary, the supported subset and the verbatim fallback for anything outside it — is [`markanywhere-yaml`](../markanywhere-yaml/README.md), which this parser feeds the body lines of the block; the `frontmatter` wrapper, the fences and the detection rule above are what this module adds.
+`entry` / `item` are Markdown-native only inside a `frontmatter`; `renderMarkdown()` writes the block back as YAML, and `renderHtml()` renders it as an ordinary element tree.
 
 ### DOCTYPE declaration (`<!DOCTYPE …>`)
 

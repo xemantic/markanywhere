@@ -19,6 +19,7 @@ package com.xemantic.markanywhere.render
 import com.xemantic.kotlin.core.text.joinToString
 import com.xemantic.kotlin.core.text.unaryPlus
 import com.xemantic.markanywhere.SemanticEvent
+import com.xemantic.markanywhere.yaml.YamlWriter
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 
@@ -45,8 +46,10 @@ import kotlinx.coroutines.flow.flow
  * Tagged events (HTML-originated, [SemanticEvent.Marked.isTagged] = `true`)
  * are passed through as raw HTML tags, since Markdown permits embedded HTML.
  *
- * The synthetic `frontmatter` block (with `format` attribute) is rendered
- * with the matching delimiter line (`---` for YAML, `+++` for TOML).
+ * The synthetic `frontmatter` block is written as YAML between `---`
+ * fences from its structured `entry` / `item` events (see [YamlWriter] in
+ * `markanywhere-yaml`); `entry` and `item` are Markdown-native only inside
+ * it and render as raw tags anywhere else.
  *
  * A single trailing `\n` (if present at end of stream) is suppressed —
  * the renderer holds at most one pending newline and drops it on completion.
@@ -55,6 +58,9 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
 
     val blockStack = ArrayDeque<BlockFrame>()
     val labelBuffers = ArrayDeque<StringBuilder>()
+    // Non-null while inside a `frontmatter` block: every event until its
+    // matching unmark is YAML metadata, written by the dedicated writer.
+    var frontmatter: YamlWriter? = null
     var pendingBlockSeparator = false
     var atLineStart = true
     var pendingHardBreak = false
@@ -622,6 +628,20 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
 
     collect { event ->
 
+        // Inside a front matter block the events are YAML metadata, not
+        // Markdown content: the writer consumes them, and only the closing
+        // `frontmatter` unmark (an unmark with nothing open in the writer)
+        // falls through.
+        val yaml = frontmatter
+        if (yaml != null) {
+            if (event is Unmark && yaml.depth == 0) {
+                frontmatter = null
+            } else {
+                yaml.collect(event)
+                return@collect
+            }
+        }
+
         // A list synthesized for an orphan `li` stays open across its
         // siblings — the next orphan joins it instead of opening a list of
         // its own — and closes on the first event that is not another item:
@@ -736,14 +756,12 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
             is Mark -> when (event.name) {
 
                 "frontmatter" -> {
-                    val format = event.attributes["format"] ?: "yaml"
-                    val delim = if (format == "toml") "+++" else "---"
                     ensureBlankLine()
-                    out(delim)
-                    out("\n")
+                    out("---\n")
                     atLineStart = true
                     pendingBlockSeparator = false
-                    blockStack.addLast(BlockFrame.Frontmatter(delim))
+                    blockStack.addLast(BlockFrame.Frontmatter)
+                    frontmatter = YamlWriter { out(it) }
                 }
 
                 "h1", "h2", "h3", "h4", "h5", "h6" -> {
@@ -962,7 +980,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
 
                     "frontmatter" -> {
                         ensureLineStart()
-                        writeRaw((frame as BlockFrame.Frontmatter).delimiter)
+                        writeRaw("---")
                         endBlock()
                     }
 
@@ -1127,7 +1145,7 @@ private sealed interface BlockFrame {
     ) : BlockFrame
     data object SelfClosed : BlockFrame
     data object TaggedInline : BlockFrame
-    class Frontmatter(val delimiter: String) : BlockFrame
+    data object Frontmatter : BlockFrame
     class Table(var columnCount: Int = 0, var headerEmitted: Boolean = false) : BlockFrame
     class TableSection(val name: String) : BlockFrame
     class TableRow(

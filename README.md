@@ -64,7 +64,10 @@ The Markdown `*streaming*` and the literal `<b>` tag produce the same kind of `m
 ### Rendering Markdown as HTML
 
 ```kotlin
-println(flowOf(markdown).parse().render())
+val html = flowOf(markdown)
+    .parse()
+    .render()
+println(html)
 ```
 
 Will print:
@@ -86,14 +89,17 @@ Will print:
 
 ```kotlin
 val document = """
-    ---
-    title: Hello
-    author: Alice
-    ---
-    # Heading
-""".trimIndent()
-
-println(flowOf(document).parse().wrapInHtmlDocument().renderHtml())
+---
+title: Hello
+author: Alice
+---
+# Heading
+"""
+val html = flowOf(document)
+    .parse()
+    .wrapInHtmlDocument()
+    .renderHtml()
+println(html)
 ```
 
 Will print:
@@ -114,7 +120,12 @@ Will print:
 </html>
 ```
 
-Without a front matter block the `head` is empty and body content streams through untouched; anything beyond the flat `key: value` (YAML) / `key = "value"` (TOML) subset is skipped gracefully.
+Without a front matter block the `head` is empty and body content streams through untouched; only top-level scalar entries feed the `head` — a nested mapping, a sequence or a null value is skipped gracefully.
+
+The front matter itself is not an opaque string: the parser turns the YAML into events — an untagged `frontmatter` mark holding one `entry` mark (with a `key` attribute) per mapping entry, `item` marks for sequence elements, the scalar as text, and a `type` attribute (`bool`, `int`, `float`, `null`, `timestamp`) on non-string scalars — so metadata is queried and transformed with the same machinery as the rest of the stream, and `renderMarkdown()` writes it back as YAML.
+See [markanywhere-parse/README.md](markanywhere-parse/README.md#front-matter-yaml) for the detection rule and [markanywhere-yaml/README.md](markanywhere-yaml/README.md) for the vocabulary and the supported YAML subset — the codec is its own module, `parseYaml()` / `renderYaml()` work on any YAML document.
+
+For a document that carries no front matter (or one without a `title`, or with an empty one), `ensureFrontmatterTitle()` derives the missing `title` from the first `h1` — synthesizing a default front matter when none exists — so `parse().ensureFrontmatterTitle().wrapInHtmlDocument()` always produces a `<title>` for a document opening with a heading.
 
 > Backed by [`WrapInHtmlDocumentTest`](markanywhere-html/src/commonTest/kotlin/WrapInHtmlDocumentTest.kt) — `should wrap parsed Markdown in a complete HTML document`.
 
@@ -137,13 +148,15 @@ val page = semanticEvents(tagged = true) {
         "script" { +"track('view')" }
     }
 }
-
-println(page.transformHtmlToMarkdown().renderMarkdown())
+val markdown = page
+    .transformHtmlToMarkdown()
+    .renderMarkdown() 
+println(markdown)
 ```
 
 Will print:
 
-```text
+```markdown
 # Weather
 
 ☀️ Sunny and **warm** today — see the [forecast](https://example.com/forecast).
@@ -295,7 +308,7 @@ The long-term aim is a separate spec, anchored on this parser, defined to fit th
 | Superscript         | `^text^`                             | `<sup>`                               |
 | Inline math         | `$E=mc^2$`                           | `<math>`                              |
 | Display math        | `$$`…`$$` on own lines               | `<math display="block">`              |
-| Front matter        | `---`/`+++` fence at document start  | `<frontmatter format="yaml\|toml">`   |
+| Front matter (YAML) | `---` fence at document start        | `<frontmatter>` holding `<entry key="…">` / `<item>` marks |
 | Namespaced tags     | `<ns:tag attr="val">`                | `Mark(name="ns:tag", isTagged=true)`  |
 | DOCTYPE declaration | `<!DOCTYPE html>` (case-insensitive) | `Mark(name="doctype", isTagged=true)` |
 
@@ -324,6 +337,7 @@ See [markanywhere-parse/README.md](markanywhere-parse/README.md) for a full list
 |--------------------------|---------------------------------------------------------------------|
 | `markanywhere-api`       | `SemanticEvent` sealed type — the only interface between modules    |
 | `markanywhere-parse`     | Streaming parser: `Flow<String>` → `Flow<SemanticEvent>`            |
+| `markanywhere-yaml`      | Streaming YAML codec: `Flow<String>.parseYaml()` → `entry` / `item` events, and `renderYaml()` back — the front matter body, usable on its own |
 | `markanywhere-render`    | HTML renderer: `Flow<SemanticEvent>` → HTML string                  |
 | `markanywhere-transform` | DSL for rewriting event streams on the fly                          |
 | `markanywhere-flow`      | Utilities for composing and splitting event flows                   |
@@ -331,7 +345,7 @@ See [markanywhere-parse/README.md](markanywhere-parse/README.md) for a full list
 | `markanywhere-js`        | Kotlin/JS DOM renderer                                              |
 | `markanywhere-dump`      | Injectable browser bundle exposing `window.markanywhere.dump()` — captures a live page's DOM as `SemanticEventDump` JSON |
 | `markanywhere-browse`    | Drives real Chrome over CDP (via `kdriver`) to capture a live page as a `SemanticEventDump` and act on it by element reference |
-| `markanywhere-html`      | HTML→Markdown pipeline `transformHtmlToMarkdown` (`resolveIcons`, `simplifyHtml`, `dropBlankInlineFormatting`, whitespace normalization, `encodeActionableRefs`), plus `applyAccessibility`, `wrapInHtmlDocument`, and `wrapInSections` (rank-nested sectioning with an optional table-of-contents `nav`) |
+| `markanywhere-html`      | HTML→Markdown pipeline `transformHtmlToMarkdown` (`resolveIcons`, `simplifyHtml`, `dropBlankInlineFormatting`, whitespace normalization, `encodeActionableRefs`), plus `applyAccessibility`, `wrapInHtmlDocument`, `wrapInSections` (rank-nested sectioning with an optional table-of-contents `nav`), and `ensureFrontmatterTitle` (derives a missing front matter `title` from the first `h1`) |
 | `markanywhere-test`      | Test helpers: `sameAs` for asserting `Flow<SemanticEvent>` equality |
 
 You can depend only on `markanywhere-parse` and consume the `Flow<SemanticEvent>` with your own renderer — the API surface is a single three-variant sealed class.

@@ -39,6 +39,7 @@ kotlin {
             dependencies {
                 api(project(":markanywhere-api"))
                 api(project(":markanywhere-flow"))
+                implementation(project(":markanywhere-yaml"))
             }
         }
 

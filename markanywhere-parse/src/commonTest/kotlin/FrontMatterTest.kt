@@ -21,27 +21,29 @@ import com.xemantic.markanywhere.flow.mergeAdjacentText
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.test.sameAs
 import kotlinx.coroutines.flow.asFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 
 /**
- * Specifies streaming front matter recognition.
+ * Specifies streaming front matter recognition and its structured event
+ * representation.
  *
- * Front matter is **auto-detected**: a document that begins with `---`
- * (YAML) or `+++` (TOML) at byte 0, followed by a line-2 line that matches
- * a strict key-pattern discriminator, opens a `frontmatter` block. The
- * discriminator is what disqualifies a legitimate `---` thematic break
- * followed by a paragraph or any other Markdown structure.
+ * Front matter is **auto-detected**: a document that begins with `---` at
+ * byte 0, followed by a line-2 line that is a mapping key line (an
+ * identifier-shaped or quoted key, then `:` and whitespace or the end of
+ * the line — `isYamlKeyLine` in `markanywhere-yaml`, e.g. `title:`), opens
+ * a `frontmatter` block. The discriminator is what disqualifies a legitimate
+ * `---` thematic break followed by a paragraph or any other Markdown
+ * structure. Only YAML is recognised — a `+++` (TOML) fence is ordinary
+ * Markdown.
  *
- * - YAML line 2 must match `^[A-Za-z_][A-Za-z0-9_-]*\s*:` (e.g. `title:`).
- * - TOML line 2 must match `^\[.+\]` or `^[A-Za-z_][A-Za-z0-9_-]*\s*=`
- *   (a table header `[section]` or a `key = value` assignment).
- *
- * The block emits an **untagged** `frontmatter` mark/unmark pair carrying
- * a `format` attribute (`yaml` or `toml`), with body content delivered as
- * raw `text` events between them. Body line terminators (`\n`) are
- * preserved; the closer line itself is consumed structurally and emits
- * no text.
+ * The body is parsed as YAML into **structured events** — the untagged
+ * `frontmatter` mark holds the `entry` / `item` marks emitted by
+ * `markanywhere-yaml`'s `YamlParser` (whose own suite, `YamlParserTest`,
+ * specifies the YAML subset and the event vocabulary). The tests here cover
+ * the fences: detection, the closer, line endings and the hand-off between
+ * the front matter and the Markdown body.
  */
 class FrontMatterTest {
 
@@ -63,8 +65,9 @@ class FrontMatterTest {
 
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
-            "frontmatter"("format" to "yaml") {
-                +"title: Hello\nauthor: Alice\n"
+            "frontmatter" {
+                "entry"("key" to "title") { +"Hello" }
+                "entry"("key" to "author") { +"Alice" }
             }
             "h1" { +"Heading" }
             "p" { +"Body paragraph." }
@@ -72,12 +75,11 @@ class FrontMatterTest {
     }
 
     @Test
-    fun `should parse TOML front matter at document start`() = runTest {
-        // given
+    fun `should not recognise a TOML fence as front matter`() = runTest {
+        // given — only YAML is supported; `+++` is ordinary paragraph text
         val textFlow = """
             +++
             title = "Hello"
-            author = "Alice"
             +++
             Body paragraph.
         """.trimIndent().chunkedRandomly().asFlow()
@@ -87,33 +89,7 @@ class FrontMatterTest {
 
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
-            "frontmatter"("format" to "toml") {
-                +"title = \"Hello\"\nauthor = \"Alice\"\n"
-            }
-            "p" { +"Body paragraph." }
-        }
-    }
-
-    @Test
-    fun `should parse TOML front matter opening with a section header`() = runTest {
-        // given
-        val textFlow = """
-            +++
-            [package]
-            name = "markanywhere"
-            +++
-            Body.
-        """.trimIndent().chunkedRandomly().asFlow()
-
-        // when
-        val parsed = textFlow.parse()
-
-        // then
-        parsed.mergeAdjacentText() sameAs semanticEvents {
-            "frontmatter"("format" to "toml") {
-                +"[package]\nname = \"markanywhere\"\n"
-            }
-            "p" { +"Body." }
+            "p" { +"+++\ntitle = \"Hello\"\n+++\nBody paragraph." }
         }
     }
 
@@ -131,14 +107,14 @@ class FrontMatterTest {
 
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
-            "frontmatter"("format" to "yaml") {
-                +"title: Standalone\n"
+            "frontmatter" {
+                "entry"("key" to "title") { +"Standalone" }
             }
         }
     }
 
     @Test
-    fun `should not interpret Markdown syntax inside front matter body`() = runTest {
+    fun `should not interpret Markdown syntax inside front matter values`() = runTest {
         // given
         val textFlow = """
             ---
@@ -155,44 +131,20 @@ class FrontMatterTest {
 
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
-            "frontmatter"("format" to "yaml") {
-                +"title: \"**Bold** _and_ # Hash\"\nlist:\n  - one\n  - two\n"
+            "frontmatter" {
+                "entry"("key" to "title") { +"**Bold** _and_ # Hash" }
+                "entry"("key" to "list") {
+                    "item" { +"one" }
+                    "item" { +"two" }
+                }
             }
             "h1" { +"Real Heading" }
         }
     }
 
     @Test
-    fun `should preserve blank lines inside front matter body`() = runTest {
-        // given
-        val textFlow = """
-            ---
-            title: With blanks
-
-            description: |
-              first
-
-              second
-            ---
-            Body.
-        """.trimIndent().chunkedRandomly().asFlow()
-
-        // when
-        val parsed = textFlow.parse()
-
-        // then
-        parsed.mergeAdjacentText() sameAs semanticEvents {
-            "frontmatter"("format" to "yaml") {
-                +"title: With blanks\n\ndescription: |\n  first\n\n  second\n"
-            }
-            "p" { +"Body." }
-        }
-    }
-
-    @Test
-    fun `should not treat fenced-code-like body content as a code block`() = runTest {
-        // given — triple backticks inside front matter must NOT open a fence;
-        // body parsing is opaque, line-by-line until the closer.
+    fun `should not treat fenced-code-like block scalar content as a code block`() = runTest {
+        // given — triple backticks inside front matter must NOT open a fence
         val textFlow = """
             ---
             content: |
@@ -208,8 +160,8 @@ class FrontMatterTest {
 
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
-            "frontmatter"("format" to "yaml") {
-                +"content: |\n  ```\n  not-a-fence\n  ```\n"
+            "frontmatter" {
+                "entry"("key" to "content") { +"```\nnot-a-fence\n```\n" }
             }
             "p" { +"Body." }
         }
@@ -225,7 +177,7 @@ class FrontMatterTest {
         val textFlow = """
             ---
             title: Forgotten
-            # This still flows into front matter because no closer arrived.
+            This still flows into front matter because no closer arrived.
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
@@ -233,11 +185,14 @@ class FrontMatterTest {
 
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
-            "frontmatter"("format" to "yaml") {
-                +"title: Forgotten\n# This still flows into front matter because no closer arrived."
+            "frontmatter" {
+                "entry"("key" to "title") { +"Forgotten" }
+                +"This still flows into front matter because no closer arrived.\n"
             }
         }
     }
+
+    // --- detection --------------------------------------------------------
 
     @Test
     fun `should not auto-detect front matter when line 2 is not key-like`() = runTest {
@@ -343,8 +298,9 @@ class FrontMatterTest {
 
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
-            "frontmatter"("format" to "yaml") {
-                +"title: Hello\nauthor: Alice\n"
+            "frontmatter" {
+                "entry"("key" to "title") { +"Hello" }
+                "entry"("key" to "author") { +"Alice" }
             }
             "p" { +"Body paragraph." }
         }
@@ -355,7 +311,7 @@ class FrontMatterTest {
         // given — a document consisting solely of `---` (no `\n`). The opener
         // never completes, so at EOF the prelude replays as content and the
         // regular parser emits a thematic break.
-        val textFlow = listOf("---").asFlow()
+        val textFlow = flowOf("---")
 
         // when
         val parsed = textFlow.parse()
@@ -368,9 +324,8 @@ class FrontMatterTest {
 
     @Test
     fun `should close front matter when closer at EOF has no trailing newline`() = runTest {
-        // given — closer arrives without a terminating `\n`. The `finalizeInBody`
-        // residual guard treats a bare `---` / `+++` at EOF as the structural
-        // close, dropping it instead of emitting it as body text.
+        // given — closer arrives without a terminating `\n`; a bare `---` at
+        // EOF is the structural close, not body content.
         val textFlow =
             "---\ntitle: Hello\n---".chunkedRandomly().asFlow()
 
@@ -379,8 +334,8 @@ class FrontMatterTest {
 
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
-            "frontmatter"("format" to "yaml") {
-                +"title: Hello\n"
+            "frontmatter" {
+                "entry"("key" to "title") { +"Hello" }
             }
         }
     }
@@ -388,12 +343,13 @@ class FrontMatterTest {
     @Test
     fun `should not treat four-dash line in body as closer`() = runTest {
         // given — closer comparison is exact line equality, so `----` (or any
-        // longer dash run) inside the body is content, not the closer.
+        // longer dash run) inside the body is content, not the closer — and
+        // not a YAML entry either, so it survives verbatim.
         val textFlow = """
             ---
             title: test
             ----
-            still body
+            still: body
             ---
             After.
         """.trimIndent().chunkedRandomly().asFlow()
@@ -403,8 +359,10 @@ class FrontMatterTest {
 
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
-            "frontmatter"("format" to "yaml") {
-                +"title: test\n----\nstill body\n"
+            "frontmatter" {
+                "entry"("key" to "title") { +"test" }
+                +"----\n"
+                "entry"("key" to "still") { +"body" }
             }
             "p" { +"After." }
         }
@@ -416,7 +374,7 @@ class FrontMatterTest {
         // `--- ` line with a trailing space is body content, not the closer.
         // Explicit concatenation guards against editor auto-strip of the
         // trailing space in the source.
-        val source = "---\ntitle: test\n--- \nstill body\n---\nAfter."
+        val source = "---\ntitle: test\n--- \nstill: body\n---\nAfter."
         val textFlow = source.chunkedRandomly().asFlow()
 
         // when
@@ -424,8 +382,10 @@ class FrontMatterTest {
 
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
-            "frontmatter"("format" to "yaml") {
-                +"title: test\n--- \nstill body\n"
+            "frontmatter" {
+                "entry"("key" to "title") { +"test" }
+                +"--- \n"
+                "entry"("key" to "still") { +"body" }
             }
             "p" { +"After." }
         }
