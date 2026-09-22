@@ -2728,6 +2728,31 @@ class MarkdownRenderingTest {
         // then
         markdown sameAs "<ruby>漢字<rt>kanji</rt></ruby> is hard"
     }
+
+    @Test
+    fun `should close the front matter fence on its own line after an item without content`() = runTest {
+        // given — the YAML writer ends the dangling `-` line itself, so the
+        // closing fence never lands on it
+        val flow = semanticEvents {
+            "frontmatter" {
+                "item" { "x" { } }
+            }
+            "p" { +"Body." }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs """
+            ---
+            -
+            ---
+
+            Body.
+        """.trimIndent()
+    }
+
 }
 
 // A spread of names the renderer has no Markdown syntax for: sectioning,

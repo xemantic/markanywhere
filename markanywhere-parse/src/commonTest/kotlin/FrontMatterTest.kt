@@ -30,9 +30,10 @@ import kotlin.test.Test
  * representation.
  *
  * Front matter is **auto-detected**: a document that begins with `---` at
- * byte 0, followed by a line-2 line that matches a strict key-pattern
- * discriminator (`^[A-Za-z_][A-Za-z0-9_-]*\s*:`, e.g. `title:`), opens a
- * `frontmatter` block. The discriminator is what disqualifies a legitimate
+ * byte 0, followed by a line-2 line that is a mapping key line (an
+ * identifier-shaped or quoted key, then `:` and whitespace or the end of
+ * the line — `isYamlKeyLine` in `markanywhere-yaml`, e.g. `title:`), opens
+ * a `frontmatter` block. The discriminator is what disqualifies a legitimate
  * `---` thematic break followed by a paragraph or any other Markdown
  * structure. Only YAML is recognised — a `+++` (TOML) fence is ordinary
  * Markdown.

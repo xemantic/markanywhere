@@ -16,6 +16,7 @@
 
 package com.xemantic.markanywhere.yaml
 
+import com.xemantic.kotlin.test.assert
 import com.xemantic.kotlin.test.sameAs
 import com.xemantic.markanywhere.flow.semanticEvents
 import kotlinx.coroutines.test.runTest
@@ -309,4 +310,46 @@ class YamlWriterTest {
               &anchor
         """.trimIndent() + "\n"
     }
+
+    @Test
+    fun `should end an item without content on its own line`() = runTest {
+        // given — an item whose only child is a foreign mark writes nothing
+        // after its dash; the line must still be terminated
+        val flow = semanticEvents {
+            "item" { "x" { } }
+            "item" { +"y" }
+        }
+
+        // when
+        val yaml = flow.renderYaml()
+
+        // then
+        yaml sameAs """
+            -
+            - y
+        """.trimIndent() + "\n"
+    }
+
+    @Test
+    fun `should write every key as a line the front matter detector accepts`() = runTest {
+        // given — the Markdown parser opens a front matter only when its
+        // first line is a mapping key line; the writer's quoting exists to
+        // keep whatever entry comes first re-detectable
+        val keys = listOf(
+            "title", "_key", "date-published", "page.section", "título",
+            "og:title", "a b", "yes", "42", "- dash", "", "with \"quote\"", "it's", "a: b",
+        )
+        for (key in keys) {
+            val flow = semanticEvents {
+                "entry"("key" to key) { +"v" }
+            }
+
+            // when
+            val line = flow.renderYaml().lineSequence().first()
+
+            // then
+            assert(isYamlKeyLine(line))
+        }
+    }
+
 }

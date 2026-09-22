@@ -74,7 +74,8 @@ $$
 
 ### Front matter (YAML)
 
-A `---` fence at the very start of the document is captured as a `frontmatter` block when the second line is a mapping key — an identifier such as `title:` / `date-published:` / `page.section:` (any letters), or a quoted key such as `"og:title":` — followed by `:` and whitespace or the end of the line.
+A `---` fence at the very start of the document is captured as a `frontmatter` block when the second line is a mapping key — an identifier such as `title:` / `date-published:` / `page.section:` (any letters), or a quoted key such as `"og:title":` — followed by `:` and whitespace or the end of the line (`isYamlKeyLine` in `markanywhere-yaml`, which its writer also honours when quoting keys).
+A front matter is therefore always a mapping: `---` followed by `- item` is a thematic break and a list, as it is in Markdown, so a `frontmatter` holding a root sequence has no round-trip.
 If the second line does not match (prose, a `# heading`, a comment, a URL), the fence falls through to a thematic break as normal Markdown.
 Only YAML is recognised; a `+++` (TOML) fence is ordinary Markdown.
 

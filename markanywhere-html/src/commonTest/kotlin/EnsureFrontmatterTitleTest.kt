@@ -269,6 +269,78 @@ class EnsureFrontmatterTitleTest {
     }
 
     @Test
+    fun `should include the alt of an image in the h1 in the derived title`() = runTest {
+        // given — the heading's accessible name is its text plus the image's alt
+        val input = semanticEvents {
+            "h1" {
+                +"Logo "
+                "img"("alt" to "Acme", "src" to "logo.png") { }
+            }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"Logo Acme" }
+            }
+            "h1" {
+                +"Logo "
+                "img"("alt" to "Acme", "src" to "logo.png") { }
+            }
+        }
+    }
+
+    @Test
+    fun `should derive the title from an image-only h1`() = runTest {
+        // given — a masthead: a link wrapping a named graphic, no text at all
+        val input = semanticEvents {
+            "h1" {
+                "a"("href" to "/") {
+                    "img"("alt" to "News") { }
+                }
+            }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"News" }
+            }
+            "h1" {
+                "a"("href" to "/") {
+                    "img"("alt" to "News") { }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should derive the title from parsed Markdown whose h1 holds an image`() = runTest {
+        // given
+        val document = flowOf("# ![Acme](logo.png) Docs\n\nSome text.")
+
+        // when
+        val markdown = document.parse().ensureFrontmatterTitle().renderMarkdown()
+
+        // then
+        markdown sameAs """
+            ---
+            title: Acme Docs
+            ---
+
+            # ![Acme](logo.png) Docs
+
+            Some text.
+        """.trimIndent()
+    }
+
+    @Test
     fun `should not derive a title from an h1 without text`() = runTest {
         // given
         val input = semanticEvents {
@@ -362,4 +434,156 @@ class EnsureFrontmatterTitleTest {
             Some text.
         """.trimIndent()
     }
+
+    @Test
+    fun `should synthesize the frontmatter before leading blank text`() = runTest {
+        // given — a leading structural newline before the h1
+        val input = semanticEvents {
+            +"\n"
+            "h1" { +"Hello" }
+            "p" { +"Body." }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then — the frontmatter must be the very first event for
+        // wrapInHtmlDocument to read it
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"Hello" }
+            }
+            +"\n"
+            "h1" { +"Hello" }
+            "p" { +"Body." }
+        }
+    }
+
+    @Test
+    fun `should put a derived title into the head despite leading blank text`() = runTest {
+        // given
+        val input = semanticEvents {
+            +"\n"
+            "h1" { +"Hello" }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle().wrapInHtmlDocument()
+
+        // then
+        output sameAs semanticEvents {
+            "html" {
+                "head" {
+                    "title" { +"Hello" }
+                }
+                "body" {
+                    +"\n"
+                    "h1" { +"Hello" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should replace a null title entry with the derived title`() = runTest {
+        // given — a bare `title:` line
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "author") { +"Alice" }
+                "entry"("key" to "title", "type" to "null") { }
+                "entry"("key" to "draft", "type" to "bool") { +"true" }
+            }
+            "h1" { +"Hello" }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then — replaced in place, not duplicated
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "author") { +"Alice" }
+                "entry"("key" to "title") { +"Hello" }
+                "entry"("key" to "draft", "type" to "bool") { +"true" }
+            }
+            "h1" { +"Hello" }
+        }
+    }
+
+    @Test
+    fun `should replace a blank title entry with the derived title`() = runTest {
+        // given — `title: ""` and `title: "  "` carry no title
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"  " }
+            }
+            "h1" { +"Hello" }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"Hello" }
+            }
+            "h1" { +"Hello" }
+        }
+    }
+
+    @Test
+    fun `should keep a title entry holding a nested structure`() = runTest {
+        // given — not a usable title, but replacing it would lose content
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") {
+                    "entry"("key" to "en") { +"Hello" }
+                }
+            }
+            "h1" { +"Hello" }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") {
+                    "entry"("key" to "en") { +"Hello" }
+                }
+            }
+            "h1" { +"Hello" }
+        }
+    }
+
+    @Test
+    fun `should derive the head title for parsed Markdown with a bare title key`() = runTest {
+        // given
+        val document = flowOf(
+            """
+            ---
+            title:
+            ---
+            # Hello
+            """.trimIndent()
+        )
+
+        // when
+        val output = document.parse().ensureFrontmatterTitle().wrapInHtmlDocument()
+
+        // then
+        output sameAs semanticEvents {
+            "html" {
+                "head" {
+                    "title" { +"Hello" }
+                }
+                "body" {
+                    "h1" { +"Hello" }
+                }
+            }
+        }
+    }
+
 }

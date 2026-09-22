@@ -127,6 +127,36 @@ class FrontMatterRoundTripTest {
         assert(first == second)
     }
 
+    @Test
+    fun `should DIVERGENCE not re-detect a root sequence front matter`() = runTest {
+        // given — YAML allows a root sequence, but front matter detection
+        // requires a mapping key on line 2 (`---` + `- a` is a thematic
+        // break followed by a list in Markdown, and no front matter consumer
+        // accepts a sequence), so this shape has no round-trip
+        val events = semanticEvents {
+            "frontmatter" {
+                "item" { +"a" }
+                "item" { +"b" }
+            }
+            "p" { +"Body." }
+        }
+
+        // when
+        val rendered = events.renderMarkdown()
+        val reparsed = flowOf(rendered).parse().events()
+
+        // then
+        rendered sameAs """
+            ---
+            - a
+            - b
+            ---
+
+            Body.
+        """.trimIndent()
+        assert(reparsed.none { it is SemanticEvent.Mark && it.name == "frontmatter" })
+    }
+
     private suspend fun Flow<SemanticEvent>.events(): List<SemanticEvent> =
         mergeAdjacentText().toList()
 }

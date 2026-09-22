@@ -17,6 +17,7 @@
 package com.xemantic.markanywhere.html
 
 import com.xemantic.kotlin.test.sameAsHtml
+import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.parse.parse
 import com.xemantic.markanywhere.render.renderHtml
@@ -282,6 +283,32 @@ class WrapInHtmlDocumentTest {
                 "body" {
                     "p" { +"Hi" }
                 }
+            }
+        }
+    }
+
+
+    @Test
+    fun `should use an entry left open when the stream ends inside the frontmatter`() = runTest {
+        // given — a broken upstream contract: neither the entry nor the
+        // frontmatter is closed. Built from raw events on purpose: the
+        // balanced builders cannot express an unclosed mark.
+        val input = flowOf(
+            SemanticEvent.Mark(name = "frontmatter", isTagged = false),
+            SemanticEvent.Mark(name = "entry", isTagged = false, attributes = mapOf("key" to "title")),
+            SemanticEvent.Text("Hello"),
+        )
+
+        // when
+        val output = input.wrapInHtmlDocument()
+
+        // then
+        output sameAs semanticEvents {
+            "html" {
+                "head" {
+                    "title" { +"Hello" }
+                }
+                "body" { }
             }
         }
     }

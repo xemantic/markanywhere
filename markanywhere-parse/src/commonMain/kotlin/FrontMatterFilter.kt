@@ -18,6 +18,7 @@ package com.xemantic.markanywhere.parse
 
 import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.yaml.YamlParser
+import com.xemantic.markanywhere.yaml.isYamlKeyLine
 import kotlinx.coroutines.flow.FlowCollector
 
 /**
@@ -64,7 +65,7 @@ internal class FrontMatterFilter(
 
     private enum class Mode { Detecting, InBody, AfterClose }
 
-    private var mode: Mode = Mode.Detecting
+    private var mode: Mode = Detecting
     private val prelude = StringBuilder()
 
     // The body text not yet consumed: at most one incomplete line plus the
@@ -129,15 +130,15 @@ internal class FrontMatterFilter(
     }
 
     suspend fun finalize() {
-        if (mode == Mode.Detecting) {
+        if (mode == Detecting) {
             tryDecide(eof = true)
-            if (mode == Mode.Detecting && prelude.isNotEmpty()) {
+            if (mode == Detecting && prelude.isNotEmpty()) {
                 processInner(prelude.toString())
                 prelude.clear()
-                mode = Mode.AfterClose
+                mode = AfterClose
             }
         }
-        if (mode == Mode.InBody) {
+        if (mode == InBody) {
             finalizeInBody()
         }
     }
@@ -177,7 +178,7 @@ internal class FrontMatterFilter(
         )
         body.append(prelude, line2Start, prelude.length)
         prelude.clear()
-        mode = Mode.InBody
+        mode = InBody
         drainBodyToCloser()
     }
 
@@ -186,25 +187,30 @@ internal class FrontMatterFilter(
             processInner(prelude.toString())
             prelude.clear()
         }
-        mode = Mode.AfterClose
+        mode = AfterClose
     }
 
+    // Hands every complete line to the YAML parser. The consumed prefix is
+    // deleted from `body` once, after the loop — deleting per line would
+    // shift the whole remaining buffer for each of the N lines of a chunk.
     private suspend fun drainBodyToCloser() {
+        var consumed = 0
         while (true) {
-            val nl = body.indexOf('\n', bodyScanOffset)
+            val nl = body.indexOf('\n', maxOf(consumed, bodyScanOffset))
             if (nl < 0) {
+                body.deleteRange(0, consumed)
                 // Everything currently in `body` has been scanned for `\n`
                 // with none found; resume future scans from the tail.
                 bodyScanOffset = body.length
                 return
             }
-            val line = body.substring(0, nl)
-            body.deleteRange(0, nl + 1)
-            bodyScanOffset = 0
+            val line = body.substring(consumed, nl)
+            consumed = nl + 1
             if (line == CLOSER) {
                 closeFrontMatter()
-                val rest = body.toString()
+                val rest = body.substring(consumed)
                 body.clear()
+                bodyScanOffset = 0
                 if (rest.isNotEmpty()) processInner(rest)
                 return
             }
@@ -229,57 +235,12 @@ internal class FrontMatterFilter(
         directDownstream.emit(
             SemanticEvent.Unmark(name = FRONTMATTER, isTagged = false)
         )
-        mode = Mode.AfterClose
+        mode = AfterClose
     }
 
     private companion object {
         const val FRONTMATTER: String = "frontmatter"
         const val CLOSER: String = "---"
         const val OPENER_LINE: String = "---\n"
-
-        // Strict YAML discriminator: a top-level mapping key followed by `:`
-        // and whitespace / end of line. Catches `title:`, `_key:`,
-        // `date-published:`, `page.section:`, `título:`, `"og:title":` — the
-        // shapes real-world front matter (and `simplifyHtml`'s output) opens
-        // with. A manual scan rather than a regex: `\p{L}` classes are not
-        // portable across the Kotlin/JS and Kotlin/Native regex engines.
-        fun isYamlKeyLine(line: String): Boolean {
-            if (line.isEmpty()) return false
-            var i: Int
-            val first = line[0]
-            if (first == '"' || first == '\'') {
-                // a double-quoted key may escape a quote with `\`, a
-                // single-quoted one doubles it
-                i = 1
-                while (true) {
-                    if (i >= line.length) return false
-                    val c = line[i]
-                    if (c == '\\' && first == '"') {
-                        i += 2
-                        continue
-                    }
-                    if (c == first) {
-                        if (first == '\'' && i + 1 < line.length && line[i + 1] == '\'') {
-                            i += 2
-                            continue
-                        }
-                        i++
-                        break
-                    }
-                    i++
-                }
-            } else {
-                if (!(first.isLetter() || first == '_')) return false
-                i = 1
-                while (i < line.length) {
-                    val c = line[i]
-                    if (c.isLetterOrDigit() || c == '_' || c == '-' || c == '.') i++ else break
-                }
-            }
-            while (i < line.length && line[i] == ' ') i++
-            if (i >= line.length || line[i] != ':') return false
-            i++
-            return i == line.length || line[i] == ' ' || line[i] == '\t'
-        }
     }
 }

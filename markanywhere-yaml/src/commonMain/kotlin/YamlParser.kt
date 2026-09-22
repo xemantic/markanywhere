@@ -119,6 +119,7 @@ public class YamlParser(
     public suspend fun finish() {
         block?.let { closeBlock(it) }
         pending?.let { resolvePendingAsNull(it) }
+        pending = null
         while (frames.size > 1) closeTopFrame()
         frames.clear()
     }
@@ -286,23 +287,36 @@ public class YamlParser(
         emitUnmark(b.owner)
     }
 
+    // YAML 1.2 §8.1.3 line folding: every empty line is a line break (also
+    // before the first content line); the break between two normal lines is
+    // a space, or nothing when empty lines separate them (the break is
+    // "trimmed", the empty lines already broke the line); a break next to a
+    // more-indented line is never folded.
     private fun fold(lines: List<String>): String {
         val sb = StringBuilder()
-        var prev: LineKind = NONE
+        // the kind of the last content line, and whether an empty line was
+        // seen since it
+        var last: LineKind = NONE
+        var emptySince = false
         for (line in lines) {
             val kind: LineKind = when {
                 line.isEmpty() -> EMPTY
                 line[0] == ' ' || line[0] == '\t' -> MORE_INDENTED
                 else -> NORMAL
             }
-            when {
-                prev == NONE -> sb.append(line)
-                kind == EMPTY -> sb.append('\n')
-                prev == NORMAL && kind == NORMAL -> sb.append(' ').append(line)
-                prev == EMPTY && kind == NORMAL -> sb.append(line)
-                else -> sb.append('\n').append(line)
+            if (kind == EMPTY) {
+                sb.append('\n')
+                emptySince = true
+                continue
             }
-            prev = kind
+            when {
+                last == NONE -> {}
+                last == NORMAL && kind == NORMAL -> if (!emptySince) sb.append(' ')
+                else -> sb.append('\n')
+            }
+            sb.append(line)
+            last = kind
+            emptySince = false
         }
         return sb.toString()
     }
@@ -542,7 +556,7 @@ private fun stripTrailingComment(value: String): String {
 // Scans a quoted scalar starting at [start]; returns the decoded content and
 // the index right after the closing quote, or null when unterminated on this
 // line. Double quotes decode the YAML escapes, single quotes only `''`.
-private fun scanQuoted(source: String, start: Int = 0): Pair<String, Int>? {
+internal fun scanQuoted(source: String, start: Int = 0): Pair<String, Int>? {
     val quote = source[start]
     val content = StringBuilder()
     var i = start + 1

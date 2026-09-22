@@ -125,7 +125,7 @@ Without a front matter block the `head` is empty and body content streams throug
 The front matter itself is not an opaque string: the parser turns the YAML into events — an untagged `frontmatter` mark holding one `entry` mark (with a `key` attribute) per mapping entry, `item` marks for sequence elements, the scalar as text, and a `type` attribute (`bool`, `int`, `float`, `null`, `timestamp`) on non-string scalars — so metadata is queried and transformed with the same machinery as the rest of the stream, and `renderMarkdown()` writes it back as YAML.
 See [markanywhere-parse/README.md](markanywhere-parse/README.md#front-matter-yaml) for the detection rule and [markanywhere-yaml/README.md](markanywhere-yaml/README.md) for the vocabulary and the supported YAML subset — the codec is its own module, `parseYaml()` / `renderYaml()` work on any YAML document.
 
-For a document that carries no front matter (or one without a `title`), `ensureFrontmatterTitle()` derives the missing `title` from the first `h1` — synthesizing a default front matter when none exists — so `parse().ensureFrontmatterTitle().wrapInHtmlDocument()` always produces a `<title>` for a document opening with a heading.
+For a document that carries no front matter (or one without a `title`, or with an empty one), `ensureFrontmatterTitle()` derives the missing `title` from the first `h1` — synthesizing a default front matter when none exists — so `parse().ensureFrontmatterTitle().wrapInHtmlDocument()` always produces a `<title>` for a document opening with a heading.
 
 > Backed by [`WrapInHtmlDocumentTest`](markanywhere-html/src/commonTest/kotlin/WrapInHtmlDocumentTest.kt) — `should wrap parsed Markdown in a complete HTML document`.
 

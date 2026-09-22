@@ -81,8 +81,9 @@ public class YamlWriter(
         addLast(Node(OTHER, key = null, type = null, indent = 0, childIndent = 0))
     }
 
-    // True right after `- ` was written for an item whose first child
-    // continues on the same line (`- key: value`, `- - nested`).
+    // True right after `-` was written for an item whose first child
+    // continues on the same line (`- key: value`, `- - nested`); the child's
+    // line prefix is then the single space after the dash.
     private var afterDash = false
 
     private var atLineStart = true
@@ -126,7 +127,14 @@ public class YamlWriter(
         val node = stack.removeLast()
         if (!node.isValue) return
         when (node.state) {
-            CONTAINER -> {}
+            // an item whose children wrote nothing (only foreign marks) still
+            // has its dash on an open line — end it, or whatever the caller
+            // writes next (the Markdown renderer's closing fence) joins it
+            CONTAINER -> if (!atLineStart) {
+                out("\n")
+                afterDash = false
+                atLineStart = true
+            }
             UNDECIDED -> writeLine(node, emptyValue(node.type))
             SCALAR -> writeLine(node, formatScalar(node.scalar.toString(), node.type, node.childIndent))
         }
@@ -139,7 +147,7 @@ public class YamlWriter(
         val pendingVerbatim = if (node.state == SCALAR) node.scalar.toString() else null
         node.state = CONTAINER
         if (node.kind == ITEM) {
-            out(linePrefix(node) + "- ")
+            out(linePrefix(node) + "-")
             atLineStart = false
             afterDash = true
         } else {
@@ -158,7 +166,7 @@ public class YamlWriter(
     private fun linePrefix(node: Node): String =
         if (afterDash) {
             afterDash = false
-            ""
+            " "
         } else {
             " ".repeat(node.indent)
         }
@@ -218,17 +226,12 @@ public class YamlWriter(
 
     // A key is written plain only when it is identifier-shaped and not a
     // reserved literal: the Markdown parser's front matter detection requires
-    // the first line to be such a key (or a quoted one), so quoting
-    // everything else keeps whatever entry comes first re-detectable.
+    // the first line to pass `isYamlKeyLine` (such a key, or a quoted one),
+    // so quoting everything else keeps whatever entry comes first
+    // re-detectable. The character rules are shared with that check.
     private fun renderKey(key: String?): String {
         val k = key ?: ""
         return if (isIdentifierKey(k) && yamlScalarType(k) == null) k else quoted(k)
-    }
-
-    private fun isIdentifierKey(k: String): Boolean {
-        if (k.isEmpty() || !(k[0].isLetter() || k[0] == '_')) return false
-        for (c in k) if (!(c.isLetterOrDigit() || c == '_' || c == '-' || c == '.')) return false
-        return true
     }
 }
 

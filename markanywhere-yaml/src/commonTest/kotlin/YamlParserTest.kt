@@ -21,6 +21,7 @@ import com.xemantic.markanywhere.flow.mergeAdjacentText
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.test.sameAs
 import kotlinx.coroutines.flow.asFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 
@@ -702,4 +703,70 @@ class YamlParserTest {
             "entry"("key" to "typed") { +"!!str 123" }
         }
     }
+
+    @Test
+    fun `should be ready for a new document after finish`() = runTest {
+        // given — the first document ends with a pending `key:` that finish
+        // resolves as null; the second must not see it
+        val parsed = flow {
+            val parser = YamlParser(this)
+            parser.line("key:")
+            parser.finish()
+            parser.line("a: 1")
+            parser.finish()
+            parser.line("- x")
+            parser.finish()
+        }
+
+        // when
+        val events = parsed.mergeAdjacentText()
+
+        // then
+        events sameAs semanticEvents {
+            "entry"("key" to "key", "type" to "null") { }
+            "entry"("key" to "a", "type" to "int") { +"1" }
+            "item" { +"x" }
+        }
+    }
+
+    @Test
+    fun `should keep a leading empty line of a folded block scalar`() = runTest {
+        // given — an empty line before the first content line is content
+        // (YAML 1.2 §8.1.3: leading empty lines each become a line break)
+        val textFlow = """
+            desc: >
+
+              foo
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parseYaml()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "entry"("key" to "desc") { +"\nfoo\n" }
+        }
+    }
+
+    @Test
+    fun `should keep an empty line after a more-indented folded line`() = runTest {
+        // given — the break after a more-indented line is never folded, so
+        // the empty line that follows it stays a separate line break
+        val textFlow = """
+            desc: >
+              a
+                b
+
+              c
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parseYaml()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "entry"("key" to "desc") { +"a\n  b\n\nc\n" }
+        }
+    }
+
 }

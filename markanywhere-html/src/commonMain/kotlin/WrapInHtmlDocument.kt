@@ -121,7 +121,11 @@ public fun Flow<SemanticEvent>.wrapInHtmlDocument(): Flow<SemanticEvent> = seman
     }
 
     // An unclosed frontmatter at end of stream (broken upstream contract) is
-    // still used; an empty stream yields the bare skeleton.
+    // still used, including an entry left open — its text is complete by
+    // then; an empty stream yields the bare skeleton.
+    if (collectingFrontmatter && depth == 1) {
+        entryKey?.let { metadata[it] = entryText.toString() }
+    }
     if (!opened) openDocument()
     unmark("body")
     unmark("html")

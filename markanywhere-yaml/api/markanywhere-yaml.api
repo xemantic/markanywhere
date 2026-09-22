@@ -1,3 +1,7 @@
+public final class com/xemantic/markanywhere/yaml/YamlKeyLineKt {
+	public static final fun isYamlKeyLine (Ljava/lang/String;)Z
+}
+
 public final class com/xemantic/markanywhere/yaml/YamlKt {
 	public static final fun asYaml (Lkotlinx/coroutines/flow/Flow;)Lkotlinx/coroutines/flow/Flow;
 	public static final fun parseYaml (Lkotlinx/coroutines/flow/Flow;)Lkotlinx/coroutines/flow/Flow;
