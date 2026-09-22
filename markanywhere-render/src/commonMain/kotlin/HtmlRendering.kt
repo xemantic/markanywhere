@@ -289,6 +289,8 @@ private val BLOCK_ELEMENTS = setOf(
     "hr", "search",
     // HTML custom/non-standard used in markdown
     "footnote",
+    // the parser's structured front matter and its entries
+    "frontmatter", "entry", "item",
     // SVG root element (all children are treated as block via svg context tracking)
     "svg",
 )

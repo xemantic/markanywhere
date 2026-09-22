@@ -126,8 +126,9 @@ import kotlinx.coroutines.flow.Flow
  *
  * Metadata extraction: `<html lang>` and any `<meta name="…"
  * content="…">` inside `<head>`, along with `<title>` text, are collected
- * and emitted as a single synthetic `frontmatter` mark with those values
- * as attributes just before `<body>` content streams through. Technical meta
+ * and emitted as a single synthetic `frontmatter` mark holding one `entry`
+ * (`key` attribute, value as text) per item — the parser's structured front
+ * matter vocabulary — just before `<body>` content streams through. Technical meta
  * names that carry no content signal (rendering hints, crawler / verification
  * directives, platform tile metadata — see [isNoiseMetaName]) are dropped so
  * they don't inflate the frontmatter. If `<head>` is absent or yields no
@@ -246,9 +247,10 @@ public fun Flow<SemanticEvent>.simplifyHtml(
         children(mode = "head")
         afterClose {
             if (metadata.isNotEmpty()) {
-                val yaml = renderYamlFrontmatter(metadata)
-                "frontmatter"(mapOf("format" to "yaml")) {
-                    +yaml
+                "frontmatter" {
+                    for ((key, value) in metadata) {
+                        "entry"("key" to key) { +value }
+                    }
                 }
             }
         }

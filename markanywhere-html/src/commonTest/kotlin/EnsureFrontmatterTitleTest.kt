@@ -27,8 +27,8 @@ import kotlin.test.Test
 
 /**
  * [ensureFrontmatterTitle] guarantees that a stream carrying a leading `h1`
- * starts with a `frontmatter` mark whose body defines a `title` — deriving a
- * missing title from the `h1` text and synthesizing a default frontmatter
+ * starts with a `frontmatter` mark holding a top-level `title` entry —
+ * deriving a missing title from the `h1` text and synthesizing a frontmatter
  * when none exists at all.
  */
 class EnsureFrontmatterTitleTest {
@@ -37,7 +37,10 @@ class EnsureFrontmatterTitleTest {
     fun `should pass through a frontmatter that already defines a title`() = runTest {
         // given
         val input = semanticEvents {
-            "frontmatter"("format" to "yaml") { +"title: Existing\nauthor: Alice\n" }
+            "frontmatter" {
+                "entry"("key" to "title") { +"Existing" }
+                "entry"("key" to "author") { +"Alice" }
+            }
             "h1" { +"Heading" }
             "p" { +"Body." }
         }
@@ -47,7 +50,10 @@ class EnsureFrontmatterTitleTest {
 
         // then
         output sameAs semanticEvents {
-            "frontmatter"("format" to "yaml") { +"title: Existing\nauthor: Alice\n" }
+            "frontmatter" {
+                "entry"("key" to "title") { +"Existing" }
+                "entry"("key" to "author") { +"Alice" }
+            }
             "h1" { +"Heading" }
             "p" { +"Body." }
         }
@@ -57,7 +63,9 @@ class EnsureFrontmatterTitleTest {
     fun `should inject the first h1 text as title into a titleless frontmatter`() = runTest {
         // given
         val input = semanticEvents {
-            "frontmatter"("format" to "yaml") { +"author: Alice\n" }
+            "frontmatter" {
+                "entry"("key" to "author") { +"Alice" }
+            }
             "h1" { +"Hello" }
             "p" { +"Body." }
         }
@@ -67,9 +75,9 @@ class EnsureFrontmatterTitleTest {
 
         // then
         output sameAs semanticEvents {
-            "frontmatter"("format" to "yaml") {
-                +"title: Hello\n"
-                +"author: Alice\n"
+            "frontmatter" {
+                "entry"("key" to "title") { +"Hello" }
+                "entry"("key" to "author") { +"Alice" }
             }
             "h1" { +"Hello" }
             "p" { +"Body." }
@@ -89,7 +97,9 @@ class EnsureFrontmatterTitleTest {
 
         // then
         output sameAs semanticEvents {
-            "frontmatter"("format" to "yaml") { +"title: Hello\n" }
+            "frontmatter" {
+                "entry"("key" to "title") { +"Hello" }
+            }
             "h1" { +"Hello" }
             "p" { +"Body." }
         }
@@ -117,7 +127,9 @@ class EnsureFrontmatterTitleTest {
     fun `should flush a titleless frontmatter unchanged when the next block is not an h1`() = runTest {
         // given
         val input = semanticEvents {
-            "frontmatter"("format" to "yaml") { +"author: Alice\n" }
+            "frontmatter" {
+                "entry"("key" to "author") { +"Alice" }
+            }
             "p" { +"Body." }
         }
 
@@ -126,7 +138,9 @@ class EnsureFrontmatterTitleTest {
 
         // then
         output sameAs semanticEvents {
-            "frontmatter"("format" to "yaml") { +"author: Alice\n" }
+            "frontmatter" {
+                "entry"("key" to "author") { +"Alice" }
+            }
             "p" { +"Body." }
         }
     }
@@ -147,7 +161,9 @@ class EnsureFrontmatterTitleTest {
 
         // then
         output sameAs semanticEvents {
-            "frontmatter"("format" to "yaml") { +"title: Hello semantic world\n" }
+            "frontmatter" {
+                "entry"("key" to "title") { +"Hello semantic world" }
+            }
             "h1" {
                 +"Hello "
                 "em" { +"semantic" }
@@ -157,7 +173,7 @@ class EnsureFrontmatterTitleTest {
     }
 
     @Test
-    fun `should quote a derived title that needs YAML escaping`() = runTest {
+    fun `should keep a derived title verbatim leaving YAML quoting to the renderer`() = runTest {
         // given
         val input = semanticEvents {
             "h1" { +"Q: What is \"markanywhere\"?" }
@@ -168,8 +184,8 @@ class EnsureFrontmatterTitleTest {
 
         // then
         output sameAs semanticEvents {
-            "frontmatter"("format" to "yaml") {
-                +"title: \"Q: What is \\\"markanywhere\\\"?\"\n"
+            "frontmatter" {
+                "entry"("key" to "title") { +"Q: What is \"markanywhere\"?" }
             }
             "h1" { +"Q: What is \"markanywhere\"?" }
         }
@@ -190,7 +206,9 @@ class EnsureFrontmatterTitleTest {
 
         // then
         output sameAs semanticEvents {
-            "frontmatter"("format" to "yaml") { +"title: Hello world\n" }
+            "frontmatter" {
+                "entry"("key" to "title") { +"Hello world" }
+            }
             "h1" {
                 +"  Hello   "
                 +" world "
@@ -199,40 +217,28 @@ class EnsureFrontmatterTitleTest {
     }
 
     @Test
-    fun `should inject title into a TOML frontmatter before its first line`() = runTest {
-        // given
+    fun `should not mistake a nested title entry for a top-level one`() = runTest {
+        // given — only a direct child `entry key=title` counts
         val input = semanticEvents {
-            "frontmatter"("format" to "toml") { +"author = \"Alice\"\n[section]\nkey = \"value\"\n" }
-            "h1" { +"Hello" }
-        }
-
-        // when
-        val output = input.ensureFrontmatterTitle()
-
-        // then
-        output sameAs semanticEvents {
-            "frontmatter"("format" to "toml") {
-                +"title = \"Hello\"\n"
-                +"author = \"Alice\"\n[section]\nkey = \"value\"\n"
+            "frontmatter" {
+                "entry"("key" to "author") {
+                    "entry"("key" to "title") { +"Dr." }
+                }
             }
             "h1" { +"Hello" }
         }
-    }
-
-    @Test
-    fun `should recognize an existing TOML title`() = runTest {
-        // given
-        val input = semanticEvents {
-            "frontmatter"("format" to "toml") { +"title = \"Existing\"\n" }
-            "h1" { +"Hello" }
-        }
 
         // when
         val output = input.ensureFrontmatterTitle()
 
         // then
         output sameAs semanticEvents {
-            "frontmatter"("format" to "toml") { +"title = \"Existing\"\n" }
+            "frontmatter" {
+                "entry"("key" to "title") { +"Hello" }
+                "entry"("key" to "author") {
+                    "entry"("key" to "title") { +"Dr." }
+                }
+            }
             "h1" { +"Hello" }
         }
     }
@@ -241,7 +247,9 @@ class EnsureFrontmatterTitleTest {
     fun `should keep blank text between the frontmatter and the h1 in source order`() = runTest {
         // given
         val input = semanticEvents {
-            "frontmatter"("format" to "yaml") { +"author: Alice\n" }
+            "frontmatter" {
+                "entry"("key" to "author") { +"Alice" }
+            }
             +"\n"
             "h1" { +"Hello" }
         }
@@ -251,9 +259,9 @@ class EnsureFrontmatterTitleTest {
 
         // then
         output sameAs semanticEvents {
-            "frontmatter"("format" to "yaml") {
-                +"title: Hello\n"
-                +"author: Alice\n"
+            "frontmatter" {
+                "entry"("key" to "title") { +"Hello" }
+                "entry"("key" to "author") { +"Alice" }
             }
             +"\n"
             "h1" { +"Hello" }
@@ -264,7 +272,9 @@ class EnsureFrontmatterTitleTest {
     fun `should not derive a title from an h1 without text`() = runTest {
         // given
         val input = semanticEvents {
-            "frontmatter"("format" to "yaml") { +"author: Alice\n" }
+            "frontmatter" {
+                "entry"("key" to "author") { +"Alice" }
+            }
             "h1" { }
             "p" { +"Body." }
         }
@@ -274,7 +284,9 @@ class EnsureFrontmatterTitleTest {
 
         // then
         output sameAs semanticEvents {
-            "frontmatter"("format" to "yaml") { +"author: Alice\n" }
+            "frontmatter" {
+                "entry"("key" to "author") { +"Alice" }
+            }
             "h1" { }
             "p" { +"Body." }
         }
@@ -284,7 +296,9 @@ class EnsureFrontmatterTitleTest {
     fun `should flush a titleless frontmatter at the end of the stream`() = runTest {
         // given
         val input = semanticEvents {
-            "frontmatter"("format" to "yaml") { +"author: Alice\n" }
+            "frontmatter" {
+                "entry"("key" to "author") { +"Alice" }
+            }
         }
 
         // when
@@ -292,7 +306,9 @@ class EnsureFrontmatterTitleTest {
 
         // then
         output sameAs semanticEvents {
-            "frontmatter"("format" to "yaml") { +"author: Alice\n" }
+            "frontmatter" {
+                "entry"("key" to "author") { +"Alice" }
+            }
         }
     }
 

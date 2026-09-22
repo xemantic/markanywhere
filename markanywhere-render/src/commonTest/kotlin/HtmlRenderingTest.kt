@@ -54,6 +54,46 @@ class HtmlRenderingTest {
         """.trimIndent()
     }
 
+    @Test
+    fun `should render structured front matter as block elements`() = runTest {
+        // given - the parser's front matter vocabulary needs no dedicated
+        //   HTML rendering: a transform can reshape it, but as-is it is a
+        //   readable element tree
+        val flow = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"Hello" }
+                "entry"("key" to "tags") {
+                    "item" { +"a" }
+                    "item"("type" to "int") { +"1" }
+                }
+            }
+            "p" { +"Body." }
+        }
+
+        // when
+        val html = flow.renderHtml()
+
+        // then
+        html sameAsHtml """
+            <frontmatter>
+              <entry key="title">
+                Hello
+              </entry>
+              <entry key="tags">
+                <item>
+                  a
+                </item>
+                <item type="int">
+                  1
+                </item>
+              </entry>
+            </frontmatter>
+            <p>
+              Body.
+            </p>
+        """.trimIndent()
+    }
+
     // Basic structure tests
 
     @Test

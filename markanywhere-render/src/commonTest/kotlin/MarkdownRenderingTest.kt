@@ -1927,14 +1927,18 @@ class MarkdownRenderingTest {
         """.trimIndent()
     }
 
-    // Front matter
+    // Front matter — an untagged `frontmatter` mark holding `entry` (key
+    // attribute) / `item` marks, written back as YAML between `---` fences.
+    // The YAML itself is `markanywhere-yaml`'s `YamlWriter` (see its
+    // `YamlWriterTest`); these tests cover the fences and the hand-off.
 
     @Test
     fun `should render YAML front matter`() = runTest {
         // given
         val flow = semanticEvents {
-            "frontmatter"("format" to "yaml") {
-                +"title: Hello\nauthor: Alice\n"
+            "frontmatter" {
+                "entry"("key" to "title") { +"Hello" }
+                "entry"("key" to "author") { +"Alice" }
             }
             "h1" { +"Heading" }
             "p" { +"Body." }
@@ -1957,57 +1961,11 @@ class MarkdownRenderingTest {
     }
 
     @Test
-    fun `should render TOML front matter`() = runTest {
-        // given
-        val flow = semanticEvents {
-            "frontmatter"("format" to "toml") {
-                +"title = \"Hello\"\nauthor = \"Alice\"\n"
-            }
-            "p" { +"Body." }
-        }
-
-        // when
-        val markdown = flow.renderMarkdown()
-
-        // then
-        markdown sameAs """
-            +++
-            title = "Hello"
-            author = "Alice"
-            +++
-
-            Body.
-        """.trimIndent()
-    }
-
-    @Test
-    fun `should default front matter format to YAML when format attribute is absent`() = runTest {
-        // given — a `frontmatter` mark with no `format` attribute defaults to
-        // YAML, so the `---` delimiter is used.
-        val flow = semanticEvents {
-            "frontmatter" { +"title: Hello\n" }
-            "p" { +"Body." }
-        }
-
-        // when
-        val markdown = flow.renderMarkdown()
-
-        // then
-        markdown sameAs """
-            ---
-            title: Hello
-            ---
-
-            Body.
-        """.trimIndent()
-    }
-
-    @Test
     fun `should render front matter as the entire document`() = runTest {
         // given
         val flow = semanticEvents {
-            "frontmatter"("format" to "yaml") {
-                +"title: Standalone\n"
+            "frontmatter" {
+                "entry"("key" to "title") { +"Standalone" }
             }
         }
 
@@ -2020,6 +1978,20 @@ class MarkdownRenderingTest {
             title: Standalone
             ---
         """.trimIndent()
+    }
+
+    @Test
+    fun `should render entry and item outside front matter as raw tags`() = runTest {
+        // given — the names are Markdown-native only inside a `frontmatter`
+        val flow = semanticEvents {
+            "p" { "entry"("key" to "x") { +"y" } }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs """<entry key="x">y</entry>"""
     }
 
     // Tagged HTML pass-through
@@ -2532,8 +2504,8 @@ class MarkdownRenderingTest {
     fun `should render a complete small document`() = runTest {
         // given
         val flow = semanticEvents {
-            "frontmatter"("format" to "yaml") {
-                +"title: Demo\n"
+            "frontmatter" {
+                "entry"("key" to "title") { +"Demo" }
             }
             "h1" { +"Demo" }
             "p" {

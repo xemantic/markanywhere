@@ -24,25 +24,22 @@ import kotlinx.coroutines.flow.Flow
  * Ensures the stream starts with a `frontmatter` mark defining a `title`,
  * deriving a missing title from the first `h1`.
  *
- * A stream whose leading `frontmatter` already defines a top-level `title`
- * key passes through untouched. Otherwise the frontmatter is held back and
- * the title is derived from the very first `h1` following it (only blank
- * text may intervene): the `h1` subtree's flattened text — trimmed, internal
- * whitespace collapsed to single spaces — becomes the `title`, injected as
- * the first line of the frontmatter body (YAML `title: …` or TOML
- * `title = "…"`, matching the mark's `format` attribute; prepending keeps a
- * TOML title ahead of any `[section]` header), and only then the frontmatter
- * and the buffered `h1` are emitted, in source order. When no frontmatter
- * exists at all, a default YAML one carrying just the derived `title` is
+ * A stream whose leading `frontmatter` already holds a top-level `entry`
+ * with `key="title"` passes through untouched. Otherwise the frontmatter is
+ * held back and the title is derived from the very first `h1` following it
+ * (only blank text may intervene): the `h1` subtree's flattened text —
+ * trimmed, internal whitespace collapsed to single spaces — becomes the
+ * `title`, injected as the first `entry` of the frontmatter, and only then
+ * the frontmatter and the buffered `h1` are emitted, in source order. When
+ * no frontmatter exists at all, one carrying just the derived `title` is
  * synthesized before the `h1`.
  *
  * When no title can be derived — the first non-blank event after the
- * frontmatter is not an `h1`, the `h1` has no text, the frontmatter's
- * `format` is unrecognized, or the stream ends — everything held is flushed
- * unchanged: a stream without a leading `h1` passes through untouched and no
- * empty frontmatter is fabricated.
+ * frontmatter is not an `h1`, the `h1` has no text, or the stream ends —
+ * everything held is flushed unchanged: a stream without a leading `h1`
+ * passes through untouched and no empty frontmatter is fabricated.
  *
- * Buffering is bounded to the frontmatter body plus one `h1` subtree —
+ * Buffering is bounded to the frontmatter subtree plus one `h1` subtree —
  * everything after the decision point is forwarded as it arrives.
  */
 public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = semanticEvents {
@@ -53,8 +50,7 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
     // no frontmatter was present and a default one is to be synthesized
     var frontmatterEvents: MutableList<SemanticEvent>? = null
     var frontmatterDepth = 0
-    var format = "yaml"
-    val body = StringBuilder()
+    var hasTitle = false
 
     // blank text between the held frontmatter and the first h1, replayed in
     // source order on commit
@@ -79,21 +75,17 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
         if (title.isEmpty()) {
             flushHeld()
         } else if (held == null) {
-            mark(
-                "frontmatter",
-                isTagged = false,
-                attributes = mapOf("format" to "yaml")
-            )
-            text(titleLine(title, "yaml"))
-            unmark("frontmatter", isTagged = false)
+            "frontmatter" {
+                "entry"("key" to "title") { +title }
+            }
             emit(blanks)
             blanks.clear()
         } else {
             // replay the original frontmatter verbatim, with a single title
-            // line prepended to its body
+            // entry prepended to its content
             frontmatterEvents = null
             emit(held.first())
-            text(titleLine(title, format))
+            "entry"("key" to "title") { +title }
             emit(held.subList(1, held.size))
             emit(blanks)
             blanks.clear()
@@ -109,7 +101,7 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
                 event is Mark && event.name == "frontmatter" -> {
                     frontmatterEvents = mutableListOf(event)
                     frontmatterDepth = 1
-                    format = event["format"] ?: "yaml"
+                    hasTitle = false
                     state = State.InFrontmatter
                 }
                 event is Mark && event.name == "h1" -> {
@@ -126,11 +118,16 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
             InFrontmatter -> {
                 frontmatterEvents!! += event
                 when (event) {
-                    is Mark -> frontmatterDepth++
-                    is Text -> body.append(event.text)
+                    is Mark -> {
+                        frontmatterDepth++
+                        // a top-level `title` entry (depth 2 = a direct child)
+                        if (frontmatterDepth == 2 && event.name == "entry"
+                            && event["key"] == "title"
+                        ) hasTitle = true
+                    }
+                    is Text -> {}
                     is Unmark -> if (--frontmatterDepth == 0) {
-                        val supported = format == "yaml" || format == "toml"
-                        if (!supported || hasTitle(body, format)) {
+                        if (hasTitle) {
                             flushHeld()
                             state = State.PassThrough
                         } else {

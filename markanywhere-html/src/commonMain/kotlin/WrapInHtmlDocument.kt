@@ -25,41 +25,43 @@ import kotlinx.coroutines.flow.Flow
  * `html`/`head`/`body` document structure.
  *
  * A **leading** `frontmatter` block (the untagged mark the parser emits for
- * YAML `---` / TOML `+++` front matter) feeds the `head` — the inverse of
- * [simplifyHtml]'s head-to-frontmatter extraction, so the two round-trip:
+ * YAML `---` front matter, holding `entry` marks) feeds the `head` — the
+ * inverse of [simplifyHtml]'s head-to-frontmatter extraction, so the two
+ * round-trip:
  *
- * - `title` becomes `<title>`
- * - `lang` becomes the `lang` attribute on `<html>`
- * - every other flat key becomes a void `<meta name content>`
+ * - the `title` entry becomes `<title>`
+ * - the `lang` entry becomes the `lang` attribute on `<html>`
+ * - every other top-level scalar entry becomes a void `<meta name content>`
  *
- * Only the flat `key: value` (YAML) / `key = "value"` (TOML) subset is
- * interpreted — exactly the shape [simplifyHtml] produces. Nested structures,
- * comments, and malformed lines are silently skipped; an unknown format or
- * a wholly unparseable body yields an empty `head` (never an error). A
- * `frontmatter` mark appearing anywhere past the first event is ordinary
+ * Only top-level scalar entries are interpreted — exactly the shape
+ * [simplifyHtml] produces. A nested mapping or sequence, a null value, and
+ * verbatim text are skipped (never an error); a later duplicate key wins.
+ * A `frontmatter` mark appearing anywhere past the first event is ordinary
  * content and flows into `body` verbatim.
  *
- * Only the frontmatter body is buffered (bounded); without one the document
- * opening is emitted on the first event and body content streams through
- * untouched. All synthetic marks are untagged, consistent with the parser's
- * `frontmatter` mark and [simplifyHtml] output. An empty input stream still
- * yields the full document skeleton.
+ * Only the frontmatter subtree is read ahead (bounded); without one the
+ * document opening is emitted on the first event and body content streams
+ * through untouched. All synthetic marks are untagged, consistent with the
+ * parser's `frontmatter` mark and [simplifyHtml] output. An empty input
+ * stream still yields the full document skeleton.
  */
 public fun Flow<SemanticEvent>.wrapInHtmlDocument(): Flow<SemanticEvent> = semanticEvents {
 
     var opened = false
     var collectingFrontmatter = false
-    // Balances defensively against nested marks inside the frontmatter block
-    // (the parser emits only text there, but a hand-built flow might not).
-    var frontmatterDepth = 0
-    var frontmatterFormat = ""
-    val frontmatterBody = StringBuilder()
+    // nesting depth inside the frontmatter: 1 while inside a top-level entry
+    var depth = 0
+    // the top-level entry being read, null when it is not a scalar to keep
+    var entryKey: String? = null
+    val entryText = StringBuilder()
+    val metadata = LinkedHashMap<String, String>()
 
     // `head` and its subtree are lexically scoped, so the paired `"name" { }`
     // builder fits; `html` and `body` close only at end-of-stream, so their
     // unmark cannot come from a builder block — explicit mark/unmark instead.
-    suspend fun openDocument(metadata: Map<String, String>) {
+    suspend fun openDocument() {
         opened = true
+        collectingFrontmatter = false
         mark(
             "html",
             attributes = metadata["lang"]
@@ -80,31 +82,38 @@ public fun Flow<SemanticEvent>.wrapInHtmlDocument(): Flow<SemanticEvent> = seman
         mark("body")
     }
 
-    suspend fun openDocumentFromFrontmatter() {
-        collectingFrontmatter = false
-        openDocument(
-            parseFlatFrontmatter(frontmatterBody.toString(), frontmatterFormat)
-        )
-    }
-
     collect { event ->
         when {
             collectingFrontmatter -> when (event) {
-                is Text -> frontmatterBody.append(event.text)
-                is Mark -> frontmatterDepth++
-                is Unmark -> if (frontmatterDepth == 0) {
-                    openDocumentFromFrontmatter()
+                is Mark -> {
+                    depth++
+                    if (depth == 1) {
+                        val type = event["type"]
+                        entryKey = if (
+                            event.name == "entry" && (type == null || type in SCALAR_TYPES)
+                        ) event["key"] else null
+                        entryText.clear()
+                    } else {
+                        entryKey = null // a nested mark: not a scalar
+                    }
+                }
+                is Text -> if (depth == 1) entryText.append(event.text)
+                is Unmark -> if (depth == 0) {
+                    openDocument()
                 } else {
-                    frontmatterDepth--
+                    if (depth == 1) {
+                        entryKey?.let { metadata[it] = entryText.toString() }
+                        entryKey = null
+                    }
+                    depth--
                 }
             }
             !opened -> if (
                 event is Mark && !event.isTagged && event.name == "frontmatter"
             ) {
                 collectingFrontmatter = true
-                frontmatterFormat = event["format"] ?: ""
             } else {
-                openDocument(emptyMap())
+                openDocument()
                 emit(event)
             }
             else -> emit(event)
@@ -113,8 +122,11 @@ public fun Flow<SemanticEvent>.wrapInHtmlDocument(): Flow<SemanticEvent> = seman
 
     // An unclosed frontmatter at end of stream (broken upstream contract) is
     // still used; an empty stream yields the bare skeleton.
-    if (collectingFrontmatter) openDocumentFromFrontmatter()
-    if (!opened) openDocument(emptyMap())
+    if (!opened) openDocument()
     unmark("body")
     unmark("html")
 }
+
+// Scalar `type`s whose text is meaningful as a `<meta content>` (`null` and
+// the empty collections are not).
+private val SCALAR_TYPES = setOf("bool", "int", "float", "timestamp")

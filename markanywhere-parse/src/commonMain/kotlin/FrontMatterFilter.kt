@@ -17,25 +17,32 @@
 package com.xemantic.markanywhere.parse
 
 import com.xemantic.markanywhere.SemanticEvent
+import com.xemantic.markanywhere.yaml.YamlParser
 import kotlinx.coroutines.flow.FlowCollector
 
 /**
- * Streaming auto-detection of YAML / TOML front matter at the start of the
+ * Streaming auto-detection of YAML front matter at the start of the
  * document.
  *
  * Sits between the input chunk flow and the regular Markdown parser:
  *
  * - Buffers chars until enough is seen to decide (line 1 + line 2, or EOF).
- * - **Trigger**: line 1 is exactly `---` (YAML) or `+++` (TOML), and line 2
- *   matches a strict discriminator that almost no natural-language paragraph
- *   does (an identifier-then-colon for YAML, an identifier-then-equals or
- *   `[section]` header for TOML). The discriminator is what disambiguates a
- *   real front matter from a `---` thematic break followed by prose.
- * - **On hit**: emits an untagged `mark("frontmatter", format=...)` directly
- *   to the downstream collector (bypassing the parser's autolink stage,
- *   since body content is opaque), streams body lines as `text` events
- *   preserving `\n`, drops the closer line, and emits `unmark`. Anything
- *   after the closer is forwarded into the regular parser as a fresh stream.
+ * - **Trigger**: line 1 is exactly `---` and line 2 matches a strict
+ *   discriminator that almost no natural-language paragraph does: a mapping
+ *   key — an identifier (`title`, `date-published`, `page.section`, any
+ *   letters) or a quoted key (`"og:title"`) — followed by `:` and whitespace
+ *   or end of line (so `http://…` does not qualify). A comment line does not
+ *   qualify either: `---` followed by `# Heading` is a thematic break plus
+ *   a heading. The discriminator is what disambiguates a real front matter
+ *   from a `---` thematic break followed by prose. Only YAML is recognised;
+ *   a `+++` (TOML) fence is ordinary Markdown.
+ * - **On hit**: emits an untagged `mark("frontmatter")` directly to the
+ *   downstream collector (bypassing the parser's autolink stage, since the
+ *   body is not Markdown), feeds each body line to a [YamlParser] (from
+ *   `markanywhere-yaml`) that emits the structured `entry` / `item` events,
+ *   drops the closer line,
+ *   and emits `unmark`. Anything after the closer is forwarded into the
+ *   regular parser as a fresh stream.
  * - **On miss**: replays the full buffered prelude into the regular parser
  *   and switches to pass-through.
  * - **On EOF without a closer** (after a hit): force-closes the open
@@ -45,14 +52,10 @@ import kotlinx.coroutines.flow.FlowCollector
  * Line endings (`\r\n`, `\r`, `\n`) are normalized to `\n` at the entry of
  * [feed], so opener / closer detection works regardless of source platform.
  *
- * **Known limitations** (matching Jekyll/Hugo behaviour):
- * - An unindented `---` / `+++` line anywhere in the body is treated as the
- *   closer; content that needs to contain such a line at the left margin
- *   must indent it by at least one space.
- * - A TOML dotted key on line 2 (`a.b = "value"`) does not match the line-2
- *   discriminator (`.` is not in the identifier char class), so the document
- *   silently falls back to a thematic break. Use a `[section]` header or a
- *   plain `key = value` first for auto-detection.
+ * **Known limitation** (matching Jekyll/Hugo behaviour): an unindented
+ * `---` line anywhere in the body is treated as the closer — even inside a
+ * block scalar; content that needs to contain such a line at the left
+ * margin must indent it by at least one space.
  */
 internal class FrontMatterFilter(
     private val directDownstream: FlowCollector<SemanticEvent>,
@@ -63,9 +66,11 @@ internal class FrontMatterFilter(
 
     private var mode: Mode = Mode.Detecting
     private val prelude = StringBuilder()
+
+    // The body text not yet consumed: at most one incomplete line plus the
+    // chunk just appended — complete lines are handed to [yaml] on arrival.
     private val body = StringBuilder()
-    private var format: String = ""
-    private var closerLine: String = ""
+    private val yaml = YamlParser(directDownstream)
 
     // Tracks how far into `body` we already scanned for `\n` without finding
     // one — the resume index for the next call to `drainBodyToCloser`. Without
@@ -139,50 +144,36 @@ internal class FrontMatterFilter(
 
     private suspend fun tryDecide(eof: Boolean) {
         if (prelude.isEmpty()) return
-        val first = prelude[0]
-        if (first != '-' && first != '+') {
-            replayPreludeAsContent()
-            return
-        }
-        // Verify chars seen so far match "---\n" or "+++\n" prefix.
-        val expected = if (first == '-') "---\n" else "+++\n"
-        val seen = minOf(prelude.length, 4)
+        // Verify chars seen so far match the "---\n" prefix.
+        val seen = minOf(prelude.length, OPENER_LINE.length)
         for (i in 0 until seen) {
-            if (prelude[i] != expected[i]) {
+            if (prelude[i] != OPENER_LINE[i]) {
                 replayPreludeAsContent()
                 return
             }
         }
         // Not enough chars yet to confirm the opener line itself.
-        if (prelude.length < 4) {
+        if (prelude.length < OPENER_LINE.length) {
             if (eof) replayPreludeAsContent()
             return
         }
-        val opener = if (first == '-') "---" else "+++"
-        val fmt = if (first == '-') "yaml" else "toml"
 
         // Examine line 2 (everything after the opener `\n` until next `\n`/EOF).
-        val line2Start = 4
+        val line2Start = OPENER_LINE.length
         val nl2 = prelude.indexOf('\n', line2Start)
         val line2: String = when {
             nl2 >= 0 -> prelude.substring(line2Start, nl2)
             eof -> prelude.substring(line2Start)
             else -> return  // wait for more chars
         }
-        if (!discriminatorMatches(line2, fmt)) {
+        if (!isYamlKeyLine(line2)) {
             replayPreludeAsContent()
             return
         }
 
         // Open front matter.
-        format = fmt
-        closerLine = opener
         directDownstream.emit(
-            SemanticEvent.Mark(
-                name = FRONTMATTER,
-                isTagged = false,
-                attributes = mapOf("format" to fmt)
-            )
+            SemanticEvent.Mark(name = FRONTMATTER, isTagged = false)
         )
         body.append(prelude, line2Start, prelude.length)
         prelude.clear()
@@ -199,47 +190,42 @@ internal class FrontMatterFilter(
     }
 
     private suspend fun drainBodyToCloser() {
-        var lineStart = 0
-        var scanFrom = bodyScanOffset
         while (true) {
-            val nl = body.indexOf('\n', scanFrom)
-            if (nl < 0) break
-            val line = body.substring(lineStart, nl)
-            if (line == closerLine) {
-                if (lineStart > 0) {
-                    directDownstream.emit(SemanticEvent.Text(body.substring(0, lineStart)))
-                }
-                directDownstream.emit(
-                    SemanticEvent.Unmark(name = FRONTMATTER, isTagged = false)
-                )
-                val rest = body.substring(nl + 1)
+            val nl = body.indexOf('\n', bodyScanOffset)
+            if (nl < 0) {
+                // Everything currently in `body` has been scanned for `\n`
+                // with none found; resume future scans from the tail.
+                bodyScanOffset = body.length
+                return
+            }
+            val line = body.substring(0, nl)
+            body.deleteRange(0, nl + 1)
+            bodyScanOffset = 0
+            if (line == CLOSER) {
+                closeFrontMatter()
+                val rest = body.toString()
                 body.clear()
-                bodyScanOffset = 0
-                mode = Mode.AfterClose
                 if (rest.isNotEmpty()) processInner(rest)
                 return
             }
-            lineStart = nl + 1
-            scanFrom = nl + 1
+            yaml.line(line)
         }
-        if (lineStart > 0) {
-            directDownstream.emit(SemanticEvent.Text(body.substring(0, lineStart)))
-            body.deleteRange(0, lineStart)
-        }
-        // Everything currently in `body` has been scanned for `\n` with none
-        // found beyond `lineStart`; resume future scans from the new tail.
-        bodyScanOffset = body.length
     }
 
     private suspend fun finalizeInBody() {
         val residual = body.toString()
-        // A bare `---` / `+++` at EOF without a trailing `\n` is treated as
-        // the structural closer arriving without its terminator — drop it
-        // rather than emit it as body text.
-        if (residual != closerLine && residual.isNotEmpty()) {
-            directDownstream.emit(SemanticEvent.Text(residual))
+        // A bare `---` at EOF without a trailing `\n` is treated as the
+        // structural closer arriving without its terminator — drop it
+        // rather than feed it as a body line.
+        if (residual != CLOSER && residual.isNotEmpty()) {
+            yaml.line(residual)
         }
         body.clear()
+        closeFrontMatter()
+    }
+
+    private suspend fun closeFrontMatter() {
+        yaml.finish()
         directDownstream.emit(
             SemanticEvent.Unmark(name = FRONTMATTER, isTagged = false)
         )
@@ -248,22 +234,52 @@ internal class FrontMatterFilter(
 
     private companion object {
         const val FRONTMATTER: String = "frontmatter"
+        const val CLOSER: String = "---"
+        const val OPENER_LINE: String = "---\n"
 
-        // Strict YAML discriminator: top-level identifier followed by `:`.
-        // Catches `title:`, `_key:`, `date-published:` — the overwhelming
-        // shape of real-world YAML front-matter first keys.
-        val YAML_KEY = Regex("""^[A-Za-z_][A-Za-z0-9_-]*\s*:""")
-
-        // Strict TOML discriminator: a `[section]` / `[[array]]` header,
-        // or an identifier followed by `=` (`key = value`).
-        val TOML_KEY_OR_SECTION =
-            Regex("""^(\[.+\]|[A-Za-z_][A-Za-z0-9_-]*\s*=)""")
-
-        fun discriminatorMatches(line: String, format: String): Boolean =
-            when (format) {
-                "yaml" -> YAML_KEY.containsMatchIn(line)
-                "toml" -> TOML_KEY_OR_SECTION.containsMatchIn(line)
-                else -> false
+        // Strict YAML discriminator: a top-level mapping key followed by `:`
+        // and whitespace / end of line. Catches `title:`, `_key:`,
+        // `date-published:`, `page.section:`, `título:`, `"og:title":` — the
+        // shapes real-world front matter (and `simplifyHtml`'s output) opens
+        // with. A manual scan rather than a regex: `\p{L}` classes are not
+        // portable across the Kotlin/JS and Kotlin/Native regex engines.
+        fun isYamlKeyLine(line: String): Boolean {
+            if (line.isEmpty()) return false
+            var i: Int
+            val first = line[0]
+            if (first == '"' || first == '\'') {
+                // a double-quoted key may escape a quote with `\`, a
+                // single-quoted one doubles it
+                i = 1
+                while (true) {
+                    if (i >= line.length) return false
+                    val c = line[i]
+                    if (c == '\\' && first == '"') {
+                        i += 2
+                        continue
+                    }
+                    if (c == first) {
+                        if (first == '\'' && i + 1 < line.length && line[i + 1] == '\'') {
+                            i += 2
+                            continue
+                        }
+                        i++
+                        break
+                    }
+                    i++
+                }
+            } else {
+                if (!(first.isLetter() || first == '_')) return false
+                i = 1
+                while (i < line.length) {
+                    val c = line[i]
+                    if (c.isLetterOrDigit() || c == '_' || c == '-' || c == '.') i++ else break
+                }
             }
+            while (i < line.length && line[i] == ' ') i++
+            if (i >= line.length || line[i] != ':') return false
+            i++
+            return i == line.length || line[i] == ' ' || line[i] == '\t'
+        }
     }
 }

@@ -178,8 +178,9 @@ private fun String.collapseWhitespace(): String = buildString {
 // Markdown inline span, whose whitespace-only content is structural noise
 // rather than significant text.
 //
-// `frontmatter` is synthetic and always untagged; its newline-separated YAML
-// must survive verbatim.
+// `frontmatter` is synthetic and always untagged; the scalar text of its
+// `entry` / `item` marks (block scalars, padding, double spaces) is content
+// and must survive verbatim.
 private fun SemanticEvent.Mark.isPreserveRegion(): Boolean =
     name == "frontmatter"
             || name == "pre"

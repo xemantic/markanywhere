@@ -134,8 +134,7 @@ class HtmlWhitespaceNormalizationTest {
     fun `should drop whitespace flanking a block element`() = runTest {
         // given — indentation around a heading between two unwrapped contexts
         val input = semanticEvents(tagged = true) {
-            +"x"
-            +"\n\t\t\t"
+            +"x\n\t\t\t"
             "h6" { +"Tenor" }
         }
 
@@ -150,12 +149,16 @@ class HtmlWhitespaceNormalizationTest {
     }
 
     @Test
-    fun `should preserve newlines inside the synthetic frontmatter block`() = runTest {
-        // given — simplifyHtml emits the untagged `frontmatter` block as one
-        // text node of newline-separated YAML; collapsing it would break it.
+    fun `should preserve whitespace inside the synthetic frontmatter block`() = runTest {
+        // given — the untagged `frontmatter` block holds scalar values whose
+        // whitespace is content (a multi-line block scalar, padding, a
+        // double space); collapsing it would change the metadata
         val input = semanticEvents {
-            "frontmatter"("format" to "yaml") {
-                +"lang: de\ntitle: Doc\n"
+            "frontmatter" {
+                "entry"("key" to "lang") { +"de" }
+                "entry"("key" to "title") { +"Ready to check  - Nu" }
+                "entry"("key" to "description") { +"first\n\nsecond\n" }
+                "entry"("key" to "padded") { +"  x  " }
             }
             "p" { +"x" }
         }
@@ -163,10 +166,13 @@ class HtmlWhitespaceNormalizationTest {
         // when
         val output = input.dropHtmlStructuralWhitespace()
 
-        // then — the YAML newlines survive verbatim
+        // then — every value survives verbatim
         output sameAs semanticEvents {
-            "frontmatter"("format" to "yaml") {
-                +"lang: de\ntitle: Doc\n"
+            "frontmatter" {
+                "entry"("key" to "lang") { +"de" }
+                "entry"("key" to "title") { +"Ready to check  - Nu" }
+                "entry"("key" to "description") { +"first\n\nsecond\n" }
+                "entry"("key" to "padded") { +"  x  " }
             }
             "p" { +"x" }
         }

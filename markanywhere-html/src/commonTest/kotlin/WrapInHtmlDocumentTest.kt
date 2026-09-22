@@ -28,10 +28,11 @@ import kotlin.test.Test
 /**
  * [wrapInHtmlDocument] wraps a semantic event stream (typically parsed
  * Markdown) in an `html`/`head`/`body` document structure. A leading
- * `frontmatter` block (the untagged mark emitted by the parser) feeds the
- * `head`: `title` becomes `<title>`, `lang` becomes the `<html lang>`
- * attribute, every other flat key becomes a `<meta name content>` — the
- * inverse of `simplifyHtml`'s head-to-frontmatter extraction.
+ * `frontmatter` block (the untagged mark emitted by the parser, holding
+ * `entry` marks) feeds the `head`: the `title` entry becomes `<title>`,
+ * `lang` becomes the `<html lang>` attribute, every other top-level scalar
+ * entry becomes a `<meta name content>` — the inverse of `simplifyHtml`'s
+ * head-to-frontmatter extraction.
  */
 class WrapInHtmlDocumentTest {
 
@@ -73,11 +74,13 @@ class WrapInHtmlDocumentTest {
     }
 
     @Test
-    fun `should populate head from YAML frontmatter`() = runTest {
+    fun `should populate head from frontmatter entries`() = runTest {
         // given
         val input = semanticEvents {
-            "frontmatter"("format" to "yaml") {
-                +"title: Hello\nauthor: Alice\nlang: en\n"
+            "frontmatter" {
+                "entry"("key" to "title") { +"Hello" }
+                "entry"("key" to "author") { +"Alice" }
+                "entry"("key" to "lang") { +"en" }
             }
             "p" { +"Body." }
         }
@@ -100,39 +103,13 @@ class WrapInHtmlDocumentTest {
     }
 
     @Test
-    fun `should populate head from TOML frontmatter`() = runTest {
-        // given
+    fun `should use scalar text verbatim including decoded quoting`() = runTest {
+        // given — the parser has already decoded the YAML; the value carries a
+        // colon, quotes and a newline as plain text
         val input = semanticEvents {
-            "frontmatter"("format" to "toml") {
-                +"title = \"Hello\"\nauthor = \"Alice\"\n"
-            }
-            "p" { +"Body." }
-        }
-
-        // when
-        val output = input.wrapInHtmlDocument()
-
-        // then
-        output sameAs semanticEvents {
-            "html" {
-                "head" {
-                    "title" { +"Hello" }
-                    "meta"("name" to "author", "content" to "Alice") { }
-                }
-                "body" {
-                    "p" { +"Body." }
-                }
-            }
-        }
-    }
-
-    @Test
-    fun `should unescape a double-quoted YAML scalar`() = runTest {
-        // given — the value contains a colon, quotes, and an escaped newline,
-        // so the YAML side must have quoted it
-        val input = semanticEvents {
-            "frontmatter"("format" to "yaml") {
-                +"title: \"He said: \\\"hi\\\"\\nBye\"\n"
+            "frontmatter" {
+                "entry"("key" to "title") { +"He said: \"hi\"\nBye" }
+                "entry"("key" to "og:image") { +"https://example.com/img.png" }
             }
         }
 
@@ -144,52 +121,6 @@ class WrapInHtmlDocumentTest {
             "html" {
                 "head" {
                     "title" { +"He said: \"hi\"\nBye" }
-                }
-                "body" { }
-            }
-        }
-    }
-
-    @Test
-    fun `should unescape a single-quoted YAML scalar`() = runTest {
-        // given
-        val input = semanticEvents {
-            "frontmatter"("format" to "yaml") {
-                +"author: 'O''Brien'\n"
-            }
-        }
-
-        // when
-        val output = input.wrapInHtmlDocument()
-
-        // then
-        output sameAs semanticEvents {
-            "html" {
-                "head" {
-                    "meta"("name" to "author", "content" to "O'Brien") { }
-                }
-                "body" { }
-            }
-        }
-    }
-
-    @Test
-    fun `should parse a double-quoted YAML key`() = runTest {
-        // given — meta names like `og:image` contain a colon, so the YAML side
-        // must have quoted the key (see renderYamlFrontmatter in SimplifyHtml)
-        val input = semanticEvents {
-            "frontmatter"("format" to "yaml") {
-                +"\"og:image\": \"https://example.com/img.png\"\n"
-            }
-        }
-
-        // when
-        val output = input.wrapInHtmlDocument()
-
-        // then
-        output sameAs semanticEvents {
-            "html" {
-                "head" {
                     "meta"("name" to "og:image", "content" to "https://example.com/img.png") { }
                 }
                 "body" { }
@@ -198,11 +129,23 @@ class WrapInHtmlDocumentTest {
     }
 
     @Test
-    fun `should skip YAML comments blank lines and nested structures`() = runTest {
-        // given — only the flat `title` key is representable in head metadata
+    fun `should include typed scalars and skip nested null and verbatim content`() = runTest {
+        // given — only a top-level scalar is representable as head metadata
         val input = semanticEvents {
-            "frontmatter"("format" to "yaml") {
-                +"# a comment\ntitle: Hello\ntags:\n  - a\n  - b\n\nempty:\n"
+            "frontmatter" {
+                "entry"("key" to "title") { +"Hello" }
+                "entry"("key" to "year", "type" to "int") { +"2026" }
+                "entry"("key" to "tags") {
+                    "item" { +"a" }
+                    "item" { +"b" }
+                }
+                "entry"("key" to "author") {
+                    "entry"("key" to "name") { +"Alice" }
+                }
+                "entry"("key" to "empty", "type" to "null") { }
+                "entry"("key" to "none", "type" to "seq") { }
+                "entry"("key" to "blank") { }
+                +"? complex\n"
             }
         }
 
@@ -214,6 +157,8 @@ class WrapInHtmlDocumentTest {
             "html" {
                 "head" {
                     "title" { +"Hello" }
+                    "meta"("name" to "year", "content" to "2026") { }
+                    "meta"("name" to "blank", "content" to "") { }
                 }
                 "body" { }
             }
@@ -221,11 +166,12 @@ class WrapInHtmlDocumentTest {
     }
 
     @Test
-    fun `should strip a trailing comment from a plain YAML scalar`() = runTest {
+    fun `should let a later duplicate key win`() = runTest {
         // given
         val input = semanticEvents {
-            "frontmatter"("format" to "yaml") {
-                +"author: Alice # the reviewer\n"
+            "frontmatter" {
+                "entry"("key" to "author") { +"Alice" }
+                "entry"("key" to "author") { +"Bob" }
             }
         }
 
@@ -236,55 +182,7 @@ class WrapInHtmlDocumentTest {
         output sameAs semanticEvents {
             "html" {
                 "head" {
-                    "meta"("name" to "author", "content" to "Alice") { }
-                }
-                "body" { }
-            }
-        }
-    }
-
-    @Test
-    fun `should stop TOML parsing at the first section header`() = runTest {
-        // given — keys after `[params]` are section-scoped, not top-level
-        val input = semanticEvents {
-            "frontmatter"("format" to "toml") {
-                +"title = \"Hello\"\n[params]\nauthor = \"Alice\"\n"
-            }
-        }
-
-        // when
-        val output = input.wrapInHtmlDocument()
-
-        // then
-        output sameAs semanticEvents {
-            "html" {
-                "head" {
-                    "title" { +"Hello" }
-                }
-                "body" { }
-            }
-        }
-    }
-
-    @Test
-    fun `should parse TOML literal strings and bare values`() = runTest {
-        // given — a literal string is verbatim (no escapes), a bare value is
-        // kept as its source string with any trailing comment stripped
-        val input = semanticEvents {
-            "frontmatter"("format" to "toml") {
-                +"path = 'C:\\Users\\alice'\nyear = 2026 # release\n"
-            }
-        }
-
-        // when
-        val output = input.wrapInHtmlDocument()
-
-        // then
-        output sameAs semanticEvents {
-            "html" {
-                "head" {
-                    "meta"("name" to "path", "content" to "C:\\Users\\alice") { }
-                    "meta"("name" to "year", "content" to "2026") { }
+                    "meta"("name" to "author", "content" to "Bob") { }
                 }
                 "body" { }
             }
@@ -297,8 +195,8 @@ class WrapInHtmlDocumentTest {
         // is ordinary content (hand-built flows), forwarded verbatim
         val input = semanticEvents {
             "p" { +"Intro." }
-            "frontmatter"("format" to "yaml") {
-                +"title: Not a head\n"
+            "frontmatter" {
+                "entry"("key" to "title") { +"Not a head" }
             }
         }
 
@@ -311,8 +209,8 @@ class WrapInHtmlDocumentTest {
                 "head" { }
                 "body" {
                     "p" { +"Intro." }
-                    "frontmatter"("format" to "yaml") {
-                        +"title: Not a head\n"
+                    "frontmatter" {
+                        "entry"("key" to "title") { +"Not a head" }
                     }
                 }
             }
