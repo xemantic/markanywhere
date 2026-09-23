@@ -14,15 +14,18 @@
  * limitations under the License.
  */
 
-package com.xemantic.markanywhere
+package com.xemantic.markanywhere.html.spec
 
+import com.xemantic.markanywhere.SemanticEvent
+
+/**
+ * The distinct class names of this mark's `class` attribute, in order of
+ * first appearance, split on [HTML whitespace][HTML_WHITESPACE_CHARS] like the
+ * DOM's `classList`; empty when the attribute is absent or blank.
+ */
 public val SemanticEvent.Mark.classList: List<String> get() =
     this["class"]
-        ?.split(whitespaceRegex)
+        ?.split(*HTML_WHITESPACE_CHARS)
         ?.filter { it.isNotEmpty() }
         ?.distinct()
         ?: emptyList()
-
-// ASCII whitespace per the HTML spec (space, tab, LF, FF, CR), deliberately
-// not \s which matches different character sets on JVM and JS
-private val whitespaceRegex = Regex("[ \t\n\\f\r]+")

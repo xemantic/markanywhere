@@ -37,16 +37,11 @@ kotlin {
         commonMain {
             dependencies {
                 api(project(":markanywhere-api"))
-                api(project(":markanywhere-flow"))
-                implementation(project(":markanywhere-html-spec"))
-                implementation(project(":markanywhere-yaml"))
-                implementation(libs.xemantic.kotlin.core)
             }
         }
 
         commonTest {
             dependencies {
-                implementation(libs.kotlinx.coroutines.test)
                 implementation(libs.kotlin.test)
                 implementation(libs.xemantic.kotlin.test)
             }

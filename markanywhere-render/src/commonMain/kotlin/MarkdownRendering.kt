@@ -19,6 +19,7 @@ package com.xemantic.markanywhere.render
 import com.xemantic.kotlin.core.text.joinToString
 import com.xemantic.kotlin.core.text.unaryPlus
 import com.xemantic.markanywhere.SemanticEvent
+import com.xemantic.markanywhere.html.spec.HTML_VOID_ELEMENTS
 import com.xemantic.markanywhere.yaml.YamlWriter
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -182,19 +183,19 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
     // depth is tracked so the matching root close exits this mode.
     fun serializeHtmlTableEvent(event: SemanticEvent) {
         when (event) {
-            is SemanticEvent.Mark -> {
+            is Mark -> {
                 appendLabel(event.renderOpenTag())
                 if (event.name == "table") htmlTableDepth++
             }
-            is SemanticEvent.Unmark -> when {
-                event.name == "table" -> {
+            is Unmark -> when (event.name) {
+                "table" -> {
                     appendLabel("</table>")
                     htmlTableDepth--
                 }
-                event.name in VOID_HTML_ELEMENTS -> { /* no closing tag */ }
+                in HTML_VOID_ELEMENTS -> { /* no closing tag */ }
                 else -> appendLabel("</${event.name}>")
             }
-            is SemanticEvent.Text -> appendLabel(event.text.escapeHtmlText())
+            is Text -> appendLabel(event.text.escapeHtmlText())
         }
     }
 
@@ -569,7 +570,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
             startBlock()
         }
         val isBlockTagged = !inLabel() && event.name in BLOCK_TAGGED_ELEMENTS
-        val isVoid = event.name in VOID_HTML_ELEMENTS
+        val isVoid = event.name in HTML_VOID_ELEMENTS
         // A void element — and an `<a>` (a block-wrapping link the forward
         // pipeline spills to raw HTML) — only counts as a block-level tag when
         // it lands at a line start; mid-line (e.g. `<input>` after text, or an
@@ -1168,15 +1169,6 @@ private val BLOCK_LEVEL_MARK_NAMES = setOf(
     "ul", "ol", "li",
     "pre",
     "table", "thead", "tbody", "tr", "caption"
-)
-
-// HTML void elements — content model is empty, no closing tag is emitted
-// in HTML5 (see WHATWG HTML §13.1.2). `br`, `hr`, `img` are handled in
-// dedicated `Markdown` branches; the rest fall through to the raw-HTML
-// path which uses this set to suppress the matching closing tag.
-private val VOID_HTML_ELEMENTS = setOf(
-    "area", "base", "br", "col", "embed", "hr", "img",
-    "input", "link", "meta", "param", "source", "track", "wbr"
 )
 
 // HTML5 block-level semantic and form-associated elements. Each is rendered

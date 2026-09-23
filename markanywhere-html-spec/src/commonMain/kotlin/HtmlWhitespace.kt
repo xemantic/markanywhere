@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.xemantic.markanywhere.html
+package com.xemantic.markanywhere.html.spec
 
 /**
  * The "ASCII whitespace" characters HTML treats as insignificant (WHATWG: TAB,

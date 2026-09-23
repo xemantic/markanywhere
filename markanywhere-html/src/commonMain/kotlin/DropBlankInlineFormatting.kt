@@ -17,6 +17,7 @@
 package com.xemantic.markanywhere.html
 
 import com.xemantic.markanywhere.SemanticEvent
+import com.xemantic.markanywhere.html.spec.isHtmlBlank
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.flow

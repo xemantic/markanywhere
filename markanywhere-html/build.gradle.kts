@@ -40,6 +40,7 @@ kotlin {
                 api(project(":markanywhere-flow"))
                 api(project(":markanywhere-transform"))
                 implementation(project(":markanywhere-dump"))
+                implementation(project(":markanywhere-html-spec"))
                 api(libs.kotlinx.coroutines.core)
                 implementation(libs.xemantic.kotlin.core)
             }

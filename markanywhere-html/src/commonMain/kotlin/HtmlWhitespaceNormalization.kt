@@ -19,6 +19,8 @@ package com.xemantic.markanywhere.html
 import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.dump.AccessibilityAnnotations
 import com.xemantic.markanywhere.flow.mergeAdjacentText
+import com.xemantic.markanywhere.html.spec.isHtmlBlank
+import com.xemantic.markanywhere.html.spec.isHtmlWhitespace
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 

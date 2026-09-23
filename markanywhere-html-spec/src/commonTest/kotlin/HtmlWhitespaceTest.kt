@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.xemantic.markanywhere.html
+package com.xemantic.markanywhere.html.spec
 
 import com.xemantic.kotlin.test.assert
 import kotlin.test.Test

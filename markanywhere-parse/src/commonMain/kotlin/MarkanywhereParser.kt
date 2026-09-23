@@ -18,6 +18,7 @@ package com.xemantic.markanywhere.parse
 
 import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.flow.SemanticEventScope
+import com.xemantic.markanywhere.html.spec.HTML_VOID_ELEMENTS
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.flow
@@ -744,20 +745,13 @@ private fun normalizeHtmlName(name: String): String {
 }
 
 /**
- * HTML5 void elements (no content, no closing tag — always treated as
- * self-closing). Real-world HTML omits `/>` on these (`<meta charset="…">`
- * not `<meta charset="…"/>`), so the parser must auto-close them on `mark`
- * to keep the event stream balanced. Names compared case-insensitively
- * after lowering.
+ * True when this open tag must auto-emit `unmark` immediately. Real-world HTML
+ * omits `/>` on void elements (`<meta charset="…">` not `<meta charset="…"/>`),
+ * so the parser must auto-close them on `mark` to keep the event stream
+ * balanced. Names compared case-insensitively after lowering.
  */
-private val HTML5_VOID_ELEMENTS: Set<String> = setOf(
-    "area", "base", "br", "col", "embed", "hr", "img", "input",
-    "keygen", "link", "meta", "param", "source", "track", "wbr"
-)
-
-/** True when this open tag must auto-emit `unmark` immediately. */
 private fun HtmlToken.OpenTag.isSelfClosingOrVoid(): Boolean =
-    selfClosing || name.lowercase() in HTML5_VOID_ELEMENTS
+    selfClosing || name.lowercase() in HTML_VOID_ELEMENTS
 
 private sealed interface HtmlToken {
     data class OpenTag(

@@ -17,6 +17,7 @@
 package com.xemantic.markanywhere.parse
 
 import com.xemantic.markanywhere.SemanticEvent
+import com.xemantic.markanywhere.html.spec.isHtmlWhitespace
 import com.xemantic.markanywhere.parse.AutolinkCollector.Companion.SUPPRESS_NAMES
 import kotlinx.coroutines.flow.FlowCollector
 
@@ -202,9 +203,7 @@ internal class AutolinkCollector(
 }
 
 /** Whitespace chars that delimit autolink-candidate words. */
-private fun Char.isAutolinkBoundary(): Boolean =
-    this == ' ' || this == '\t' || this == '\n' ||
-        this == '\r' || this == '\u000C'
+private fun Char.isAutolinkBoundary(): Boolean = isHtmlWhitespace()
 
 /** Chars that are valid pre-boundary for an extended autolink (GFM §6.9). */
 private fun Char?.isAutolinkPreBoundary(): Boolean {

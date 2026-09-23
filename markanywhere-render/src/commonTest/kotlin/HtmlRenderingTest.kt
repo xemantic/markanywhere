@@ -701,6 +701,20 @@ class HtmlRenderingTest {
     }
 
     @Test
+    fun `should self-close a keygen the HTML parser treats as void`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "keygen"("name" to "key") { }
+        }
+
+        // when
+        val html = flow.renderHtml()
+
+        // then
+        html sameAsHtml """<keygen name="key"/>"""
+    }
+
+    @Test
     fun `should handle br element`() = runTest {
         // given
         val flow = semanticEvents {
@@ -3453,6 +3467,163 @@ class HtmlRenderingTest {
             <head>
               <title></title>
               <meta charset="UTF-8"/>
+            </head>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should keep the collapsed space of a description around a nested empty title`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "svg"("xmlns" to "http://www.w3.org/2000/svg") {
+                "desc" {
+                    +"Hello"
+                    "title" {}
+                    +" world"
+                }
+            }
+        }
+
+        // when
+        val html = flow.renderHtml()
+
+        // then
+        html sameAsXml """
+            <svg xmlns="http://www.w3.org/2000/svg">
+              <desc>Hello<title/> world</desc>
+            </svg>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should render a stray title close tag without failing`() = runTest {
+        // given
+        val flow = semanticEvents {
+            unmark("title")
+            "p" { +"after" }
+        }
+
+        // when
+        val html = flow.renderHtml()
+
+        // then
+        html sameAsHtml """
+            </title>
+            <p>
+              after
+            </p>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should keep the whitespace of a pre nested in a title`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "head" {
+                "title" {
+                    "pre" { +"a\n  b" }
+                }
+            }
+        }
+
+        // when
+        val html = flow.renderHtml()
+
+        // then
+        html sameAsHtml "<head>\n  <title><pre>a\n  b</pre></title>\n</head>"
+    }
+
+    @Test
+    fun `should keep custom markup nested in an SVG description raw`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "svg"("xmlns" to "http://www.w3.org/2000/svg") {
+                "desc" {
+                    "ns:note" { +"<b>a  b</b>" }
+                }
+            }
+        }
+
+        // when
+        val html = flow.renderHtml()
+
+        // then
+        html sameAsXml """
+            <svg xmlns="http://www.w3.org/2000/svg">
+              <desc><ns:note><b>a  b</b></ns:note></desc>
+            </svg>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should keep a title space before nested markup that opens with text`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "head" {
+                "title" {
+                    +"A "
+                    "b" {
+                        "i" { +"bold" }
+                    }
+                    +" title"
+                }
+            }
+        }
+
+        // when
+        val html = flow.renderHtml()
+
+        // then
+        html sameAsHtml """
+            <head>
+              <title>A <b><i>bold</i></b> title</title>
+            </head>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should keep a title space before empty markup followed by text`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "head" {
+                "title" {
+                    +"x "
+                    "b" {}
+                    +"y"
+                }
+            }
+        }
+
+        // when
+        val html = flow.renderHtml()
+
+        // then
+        html sameAsHtml """
+            <head>
+              <title>x <b></b>y</title>
+            </head>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should trim a trailing title space followed by empty markup`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "head" {
+                "title" {
+                    +"x "
+                    "b" {}
+                }
+            }
+        }
+
+        // when
+        val html = flow.renderHtml()
+
+        // then
+        html sameAsHtml """
+            <head>
+              <title>x<b></b></title>
             </head>
         """.trimIndent()
     }
