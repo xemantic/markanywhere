@@ -16,7 +16,7 @@
 
 package com.xemantic.markanywhere.html.icons
 
-import com.xemantic.markanywhere.classList
+import com.xemantic.markanywhere.html.spec.classList
 import com.xemantic.markanywhere.transform.MarkSelect
 
 // Most common Bootstrap Icons glyph names → the closest Unicode emoji.

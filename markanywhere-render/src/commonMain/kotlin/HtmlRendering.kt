@@ -19,6 +19,8 @@ package com.xemantic.markanywhere.render
 import com.xemantic.kotlin.core.text.joinToString
 import com.xemantic.kotlin.core.text.unaryPlus
 import com.xemantic.markanywhere.SemanticEvent
+import com.xemantic.markanywhere.html.spec.HTML_RAW_TEXT_ELEMENTS
+import com.xemantic.markanywhere.html.spec.HTML_VOID_ELEMENTS
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.flow
@@ -33,43 +35,50 @@ import kotlinx.coroutines.flow.flow
  * which flushes once at the end of the event.
  *
  * Inline elements are rendered on the same line as their surrounding content.
- * Content inside `<pre>` elements is not indented to preserve whitespace.
- * Content inside `<style>` and `<script>` elements is not indented or
- * HTML-escaped (HTML raw text elements). Custom namespaced elements
+ * Content inside `<pre>` and `<textarea>` elements is not indented to preserve
+ * whitespace. Content inside `<style>` and `<script>` elements is not indented
+ * or HTML-escaped (HTML raw text elements). Custom namespaced elements
  * (containing `:`) are treated as block elements. All elements inside
  * `<svg>` are treated as block elements for Chrome DevTools-like
- * indentation, except for inline text elements (`tspan`, `textPath`, `a`)
- * which remain inline to preserve text content. HTML void elements and
- * empty SVG elements are rendered with XHTML self-closing syntax
+ * indentation. Text content elements (HTML `<title>`, SVG `<title>`,
+ * `<desc>` and `<text>`) sit on their own line, but their content, including
+ * any nested markup, is emitted verbatim and inline, since added whitespace
+ * would become part of the text. The renderer never rewrites the whitespace
+ * it receives — normalizing it is up to the upstream pipeline. HTML void
+ * elements and empty SVG elements are rendered with XHTML self-closing syntax
  * (e.g. `<br/>`, `<img src="..."/>`).
  *
  * The opening tag's closing `>` is deferred by one event so an immediately
  * following matching unmark can render the element as self-closing. A
  * dangling pending mark at end of stream is resolved before completion.
+ * An unbalanced stream degrades instead of failing: an unmark closes the
+ * innermost open element, and one with no element open is rendered as a
+ * bare closing tag.
  *
  * A single trailing `\n` (if present at end of stream) is suppressed —
  * the renderer holds at most one pending newline and drops it on completion.
  */
 public fun Flow<SemanticEvent>.asHtml(): Flow<String> = flow {
 
-    var level = 0
     val indentAtom = "  "
+    // indentation strings by depth, built once each as the depth first grows
+    val indentations = mutableListOf("")
+    fun indentationAt(depth: Int): String {
+        while (indentations.size <= depth) indentations += indentations.last() + indentAtom
+        return indentations[depth]
+    }
+
     var indentation = ""
     var atLineStart = true
-    var preCount = 0
-    var svgCount = 0
-    var customMarkupCount = 0
-    var rawTextCount = 0
+    val openElements = ArrayDeque<OpenElement>()
 
     val eventBuffer = StringBuilder()
     var hasPendingNewline = false
 
-    // Pending mark state for self-closing detection.
+    // Pending mark for self-closing detection.
     // When a Mark event is processed, the closing ">" is deferred until the next
     // event arrives, so we can detect empty elements and render them as self-closing.
-    var pendingMarkName: String? = null
-    var pendingMarkIsBlock = false
-    var pendingMarkInsideSvg = false
+    var pendingMark: OpenElement? = null
 
     fun out(s: String) { eventBuffer.append(s) }
 
@@ -86,38 +95,32 @@ public fun Flow<SemanticEvent>.asHtml(): Flow<String> = flow {
     }
 
     fun confirmPendingMark() {
-        if (pendingMarkName == null) return
-        pendingMarkName = null
+        val element = pendingMark ?: return
+        pendingMark = null
         out(">")
-        level++
-        indentation = indentAtom.repeat(level)
-        if (pendingMarkIsBlock) {
+        indentation = indentationAt(openElements.size)
+        if (element.isBlock && !element.isTextContent) {
             out("\n")
             atLineStart = true
+        } else {
+            atLineStart = false
         }
     }
-
-    fun SemanticEvent.Marked.isBlockMark(insideSvg: Boolean, insidePre: Boolean): Boolean =
-        (isBlock || (insideSvg && name !in SVG_INLINE_ELEMENTS)) && !insidePre
 
     collect { event ->
 
         // Check for self-closing opportunity before processing the next event
-        val pmName = pendingMarkName
-        if (pmName != null) {
+        val pending = pendingMark
+        if (pending != null) {
             if (
                 event is Unmark
-                && event.name == pmName
-                && (pmName in VOID_ELEMENTS || pendingMarkInsideSvg)
+                && event.name == pending.name
+                && (pending.name in HTML_VOID_ELEMENTS || pending.insideSvg)
             ) {
-                pendingMarkName = null
-                // Undo counter increments from Mark processing
-                if (pmName == "pre") preCount--
-                if (pmName == "svg") svgCount--
-                if (':' in pmName) customMarkupCount--
-                if (pmName in RAW_TEXT_ELEMENTS) rawTextCount--
+                pendingMark = null
+                openElements.removeLast()
                 out("/>")
-                if (pendingMarkIsBlock) {
+                if (pending.isBlock) {
                     out("\n")
                     atLineStart = true
                 }
@@ -130,25 +133,26 @@ public fun Flow<SemanticEvent>.asHtml(): Flow<String> = flow {
 
         when (event) {
 
-            is Text -> {
-                if (event.text != "") {
-                    if (level == 0) {
+            is Text -> if (event.text != "") {
+                when (openElements.lastOrNull()?.content) {
+                    null -> {
                         // Raw HTML at level 0 - output as-is without escaping
                         out(event.text)
                         atLineStart = event.text.endsWith('\n')
-                    } else if (preCount > 0 || customMarkupCount > 0 || rawTextCount > 0) {
-                        // Inside pre / custom markup / raw text - emit as-is
-                        // without indentation. Custom markup and raw text also
-                        // bypass HTML escaping.
-                        if (customMarkupCount > 0 || rawTextCount > 0) {
-                            out(event.text)
-                        } else {
-                            eventBuffer.escapeHtml(event.text)
-                        }
+                    }
+                    RAW -> {
+                        // custom markup / raw text - neither escaped nor indented
+                        out(event.text)
                         atLineStart = false
-                    } else {
+                    }
+                    VERBATIM -> {
+                        // pre / textarea / text content - escaped, but not indented
+                        eventBuffer.escapeHtml(event.text)
+                        atLineStart = false
+                    }
+                    INDENTED -> {
                         // Re-indent after each newline. Escape line-by-line
-                        // straight into eventBuffer — escaping doesn't insert
+                        // straight into the buffer — escaping doesn't insert
                         // or remove `\n`, so split-then-escape is equivalent
                         // to escape-then-split.
                         val lines = event.text.split('\n')
@@ -170,22 +174,10 @@ public fun Flow<SemanticEvent>.asHtml(): Flow<String> = flow {
             }
 
             is Mark -> {
-                val insidePre = preCount > 0
-                val insideSvg = svgCount > 0
-                if (event.name == "pre") {
-                    preCount++
-                }
-                if (event.name == "svg") {
-                    svgCount++
-                }
-                if (':' in event.name) {
-                    customMarkupCount++
-                }
-                if (event.name in RAW_TEXT_ELEMENTS) {
-                    rawTextCount++
-                }
-                val isBlock = event.isBlockMark(insideSvg, insidePre)
-                if (isBlock) {
+                val parent = openElements.lastOrNull() ?: DOCUMENT
+                val element = event.openIn(parent)
+                openElements.addLast(element)
+                if (element.isBlock) {
                     if (atLineStart) {
                         out(indentation)
                     } else {
@@ -193,48 +185,34 @@ public fun Flow<SemanticEvent>.asHtml(): Flow<String> = flow {
                         out(indentation)
                     }
                 } else {
-                    if (atLineStart && !insidePre) {
+                    if (atLineStart && !parent.inlineLayout) {
                         out(indentation)
                     }
                     atLineStart = false
                 }
                 out("<"); out(event.name); event.flowAttributes()
                 // Defer closing ">" for potential self-close detection
-                pendingMarkName = event.name
-                pendingMarkIsBlock = isBlock
-                pendingMarkInsideSvg = insideSvg
+                pendingMark = element
             }
 
             is Unmark -> {
-                if (event.name == "pre") {
-                    preCount--
-                }
-                if (event.name == "svg") {
-                    svgCount--
-                }
-                if (':' in event.name) {
-                    customMarkupCount--
-                }
-                if (event.name in RAW_TEXT_ELEMENTS) {
-                    rawTextCount--
-                }
-                val insidePre = preCount > 0
-                val insideSvg = svgCount > 0
-                level--
-                indentation = indentAtom.repeat(level)
-                val isBlock = event.isBlockMark(insideSvg, insidePre)
-                if (isBlock) {
+                // a stray unmark, with nothing open, closes as if at top level
+                val element = openElements.removeLastOrNull() ?: event.openIn(DOCUMENT)
+                val parent = openElements.lastOrNull() ?: DOCUMENT
+                indentation = indentationAt(openElements.size)
+                // a text content element closes right after its content
+                if (element.isBlock && !element.isTextContent) {
                     if (atLineStart) {
                         out(indentation)
                     } else {
                         out("\n")
                         out(indentation)
                     }
-                } else if (atLineStart && !insidePre) {
+                } else if (!element.isBlock && atLineStart && !parent.inlineLayout) {
                     out(indentation)
                 }
                 out("</"); out(event.name); out(">")
-                if (isBlock) {
+                if (element.isBlock) {
                     out("\n")
                     atLineStart = true
                 } else {
@@ -252,6 +230,65 @@ public fun Flow<SemanticEvent>.asHtml(): Flow<String> = flow {
     // the collect lambda throws and we skip this; the consumer is gone anyway.
     confirmPendingMark()
     flush()
+}
+
+// An element open in the rendered output, with everything its descendants
+// need to know about how to lay out and write their content.
+private class OpenElement(
+    val name: String,
+    // whether the element itself sits inside an <svg>
+    val insideSvg: Boolean,
+    // whether the element is laid out as a block: its tags on their own lines
+    val isBlock: Boolean,
+    // whether the element is a title / description / SVG text: its content
+    // sits between its tags with nothing added
+    val isTextContent: Boolean,
+    // how text inside the element is written
+    val content: Content,
+    // whether elements inside are laid out inline, never adding whitespace
+    val inlineLayout: Boolean,
+) {
+    // whether elements inside sit inside an <svg>
+    val svg: Boolean get() = insideSvg || name == "svg"
+}
+
+// The implicit parent of top-level elements
+private val DOCUMENT = OpenElement(
+    name = "",
+    insideSvg = false,
+    isBlock = false,
+    isTextContent = false,
+    content = INDENTED,
+    inlineLayout = false,
+)
+
+// How text inside an element is written
+private enum class Content {
+    // escaped, and re-indented after each newline
+    INDENTED,
+    // escaped, but otherwise as-is
+    VERBATIM,
+    // as-is, neither escaped nor indented
+    RAW,
+}
+
+private fun SemanticEvent.Marked.openIn(parent: OpenElement): OpenElement {
+    val insideSvg = parent.svg
+    val isTextContent = isTextContent(name, insideSvg)
+    val preservesWhitespace = isTextContent || name in WHITESPACE_PRESERVING_ELEMENTS
+    return OpenElement(
+        name = name,
+        insideSvg = insideSvg,
+        isBlock = (isBlock || insideSvg) && !parent.inlineLayout,
+        isTextContent = isTextContent,
+        // whitespace preserved by an ancestor is never re-indented again
+        content = when {
+            parent.content == RAW || ':' in name || name in HTML_RAW_TEXT_ELEMENTS -> RAW
+            parent.content == VERBATIM || preservesWhitespace -> VERBATIM
+            else -> INDENTED
+        },
+        inlineLayout = parent.inlineLayout || preservesWhitespace,
+    )
 }
 
 /**
@@ -291,26 +328,23 @@ private val BLOCK_ELEMENTS = setOf(
     "footnote",
     // the parser's structured front matter and its entries
     "frontmatter", "entry", "item",
-    // SVG root element (all children are treated as block via svg context tracking)
+    // SVG root element (all children are treated as block via svg context tracking,
+    // except inside a text content element)
     "svg",
 )
 
-// SVG inline elements that remain inline even inside SVG context.
-// These elements contain text content where added whitespace would affect rendering.
-private val SVG_INLINE_ELEMENTS = setOf(
-    "tspan", "textPath", "a"
-)
+// Elements whose whitespace is significant, so their content is written
+// verbatim and laid out inline
+private val WHITESPACE_PRESERVING_ELEMENTS = setOf("pre", "textarea")
 
-// HTML raw text elements whose content is not HTML-parsed (no escaping, no indentation)
-private val RAW_TEXT_ELEMENTS = setOf(
-    "style", "script"
-)
-
-// HTML void elements that cannot have children and are rendered as self-closing (e.g. <br/>)
-private val VOID_ELEMENTS = setOf(
-    "area", "base", "br", "col", "embed", "hr", "img",
-    "input", "link", "meta", "param", "source", "track", "wbr"
-)
+// Text content elements: the opening tag starts its own line and the closing
+// tag ends it, with nothing added between, since whitespace there would become
+// part of the text.
+private fun isTextContent(name: String, insideSvg: Boolean): Boolean = when (name) {
+    "title" -> true
+    "desc", "text" -> insideSvg
+    else -> false
+}
 
 private fun Appendable.escapeHtml(value: String) {
     for (c in value) when (c) {

@@ -16,10 +16,12 @@
 
 package com.xemantic.markanywhere.render
 
+import com.xemantic.kotlin.test.assert
 import com.xemantic.kotlin.test.sameAs
 import com.xemantic.kotlin.test.sameAsHtml
 import com.xemantic.kotlin.test.sameAsXml
 import com.xemantic.markanywhere.flow.semanticEvents
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 
@@ -698,6 +700,20 @@ class HtmlRenderingTest {
 
         // then
         html sameAsHtml "<hr/>"
+    }
+
+    @Test
+    fun `should self-close a keygen the HTML parser treats as void`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "keygen"("name" to "key") { }
+        }
+
+        // when
+        val html = flow.renderHtml()
+
+        // then
+        html sameAsHtml """<keygen name="key"/>"""
     }
 
     @Test
@@ -2935,9 +2951,7 @@ class HtmlRenderingTest {
               <polygon points="150,130 190,170 110,170" fill="purple"/>
               <polyline points="10,140 30,160 50,140 70,160" fill="none" stroke="orange"/>
               <path d="M10 180 Q 95 130 180 180" fill="none" stroke="blue"/>
-              <text x="100" y="105" text-anchor="middle" font-size="14">
-                <tspan fill="blue">Hello</tspan><tspan fill="red" dx="5">SVG</tspan>
-              </text>
+              <text x="100" y="105" text-anchor="middle" font-size="14"><tspan fill="blue">Hello</tspan><tspan fill="red" dx="5">SVG</tspan></text>
               <use href="#icon" x="170" y="5" width="24" height="24"/>
               <image href="photo.jpg" x="120" y="120" width="60" height="60"/>
             </svg>
@@ -2966,9 +2980,7 @@ class HtmlRenderingTest {
         // then
         html sameAsXml """
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 50">
-              <text x="10" y="30">
-                Hello <tspan fill="red" font-weight="bold">World</tspan>!
-              </text>
+              <text x="10" y="30">Hello <tspan fill="red" font-weight="bold">World</tspan>!</text>
             </svg>
         """.trimIndent()
     }
@@ -2997,9 +3009,7 @@ class HtmlRenderingTest {
         // then
         html sameAsXml """
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 50">
-              <text x="10" y="30">
-                <tspan fill="blue">outer <tspan font-style="italic">inner</tspan> text</tspan>
-              </text>
+              <text x="10" y="30"><tspan fill="blue">outer <tspan font-style="italic">inner</tspan> text</tspan></text>
             </svg>
         """.trimIndent()
     }
@@ -3030,9 +3040,7 @@ class HtmlRenderingTest {
               <defs>
                 <path id="curve" d="M 50 100 Q 250 0 450 100"/>
               </defs>
-              <text>
-                <textPath href="#curve">Text along a curve</textPath>
-              </text>
+              <text><textPath href="#curve">Text along a curve</textPath></text>
             </svg>
         """.trimIndent()
     }
@@ -3061,9 +3069,7 @@ class HtmlRenderingTest {
         // then
         html sameAsXml """
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 50">
-              <text x="10" y="30">
-                Click <a href="https://example.com"><tspan fill="blue" text-decoration="underline">here</tspan></a> for more
-              </text>
+              <text x="10" y="30">Click <a href="https://example.com"><tspan fill="blue" text-decoration="underline">here</tspan></a> for more</text>
             </svg>
         """.trimIndent()
     }
@@ -3094,19 +3100,15 @@ class HtmlRenderingTest {
         html sameAsXml """
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100">
               <a href="https://example.com">
-                <text x="10" y="30">
-                  <tspan fill="blue">Link text</tspan>
-                </text>
+                <text x="10" y="30"><tspan fill="blue">Link text</tspan></text>
               </a>
-              <text x="10" y="60">
-                Normal text
-              </text>
+              <text x="10" y="60">Normal text</text>
             </svg>
         """.trimIndent()
     }
 
     @Test
-    fun `should render SVG title and desc as block elements`() = runTest {
+    fun `should render SVG title and desc on their own lines with inline content`() = runTest {
         // given
         val flow = semanticEvents {
             "svg"(
@@ -3125,13 +3127,171 @@ class HtmlRenderingTest {
         // then
         html sameAsXml """
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-              <title>
-                My SVG
-              </title>
-              <desc>
-                A description of the SVG
-              </desc>
+              <title>My SVG</title>
+              <desc>A description of the SVG</desc>
               <circle cx="50" cy="50" r="40"/>
+            </svg>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should keep whitespace of SVG title and desc verbatim and their markup inline`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "svg"("xmlns" to "http://www.w3.org/2000/svg") {
+                "title" { +" My  SVG " }
+                "desc" {
+                    +"A "
+                    "tspan" { +"bold" }
+                    +"\n  description"
+                }
+            }
+        }
+
+        // when
+        val html = flow.renderHtml()
+
+        // then
+        html sameAsXml """
+            <svg xmlns="http://www.w3.org/2000/svg">
+              <title> My  SVG </title>
+              <desc>A <tspan>bold</tspan>
+              description</desc>
+            </svg>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should keep the preserved whitespace of an SVG desc`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "svg"("xmlns" to "http://www.w3.org/2000/svg") {
+                "desc"("xml:space" to "preserve") { +"a  b" }
+            }
+        }
+
+        // when
+        val html = flow.renderHtml()
+
+        // then
+        html sameAsXml """
+            <svg xmlns="http://www.w3.org/2000/svg">
+              <desc xml:space="preserve">a  b</desc>
+            </svg>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should self-close an empty SVG desc`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "svg"("xmlns" to "http://www.w3.org/2000/svg") {
+                "desc" {}
+                "circle"("r" to "40") {}
+            }
+        }
+
+        // when
+        val html = flow.renderHtml()
+
+        // then
+        html sameAsXml """
+            <svg xmlns="http://www.w3.org/2000/svg">
+              <desc/>
+              <circle r="40"/>
+            </svg>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should keep the whitespace of textarea content`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "form" {
+                "textarea" { +"a\n  b" }
+            }
+        }
+
+        // when
+        val html = flow.renderHtml()
+
+        // then
+        html sameAsHtml """
+            <form>
+              <textarea>a
+              b</textarea>
+            </form>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should render desc outside SVG as an ordinary inline element`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "desc" {
+                "p" { +"First" }
+                "p" { +"Second" }
+            }
+        }
+
+        // when
+        val html = flow.renderHtml()
+
+        // then
+        html sameAsHtml """
+            <desc>
+              <p>
+                First
+              </p>
+              <p>
+                Second
+              </p>
+            </desc>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should keep SVG text content verbatim`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "svg"("xmlns" to "http://www.w3.org/2000/svg") {
+                "text"("xml:space" to "preserve") { +"a  b\nc" }
+            }
+        }
+
+        // when
+        val html = flow.renderHtml()
+
+        // then
+        html sameAsXml """
+            <svg xmlns="http://www.w3.org/2000/svg">
+              <text xml:space="preserve">a  b
+            c</text>
+            </svg>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should keep a title inside SVG text inline`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "svg"("xmlns" to "http://www.w3.org/2000/svg") {
+                "text" {
+                    "a"("href" to "https://example.com") {
+                        "title" { +"tip" }
+                        +"label"
+                    }
+                }
+            }
+        }
+
+        // when
+        val html = flow.renderHtml()
+
+        // then
+        html sameAsXml """
+            <svg xmlns="http://www.w3.org/2000/svg">
+              <text><a href="https://example.com"><title>tip</title>label</a></text>
             </svg>
         """.trimIndent()
     }
@@ -3245,13 +3405,365 @@ class HtmlRenderingTest {
         html sameAsHtml """
             <head>
               <meta charset="UTF-8"/>
-              <title>
-                My Page
-              </title>
+              <title>My Page</title>
               <meta name="description" content="A page description"/>
               <link rel="stylesheet" href="style.css"/>
             </head>
         """.trimIndent()
+    }
+
+    @Test
+    fun `should keep the whitespace of a title written over several lines`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "head" {
+                "title" {
+                    +"\n  Hello\n"
+                    +"  World  \n"
+                }
+            }
+        }
+
+        // when
+        val html = flow.renderHtml()
+
+        // then
+        html sameAsHtml """
+            <head>
+              <title>
+              Hello
+              World${"  "}
+            </title>
+            </head>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should keep a non-breaking space in a title`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "head" {
+                "title" { +"\u00A0Hello\u00A0" }
+            }
+        }
+
+        // when
+        val html = flow.renderHtml()
+
+        // then
+        html sameAsHtml "<head>\n  <title>\u00A0Hello\u00A0</title>\n</head>"
+    }
+
+    @Test
+    fun `should start a title following inline content on its own line`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "head" {
+                +"stray"
+                "title" { +"Hello" }
+            }
+        }
+
+        // when
+        val html = flow.renderHtml()
+
+        // then
+        html sameAsHtml """
+            <head>
+              stray
+              <title>Hello</title>
+            </head>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should escape title content`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "head" {
+                "title" { +"A & B <C>" }
+            }
+        }
+
+        // when
+        val html = flow.renderHtml()
+
+        // then
+        html sameAsHtml """
+            <head>
+              <title>A &amp; B &lt;C&gt;</title>
+            </head>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should render an empty title on its own line`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "head" {
+                "title" {}
+                "meta"("charset" to "UTF-8") {}
+            }
+        }
+
+        // when
+        val html = flow.renderHtml()
+
+        // then
+        html sameAsHtml """
+            <head>
+              <title></title>
+              <meta charset="UTF-8"/>
+            </head>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should keep the text of a description around a nested empty title`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "svg"("xmlns" to "http://www.w3.org/2000/svg") {
+                "desc" {
+                    +"Hello"
+                    "title" {}
+                    +" world"
+                }
+            }
+        }
+
+        // when
+        val html = flow.renderHtml()
+
+        // then
+        html sameAsXml """
+            <svg xmlns="http://www.w3.org/2000/svg">
+              <desc>Hello<title/> world</desc>
+            </svg>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should render a stray title close tag without failing`() = runTest {
+        // given
+        val flow = semanticEvents {
+            unmark("title")
+            "p" { +"after" }
+        }
+
+        // when
+        val html = flow.renderHtml()
+
+        // then
+        html sameAsHtml """
+            </title>
+            <p>
+              after
+            </p>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should keep the whitespace of a pre nested in a title`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "head" {
+                "title" {
+                    "pre" { +"a\n  b" }
+                }
+            }
+        }
+
+        // when
+        val html = flow.renderHtml()
+
+        // then
+        html sameAsHtml "<head>\n  <title><pre>a\n  b</pre></title>\n</head>"
+    }
+
+    @Test
+    fun `should keep custom markup nested in an SVG description raw`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "svg"("xmlns" to "http://www.w3.org/2000/svg") {
+                "desc" {
+                    "ns:note" { +"<b>a  b</b>" }
+                }
+            }
+        }
+
+        // when
+        val html = flow.renderHtml()
+
+        // then
+        html sameAsXml """
+            <svg xmlns="http://www.w3.org/2000/svg">
+              <desc><ns:note><b>a  b</b></ns:note></desc>
+            </svg>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should keep a title space before nested markup that opens with text`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "head" {
+                "title" {
+                    +"A "
+                    "b" {
+                        "i" { +"bold" }
+                    }
+                    +" title"
+                }
+            }
+        }
+
+        // when
+        val html = flow.renderHtml()
+
+        // then
+        html sameAsHtml """
+            <head>
+              <title>A <b><i>bold</i></b> title</title>
+            </head>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should keep a title space before empty markup followed by text`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "head" {
+                "title" {
+                    +"x "
+                    "b" {}
+                    +"y"
+                }
+            }
+        }
+
+        // when
+        val html = flow.renderHtml()
+
+        // then
+        html sameAsHtml """
+            <head>
+              <title>x <b></b>y</title>
+            </head>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should keep a trailing title space followed by empty markup`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "head" {
+                "title" {
+                    +"x "
+                    "b" {}
+                }
+            }
+        }
+
+        // when
+        val html = flow.renderHtml()
+
+        // then
+        html sameAsHtml """
+            <head>
+              <title>x <b></b></title>
+            </head>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should keep a title space following a nested pre`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "head" {
+                "title" {
+                    "pre" { +"a" }
+                    +" b"
+                }
+            }
+        }
+
+        // when
+        val html = flow.renderHtml()
+
+        // then
+        html sameAsHtml """
+            <head>
+              <title><pre>a</pre> b</title>
+            </head>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should keep a title space following nested custom markup`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "head" {
+                "title" {
+                    "ns:x" { +"a" }
+                    +" b"
+                }
+            }
+        }
+
+        // when
+        val html = flow.renderHtml()
+
+        // then
+        html sameAsHtml """
+            <head>
+              <title><ns:x>a</ns:x> b</title>
+            </head>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should keep a title space following a nested void element`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "head" {
+                "title" {
+                    "img"("src" to "a.png") {}
+                    +" x"
+                }
+            }
+        }
+
+        // when
+        val html = flow.renderHtml()
+
+        // then
+        html sameAsHtml """
+            <head>
+              <title><img src="a.png"/> x</title>
+            </head>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should stream markup nested in a title without waiting for the title to close`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "head" {
+                "title" {
+                    +"x "
+                    "b" { "i" {} }
+                    "b" { "i" {} }
+                }
+            }
+        }
+
+        // when
+        val chunks = flow.asHtml().toList()
+
+        // then
+        val titleClose = chunks.indexOfFirst { "</title>" in it }
+        val firstNested = chunks.indexOfFirst { "<b" in it }
+        assert(firstNested in 0..<titleClose)
     }
 
     // HTML raw text and scripting element tests
@@ -3414,9 +3926,7 @@ class HtmlRenderingTest {
         html sameAsHtml """
             <head>
               <meta charset="UTF-8"/>
-              <title>
-                My Page
-              </title>
+              <title>My Page</title>
               <style>
             body {
               margin: 0;

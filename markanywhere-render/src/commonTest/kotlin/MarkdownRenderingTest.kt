@@ -2185,6 +2185,26 @@ class MarkdownRenderingTest {
     }
 
     @Test
+    fun `should render a keygen the HTML parser treats as void without closing tag`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "form" {
+                "keygen"("name" to "key") { }
+            }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs """
+            <form>
+            <keygen name="key">
+            </form>
+        """.trimIndent()
+    }
+
+    @Test
     fun `should render nav semantic element with newlines around content`() = runTest {
         // given
         val flow = semanticEvents {

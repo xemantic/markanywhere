@@ -14,9 +14,10 @@
  * limitations under the License.
  */
 
-package com.xemantic.markanywhere
+package com.xemantic.markanywhere.html.spec
 
 import com.xemantic.kotlin.test.assert
+import com.xemantic.markanywhere.SemanticEvent
 import kotlin.test.Test
 
 class MarkClassListTest {

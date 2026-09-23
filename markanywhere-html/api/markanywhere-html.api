@@ -29,12 +29,6 @@ public final class com/xemantic/markanywhere/html/HtmlToMarkdownKt {
 	public static synthetic fun transformHtmlToMarkdown$default (Lkotlinx/coroutines/flow/Flow;Ljava/util/Set;Lcom/xemantic/markanywhere/html/RefMode;Lcom/xemantic/markanywhere/html/SvgMode;ILjava/lang/Object;)Lkotlinx/coroutines/flow/Flow;
 }
 
-public final class com/xemantic/markanywhere/html/HtmlWhitespaceKt {
-	public static final fun getHTML_WHITESPACE_CHARS ()[C
-	public static final fun isHtmlBlank (Ljava/lang/String;)Z
-	public static final fun isHtmlWhitespace (C)Z
-}
-
 public final class com/xemantic/markanywhere/html/HtmlWhitespaceNormalizationKt {
 	public static final fun dropHtmlStructuralWhitespace (Lkotlinx/coroutines/flow/Flow;)Lkotlinx/coroutines/flow/Flow;
 }

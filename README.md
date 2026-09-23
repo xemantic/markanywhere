@@ -107,9 +107,7 @@ Will print:
 ```text
 <html>
   <head>
-    <title>
-      Hello
-    </title>
+    <title>Hello</title>
     <meta name="author" content="Alice"/>
   </head>
   <body>
@@ -337,6 +335,7 @@ See [markanywhere-parse/README.md](markanywhere-parse/README.md) for a full list
 |--------------------------|---------------------------------------------------------------------|
 | `markanywhere-api`       | `SemanticEvent` sealed type — the only interface between modules    |
 | `markanywhere-parse`     | Streaming parser: `Flow<String>` → `Flow<SemanticEvent>`            |
+| `markanywhere-html-spec` | Facts of the HTML standard shared by the parser, the renderers and the HTML pipeline: HTML whitespace (`isHtmlWhitespace`, `isHtmlBlank`), void and raw text elements, and `Mark.classList` |
 | `markanywhere-yaml`      | Streaming YAML codec: `Flow<String>.parseYaml()` → `entry` / `item` events, and `renderYaml()` back — the front matter body, usable on its own |
 | `markanywhere-render`    | HTML renderer: `Flow<SemanticEvent>` → HTML string                  |
 | `markanywhere-transform` | DSL for rewriting event streams on the fly                          |

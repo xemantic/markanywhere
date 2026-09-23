@@ -17,7 +17,7 @@
 package com.xemantic.markanywhere.html.icons
 
 import com.xemantic.markanywhere.SemanticEvent
-import com.xemantic.markanywhere.classList
+import com.xemantic.markanywhere.html.spec.classList
 import com.xemantic.markanywhere.transform.MarkSelect
 
 // Most common Material Icons / Symbols ligature names (with `_` already

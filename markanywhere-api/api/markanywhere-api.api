@@ -1,7 +1,3 @@
-public final class com/xemantic/markanywhere/MarkClassListKt {
-	public static final fun getClassList (Lcom/xemantic/markanywhere/SemanticEvent$Mark;)Ljava/util/List;
-}
-
 public final class com/xemantic/markanywhere/MarkanywhereJsonKt {
 	public static final fun getMarkanywhereJson ()Lkotlinx/serialization/json/Json;
 }

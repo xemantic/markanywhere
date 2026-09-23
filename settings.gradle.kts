@@ -24,6 +24,7 @@ include(
     "markanywhere-api",
     "markanywhere-dump",
     "markanywhere-flow",
+    "markanywhere-html-spec",
     "markanywhere-yaml",
     "markanywhere-render",
     "markanywhere-parse",
