@@ -16,25 +16,19 @@
 
 package com.xemantic.markanywhere.html.spec
 
+// The HTML whitespace characters, as an array so they can be spread straight
+// into the delimiters vararg of `split`. Internal, since an array is mutable.
+internal val HTML_WHITESPACE_CHARS: CharArray = charArrayOf(' ', '\t', '\n', '\r', '\u000C')
+
 /**
- * The "ASCII whitespace" characters HTML treats as insignificant (WHATWG: TAB,
- * LF, FF, CR, SPACE).
- *
- * Exposed as a [CharArray] so it can be spread straight into the
- * [delimiters][CharSequence.split] vararg, e.g.
- * `classAttr.split(*HTML_WHITESPACE_CHARS)`, and backs [Char.isHtmlWhitespace]
- * as the single source of truth for the set.
+ * Whether this character is one of the "ASCII whitespace" characters HTML
+ * treats as insignificant (WHATWG: TAB, LF, FF, CR, SPACE).
  *
  * Deliberately narrower than [Char.isWhitespace], which also matches NBSP
  * (` `) and the other Unicode space separators that HTML renders as
  * **printable content** — they survive collapsing and never qualify a node as
  * blank (e.g. the non-breaking spaces in legal citations like `§ 823` /
  * `Abs. 1`).
- */
-public val HTML_WHITESPACE_CHARS: CharArray = charArrayOf(' ', '\t', '\n', '\r', '\u000C')
-
-/**
- * Whether this character is [HTML whitespace][HTML_WHITESPACE_CHARS].
  */
 public fun Char.isHtmlWhitespace(): Boolean = this in HTML_WHITESPACE_CHARS
 

@@ -20,7 +20,7 @@ import com.xemantic.markanywhere.SemanticEvent
 
 /**
  * The distinct class names of this mark's `class` attribute, in order of
- * first appearance, split on [HTML whitespace][HTML_WHITESPACE_CHARS] like the
+ * first appearance, split on [HTML whitespace][isHtmlWhitespace] like the
  * DOM's `classList`; empty when the attribute is absent or blank.
  */
 public val SemanticEvent.Mark.classList: List<String> get() =

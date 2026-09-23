@@ -21,7 +21,6 @@ import com.xemantic.kotlin.core.text.unaryPlus
 import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.html.spec.HTML_RAW_TEXT_ELEMENTS
 import com.xemantic.markanywhere.html.spec.HTML_VOID_ELEMENTS
-import com.xemantic.markanywhere.html.spec.isHtmlWhitespace
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.flow
@@ -36,21 +35,18 @@ import kotlinx.coroutines.flow.flow
  * which flushes once at the end of the event.
  *
  * Inline elements are rendered on the same line as their surrounding content.
- * Content inside `<pre>` elements is not indented to preserve whitespace.
- * Content inside `<style>` and `<script>` elements is not indented or
- * HTML-escaped (HTML raw text elements). Custom namespaced elements
+ * Content inside `<pre>` and `<textarea>` elements is not indented to preserve
+ * whitespace. Content inside `<style>` and `<script>` elements is not indented
+ * or HTML-escaped (HTML raw text elements). Custom namespaced elements
  * (containing `:`) are treated as block elements. All elements inside
  * `<svg>` are treated as block elements for Chrome DevTools-like
  * indentation. Text content elements (HTML `<title>`, SVG `<title>`,
- * `<desc>` and `<text>`) sit on their own line, but their content is kept
- * inline, since added whitespace would become part of the text: the content
- * of SVG `<text>` (including its `tspan`, `textPath` and `a` children) is
- * emitted verbatim, while the whitespace of a title or description,
- * insignificant to its readers, is collapsed to single spaces and trimmed.
- * Whitespace is only ever preserved deeper down: a `<pre>` nested in a
- * title keeps its content verbatim, and custom markup nested anywhere keeps
- * it raw. HTML void elements and empty SVG elements are rendered with XHTML
- * self-closing syntax (e.g. `<br/>`, `<img src="..."/>`).
+ * `<desc>` and `<text>`) sit on their own line, but their content, including
+ * any nested markup, is emitted verbatim and inline, since added whitespace
+ * would become part of the text. The renderer never rewrites the whitespace
+ * it receives — normalizing it is up to the upstream pipeline. HTML void
+ * elements and empty SVG elements are rendered with XHTML self-closing syntax
+ * (e.g. `<br/>`, `<img src="..."/>`).
  *
  * The opening tag's closing `>` is deferred by one event so an immediately
  * following matching unmark can render the element as self-closing. A
@@ -65,6 +61,13 @@ import kotlinx.coroutines.flow.flow
 public fun Flow<SemanticEvent>.asHtml(): Flow<String> = flow {
 
     val indentAtom = "  "
+    // indentation strings by depth, built once each as the depth first grows
+    val indentations = mutableListOf("")
+    fun indentationAt(depth: Int): String {
+        while (indentations.size <= depth) indentations += indentations.last() + indentAtom
+        return indentations[depth]
+    }
+
     var indentation = ""
     var atLineStart = true
     val openElements = ArrayDeque<OpenElement>()
@@ -77,44 +80,7 @@ public fun Flow<SemanticEvent>.asHtml(): Flow<String> = flow {
     // event arrives, so we can detect empty elements and render them as self-closing.
     var pendingMark: OpenElement? = null
 
-    // Markup opened after a pending collapsed space is held back, since only the
-    // content that follows decides where the space goes: before the held markup
-    // when visible text follows, nowhere when the collapsing element closes first.
-    // Only markup is ever held, never text.
-    var heldMarkup: StringBuilder? = null
-    // the collapsing element whose pending space the held markup follows
-    var heldAfterSpaceOf: Collapsed? = null
-
-    // where output goes: the held markup, if any, otherwise the event buffer
-    var sink = eventBuffer
-
-    fun out(s: String) { sink.append(s) }
-
-    fun releaseHeldMarkup(withSpace: Boolean) {
-        val held = heldMarkup ?: return
-        if (withSpace) eventBuffer.append(' ')
-        eventBuffer.append(held)
-        heldAfterSpaceOf?.spacePending = false
-        heldMarkup = null
-        heldAfterSpaceOf = null
-        sink = eventBuffer
-    }
-
-    // Writes title / description text: whitespace runs collapse to single
-    // spaces, dropping leading and trailing ones
-    fun writeCollapsed(text: String, collapsed: Collapsed) {
-        for (c in text) {
-            if (c.isHtmlWhitespace()) {
-                if (collapsed.started) collapsed.spacePending = true
-            } else {
-                releaseHeldMarkup(withSpace = true)
-                if (collapsed.spacePending) sink.append(' ')
-                collapsed.spacePending = false
-                collapsed.started = true
-                sink.escapeHtml(c)
-            }
-        }
-    }
+    fun out(s: String) { eventBuffer.append(s) }
 
     suspend fun flush() {
         hasPendingNewline = flushDeferringTrailingNewline(eventBuffer, hasPendingNewline)
@@ -123,7 +89,7 @@ public fun Flow<SemanticEvent>.asHtml(): Flow<String> = flow {
     fun SemanticEvent.Mark.flowAttributes() {
         attributes.forEach { (name, value) ->
             out(" "); out(name); out("=\"")
-            sink.escapeAttributeValue(value)
+            eventBuffer.escapeAttributeValue(value)
             out("\"")
         }
     }
@@ -132,7 +98,7 @@ public fun Flow<SemanticEvent>.asHtml(): Flow<String> = flow {
         val element = pendingMark ?: return
         pendingMark = null
         out(">")
-        indentation = indentAtom.repeat(openElements.size)
+        indentation = indentationAt(openElements.size)
         if (element.isBlock && !element.isTextContent) {
             out("\n")
             atLineStart = true
@@ -168,31 +134,25 @@ public fun Flow<SemanticEvent>.asHtml(): Flow<String> = flow {
         when (event) {
 
             is Text -> if (event.text != "") {
-                when (val content = openElements.lastOrNull()?.content) {
+                when (openElements.lastOrNull()?.content) {
                     null -> {
                         // Raw HTML at level 0 - output as-is without escaping
                         out(event.text)
                         atLineStart = event.text.endsWith('\n')
                     }
-                    Raw -> {
+                    RAW -> {
                         // custom markup / raw text - neither escaped nor indented
-                        releaseHeldMarkup(withSpace = true)
                         out(event.text)
                         atLineStart = false
                     }
-                    Verbatim -> {
-                        // pre / SVG text - escaped, but not indented
-                        releaseHeldMarkup(withSpace = true)
-                        sink.escapeHtml(event.text)
+                    VERBATIM -> {
+                        // pre / textarea / text content - escaped, but not indented
+                        eventBuffer.escapeHtml(event.text)
                         atLineStart = false
                     }
-                    is Collapsed -> {
-                        writeCollapsed(event.text, content)
-                        atLineStart = false
-                    }
-                    Indented -> {
+                    INDENTED -> {
                         // Re-indent after each newline. Escape line-by-line
-                        // straight into the sink — escaping doesn't insert
+                        // straight into the buffer — escaping doesn't insert
                         // or remove `\n`, so split-then-escape is equivalent
                         // to escape-then-split.
                         val lines = event.text.split('\n')
@@ -205,7 +165,7 @@ public fun Flow<SemanticEvent>.asHtml(): Flow<String> = flow {
                                 if (atLineStart) {
                                     out(indentation)
                                 }
-                                sink.escapeHtml(line)
+                                eventBuffer.escapeHtml(line)
                                 atLineStart = false
                             }
                         }
@@ -215,13 +175,6 @@ public fun Flow<SemanticEvent>.asHtml(): Flow<String> = flow {
 
             is Mark -> {
                 val parent = openElements.lastOrNull() ?: DOCUMENT
-                val parentContent = parent.content
-                if (heldMarkup == null && parentContent is Collapsed && parentContent.spacePending) {
-                    val held = StringBuilder()
-                    heldMarkup = held
-                    heldAfterSpaceOf = parentContent
-                    sink = held
-                }
                 val element = event.openIn(parent)
                 openElements.addLast(element)
                 if (element.isBlock) {
@@ -246,12 +199,7 @@ public fun Flow<SemanticEvent>.asHtml(): Flow<String> = flow {
                 // a stray unmark, with nothing open, closes as if at top level
                 val element = openElements.removeLastOrNull() ?: event.openIn(DOCUMENT)
                 val parent = openElements.lastOrNull() ?: DOCUMENT
-                if (element.content === heldAfterSpaceOf && parent.content !== element.content) {
-                    // the collapsing element itself (not one nested in it, sharing
-                    // its state) closes, so its trailing space is dropped
-                    releaseHeldMarkup(withSpace = false)
-                }
-                indentation = indentAtom.repeat(openElements.size)
+                indentation = indentationAt(openElements.size)
                 // a text content element closes right after its content
                 if (element.isBlock && !element.isTextContent) {
                     if (atLineStart) {
@@ -281,7 +229,6 @@ public fun Flow<SemanticEvent>.asHtml(): Flow<String> = flow {
     // unclosed element). Runs only on normal completion — on cancellation
     // the collect lambda throws and we skip this; the consumer is gone anyway.
     confirmPendingMark()
-    releaseHeldMarkup(withSpace = false)
     flush()
 }
 
@@ -300,9 +247,10 @@ private class OpenElement(
     val content: Content,
     // whether elements inside are laid out inline, never adding whitespace
     val inlineLayout: Boolean,
+) {
     // whether elements inside sit inside an <svg>
-    val svg: Boolean,
-)
+    val svg: Boolean get() = insideSvg || name == "svg"
+}
 
 // The implicit parent of top-level elements
 private val DOCUMENT = OpenElement(
@@ -310,51 +258,36 @@ private val DOCUMENT = OpenElement(
     insideSvg = false,
     isBlock = false,
     isTextContent = false,
-    content = Indented,
+    content = INDENTED,
     inlineLayout = false,
-    svg = false,
 )
 
 // How text inside an element is written
-private sealed interface Content
-
-// Escaped, and re-indented after each newline
-private data object Indented : Content
-
-// Escaped, but otherwise as-is
-private data object Verbatim : Content
-
-// As-is, neither escaped nor indented
-private data object Raw : Content
-
-// Escaped, with whitespace collapsed to single spaces and trimmed. One instance
-// per collapsing element, shared by the elements nested in it, so that a space
-// between their text is kept, while a nested collapsing element starts afresh
-// and leaves the state of its parent intact.
-private class Collapsed : Content {
-    // whether any content was written, so that a leading space is dropped
-    var started = false
-    // a space is only written before the next content, so that a trailing one
-    // is dropped
-    var spacePending = false
+private enum class Content {
+    // escaped, and re-indented after each newline
+    INDENTED,
+    // escaped, but otherwise as-is
+    VERBATIM,
+    // as-is, neither escaped nor indented
+    RAW,
 }
 
 private fun SemanticEvent.Marked.openIn(parent: OpenElement): OpenElement {
     val insideSvg = parent.svg
-    val textContent = textContentOf(name, insideSvg)
+    val isTextContent = isTextContent(name, insideSvg)
+    val preservesWhitespace = isTextContent || name in WHITESPACE_PRESERVING_ELEMENTS
     return OpenElement(
         name = name,
         insideSvg = insideSvg,
         isBlock = (isBlock || insideSvg) && !parent.inlineLayout,
-        isTextContent = textContent != null,
-        // whitespace preserved by an ancestor is never collapsed again
+        isTextContent = isTextContent,
+        // whitespace preserved by an ancestor is never re-indented again
         content = when {
-            parent.content == Raw || ':' in name || name in HTML_RAW_TEXT_ELEMENTS -> Raw
-            parent.content == Verbatim || name == "pre" -> Verbatim
-            else -> textContent ?: parent.content
+            parent.content == RAW || ':' in name || name in HTML_RAW_TEXT_ELEMENTS -> RAW
+            parent.content == VERBATIM || preservesWhitespace -> VERBATIM
+            else -> INDENTED
         },
-        inlineLayout = parent.inlineLayout || name == "pre" || textContent != null,
-        svg = insideSvg || name == "svg",
+        inlineLayout = parent.inlineLayout || preservesWhitespace,
     )
 }
 
@@ -400,24 +333,21 @@ private val BLOCK_ELEMENTS = setOf(
     "svg",
 )
 
+// Elements whose whitespace is significant, so their content is written
+// verbatim and laid out inline
+private val WHITESPACE_PRESERVING_ELEMENTS = setOf("pre", "textarea")
+
 // Text content elements: the opening tag starts its own line and the closing
 // tag ends it, with nothing added between, since whitespace there would become
-// part of the text. Returns how their text is written — collapsed for a title /
-// description, whose whitespace is insignificant to its readers — or null when
-// the element is not a text content element at all.
-private fun textContentOf(name: String, insideSvg: Boolean): Content? = when (name) {
-    "title" -> Collapsed()
-    "desc" -> if (insideSvg) Collapsed() else null
-    "text" -> if (insideSvg) Verbatim else null
-    else -> null
+// part of the text.
+private fun isTextContent(name: String, insideSvg: Boolean): Boolean = when (name) {
+    "title" -> true
+    "desc", "text" -> insideSvg
+    else -> false
 }
 
 private fun Appendable.escapeHtml(value: String) {
-    for (c in value) escapeHtml(c)
-}
-
-private fun Appendable.escapeHtml(c: Char) {
-    when (c) {
+    for (c in value) when (c) {
         '<' -> +"&lt;"
         '>' -> +"&gt;"
         '&' -> +"&amp;"

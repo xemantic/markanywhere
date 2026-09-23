@@ -4,7 +4,6 @@ public final class com/xemantic/markanywhere/html/spec/HtmlElementsKt {
 }
 
 public final class com/xemantic/markanywhere/html/spec/HtmlWhitespaceKt {
-	public static final fun getHTML_WHITESPACE_CHARS ()[C
 	public static final fun isHtmlBlank (Ljava/lang/String;)Z
 	public static final fun isHtmlWhitespace (C)Z
 }
