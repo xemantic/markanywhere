@@ -39,7 +39,12 @@ import kotlinx.coroutines.flow.flow
  * (containing `:`) are treated as block elements. All elements inside
  * `<svg>` are treated as block elements for Chrome DevTools-like
  * indentation, except for inline text elements (`tspan`, `textPath`, `a`)
- * which remain inline to preserve text content. HTML void elements and
+ * which remain inline to preserve text content. Text content elements
+ * (HTML `<title>`, SVG `<title>`, `<desc>` and `<text>`) sit on their own
+ * line, but their content is kept inline, since added whitespace would
+ * become part of the text: the content of SVG `<text>` is emitted verbatim,
+ * while the whitespace of a title or description, insignificant to its
+ * readers, is collapsed to single spaces and trimmed. HTML void elements and
  * empty SVG elements are rendered with XHTML self-closing syntax
  * (e.g. `<br/>`, `<img src="..."/>`).
  *
@@ -60,6 +65,11 @@ public fun Flow<SemanticEvent>.asHtml(): Flow<String> = flow {
     var svgCount = 0
     var customMarkupCount = 0
     var rawTextCount = 0
+    // One entry per open text content element: whether it collapses whitespace
+    val textContentStack = ArrayDeque<Boolean>()
+    // Whitespace collapsing state of the innermost collapsing element
+    var collapsedContentStarted = false
+    var collapsedSpacePending = false
 
     val eventBuffer = StringBuilder()
     var hasPendingNewline = false
@@ -86,19 +96,28 @@ public fun Flow<SemanticEvent>.asHtml(): Flow<String> = flow {
     }
 
     fun confirmPendingMark() {
-        if (pendingMarkName == null) return
+        val name = pendingMarkName ?: return
         pendingMarkName = null
         out(">")
         level++
         indentation = indentAtom.repeat(level)
-        if (pendingMarkIsBlock) {
+        if (pendingMarkIsBlock && textContentCollapse(name, pendingMarkInsideSvg) == null) {
             out("\n")
             atLineStart = true
+        } else {
+            atLineStart = false
         }
     }
 
-    fun SemanticEvent.Marked.isBlockMark(insideSvg: Boolean, insidePre: Boolean): Boolean =
-        (isBlock || (insideSvg && name !in SVG_INLINE_ELEMENTS)) && !insidePre
+    // Emits the pending collapsed space, if any, before the next content
+    fun flushCollapsedSpace() {
+        if (collapsedSpacePending) out(" ")
+        collapsedSpacePending = false
+        collapsedContentStarted = true
+    }
+
+    fun SemanticEvent.Marked.isBlockMark(insideSvg: Boolean, verbatimLayout: Boolean): Boolean =
+        (isBlock || (insideSvg && name !in SVG_INLINE_ELEMENTS)) && !verbatimLayout
 
     collect { event ->
 
@@ -116,6 +135,9 @@ public fun Flow<SemanticEvent>.asHtml(): Flow<String> = flow {
                 if (pmName == "svg") svgCount--
                 if (':' in pmName) customMarkupCount--
                 if (pmName in RAW_TEXT_ELEMENTS) rawTextCount--
+                if (textContentCollapse(pmName, pendingMarkInsideSvg) != null) {
+                    textContentStack.removeLast()
+                }
                 out("/>")
                 if (pendingMarkIsBlock) {
                     out("\n")
@@ -136,9 +158,23 @@ public fun Flow<SemanticEvent>.asHtml(): Flow<String> = flow {
                         // Raw HTML at level 0 - output as-is without escaping
                         out(event.text)
                         atLineStart = event.text.endsWith('\n')
-                    } else if (preCount > 0 || customMarkupCount > 0 || rawTextCount > 0) {
-                        // Inside pre / custom markup / raw text - emit as-is
-                        // without indentation. Custom markup and raw text also
+                    } else if (textContentStack.lastOrNull() == true) {
+                        // Inside a title / description - collapse whitespace
+                        // runs to single spaces, dropping leading and trailing ones
+                        for (c in event.text) {
+                            if (c in ASCII_WHITESPACE) {
+                                if (collapsedContentStarted) collapsedSpacePending = true
+                            } else {
+                                flushCollapsedSpace()
+                                eventBuffer.escapeHtml(c)
+                            }
+                        }
+                        atLineStart = false
+                    } else if (
+                        preCount > 0 || customMarkupCount > 0 || rawTextCount > 0 || textContentStack.isNotEmpty()
+                    ) {
+                        // Inside pre / custom markup / raw text / SVG text - emit
+                        // as-is without indentation. Custom markup and raw text also
                         // bypass HTML escaping.
                         if (customMarkupCount > 0 || rawTextCount > 0) {
                             out(event.text)
@@ -170,8 +206,12 @@ public fun Flow<SemanticEvent>.asHtml(): Flow<String> = flow {
             }
 
             is Mark -> {
-                val insidePre = preCount > 0
+                val verbatimLayout = preCount > 0 || textContentStack.isNotEmpty()
                 val insideSvg = svgCount > 0
+                if (textContentStack.lastOrNull() == true) {
+                    // markup nested in a title / description is content
+                    flushCollapsedSpace()
+                }
                 if (event.name == "pre") {
                     preCount++
                 }
@@ -184,7 +224,15 @@ public fun Flow<SemanticEvent>.asHtml(): Flow<String> = flow {
                 if (event.name in RAW_TEXT_ELEMENTS) {
                     rawTextCount++
                 }
-                val isBlock = event.isBlockMark(insideSvg, insidePre)
+                val collapse = textContentCollapse(event.name, insideSvg)
+                if (collapse != null) {
+                    textContentStack.addLast(collapse)
+                    if (collapse) {
+                        collapsedContentStarted = false
+                        collapsedSpacePending = false
+                    }
+                }
+                val isBlock = event.isBlockMark(insideSvg, verbatimLayout)
                 if (isBlock) {
                     if (atLineStart) {
                         out(indentation)
@@ -193,7 +241,7 @@ public fun Flow<SemanticEvent>.asHtml(): Flow<String> = flow {
                         out(indentation)
                     }
                 } else {
-                    if (atLineStart && !insidePre) {
+                    if (atLineStart && !verbatimLayout) {
                         out(indentation)
                     }
                     atLineStart = false
@@ -218,19 +266,25 @@ public fun Flow<SemanticEvent>.asHtml(): Flow<String> = flow {
                 if (event.name in RAW_TEXT_ELEMENTS) {
                     rawTextCount--
                 }
-                val insidePre = preCount > 0
                 val insideSvg = svgCount > 0
+                // a text content element closes right after its content
+                val isTextContent = textContentCollapse(event.name, insideSvg) != null
+                if (isTextContent) {
+                    // a trailing collapsed space is dropped
+                    if (textContentStack.removeLast()) collapsedSpacePending = false
+                }
+                val verbatimLayout = preCount > 0 || textContentStack.isNotEmpty()
                 level--
                 indentation = indentAtom.repeat(level)
-                val isBlock = event.isBlockMark(insideSvg, insidePre)
-                if (isBlock) {
+                val isBlock = event.isBlockMark(insideSvg, verbatimLayout)
+                if (isBlock && !isTextContent) {
                     if (atLineStart) {
                         out(indentation)
                     } else {
                         out("\n")
                         out(indentation)
                     }
-                } else if (atLineStart && !insidePre) {
+                } else if (!isBlock && atLineStart && !verbatimLayout) {
                     out(indentation)
                 }
                 out("</"); out(event.name); out(">")
@@ -306,6 +360,21 @@ private val RAW_TEXT_ELEMENTS = setOf(
     "style", "script"
 )
 
+// Text content elements: the opening tag starts its own line and the closing
+// tag ends it, with nothing added between, since whitespace there would become
+// part of the text. Returns whether the element collapses its whitespace
+// (a title / description, whose whitespace is insignificant to its readers),
+// or null when the element is not a text content element at all.
+private fun textContentCollapse(name: String, insideSvg: Boolean): Boolean? = when (name) {
+    "title" -> true
+    "desc" -> if (insideSvg) true else null
+    "text" -> if (insideSvg) false else null
+    else -> null
+}
+
+// ASCII whitespace per the HTML spec, which a title strips and collapses
+private const val ASCII_WHITESPACE = " \t\n\r\u000C"
+
 // HTML void elements that cannot have children and are rendered as self-closing (e.g. <br/>)
 private val VOID_ELEMENTS = setOf(
     "area", "base", "br", "col", "embed", "hr", "img",
@@ -313,7 +382,11 @@ private val VOID_ELEMENTS = setOf(
 )
 
 private fun Appendable.escapeHtml(value: String) {
-    for (c in value) when (c) {
+    for (c in value) escapeHtml(c)
+}
+
+private fun Appendable.escapeHtml(c: Char) {
+    when (c) {
         '<' -> +"&lt;"
         '>' -> +"&gt;"
         '&' -> +"&amp;"

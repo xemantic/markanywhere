@@ -107,9 +107,7 @@ Will print:
 ```text
 <html>
   <head>
-    <title>
-      Hello
-    </title>
+    <title>Hello</title>
     <meta name="author" content="Alice"/>
   </head>
   <body>
