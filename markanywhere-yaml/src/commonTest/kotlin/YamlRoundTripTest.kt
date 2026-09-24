@@ -157,11 +157,10 @@ class YamlRoundTripTest {
 
     @Test
     fun `should quote a key a YAML 1_1 reader would type`() = runTest {
-        // given — Psych reads booleans in any letter case, go-yaml v2 reads
-        // `y` / `n` as booleans
+        // given — Psych reads booleans and nulls in any letter case
         val events = semanticEvents {
             "entry"("key" to "yEs") { +"v" }
-            "entry"("key" to "n") { +"v" }
+            "entry"("key" to "nULL") { +"v" }
         }
 
         // when
@@ -169,8 +168,22 @@ class YamlRoundTripTest {
         val reparsed = flowOf(rendered).parseYaml()
 
         // then
-        rendered sameAs "\"yEs\": v\n\"n\": v\n"
+        rendered sameAs "\"yEs\": v\n\"nULL\": v\n"
         reparsed.mergeAdjacentText() sameAs events
+    }
+
+    @Test
+    fun `should not quote a one-letter boolean key`() = runTest {
+        // given — go-yaml v2 reads a plain `y` / `n` value as a boolean, but
+        // decodes a front matter key into a string, and neither Psych nor
+        // PyYAML types them at all
+        val source = "x: 1\ny: 2\nn: 3\nY: 4\nN: 5\n"
+
+        // when
+        val rendered = flowOf(source).parseYaml().renderYaml()
+
+        // then
+        rendered sameAs source
     }
 
     @Test
@@ -216,7 +229,7 @@ class YamlRoundTripTest {
     @Test
     fun `should not quote a shape no reader types`() = runTest {
         // given
-        val values = listOf("1,", "1,,2", "._0", ".e5")
+        val values = listOf("1,", "1,,2", "._0", ".e5", "2024-2-30", "2024-5-32")
         for (value in values) {
             val events = semanticEvents {
                 "entry"("key" to "k") { +value }
@@ -237,14 +250,15 @@ class YamlRoundTripTest {
         // given — the parser leaves these strings (no reader has a type for
         // them), but PyYAML or Psych refuse the whole document when they are
         // plain, so the writer quotes them and the first render rewrites the
-        // source; a date-shaped string outside the calendar is quoted too
+        // source; PyYAML refuses a timestamp shape out of range
         val source = """
             a: =
             b: <<
             c: 2024-13-45
-            d: 2024-2-30
+            d: 2024-01-01 24:30:00
             e: 0x_
             f: .e+4
+            g: 2024-01-01 10:00:00 +23:99
         """.trimIndent() + "\n"
 
         // when
@@ -255,9 +269,10 @@ class YamlRoundTripTest {
             a: "="
             b: "<<"
             c: "2024-13-45"
-            d: "2024-2-30"
+            d: "2024-01-01 24:30:00"
             e: "0x_"
             f: ".e+4"
+            g: "2024-01-01 10:00:00 +23:99"
         """.trimIndent() + "\n"
     }
 

@@ -46,10 +46,9 @@ import com.xemantic.markanywhere.SemanticEvent
  *   text is a bare `key:`; `type=seq` / `type=map` with no children are
  *   `[]` / `{}`;
  * - a key is written plain only when identifier-shaped (letters, digits,
- *   `_`, `-`, `.`, starting with a letter or `_`) and not a shape a plain
- *   scalar would be typed as — a YAML 1.1 reader takes a bare `yes:`, `y:`
- *   or `nULL:` as a boolean / null key — and double-quoted otherwise, even
- *   where YAML would not require it;
+ *   `_`, `-`, `.`, starting with a letter or `_`) and not a key a reader
+ *   would type — Psych takes a bare `yes:` or `nULL:` as a boolean / null
+ *   key — and double-quoted otherwise, even where YAML would not require it;
  * - a `text` child of a container (the parser's verbatim fallback for a
  *   line outside its YAML subset) is written as-is, on its own line(s).
  *
@@ -232,13 +231,13 @@ public class YamlWriter(
     }
 
     // A key is written plain only when it is identifier-shaped and would not
-    // be typed (`yes`, `y`, `nULL`): the Markdown parser's front matter detection requires
+    // be typed (`yes`, `nULL`): the Markdown parser's front matter detection requires
     // the first line to pass `isYamlKeyLine` (such a key, or a quoted one),
     // so quoting everything else keeps whatever entry comes first
     // re-detectable. The character rules are shared with that check.
     private fun renderKey(key: String?): String {
         val k = key ?: ""
-        return if (isIdentifierKey(k) && !isUnsafePlainScalar(k)) k else quoted(k)
+        return if (isIdentifierKey(k) && !isTypedPlainKey(k)) k else quoted(k)
     }
 }
 

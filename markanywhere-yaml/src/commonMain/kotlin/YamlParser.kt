@@ -481,7 +481,7 @@ public class YamlParser(
         var i = start
         while (i < s.length) {
             val c = s[i]
-            if (c == ':' && (i + 1 >= s.length || s[i + 1] == ' ' || s[i + 1] == ',' || s[i + 1] == '}')) break
+            if (s.isMappingColonAt(i) || c == ':' && (s[i + 1] == ',' || s[i + 1] == '}')) break
             if (c == ',' || c == '}' || c == ']' || c == '[' || c == '{') return null
             i++
         }
@@ -497,8 +497,7 @@ public class YamlParser(
         while (i < s.length) {
             val c = s[i]
             if (c == ',' || c == ']' || c == '}') break
-            if (c == ':' && (i + 1 >= s.length || s[i + 1] == ' ')) return null
-            if (c == '#' && i > start && s[i - 1] == ' ') return null
+            if (s.isMappingColonAt(i) || s.isCommentStartAt(i)) return null
             i++
         }
         val text = s.substring(start, i).trim()
