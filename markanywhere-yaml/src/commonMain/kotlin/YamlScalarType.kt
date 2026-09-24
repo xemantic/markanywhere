@@ -65,10 +65,13 @@ private val YAML_WORD_MAX_LENGTH =
 private fun anchored(pattern: String) = Regex("^(?:$pattern)$")
 
 // PyYAML's resolver, less a base prefix with no digit (`0x_`), which it
-// resolves and then fails to construct
+// resolves and then fails to construct. The digits after a base prefix are
+// written `_*[01][01_]*`, not `[01_]*[01][01_]*`: the same strings, but the
+// latter can split a digit run many ways and backtracks quadratically over
+// a long near-miss.
 private val PYYAML_INT = anchored(
-    "[-+]?0b[01_]*[01][01_]*|[-+]?0[0-7_]+|[-+]?(?:0|[1-9][0-9_]*)" +
-        "|[-+]?0x[0-9a-fA-F_]*[0-9a-fA-F][0-9a-fA-F_]*|[-+]?[1-9][0-9_]*(?::[0-5]?[0-9])+"
+    "[-+]?0b_*[01][01_]*|[-+]?0[0-7_]+|[-+]?(?:0|[1-9][0-9_]*)" +
+        "|[-+]?0x_*[0-9a-fA-F][0-9a-fA-F_]*|[-+]?[1-9][0-9_]*(?::[0-5]?[0-9])+"
 )
 
 private val PYYAML_FLOAT = anchored(
@@ -78,8 +81,8 @@ private val PYYAML_FLOAT = anchored(
 
 // Psych's scalar scanner, with its default (legacy) integers that allow `,`
 private val PSYCH_INT = anchored(
-    "[-+]?0b[01_,]*[01][01_,]*|[-+]?0[0-7_,]+|[-+]?(?:0|[1-9](?:[0-9]|[,_][0-9])*)" +
-        "|[-+]?0x[0-9a-fA-F_,]*[0-9a-fA-F][0-9a-fA-F_,]*|[-+]?[0-9][0-9_]*(?::[0-5]?[0-9]){1,2}"
+    "[-+]?0b[_,]*[01][01_,]*|[-+]?0[0-7_,]+|[-+]?(?:0|[1-9](?:[0-9]|[,_][0-9])*)" +
+        "|[-+]?0x[_,]*[0-9a-fA-F][0-9a-fA-F_,]*|[-+]?[0-9][0-9_]*(?::[0-5]?[0-9]){1,2}"
 )
 
 private val PSYCH_FLOAT = anchored(
@@ -105,11 +108,11 @@ private val GO_YAML_DOT_FLOAT = anchored("""\.[0-9](?:_?[0-9])*(?:[eE][-+]?[0-9]
 
 // The union of the Psych and PyYAML timestamp shapes (go-yaml v2 decodes a
 // timestamp into a string); the groups are the date, the time and the
-// offset, so [isTimestampInRange] can check their values.
+// offset digits, so [isTimestampInRange] can check their values.
 private val YAML_TIMESTAMP = anchored(
     """(-?[0-9]{4})-([0-9]{1,2})-([0-9]{1,2})""" +
         """(?:(?:[Tt]|[ \t]+)([0-9]{1,2}):([0-9]{2}):([0-9]{2})(?:\.[0-9]*)?""" +
-        """(?:[ \t]*(?:Z|[-+]([0-9]{1,2}):?([0-9]{2})?))?)?"""
+        """(?:[ \t]*(?:Z|[-+]([0-9]{1,2}:?(?:[0-9]{2})?)))?)?"""
 )
 
 // PyYAML's own timestamp shape: two-digit month and day for a date alone,
@@ -161,15 +164,24 @@ private fun isTimestampInRange(groups: List<String>): Boolean {
         val hour = groups[4].toInt()
         val minute = groups[5].toInt()
         val second = groups[6].toInt()
-        val offsetHours = groups[7]
-        val offsetMinutes = groups[8]
+        val offset = groups[7]
         return day in 1..31 && minute <= 59 && second <= 60 &&
             (hour <= 23 || hour == 24 && minute == 0 && second == 0) &&
-            (offsetHours.isEmpty() || offsetHours.toInt() <= 23) &&
-            (offsetMinutes.isEmpty() || offsetMinutes.toInt() <= 59)
+            (offset.isEmpty() || offsetMinutes(offset) < 24 * 60)
     }
     if (year < 0) return false
     return day in 1..daysInMonth(year, month)
+}
+
+// The offset as Psych's `parse_time` splits it: at the colon when there is
+// one, else up to two digits of hours and the rest as minutes (`+530` is
+// 53 hours, `+070` is 7). Minutes past 59 carry into the hours (`+05:99`).
+private fun offsetMinutes(offset: String): Int {
+    val colon = offset.indexOf(':')
+    val split = if (colon >= 0) colon else minOf(2, offset.length)
+    val hours = offset.substring(0, split).toInt()
+    val minutes = offset.substring(if (colon >= 0) split + 1 else split)
+    return hours * 60 + (if (minutes.isEmpty()) 0 else minutes.toInt())
 }
 
 private fun daysInMonth(year: Int, month: Int): Int = when (month) {

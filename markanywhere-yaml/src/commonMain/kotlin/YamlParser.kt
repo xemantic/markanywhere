@@ -346,8 +346,7 @@ public class YamlParser(
             val (key, end) = scanQuoted(content) ?: return null
             var i = end
             while (i < content.length && content[i] == ' ') i++
-            if (i >= content.length || content[i] != ':') return null
-            if (i + 1 < content.length && content[i + 1] != ' ' && content[i + 1] != '\t') return null
+            if (i >= content.length || !content.isMappingColonAt(i)) return null
             return key to content.substring(i + 1)
         }
         if (first in KEY_FORBIDDEN_START) return null
@@ -482,7 +481,7 @@ public class YamlParser(
         while (i < s.length) {
             val c = s[i]
             if (s.isMappingColonAt(i) || c == ':' && (s[i + 1] == ',' || s[i + 1] == '}')) break
-            if (c == ',' || c == '}' || c == ']' || c == '[' || c == '{') return null
+            if (c == ',' || c == '}' || c == ']' || c == '[' || c == '{' || s.isCommentStartAt(i)) return null
             i++
         }
         val key = s.substring(start, i).trim()
@@ -546,10 +545,13 @@ private fun skipSpaces(s: String, from: Int): Int {
 private fun isSequenceEntry(content: String): Boolean =
     content == "-" || content.startsWith("- ") || content.startsWith("-\t")
 
-// True when only whitespace or a `#` comment follows index [from].
+// True when only whitespace or a `#` comment follows index [from], the end
+// of a quoted scalar or a flow collection. Not [isCommentStartAt]: that is
+// the rule inside a plain scalar, while after a closed token every reader
+// (libyaml, PyYAML) starts a comment at any `#`, even with no space (`"x"#b`).
 private fun isBlankOrComment(s: String, from: Int): Boolean {
     val i = skipSpaces(s, from)
-    return i >= s.length || (s[i] == '#' && (i == from || s[i - 1] == ' ' || s[i - 1] == '\t'))
+    return i >= s.length || s[i] == '#'
 }
 
 // A ` #` (hash preceded by whitespace) starts a trailing comment.

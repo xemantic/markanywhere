@@ -23,7 +23,11 @@ import com.xemantic.markanywhere.test.sameAs
 import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.runTest
+import com.xemantic.kotlin.test.assert
 import kotlin.test.Test
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeSource
+import kotlin.time.measureTime
 
 /**
  * Specifies the streaming YAML parser and its event representation.
@@ -348,6 +352,33 @@ class YamlParserTest {
     }
 
     @Test
+    fun `should type a timestamp offset the way Psych splits and bounds it`() = runTest {
+        // given — Psych reads up to two digits as the offset hours and the
+        // rest as its minutes, and only bounds the whole offset under a day:
+        // minutes past 59 carry into the hours, and a three-digit offset is
+        // two hour digits and one minute digit
+        val textFlow = """
+            a: 2024-01-01 10:00:00 +05:99
+            b: 2024-01-01 10:00:00 +0599
+            c: 2024-01-01 10:00:00 +19:70
+            d: 2024-01-01 10:00:00 +070
+            e: 2024-01-01 10:00:00 -2359
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parseYaml()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "entry"("key" to "a", "type" to "timestamp") { +"2024-01-01 10:00:00 +05:99" }
+            "entry"("key" to "b", "type" to "timestamp") { +"2024-01-01 10:00:00 +0599" }
+            "entry"("key" to "c", "type" to "timestamp") { +"2024-01-01 10:00:00 +19:70" }
+            "entry"("key" to "d", "type" to "timestamp") { +"2024-01-01 10:00:00 +070" }
+            "entry"("key" to "e", "type" to "timestamp") { +"2024-01-01 10:00:00 -2359" }
+        }
+    }
+
+    @Test
     fun `should type the number shapes go-yaml v2 reads once underscores are removed`() = runTest {
         // given — go-yaml v2 (Hugo) deletes every `_` before it parses a
         // number, so an underscore next to a sign, an exponent or a base
@@ -382,8 +413,9 @@ class YamlParserTest {
         // given — a trailing or doubled separator, a dot before an
         // underscore, an exponent with no mantissa digit, a date that is not
         // in the calendar, a date-only shape with a sign, a minute Psych's
-        // Time refuses and a sign after a signed binary prefix: PyYAML, Psych
-        // and go-yaml v2 all read strings
+        // Time refuses, a sign after a signed binary prefix and an offset
+        // Psych splits into 53 hours or bounds at a day: PyYAML, Psych and
+        // go-yaml v2 all read strings
         val textFlow = """
             a: 1,
             b: 1,,2
@@ -394,6 +426,8 @@ class YamlParserTest {
             g: 2024-01-01T12:60:00
             h: -0b-1
             i: -0b+1
+            j: 2024-01-01 10:00:00 +530
+            k: 2024-01-01 10:00:00 +2400
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
@@ -410,6 +444,8 @@ class YamlParserTest {
             "entry"("key" to "g") { +"2024-01-01T12:60:00" }
             "entry"("key" to "h") { +"-0b-1" }
             "entry"("key" to "i") { +"-0b+1" }
+            "entry"("key" to "j") { +"2024-01-01 10:00:00 +530" }
+            "entry"("key" to "k") { +"2024-01-01 10:00:00 +2400" }
         }
     }
 
@@ -443,6 +479,27 @@ class YamlParserTest {
             "entry"("key" to "f") { +"2024-01-01 24:30:00" }
             "entry"("key" to "g") { +"2024-01-01 10:00:00 +23:99" }
         }
+    }
+
+    @Test
+    fun `should resolve a long near-miss of a base prefixed number in linear time`() {
+        // given — a base prefix, digits and one character outside the base:
+        // a pattern that lets the digits match two ways backtracks
+        // quadratically over them, and every plain scalar is typed
+        val values = listOf("0x", "0b", "+0x", "-0b").map { prefix ->
+            prefix + "1".repeat(50_000) + "g"
+        }
+
+        // when
+        val elapsed = TimeSource.Monotonic.measureTime {
+            for (value in values) {
+                assert(yamlScalarType(value) == null)
+                assert(!isUnsafePlainScalar(value))
+            }
+        }
+
+        // then
+        assert(elapsed < 2.seconds)
     }
 
     @Test
@@ -873,6 +930,22 @@ class YamlParserTest {
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "entry"("key" to "title") { +"x" }
             +"a\t#b: c\n"
+        }
+    }
+
+    @Test
+    fun `should read a hash after a space as a comment in a flow mapping key`() = runTest {
+        // given — the comment leaves the mapping unterminated, which every
+        // reader refuses, so the line is outside the subset
+        val textFlow = "title: x\ngeo: {a #b: c}\n".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parseYaml()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "entry"("key" to "title") { +"x" }
+            +"geo: {a #b: c}\n"
         }
     }
 

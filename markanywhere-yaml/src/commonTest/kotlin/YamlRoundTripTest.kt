@@ -198,6 +198,7 @@ class YamlRoundTripTest {
             mixed: yEs
             big: 1_000
             time: 12:30
+            offset: 2024-01-01 10:00:00 +05:99
         """.trimIndent() + "\n"
 
         // when
@@ -229,7 +230,9 @@ class YamlRoundTripTest {
     @Test
     fun `should not quote a shape no reader types`() = runTest {
         // given
-        val values = listOf("1,", "1,,2", "._0", ".e5", "2024-2-30", "2024-5-32")
+        val values = listOf(
+            "1,", "1,,2", "._0", ".e5", "2024-2-30", "2024-5-32", "2024-01-01 10:00:00 +530",
+        )
         for (value in values) {
             val events = semanticEvents {
                 "entry"("key" to "k") { +value }
