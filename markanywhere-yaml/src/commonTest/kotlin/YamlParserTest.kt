@@ -302,6 +302,70 @@ class YamlParserTest {
     }
 
     @Test
+    fun `should type the plain scalars a YAML 1_1 reader types`() = runTest {
+        // given — YAML 1.2 reads these as strings, but Psych (Jekyll), PyYAML
+        // or go-yaml v2 type them, and front matter is written for those
+        // readers: Jekyll's documented date format carries a colonless offset
+        val textFlow = """
+            date: 2016-01-01 12:00:00 -0500
+            short: 2024-5-1
+            answer: y
+            shout: N
+            mixed: yEs
+            nil: nULL
+            big: 1_000
+            grouped: 1,000
+            bin: 0b101
+            signed: +0x1F
+            money: 1_000.5
+            nan: .NaN
+            time: 12:30
+            angle: 190:20:30.15
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parseYaml()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "entry"("key" to "date", "type" to "timestamp") { +"2016-01-01 12:00:00 -0500" }
+            "entry"("key" to "short", "type" to "timestamp") { +"2024-5-1" }
+            "entry"("key" to "answer", "type" to "bool") { +"y" }
+            "entry"("key" to "shout", "type" to "bool") { +"N" }
+            "entry"("key" to "mixed", "type" to "bool") { +"yEs" }
+            "entry"("key" to "nil", "type" to "null") { +"nULL" }
+            "entry"("key" to "big", "type" to "int") { +"1_000" }
+            "entry"("key" to "grouped", "type" to "int") { +"1,000" }
+            "entry"("key" to "bin", "type" to "int") { +"0b101" }
+            "entry"("key" to "signed", "type" to "int") { +"+0x1F" }
+            "entry"("key" to "money", "type" to "float") { +"1_000.5" }
+            "entry"("key" to "nan", "type" to "float") { +".NaN" }
+            "entry"("key" to "time", "type" to "int") { +"12:30" }
+            "entry"("key" to "angle", "type" to "float") { +"190:20:30.15" }
+        }
+    }
+
+    @Test
+    fun `should not type a float shape without a digit`() = runTest {
+        // given — no reader types a lone dot or a sign and a dot
+        val textFlow = """
+            dot: .
+            signed: +.
+            under: ._
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parseYaml()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "entry"("key" to "dot") { +"." }
+            "entry"("key" to "signed") { +"+." }
+            "entry"("key" to "under") { +"._" }
+        }
+    }
+
+    @Test
     fun `should keep a quoted scalar a string`() = runTest {
         // given — quoting suppresses the type resolution
         val textFlow = """

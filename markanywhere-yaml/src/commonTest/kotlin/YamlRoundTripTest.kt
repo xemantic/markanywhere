@@ -166,9 +166,51 @@ class YamlRoundTripTest {
 
         // when
         val rendered = events.renderYaml()
+        val reparsed = flowOf(rendered).parseYaml()
 
         // then
         rendered sameAs "\"yEs\": v\n\"n\": v\n"
+        reparsed.mergeAdjacentText() sameAs events
+    }
+
+    @Test
+    fun `should keep YAML 1_1 typed front matter values as written`() = runTest {
+        // given — Jekyll's documented date format, a short date, go-yaml v2
+        // booleans and Psych numbers: the parser types them, so the writer
+        // writes them back bare instead of quoting them into strings
+        val source = """
+            date: 2016-01-01 12:00:00 -0500
+            short: 2024-5-1
+            answer: y
+            mixed: yEs
+            big: 1_000
+            time: 12:30
+        """.trimIndent() + "\n"
+
+        // when
+        val rendered = flowOf(source).parseYaml().renderYaml()
+
+        // then
+        rendered sameAs source
+    }
+
+    @Test
+    fun `should not quote a float shape without a digit`() = runTest {
+        // given
+        val values = listOf(".", "+.", "._")
+        for (value in values) {
+            val events = semanticEvents {
+                "entry"("key" to "k") { +value }
+            }
+
+            // when
+            val rendered = events.renderYaml()
+            val reparsed = flowOf(rendered).parseYaml()
+
+            // then
+            rendered sameAs "k: $value\n"
+            reparsed.mergeAdjacentText() sameAs events
+        }
     }
 
     @Test
@@ -177,7 +219,7 @@ class YamlRoundTripTest {
         // as Latin-1), the U+FFFE / U+FFFF non-characters and lone surrogates
         // are outside YAML's printable set (YAML 1.2 §5.1): Psych and PyYAML
         // refuse the whole document when they appear raw, even in a block
-        // scalar
+        // scalar; a byte order mark must not appear inside a document (§5.2)
         val values = listOf(
             "It\u0092s" to "\"It\\u0092s\"",
             "a\u0080b" to "\"a\\u0080b\"",
@@ -187,6 +229,8 @@ class YamlRoundTripTest {
             "lone \uD800 high" to "\"lone \\ud800 high\"",
             "lone \uDC00 low" to "\"lone \\udc00 low\"",
             "first\u0092\nsecond" to "\"first\\u0092\\nsecond\"",
+            "\uFEFFTitle" to "\"\\ufeffTitle\"",
+            "first\n\uFEFFsecond" to "\"first\\n\\ufeffsecond\"",
             "smile 😀" to "smile 😀",
         )
         for ((value, expected) in values) {

@@ -35,10 +35,10 @@ import com.xemantic.markanywhere.SemanticEvent
  * - a scalar with a `type` (`bool`, `int`, `float`, `null`, `timestamp`) is
  *   written bare; a string is written plain unless a plain scalar would
  *   re-parse as something else — reserved literals, numbers, timestamps,
- *   shapes a YAML 1.1 reader types (`12:30`, `1_000`, `yEs`), a leading
- *   indicator, `: ` or a trailing `:`, ` #`, surrounding whitespace, a
- *   character outside YAML's printable set — in which case it is
- *   double-quoted with the YAML escapes;
+ *   including the YAML 1.1 shapes the parser types (`12:30`, `1_000`,
+ *   `yEs`), a leading indicator, `: ` or a trailing `:`, ` #`, surrounding
+ *   whitespace, a line break or tab, a character YAML requires escaped —
+ *   in which case it is double-quoted with the YAML escapes;
  * - a multi-line string becomes a literal block scalar (`|`, `|-`, `|+`
  *   according to its trailing newlines) unless its first line starts with
  *   whitespace or it has no content, which fall back to a quoted scalar;
@@ -46,9 +46,10 @@ import com.xemantic.markanywhere.SemanticEvent
  *   text is a bare `key:`; `type=seq` / `type=map` with no children are
  *   `[]` / `{}`;
  * - a key is written plain only when identifier-shaped (letters, digits,
- *   `_`, `-`, `.`, starting with a letter or `_`) and not a reserved
- *   literal — a YAML 1.1 reader takes a bare `yes:` as a boolean key — and
- *   double-quoted otherwise, even where YAML would not require it;
+ *   `_`, `-`, `.`, starting with a letter or `_`) and not a shape a plain
+ *   scalar would be typed as — a YAML 1.1 reader takes a bare `yes:`, `y:`
+ *   or `nULL:` as a boolean / null key — and double-quoted otherwise, even
+ *   where YAML would not require it;
  * - a `text` child of a container (the parser's verbatim fallback for a
  *   line outside its YAML subset) is written as-is, on its own line(s).
  *
@@ -204,7 +205,8 @@ public class YamlWriter(
         if (first == ' ' || first == '\t' || first == '\n') return false
         for (i in text.indices) {
             val c = text[i]
-            if (c != '\n' && c != '\t' && text.isYamlUnprintableAt(i)) return false
+            // a carriage return would be read as a line break
+            if (c == '\r' || text.isYamlUnprintableAt(i)) return false
         }
         return text.trimEnd('\n').isNotEmpty()
     }
@@ -229,14 +231,14 @@ public class YamlWriter(
         return sb.toString()
     }
 
-    // A key is written plain only when it is identifier-shaped and not a
-    // reserved literal: the Markdown parser's front matter detection requires
+    // A key is written plain only when it is identifier-shaped and would not
+    // be typed (`yes`, `y`, `nULL`): the Markdown parser's front matter detection requires
     // the first line to pass `isYamlKeyLine` (such a key, or a quoted one),
     // so quoting everything else keeps whatever entry comes first
     // re-detectable. The character rules are shared with that check.
     private fun renderKey(key: String?): String {
         val k = key ?: ""
-        return if (isIdentifierKey(k) && yamlScalarType(k) == null && !isYaml11Typed(k)) k else quoted(k)
+        return if (isIdentifierKey(k) && !isTypedPlainScalar(k)) k else quoted(k)
     }
 }
 
@@ -244,28 +246,32 @@ public class YamlWriter(
 // double-quoted output (see YAML 1.2 §6.4 / §6.6).
 private const val YAML_INDICATORS = "-?:,[]{}#&*!|>'\"%@`"
 
-// Whether the character at [i] must be escaped: it is outside YAML's
-// printable set (YAML 1.2 §5.1 — C0 controls, DEL, the C1 controls,
-// U+FFFE / U+FFFF, a surrogate not part of a pair), which Psych and PyYAML
-// refuse anywhere in a document, or a line break for a YAML 1.1 reader
-// (NEL, the Unicode line and paragraph separators). A lone surrogate has no
-// valid YAML representation at all; its `\u` escape is still the only way to
-// keep it.
+// Whether the character at [i] may only appear `\u`-escaped: it is outside
+// YAML's printable set (YAML 1.2 §5.1 — C0 controls other than tab, line
+// feed and carriage return, DEL, the C1 controls, U+FFFE / U+FFFF, a
+// surrogate not part of a pair), which Psych and PyYAML refuse anywhere in a
+// document; a byte order mark, which must not appear inside a document
+// (§5.2); or a line break for a YAML 1.1 reader (NEL, the Unicode line and
+// paragraph separators). A lone surrogate has no valid YAML representation
+// at all; its `\u` escape is still the only way to keep it. Tab, line feed
+// and carriage return are printable — each writer path decides where it can
+// keep them.
 private fun String.isYamlUnprintableAt(i: Int): Boolean {
     val c = this[i]
     return when {
         c.isHighSurrogate() -> i + 1 == length || !this[i + 1].isLowSurrogate()
         c.isLowSurrogate() -> i == 0 || !this[i - 1].isHighSurrogate()
-        else -> c < ' ' || c in '\u007f'..'\u009f' ||
-            c == '\u2028' || c == '\u2029' || c == '\ufffe' || c == '\uffff'
+        else -> (c < ' ' && c != '\t' && c != '\n' && c != '\r') ||
+            c in '\u007f'..'\u009f' || c == '\u2028' || c == '\u2029' ||
+            c == '\ufeff' || c == '\ufffe' || c == '\uffff'
     }
 }
 
 // A plain scalar the parser would not read back as the same string: one it
-// would type (`yamlScalarType`) or a YAML 1.1 reader would (`isYaml11Typed`),
-// or whose shape is an indicator, a comment
-// (`#` after a space), a mapping colon (`:` before a space or at the end),
-// surrounding whitespace or an unprintable character. A `:` or `#` anywhere else
+// would type (`isTypedPlainScalar`), or whose shape is an indicator, a
+// comment (`#` after a space), a mapping colon (`:` before a space or at the
+// end), surrounding whitespace, a line break or tab, or an unprintable
+// character. A `:` or `#` anywhere else
 // is plain content (`https://x/y`, `C#`), as is an inner `"` or `\`.
 private fun needsQuoting(s: String): Boolean {
     if (s.isEmpty()) return true
@@ -273,11 +279,11 @@ private fun needsQuoting(s: String): Boolean {
     if (s[0] in YAML_INDICATORS) return true
     for (i in s.indices) {
         val c = s[i]
-        if (s.isYamlUnprintableAt(i)) return true
+        if (c == '\n' || c == '\r' || c == '\t' || s.isYamlUnprintableAt(i)) return true
         if (c == ':' && (i + 1 == s.length || s[i + 1] == ' ')) return true
         if (c == '#' && i > 0 && s[i - 1] == ' ') return true
     }
-    return yamlScalarType(s) != null || isYaml11Typed(s)
+    return isTypedPlainScalar(s)
 }
 
 private fun quoted(s: String): String = buildString {
