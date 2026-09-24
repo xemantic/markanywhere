@@ -301,18 +301,16 @@ class YamlRoundTripTest {
     @Test
     fun `should escape every character YAML does not allow in a document`() = runTest {
         // given — C1 controls (mojibake like a Windows-1252 apostrophe read
-        // as Latin-1), the U+FFFE / U+FFFF non-characters and lone surrogates
-        // are outside YAML's printable set (YAML 1.2 §5.1): Psych and PyYAML
-        // refuse the whole document when they appear raw, even in a block
-        // scalar; a byte order mark must not appear inside a document (§5.2)
+        // as Latin-1) and the U+FFFE / U+FFFF non-characters are outside
+        // YAML's printable set (YAML 1.2 §5.1): Psych and PyYAML refuse
+        // the whole document when they appear raw, even in a block scalar;
+        // a byte order mark must not appear inside a document (§5.2)
         val values = listOf(
             "It\u0092s" to "\"It\\u0092s\"",
             "a\u0080b" to "\"a\\u0080b\"",
             "\u009f" to "\"\\u009f\"",
             "x\uFFFEy" to "\"x\\ufffey\"",
             "x\uFFFF" to "\"x\\uffff\"",
-            "lone \uD800 high" to "\"lone \\ud800 high\"",
-            "lone \uDC00 low" to "\"lone \\udc00 low\"",
             "first\u0092\nsecond" to "\"first\\u0092\\nsecond\"",
             "\uFEFFTitle" to "\"\\ufeffTitle\"",
             "first\n\uFEFFsecond" to "\"first\\n\\ufeffsecond\"",
@@ -331,6 +329,49 @@ class YamlRoundTripTest {
             rendered sameAs "k: $expected\n"
             reparsed.mergeAdjacentText() sameAs events
         }
+    }
+
+    @Test
+    fun `should DIVERGENCE write a lone surrogate as the replacement character`() = runTest {
+        // given — a lone surrogate (a JS string cut mid-pair) has no YAML
+        // representation: raw it is outside the printable set, and Psych and
+        // go-yaml refuse its `\u` escape as an invalid code point, so either
+        // loses the whole document; U+FFFD keeps it loadable, but the
+        // surrogate does not survive the round-trip
+        val values = listOf(
+            "lone \uD800 high" to "lone \uFFFD high",
+            "lone \uDC00 low" to "lone \uFFFD low",
+            "\uDC00\uD800" to "\uFFFD\uFFFD",
+        )
+        for ((value, replaced) in values) {
+            val events = semanticEvents {
+                "entry"("key" to "k") { +value }
+            }
+
+            // when
+            val rendered = events.renderYaml()
+            val reparsed = flowOf(rendered).parseYaml()
+
+            // then
+            rendered sameAs "k: \"$replaced\"\n"
+            reparsed.mergeAdjacentText() sameAs semanticEvents {
+                "entry"("key" to "k") { +replaced }
+            }
+        }
+    }
+
+    @Test
+    fun `should DIVERGENCE write a lone surrogate in a key as the replacement character`() = runTest {
+        // given
+        val events = semanticEvents {
+            "entry"("key" to "a\uD800") { +"v" }
+        }
+
+        // when
+        val rendered = events.renderYaml()
+
+        // then
+        rendered sameAs "\"a\uFFFD\": v\n"
     }
 
     @Test

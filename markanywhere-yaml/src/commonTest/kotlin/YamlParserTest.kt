@@ -379,6 +379,19 @@ class YamlParserTest {
     }
 
     @Test
+    fun `should not type a timestamp whose offset ends in a colon`() {
+        // given — a `:` ending a plain scalar is a mapping indicator, so
+        // Psych refuses the line: the shape can never be a timestamp
+        val values = listOf("2024-01-01 12:00:00 +5:", "2024-01-01 12:00:00 -05:")
+
+        // when
+        val types = values.map { yamlScalarType(it) }
+
+        // then
+        assert(types == listOf(null, null))
+    }
+
+    @Test
     fun `should type the number shapes go-yaml v2 reads once underscores are removed`() = runTest {
         // given — go-yaml v2 (Hugo) deletes every `_` before it parses a
         // number, so an underscore next to a sign, an exponent or a base
@@ -413,9 +426,10 @@ class YamlParserTest {
         // given — a trailing or doubled separator, a dot before an
         // underscore, an exponent with no mantissa digit, a date that is not
         // in the calendar, a date-only shape with a sign, a minute Psych's
-        // Time refuses, a sign after a signed binary prefix and an offset
-        // Psych splits into 53 hours or bounds at a day: PyYAML, Psych and
-        // go-yaml v2 all read strings
+        // Time refuses, a sign after a signed binary prefix, an offset
+        // Psych splits into 53 hours or bounds at a day and a date-only
+        // shape with a signed zero year: PyYAML, Psych and go-yaml v2 all
+        // read strings
         val textFlow = """
             a: 1,
             b: 1,,2
@@ -428,6 +442,7 @@ class YamlParserTest {
             i: -0b+1
             j: 2024-01-01 10:00:00 +530
             k: 2024-01-01 10:00:00 +2400
+            l: -0000-01-01
         """.trimIndent().chunkedRandomly().asFlow()
 
         // when
@@ -446,6 +461,7 @@ class YamlParserTest {
             "entry"("key" to "i") { +"-0b+1" }
             "entry"("key" to "j") { +"2024-01-01 10:00:00 +530" }
             "entry"("key" to "k") { +"2024-01-01 10:00:00 +2400" }
+            "entry"("key" to "l") { +"-0000-01-01" }
         }
     }
 
@@ -498,8 +514,36 @@ class YamlParserTest {
             }
         }
 
+        // then — linear takes milliseconds, quadratic minutes; the bound
+        // is far from both so a slow runner cannot trip it
+        assert(elapsed < 20.seconds)
+    }
+
+    @Test
+    fun `should type a long run of digits without exhausting the stack`() {
+        // given — a repeated group is matched recursively by the JVM regex
+        // engine, one frame per repetition, so a pattern that repeats one
+        // over a digit run overflows the stack on a long enough value
+        val digits = "1".repeat(100_000)
+        val values = mapOf(
+            digits to "int",
+            "1,".repeat(50_000) + "1" to "int",
+            ".$digits" to "float",
+            ".1" + "_1".repeat(50_000) to "float",
+            "1" + ":1".repeat(50_000) to "int",
+            "1" + ":1".repeat(50_000) + ".5" to "float",
+            "${digits}g" to null,
+            "1,".repeat(50_000) + "g" to null,
+            ".${digits}g" to null,
+            ".1" + "_1".repeat(50_000) + "g" to null,
+            "1" + ":1".repeat(50_000) + "g" to null,
+        )
+
+        // when
+        val types = values.keys.map { yamlScalarType(it) }
+
         // then
-        assert(elapsed < 2.seconds)
+        assert(types == values.values.toList())
     }
 
     @Test

@@ -62,6 +62,11 @@ private val YAML_WORD_MAX_LENGTH =
 // on a prefix (`0x1F` matched `[0-9]+` as `0`, a full timestamp matched its
 // date-only branch) and the whole-input check then fails — JVM backtracks
 // across the branches and never showed it.
+// No pattern repeats a group (`(?:_?[0-9])*`): the JVM engine matches each
+// repetition of a group one stack frame deeper, so a long digit run
+// overflows the stack. A digit run is a character class instead, and the
+// rule the group expressed is checked by hand ([hasSeparatorsBeforeDigits],
+// [hasUnderscoresBetweenDigits], [isBase60Tail]).
 private fun anchored(pattern: String) = Regex("^(?:$pattern)$")
 
 // PyYAML's resolver, less a base prefix with no digit (`0x_`), which it
@@ -71,19 +76,28 @@ private fun anchored(pattern: String) = Regex("^(?:$pattern)$")
 // a long near-miss.
 private val PYYAML_INT = anchored(
     "[-+]?0b_*[01][01_]*|[-+]?0[0-7_]+|[-+]?(?:0|[1-9][0-9_]*)" +
-        "|[-+]?0x_*[0-9a-fA-F][0-9a-fA-F_]*|[-+]?[1-9][0-9_]*(?::[0-5]?[0-9])+"
+        "|[-+]?0x_*[0-9a-fA-F][0-9a-fA-F_]*"
 )
 
 private val PYYAML_FLOAT = anchored(
-    """[-+]?[0-9][0-9_]*\.[0-9_]*(?:[eE][-+][0-9]+)?|\.[0-9][0-9_]*(?:[eE][-+][0-9]+)?""" +
-        """|[-+]?[0-9][0-9_]*(?::[0-5]?[0-9])+\.[0-9_]*"""
+    """[-+]?[0-9][0-9_]*\.[0-9_]*(?:[eE][-+][0-9]+)?|\.[0-9][0-9_]*(?:[eE][-+][0-9]+)?"""
 )
+
+// PyYAML's base-60 int and float, `(?::[0-5]?[0-9])+` written as a run the
+// group is the tail of, which [isBase60Tail] then checks
+private val PYYAML_BASE60_INT = anchored("[-+]?[1-9][0-9_]*(:[0-9:]*)")
+
+private val PYYAML_BASE60_FLOAT = anchored("""[-+]?[0-9][0-9_]*(:[0-9:]*)\.[0-9_]*""")
 
 // Psych's scalar scanner, with its default (legacy) integers that allow `,`
 private val PSYCH_INT = anchored(
-    "[-+]?0b[_,]*[01][01_,]*|[-+]?0[0-7_,]+|[-+]?(?:0|[1-9](?:[0-9]|[,_][0-9])*)" +
+    "[-+]?0b[_,]*[01][01_,]*|[-+]?0[0-7_,]+|[-+]?0" +
         "|[-+]?0x[_,]*[0-9a-fA-F][0-9a-fA-F_,]*|[-+]?[0-9][0-9_]*(?::[0-5]?[0-9]){1,2}"
 )
+
+// … and its decimal, `[1-9](?:[0-9]|[,_][0-9])*`: a separator only before a
+// digit, which [hasSeparatorsBeforeDigits] checks
+private val PSYCH_DECIMAL_INT = anchored("[-+]?[1-9][0-9,_]*")
 
 private val PSYCH_FLOAT = anchored(
     """[-+]?(?:[0-9][0-9_,]*\.[0-9]*|\.[0-9]+)(?:[eE][-+][0-9]+)?""" +
@@ -104,7 +118,8 @@ private val GO_YAML_FLOAT = anchored("""[-+]?(?:\.[0-9]+|[0-9]+(?:\.[0-9]*)?)(?:
 
 // … but hands a text starting with `.` to Go's `ParseFloat` as is, which
 // takes an `_` only between two digits
-private val GO_YAML_DOT_FLOAT = anchored("""\.[0-9](?:_?[0-9])*(?:[eE][-+]?[0-9](?:_?[0-9])*)?""")
+// ([hasUnderscoresBetweenDigits] checks that)
+private val GO_YAML_DOT_FLOAT = anchored("""\.[0-9][0-9_]*(?:[eE][-+]?[0-9][0-9_]*)?""")
 
 // The union of the Psych and PyYAML timestamp shapes (go-yaml v2 decodes a
 // timestamp into a string); the groups are the date, the time and the
@@ -112,7 +127,7 @@ private val GO_YAML_DOT_FLOAT = anchored("""\.[0-9](?:_?[0-9])*(?:[eE][-+]?[0-9]
 private val YAML_TIMESTAMP = anchored(
     """(-?[0-9]{4})-([0-9]{1,2})-([0-9]{1,2})""" +
         """(?:(?:[Tt]|[ \t]+)([0-9]{1,2}):([0-9]{2}):([0-9]{2})(?:\.[0-9]*)?""" +
-        """(?:[ \t]*(?:Z|[-+]([0-9]{1,2}:?(?:[0-9]{2})?)))?)?"""
+        """(?:[ \t]*(?:Z|[-+]([0-9]{1,2}(?::?[0-9]{2})?)))?)?"""
 )
 
 // PyYAML's own timestamp shape: two-digit month and day for a date alone,
@@ -123,6 +138,14 @@ private val PYYAML_TIMESTAMP = anchored(
         """|[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}(?:[Tt]|[ \t]+)[0-9]{1,2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]*)?""" +
         """(?:[ \t]*(?:Z|[-+][0-9]{1,2}(?::[0-9]{2})?))?"""
 )
+
+// Every character a numeric or timestamp shape can hold, so a string with
+// any other one is a string without running a pattern: digits, signs,
+// separators, base prefixes and hex digits, exponents, and a timestamp's
+// `T` / `Z` and spaces.
+private fun Char.canBeNumeric(): Boolean =
+    this in '0'..'9' || this in "+-._,:" || this in 'a'..'f' || this in 'A'..'F' ||
+        this in "xXoO tTZ\t"
 
 // The `type` a plain scalar resolves to, or null for a string.
 internal fun yamlScalarType(text: String): String? {
@@ -137,10 +160,14 @@ internal fun yamlScalarType(text: String): String? {
     // patterns only run on a string that can match them
     val first = text[0]
     if (first != '-' && first != '+' && first != '.' && first !in '0'..'9') return null
+    if (!text.all { it.canBeNumeric() }) return null
     if (PYYAML_INT.matches(text) || PSYCH_INT.matches(text)) return "int"
+    if (PSYCH_DECIMAL_INT.matches(text) && text.hasSeparatorsBeforeDigits()) return "int"
+    if (PYYAML_BASE60_INT.matchEntire(text)?.let { isBase60Tail(it.groupValues[1]) } == true) return "int"
     if (PYYAML_FLOAT.matches(text) || PSYCH_FLOAT.matches(text)) return "float"
+    if (PYYAML_BASE60_FLOAT.matchEntire(text)?.let { isBase60Tail(it.groupValues[1]) } == true) return "float"
     if (first == '.') {
-        if (GO_YAML_DOT_FLOAT.matches(text)) return "float"
+        if (GO_YAML_DOT_FLOAT.matches(text) && text.hasUnderscoresBetweenDigits()) return "float"
     } else {
         val plain = if ('_' in text) text.replace("_", "") else text
         if (GO_YAML_INT.matches(plain)) return "int"
@@ -150,6 +177,22 @@ internal fun yamlScalarType(text: String): String? {
     if (timestamp != null && isTimestampInRange(timestamp.groupValues)) return "timestamp"
     return null
 }
+
+// Whether every `,` / `_` is followed by a digit.
+private fun String.hasSeparatorsBeforeDigits(): Boolean = indices.all { i ->
+    this[i] != ',' && this[i] != '_' || i + 1 < length && this[i + 1] in '0'..'9'
+}
+
+// Whether every `_` sits between two digits.
+private fun String.hasUnderscoresBetweenDigits(): Boolean = indices.all { i ->
+    this[i] != '_' || i > 0 && this[i - 1] in '0'..'9' && i + 1 < length && this[i + 1] in '0'..'9'
+}
+
+// Whether [tail] is one or more `:` segments of `[0-5]?[0-9]`.
+private fun isBase60Tail(tail: String): Boolean =
+    tail.split(':').drop(1).all { segment ->
+        segment.length == 1 || segment.length == 2 && segment[0] in '0'..'5'
+    }
 
 // Psych checks a date against the calendar, but normalises a date and time
 // (`2023-02-31T10:00:00` is March 3rd), refusing only the values its `Time`
@@ -169,7 +212,8 @@ private fun isTimestampInRange(groups: List<String>): Boolean {
             (hour <= 23 || hour == 24 && minute == 0 && second == 0) &&
             (offset.isEmpty() || offsetMinutes(offset) < 24 * 60)
     }
-    if (year < 0) return false
+    // `-0000` is a signed year too, though its value is not negative
+    if (groups[1].startsWith('-')) return false
     return day in 1..daysInMonth(year, month)
 }
 

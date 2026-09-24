@@ -252,7 +252,8 @@ private const val YAML_INDICATORS = "-?:,[]{}#&*!|>'\"%@`"
 // document; a byte order mark, which must not appear inside a document
 // (§5.2); or a line break for a YAML 1.1 reader (NEL, the Unicode line and
 // paragraph separators). A lone surrogate has no valid YAML representation
-// at all; its `\u` escape is still the only way to keep it. Tab, line feed
+// at all — raw it is unprintable, and Psych and go-yaml refuse its `\u`
+// escape — so [quoted] writes it as U+FFFD (DIVERGENCE: lossy). Tab, line feed
 // and carriage return are printable — each writer path decides where it can
 // keep them.
 private fun String.isYamlUnprintableAt(i: Int): Boolean {
@@ -292,7 +293,11 @@ private fun quoted(s: String): String = buildString {
         '\n' -> +"\\n"
         '\r' -> +"\\r"
         '\t' -> +"\\t"
-        else -> if (s.isYamlUnprintableAt(i)) +("\\u" + c.code.toString(16).padStart(4, '0')) else +c
+        else -> when {
+            c.isSurrogate() && s.isYamlUnprintableAt(i) -> +'\uFFFD'
+            s.isYamlUnprintableAt(i) -> +("\\u" + c.code.toString(16).padStart(4, '0'))
+            else -> +c
+        }
     }
     +'"'
 }
