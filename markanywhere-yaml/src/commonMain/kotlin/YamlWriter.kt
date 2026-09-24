@@ -238,7 +238,7 @@ public class YamlWriter(
     // re-detectable. The character rules are shared with that check.
     private fun renderKey(key: String?): String {
         val k = key ?: ""
-        return if (isIdentifierKey(k) && !isTypedPlainScalar(k)) k else quoted(k)
+        return if (isIdentifierKey(k) && !isUnsafePlainScalar(k)) k else quoted(k)
     }
 }
 
@@ -267,11 +267,11 @@ private fun String.isYamlUnprintableAt(i: Int): Boolean {
     }
 }
 
-// A plain scalar the parser would not read back as the same string: one it
-// would type (`isTypedPlainScalar`), or whose shape is an indicator, a
-// comment (`#` after a space), a mapping colon (`:` before a space or at the
-// end), surrounding whitespace, a line break or tab, or an unprintable
-// character. A `:` or `#` anywhere else
+// A plain scalar a reader would not read back as the same string: one the
+// parser would type or a reader refuses (`isUnsafePlainScalar`), or whose
+// shape is an indicator, a comment (`#` after whitespace), a mapping colon
+// (`:` before whitespace or at the end), surrounding whitespace, a line
+// break or tab, or an unprintable character. A `:` or `#` anywhere else
 // is plain content (`https://x/y`, `C#`), as is an inner `"` or `\`.
 private fun needsQuoting(s: String): Boolean {
     if (s.isEmpty()) return true
@@ -280,10 +280,9 @@ private fun needsQuoting(s: String): Boolean {
     for (i in s.indices) {
         val c = s[i]
         if (c == '\n' || c == '\r' || c == '\t' || s.isYamlUnprintableAt(i)) return true
-        if (c == ':' && (i + 1 == s.length || s[i + 1] == ' ')) return true
-        if (c == '#' && i > 0 && s[i - 1] == ' ') return true
+        if (s.isMappingColonAt(i) || s.isCommentStartAt(i)) return true
     }
-    return isTypedPlainScalar(s)
+    return isUnsafePlainScalar(s)
 }
 
 private fun quoted(s: String): String = buildString {

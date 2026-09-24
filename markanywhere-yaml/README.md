@@ -39,7 +39,10 @@ The vocabulary is deliberately small and the key lives in an attribute, so a key
 - `entry` (attribute `key`) is a mapping entry; `item` is a sequence element.
   A root mapping is a run of top-level `entry` marks, a root sequence a run of top-level `item` marks — there is no wrapper mark.
 - The kind of value follows from the children: text only is a scalar, nested `entry` marks are a mapping, nested `item` marks are a sequence.
-- `type` is present only on a non-string scalar: `bool`, `int`, `float`, `null`, `timestamp` (YAML 1.2 core schema, plus the 1.1 `yes`/`no`/`on`/`off` booleans so a Jekyll / Hugo document round-trips as written).
+- `type` is present only on a non-string scalar: `bool`, `int`, `float`, `null`, `timestamp`.
+  A plain scalar is typed exactly when some reader front matter is written for reads it as something other than a string — the YAML 1.2 core schema, plus the YAML 1.1 shapes Psych (Jekyll), PyYAML and go-yaml v2 (Hugo) still type — so a Jekyll / Hugo document round-trips as written.
+  Beyond the core schema that means booleans and nulls in any letter case and `y` / `n`, numbers with `_` / `,` separators or a binary / octal / upper-case base prefix (`1_000`, `1,000`, `0b101`, `0X1F`), base-60 numbers (`12:30` is an `int`), and timestamps with a one-digit month or day or a colonless offset (`2016-01-01 12:00:00 -0500`); a date only when it is in the calendar.
+  So `type="int"` / `type="float"` says a reader reads a number, not that the text is a Kotlin literal: reading the value yourself takes that reader's rules (drop the separators, resolve the prefix or the base 60).
   No text and no type is an empty string; a bare `key:` is `type="null"`; an empty `[]` / `{}` is `type="seq"` / `type="map"` with no children.
 - All marks are untagged.
 
@@ -56,7 +59,8 @@ Anchors, aliases and tags are not resolved: a plain scalar starting with `&`, `*
 ## Writing
 
 `renderYaml()` emits block style, one line per scalar, two spaces per nesting level.
-A string that would re-parse as another type or shape (`"true"`, `"42"`, `"- dash"`, `"a: b"`, surrounding whitespace, control characters) is double-quoted; a multi-line string becomes a literal block scalar with the chomping indicator its trailing newlines call for; a key is written plain only when identifier-shaped and not a reserved literal.
+A string that would re-parse as another type or shape (`"true"`, `"y"`, `"42"`, `"12:30"`, `"- dash"`, `"a: b"`, surrounding whitespace) is double-quoted, with every character YAML does not allow in a document `\u`-escaped; a multi-line string becomes a literal block scalar with the chomping indicator its trailing newlines call for; a key is written plain only when identifier-shaped and not a typed word (`"yes"`, `"y"`, `"null"`).
+DIVERGENCE: a string some reader refuses to load when plain — `=`, `<<`, a base prefix with no digit (`0x_`), a date not in the calendar (`2024-13-45`) — is quoted too, although the parser reads it back as a plain string, so the first render quotes such a value in the source.
 Any mark other than `entry` / `item` is transparent, so a `frontmatter` wrapper renders the same with or without it.
 Every line is terminated — a non-empty document ends with `\n`, which a `|+` block scalar at the end needs.
 

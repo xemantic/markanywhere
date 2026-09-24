@@ -195,6 +195,73 @@ class YamlRoundTripTest {
     }
 
     @Test
+    fun `should quote a string go-yaml v2 reads as a number once underscores are removed`() = runTest {
+        // given
+        val values = listOf("1_e5", "1e5_", "1_E5", "+_1", "+_1.", "0_x1", "0X1F")
+        for (value in values) {
+            val events = semanticEvents {
+                "entry"("key" to "k") { +value }
+            }
+
+            // when
+            val rendered = events.renderYaml()
+            val reparsed = flowOf(rendered).parseYaml()
+
+            // then
+            rendered sameAs "k: \"$value\"\n"
+            reparsed.mergeAdjacentText() sameAs events
+        }
+    }
+
+    @Test
+    fun `should not quote a shape no reader types`() = runTest {
+        // given
+        val values = listOf("1,", "1,,2", "._0", ".e5")
+        for (value in values) {
+            val events = semanticEvents {
+                "entry"("key" to "k") { +value }
+            }
+
+            // when
+            val rendered = events.renderYaml()
+            val reparsed = flowOf(rendered).parseYaml()
+
+            // then
+            rendered sameAs "k: $value\n"
+            reparsed.mergeAdjacentText() sameAs events
+        }
+    }
+
+    @Test
+    fun `should DIVERGENCE quote a plain scalar a reader refuses to load`() = runTest {
+        // given — the parser leaves these strings (no reader has a type for
+        // them), but PyYAML or Psych refuse the whole document when they are
+        // plain, so the writer quotes them and the first render rewrites the
+        // source; a date-shaped string outside the calendar is quoted too
+        val source = """
+            a: =
+            b: <<
+            c: 2024-13-45
+            d: 2024-2-30
+            e: 0x_
+            f: .e+4
+        """.trimIndent() + "\n"
+
+        // when
+        val rendered = flowOf(source).parseYaml().renderYaml()
+
+        // then
+        rendered sameAs """
+            a: "="
+            b: "<<"
+            c: "2024-13-45"
+            d: "2024-2-30"
+            e: "0x_"
+            f: ".e+4"
+        """.trimIndent() + "\n"
+    }
+
+    @Test
     fun `should not quote a float shape without a digit`() = runTest {
         // given
         val values = listOf(".", "+.", "._")

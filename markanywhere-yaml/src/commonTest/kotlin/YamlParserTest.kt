@@ -320,6 +320,7 @@ class YamlParserTest {
             money: 1_000.5
             nan: .NaN
             time: 12:30
+            clock: 12:30:45:10
             angle: 190:20:30.15
         """.trimIndent().chunkedRandomly().asFlow()
 
@@ -341,7 +342,96 @@ class YamlParserTest {
             "entry"("key" to "money", "type" to "float") { +"1_000.5" }
             "entry"("key" to "nan", "type" to "float") { +".NaN" }
             "entry"("key" to "time", "type" to "int") { +"12:30" }
+            "entry"("key" to "clock", "type" to "int") { +"12:30:45:10" }
             "entry"("key" to "angle", "type" to "float") { +"190:20:30.15" }
+        }
+    }
+
+    @Test
+    fun `should type the number shapes go-yaml v2 reads once underscores are removed`() = runTest {
+        // given — go-yaml v2 (Hugo) deletes every `_` before it parses a
+        // number, so an underscore next to a sign, an exponent or a base
+        // prefix still makes one; it also takes an upper-case base prefix
+        val textFlow = """
+            a: 1_e5
+            b: 1e5_
+            c: 1_E5
+            d: +_1
+            e: +_1.
+            f: 0_x1
+            g: 0X1F
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parseYaml()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "entry"("key" to "a", "type" to "float") { +"1_e5" }
+            "entry"("key" to "b", "type" to "float") { +"1e5_" }
+            "entry"("key" to "c", "type" to "float") { +"1_E5" }
+            "entry"("key" to "d", "type" to "int") { +"+_1" }
+            "entry"("key" to "e", "type" to "float") { +"+_1." }
+            "entry"("key" to "f", "type" to "int") { +"0_x1" }
+            "entry"("key" to "g", "type" to "int") { +"0X1F" }
+        }
+    }
+
+    @Test
+    fun `should not type a shape no reader types`() = runTest {
+        // given — a trailing or doubled separator, a dot before an
+        // underscore, an exponent with no mantissa digit, a date that is not
+        // in the calendar, a date-only shape with a sign and a minute Psych's
+        // Time refuses: PyYAML, Psych and go-yaml v2 all read strings
+        val textFlow = """
+            a: 1,
+            b: 1,,2
+            c: ._0
+            d: .e5
+            e: 2024-2-30
+            f: -2024-01-01
+            g: 2024-01-01T12:60:00
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parseYaml()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "entry"("key" to "a") { +"1," }
+            "entry"("key" to "b") { +"1,,2" }
+            "entry"("key" to "c") { +"._0" }
+            "entry"("key" to "d") { +".e5" }
+            "entry"("key" to "e") { +"2024-2-30" }
+            "entry"("key" to "f") { +"-2024-01-01" }
+            "entry"("key" to "g") { +"2024-01-01T12:60:00" }
+        }
+    }
+
+    @Test
+    fun `should DIVERGENCE not type a plain scalar a reader refuses to load`() = runTest {
+        // given — PyYAML resolves `=` and `<<` to its value / merge tags and
+        // then refuses to construct them; it refuses a date not in the
+        // calendar, and PyYAML / Psych refuse a base prefix with no digit or
+        // an exponent with no mantissa: none of them has a type to report
+        val textFlow = """
+            a: =
+            b: <<
+            c: 2024-13-45
+            d: 0x_
+            e: .e+4
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parseYaml()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "entry"("key" to "a") { +"=" }
+            "entry"("key" to "b") { +"<<" }
+            "entry"("key" to "c") { +"2024-13-45" }
+            "entry"("key" to "d") { +"0x_" }
+            "entry"("key" to "e") { +".e+4" }
         }
     }
 
@@ -701,6 +791,22 @@ class YamlParserTest {
     }
 
     // --- verbatim fallback (DIVERGENCE) -----------------------------------
+
+    @Test
+    fun `should read a hash after a tab as a comment in a key line`() = runTest {
+        // given — `#` after any whitespace starts a comment, so the colon
+        // behind it is not a mapping indicator and the line is not an entry
+        val textFlow = "title: x\na\t#b: c\n".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parseYaml()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "entry"("key" to "title") { +"x" }
+            +"a\t#b: c\n"
+        }
+    }
 
     @Test
     fun `should DIVERGENCE keep an unrecognised line verbatim`() = runTest {

@@ -35,8 +35,12 @@ import kotlinx.coroutines.flow.FlowCollector
  *   sequence is nested `item` marks. The root is a mapping (top-level
  *   `entry` marks) or a sequence (top-level `item` marks) — no wrapper mark.
  * - A non-string scalar carries `type` = `bool` / `int` / `float` / `null` /
- *   `timestamp` (YAML 1.2 core schema, plus the 1.1 `yes`/`no`/`on`/`off`
- *   booleans so a Jekyll / Hugo document round-trips as written). An empty
+ *   `timestamp`: typed exactly when a front matter reader — the YAML 1.2
+ *   core schema, or the YAML 1.1 shapes of Psych (Jekyll), PyYAML and
+ *   go-yaml v2 (Hugo) — reads it as other than a string (`y`, `yEs`,
+ *   `1_000`, `0X1F`, `12:30`, `2024-5-1`), so a Jekyll / Hugo document
+ *   round-trips as written. A number keeps that reader's syntax (separators,
+ *   base prefixes, base 60) in its text. An empty
  *   flow collection carries `type` = `seq` / `map`. An empty string is an
  *   entry with no text and no type; a missing value (`key:`) is `type=null`.
  *
@@ -350,9 +354,8 @@ public class YamlParser(
         if (content == "?" || content.startsWith("? ")) return null
         var i = 0
         while (i < content.length) {
-            val c = content[i]
-            if (c == ':' && (i + 1 == content.length || content[i + 1] == ' ' || content[i + 1] == '\t')) break
-            if (c == '#' && i > 0 && content[i - 1] == ' ') return null
+            if (content.isMappingColonAt(i)) break
+            if (content.isCommentStartAt(i)) return null
             i++
         }
         if (i == content.length) return null
@@ -553,9 +556,7 @@ private fun isBlankOrComment(s: String, from: Int): Boolean {
 // A ` #` (hash preceded by whitespace) starts a trailing comment.
 private fun stripTrailingComment(value: String): String {
     for (i in 1 until value.length) {
-        if (value[i] == '#' && (value[i - 1] == ' ' || value[i - 1] == '\t')) {
-            return value.substring(0, i)
-        }
+        if (value.isCommentStartAt(i)) return value.substring(0, i)
     }
     return value
 }
