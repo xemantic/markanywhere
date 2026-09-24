@@ -35,8 +35,9 @@ import com.xemantic.markanywhere.SemanticEvent
  * - a scalar with a `type` (`bool`, `int`, `float`, `null`, `timestamp`) is
  *   written bare; a string is written plain unless a plain scalar would
  *   re-parse as something else — reserved literals, numbers, timestamps,
- *   YAML 1.1 sexagesimals (`12:30`), a leading indicator, `: ` or a
- *   trailing `:`, ` #`, surrounding whitespace, a control character — in
+ *   shapes a YAML 1.1 reader types (`12:30`, `1_000`, `yEs`), a leading
+ *   indicator, `: ` or a trailing `:`, ` #`, surrounding whitespace, a
+ *   control character — in
  *   which case it is double-quoted with the YAML escapes;
  * - a multi-line string becomes a literal block scalar (`|`, `|-`, `|+`
  *   according to its trailing newlines) unless its first line starts with
@@ -232,7 +233,7 @@ public class YamlWriter(
     // re-detectable. The character rules are shared with that check.
     private fun renderKey(key: String?): String {
         val k = key ?: ""
-        return if (isIdentifierKey(k) && yamlScalarType(k) == null) k else quoted(k)
+        return if (isIdentifierKey(k) && yamlScalarType(k) == null && !isYaml11Typed(k)) k else quoted(k)
     }
 }
 
@@ -245,15 +246,9 @@ private const val YAML_INDICATORS = "-?:,[]{}#&*!|>'\"%@`"
 private val Char.isYamlControl: Boolean
     get() = this < ' ' || this == '\u007f' || this == '\u0085' || this == '\u2028' || this == '\u2029'
 
-// A YAML 1.1 base-60 number (`12:30`, `-1:30`, `190:20:30.15`): YAML 1.2 —
-// and so `yamlScalarType` — reads it as a string, but Psych (Jekyll) and
-// PyYAML type it as an int / float, so the writer keeps it quoted, in the
-// same spirit as the YAML 1.1 booleans (`yes`, `on`). Anchored, see the
-// note on the patterns in `YamlParser.kt`.
-private val YAML_1_1_SEXAGESIMAL = Regex("""^[-+]?[0-9][0-9_]*(:[0-5]?[0-9])+(\.[0-9_]*)?$""")
-
 // A plain scalar the parser would not read back as the same string: one it
-// would type (`yamlScalarType`), or whose shape is an indicator, a comment
+// would type (`yamlScalarType`) or a YAML 1.1 reader would (`isYaml11Typed`),
+// or whose shape is an indicator, a comment
 // (`#` after a space), a mapping colon (`:` before a space or at the end),
 // surrounding whitespace or a control character. A `:` or `#` anywhere else
 // is plain content (`https://x/y`, `C#`), as is an inner `"` or `\`.
@@ -265,10 +260,9 @@ private fun needsQuoting(s: String): Boolean {
         val c = s[i]
         if (c.isYamlControl) return true
         if (c == ':' && (i + 1 == s.length || s[i + 1] == ' ')) return true
-        if (c == '#' && s[i - 1] == ' ') return true
+        if (c == '#' && i > 0 && s[i - 1] == ' ') return true
     }
-    if (YAML_1_1_SEXAGESIMAL.matches(s)) return true
-    return yamlScalarType(s) != null
+    return yamlScalarType(s) != null || isYaml11Typed(s)
 }
 
 private fun quoted(s: String): String = buildString {

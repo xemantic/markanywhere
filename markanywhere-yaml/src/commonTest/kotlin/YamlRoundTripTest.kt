@@ -91,7 +91,7 @@ class YamlRoundTripTest {
         // given — a mapping colon, a comment, a leading indicator, and base-60
         // numbers a YAML 1.1 reader (Psych, PyYAML) would type as int / float
         val values = listOf(
-            "Note: see", "ends:", "a #b", "12:30", "-1:30", "190:20:30.15", "#tag", ": x",
+            "Note: see", "ends:", "a #b", "12:30", "+1:30", "190:20:30.15", "#tag", ": x",
         )
         for (value in values) {
             val events = semanticEvents {
@@ -106,6 +106,44 @@ class YamlRoundTripTest {
             rendered sameAs "k: \"$value\"\n"
             reparsed.mergeAdjacentText() sameAs events
         }
+    }
+
+    @Test
+    fun `should quote a string a YAML 1_1 reader would type`() = runTest {
+        // given — plain scalars YAML 1.2 reads as strings, but Psych (Jekyll)
+        // or PyYAML type as a number, time, boolean or null, or refuse
+        val values = listOf(
+            "2024-05-01T10:00:00+0100", "2024-05-01 10:00:00 +0100", "2024-5-1",
+            "1_000", "1,000", "0b101", "+0x1F", "0755", "1_000.5", "1.0e+5", ".e+4",
+            "yEs", "oFF", "nULL", "=", "<<",
+        )
+        for (value in values) {
+            val events = semanticEvents {
+                "entry"("key" to "k") { +value }
+            }
+
+            // when
+            val rendered = events.renderYaml()
+            val reparsed = flowOf(rendered).parseYaml()
+
+            // then
+            rendered sameAs "k: \"$value\"\n"
+            reparsed.mergeAdjacentText() sameAs events
+        }
+    }
+
+    @Test
+    fun `should quote a key a YAML 1_1 reader would type`() = runTest {
+        // given — Psych reads booleans in any letter case
+        val events = semanticEvents {
+            "entry"("key" to "yEs") { +"v" }
+        }
+
+        // when
+        val rendered = events.renderYaml()
+
+        // then
+        rendered sameAs "\"yEs\": v\n"
     }
 
     @Test

@@ -56,10 +56,12 @@ import kotlinx.coroutines.flow.FlowCollector
  * directives are not recognised — a multi-document stream is outside the
  * subset.
  *
- * DIVERGENCE (lenient plain scalars): a plain value containing a mapping
- * indicator — `k: Note: see`, `k: ends:` — is read as the string after the
- * first `: `, where YAML (Psych, PyYAML) rejects the line. This does not
- * make such a value safe to write plain: [YamlWriter] still quotes it.
+ * DIVERGENCE (lenient plain scalars): a mapping entry's plain value
+ * containing a mapping indicator — `k: Note: see`, `k: ends:` — is read as
+ * the string after the first `: `, where YAML (Psych, PyYAML) rejects the
+ * line. A sequence item is not lenient: `- Note: see` is a compact mapping
+ * (an item holding the entry `Note`), as in YAML. This does not make such a
+ * value safe to write plain: [YamlWriter] still quotes it.
  *
  * Streaming: a `key: value` line commits on its newline. A bare `key:` (or
  * `-`) is held for one line to decide between a nested block and a null
@@ -671,4 +673,44 @@ internal fun yamlScalarType(text: String): String? = when {
     YAML_FLOAT.matches(text) -> "float"
     YAML_TIMESTAMP.matches(text) -> "timestamp"
     else -> null
+}
+
+// YAML 1.1 plain-scalar shapes that YAML 1.2 — and so [yamlScalarType] —
+// reads as a string, but that a YAML 1.1 reader still types: Psych (Jekyll)
+// and PyYAML. The union of both is covered, erring on the side of too much:
+// - booleans / nulls in any letter case (`yEs`, `nULL` — Psych ignores case);
+// - integers with `_` or `,` separators, binary, signed hex, leading-zero
+//   octal (`1_000`, `1,000`, `0b101`, `+0x1F`, `0755`);
+// - floats with separators, a trailing or leading dot (`1_000.5`, `1.`, `.5`);
+// - base-60 numbers (`12:30`, `+1:30`, `190:20:30.15`);
+// - timestamps Psych accepts beyond the 1.2 shape: one-digit month / day
+//   (`2024-5-1`), an offset without a colon (`+0100`);
+// - PyYAML's value / merge tags (`=`, `<<`), which its SafeLoader cannot
+//   construct.
+// Anchored, see the note above.
+private val YAML_1_1_WORDS = setOf("yes", "no", "true", "false", "on", "off", "null")
+
+private val YAML_1_1_NUMBER = Regex(
+    """^(?:[-+]?0b[01_,]+|[-+]?0x[0-9a-fA-F_,]+|[-+]?[0-9][0-9_,]*""" +
+        """|[-+]?(?:[0-9][0-9_,]*)?\.[0-9_]*(?:[eE][-+]?[0-9]+)?""" +
+        """|[-+]?[0-9][0-9_,]*(?::[0-5]?[0-9])+(?:\.[0-9_]*)?)$"""
+)
+
+private val YAML_1_1_TIMESTAMP = Regex(
+    """^-?[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}""" +
+        """(?:(?:[Tt]|[ \t]+)[0-9]{1,2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]*)?(?:[ \t]*(?:Z|[-+][0-9]{1,2}:?(?:[0-9]{2})?))?)?$"""
+)
+
+// Whether a YAML 1.1 reader (Psych, PyYAML) would type this plain scalar,
+// or refuse it, where [yamlScalarType] reads a string. The writer quotes
+// such a value, in the same spirit as the 1.1 booleans in [YAML_BOOLS].
+// Every shape starts with a sign, a digit or a dot, or is one of a few
+// words, so the regexes only run on a string that can match them.
+internal fun isYaml11Typed(text: String): Boolean {
+    if (text.isEmpty()) return false
+    if (text == "=" || text == "<<") return true
+    if (text.length <= 5 && text.lowercase() in YAML_1_1_WORDS) return true
+    val first = text[0]
+    if (first != '-' && first != '+' && first != '.' && first !in '0'..'9') return false
+    return YAML_1_1_NUMBER.matches(text) || YAML_1_1_TIMESTAMP.matches(text)
 }
