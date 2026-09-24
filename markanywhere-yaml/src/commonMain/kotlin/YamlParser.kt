@@ -678,17 +678,24 @@ internal fun yamlScalarType(text: String): String? = when {
 // YAML 1.1 plain-scalar shapes that YAML 1.2 — and so [yamlScalarType] —
 // reads as a string, but that a YAML 1.1 reader still types: Psych (Jekyll)
 // and PyYAML. The union of both is covered, erring on the side of too much:
-// - booleans / nulls in any letter case (`yEs`, `nULL` — Psych ignores case);
-// - integers with `_` or `,` separators, binary, signed hex, leading-zero
-//   octal (`1_000`, `1,000`, `0b101`, `+0x1F`, `0755`);
-// - floats with separators, a trailing or leading dot (`1_000.5`, `1.`, `.5`);
+// - booleans / nulls in any letter case (`yEs`, `nULL` — Psych ignores case),
+//   and the one-letter booleans `y` / `n` (the YAML 1.1 spec, go-yaml v2);
+// - the special floats in any letter case (`.Nan`, `+.InF` — Psych again);
+// - integers with `_` or `,` separators, binary, signed hex
+//   (`1_000`, `1,000`, `0b101`, `+0x1F`);
+// - floats with separators or a digit-less mantissa (`1_000.5`, `1,000.5`,
+//   `.e+4`);
 // - base-60 numbers (`12:30`, `+1:30`, `190:20:30.15`);
 // - timestamps Psych accepts beyond the 1.2 shape: one-digit month / day
 //   (`2024-5-1`), an offset without a colon (`+0100`);
 // - PyYAML's value / merge tags (`=`, `<<`), which its SafeLoader cannot
 //   construct.
 // Anchored, see the note above.
-private val YAML_1_1_WORDS = setOf("yes", "no", "true", "false", "on", "off", "null")
+private val YAML_1_1_WORDS =
+    (YAML_BOOLS + YAML_NULLS).mapTo(mutableSetOf()) { it.lowercase() } +
+        setOf("y", "n", ".inf", "+.inf", "-.inf", ".nan")
+
+private val YAML_1_1_WORD_MAX_LENGTH = YAML_1_1_WORDS.maxOf { it.length }
 
 private val YAML_1_1_NUMBER = Regex(
     """^(?:[-+]?0b[01_,]+|[-+]?0x[0-9a-fA-F_,]+|[-+]?[0-9][0-9_,]*""" +
@@ -709,7 +716,7 @@ private val YAML_1_1_TIMESTAMP = Regex(
 internal fun isYaml11Typed(text: String): Boolean {
     if (text.isEmpty()) return false
     if (text == "=" || text == "<<") return true
-    if (text.length <= 5 && text.lowercase() in YAML_1_1_WORDS) return true
+    if (text.length <= YAML_1_1_WORD_MAX_LENGTH && text.lowercase() in YAML_1_1_WORDS) return true
     val first = text[0]
     if (first != '-' && first != '+' && first != '.' && first !in '0'..'9') return false
     return YAML_1_1_NUMBER.matches(text) || YAML_1_1_TIMESTAMP.matches(text)

@@ -37,8 +37,8 @@ import com.xemantic.markanywhere.SemanticEvent
  *   re-parse as something else — reserved literals, numbers, timestamps,
  *   shapes a YAML 1.1 reader types (`12:30`, `1_000`, `yEs`), a leading
  *   indicator, `: ` or a trailing `:`, ` #`, surrounding whitespace, a
- *   control character — in
- *   which case it is double-quoted with the YAML escapes;
+ *   character outside YAML's printable set — in which case it is
+ *   double-quoted with the YAML escapes;
  * - a multi-line string becomes a literal block scalar (`|`, `|-`, `|+`
  *   according to its trailing newlines) unless its first line starts with
  *   whitespace or it has no content, which fall back to a quoted scalar;
@@ -202,7 +202,10 @@ public class YamlWriter(
     private fun canBlock(text: String): Boolean {
         val first = text[0]
         if (first == ' ' || first == '\t' || first == '\n') return false
-        for (c in text) if (c != '\n' && c != '\t' && c < ' ') return false
+        for (i in text.indices) {
+            val c = text[i]
+            if (c != '\n' && c != '\t' && text.isYamlUnprintableAt(i)) return false
+        }
         return text.trimEnd('\n').isNotEmpty()
     }
 
@@ -241,16 +244,28 @@ public class YamlWriter(
 // double-quoted output (see YAML 1.2 §6.4 / §6.6).
 private const val YAML_INDICATORS = "-?:,[]{}#&*!|>'\"%@`"
 
-// A character a plain scalar cannot carry: C0 / DEL / NEL and the Unicode
-// line and paragraph separators (YAML 1.2 §5.1 printable characters).
-private val Char.isYamlControl: Boolean
-    get() = this < ' ' || this == '\u007f' || this == '\u0085' || this == '\u2028' || this == '\u2029'
+// Whether the character at [i] must be escaped: it is outside YAML's
+// printable set (YAML 1.2 §5.1 — C0 controls, DEL, the C1 controls,
+// U+FFFE / U+FFFF, a surrogate not part of a pair), which Psych and PyYAML
+// refuse anywhere in a document, or a line break for a YAML 1.1 reader
+// (NEL, the Unicode line and paragraph separators). A lone surrogate has no
+// valid YAML representation at all; its `\u` escape is still the only way to
+// keep it.
+private fun String.isYamlUnprintableAt(i: Int): Boolean {
+    val c = this[i]
+    return when {
+        c.isHighSurrogate() -> i + 1 == length || !this[i + 1].isLowSurrogate()
+        c.isLowSurrogate() -> i == 0 || !this[i - 1].isHighSurrogate()
+        else -> c < ' ' || c in '\u007f'..'\u009f' ||
+            c == '\u2028' || c == '\u2029' || c == '\ufffe' || c == '\uffff'
+    }
+}
 
 // A plain scalar the parser would not read back as the same string: one it
 // would type (`yamlScalarType`) or a YAML 1.1 reader would (`isYaml11Typed`),
 // or whose shape is an indicator, a comment
 // (`#` after a space), a mapping colon (`:` before a space or at the end),
-// surrounding whitespace or a control character. A `:` or `#` anywhere else
+// surrounding whitespace or an unprintable character. A `:` or `#` anywhere else
 // is plain content (`https://x/y`, `C#`), as is an inner `"` or `\`.
 private fun needsQuoting(s: String): Boolean {
     if (s.isEmpty()) return true
@@ -258,7 +273,7 @@ private fun needsQuoting(s: String): Boolean {
     if (s[0] in YAML_INDICATORS) return true
     for (i in s.indices) {
         val c = s[i]
-        if (c.isYamlControl) return true
+        if (s.isYamlUnprintableAt(i)) return true
         if (c == ':' && (i + 1 == s.length || s[i + 1] == ' ')) return true
         if (c == '#' && i > 0 && s[i - 1] == ' ') return true
     }
@@ -267,14 +282,13 @@ private fun needsQuoting(s: String): Boolean {
 
 private fun quoted(s: String): String = buildString {
     +'"'
-    for (c in s) when {
-        c == '\\' -> +"\\\\"
-        c == '"' -> +"\\\""
-        c == '\n' -> +"\\n"
-        c == '\r' -> +"\\r"
-        c == '\t' -> +"\\t"
-        c.isYamlControl -> +("\\u" + c.code.toString(16).padStart(4, '0'))
-        else -> +c
+    for (i in s.indices) when (val c = s[i]) {
+        '\\' -> +"\\\\"
+        '"' -> +"\\\""
+        '\n' -> +"\\n"
+        '\r' -> +"\\r"
+        '\t' -> +"\\t"
+        else -> if (s.isYamlUnprintableAt(i)) +("\\u" + c.code.toString(16).padStart(4, '0')) else +c
     }
     +'"'
 }

@@ -317,7 +317,7 @@ class YamlWriterTest {
         // after its dash; the line must still be terminated
         val flow = semanticEvents {
             "item" { "x" { } }
-            "item" { +"y" }
+            "item" { +"next" }
         }
 
         // when
@@ -326,7 +326,7 @@ class YamlWriterTest {
         // then
         yaml sameAs """
             -
-            - y
+            - next
         """.trimIndent() + "\n"
     }
 
