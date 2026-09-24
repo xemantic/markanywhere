@@ -705,6 +705,24 @@ class YamlParserTest {
     }
 
     @Test
+    fun `should DIVERGENCE accept a mapping indicator inside a plain value`() = runTest {
+        // given — YAML readers (Psych, PyYAML) reject both lines
+        val textFlow = """
+            note: Note: see
+            end: ends:
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parseYaml()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "entry"("key" to "note") { +"Note: see" }
+            "entry"("key" to "end") { +"ends:" }
+        }
+    }
+
+    @Test
     fun `should be ready for a new document after finish`() = runTest {
         // given — the first document ends with a pending `key:` that finish
         // resolves as null; the second must not see it

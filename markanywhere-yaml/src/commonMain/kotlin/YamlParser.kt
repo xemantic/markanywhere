@@ -56,6 +56,11 @@ import kotlinx.coroutines.flow.FlowCollector
  * directives are not recognised — a multi-document stream is outside the
  * subset.
  *
+ * DIVERGENCE (lenient plain scalars): a plain value containing a mapping
+ * indicator — `k: Note: see`, `k: ends:` — is read as the string after the
+ * first `: `, where YAML (Psych, PyYAML) rejects the line. This does not
+ * make such a value safe to write plain: [YamlWriter] still quotes it.
+ *
  * Streaming: a `key: value` line commits on its newline. A bare `key:` (or
  * `-`) is held for one line to decide between a nested block and a null
  * value. A block scalar is buffered until it closes — never past the

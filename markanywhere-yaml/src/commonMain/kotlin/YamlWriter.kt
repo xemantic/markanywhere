@@ -35,8 +35,9 @@ import com.xemantic.markanywhere.SemanticEvent
  * - a scalar with a `type` (`bool`, `int`, `float`, `null`, `timestamp`) is
  *   written bare; a string is written plain unless a plain scalar would
  *   re-parse as something else — reserved literals, numbers, timestamps,
- *   a leading indicator, `: `, ` #`, surrounding whitespace, a control
- *   character — in which case it is double-quoted with the YAML escapes;
+ *   YAML 1.1 sexagesimals (`12:30`), a leading indicator, `: ` or a
+ *   trailing `:`, ` #`, surrounding whitespace, a control character — in
+ *   which case it is double-quoted with the YAML escapes;
  * - a multi-line string becomes a literal block scalar (`|`, `|-`, `|+`
  *   according to its trailing newlines) unless its first line starts with
  *   whitespace or it has no content, which fall back to a quoted scalar;
@@ -244,14 +245,29 @@ private const val YAML_INDICATORS = "-?:,[]{}#&*!|>'\"%@`"
 private val Char.isYamlControl: Boolean
     get() = this < ' ' || this == '\u007f' || this == '\u0085' || this == '\u2028' || this == '\u2029'
 
+// A YAML 1.1 base-60 number (`12:30`, `-1:30`, `190:20:30.15`): YAML 1.2 —
+// and so `yamlScalarType` — reads it as a string, but Psych (Jekyll) and
+// PyYAML type it as an int / float, so the writer keeps it quoted, in the
+// same spirit as the YAML 1.1 booleans (`yes`, `on`). Anchored, see the
+// note on the patterns in `YamlParser.kt`.
+private val YAML_1_1_SEXAGESIMAL = Regex("""^[-+]?[0-9][0-9_]*(:[0-5]?[0-9])+(\.[0-9_]*)?$""")
+
 // A plain scalar the parser would not read back as the same string: one it
-// would type (`yamlScalarType`), or whose shape is an indicator, a comment,
-// a mapping colon, surrounding whitespace or a control character.
+// would type (`yamlScalarType`), or whose shape is an indicator, a comment
+// (`#` after a space), a mapping colon (`:` before a space or at the end),
+// surrounding whitespace or a control character. A `:` or `#` anywhere else
+// is plain content (`https://x/y`, `C#`), as is an inner `"` or `\`.
 private fun needsQuoting(s: String): Boolean {
     if (s.isEmpty()) return true
     if (s.first().isWhitespace() || s.last().isWhitespace()) return true
     if (s[0] in YAML_INDICATORS) return true
-    for (c in s) if (c == ':' || c == '#' || c == '"' || c == '\\' || c.isYamlControl) return true
+    for (i in s.indices) {
+        val c = s[i]
+        if (c.isYamlControl) return true
+        if (c == ':' && (i + 1 == s.length || s[i + 1] == ' ')) return true
+        if (c == '#' && s[i - 1] == ' ') return true
+    }
+    if (YAML_1_1_SEXAGESIMAL.matches(s)) return true
     return yamlScalarType(s) != null
 }
 

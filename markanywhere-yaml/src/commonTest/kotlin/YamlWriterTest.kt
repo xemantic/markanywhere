@@ -241,7 +241,7 @@ class YamlWriterTest {
             dash: "- not an item"
             padded: " spaced "
             tabbed: "a\tb"
-            url: "http://x#y"
+            url: http://x#y
             page.section: News
         """.trimIndent() + "\n"
     }

@@ -65,6 +65,50 @@ class YamlRoundTripTest {
     }
 
     @Test
+    fun `should write a colon or hash that is not an indicator plain`() = runTest {
+        // given — `:` not followed by a space and `#` not after a space are
+        // plain-scalar content for every YAML reader (issue #80)
+        val values = listOf(
+            "https://xemantic.com/contact", "a:b", "C#", "a#b", "say \"hi\"", "C:\\path",
+        )
+        for (value in values) {
+            val source = "k: $value\n"
+
+            // when
+            val rendered = flowOf(source).parseYaml().renderYaml()
+            val reparsed = flowOf(rendered).parseYaml()
+
+            // then
+            rendered sameAs source
+            reparsed.mergeAdjacentText() sameAs semanticEvents {
+                "entry"("key" to "k") { +value }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep quoting a colon or hash that is an indicator and YAML 1_1 sexagesimals`() = runTest {
+        // given — a mapping colon, a comment, a leading indicator, and base-60
+        // numbers a YAML 1.1 reader (Psych, PyYAML) would type as int / float
+        val values = listOf(
+            "Note: see", "ends:", "a #b", "12:30", "-1:30", "190:20:30.15", "#tag", ": x",
+        )
+        for (value in values) {
+            val events = semanticEvents {
+                "entry"("key" to "k") { +value }
+            }
+
+            // when
+            val rendered = events.renderYaml()
+            val reparsed = flowOf(rendered).parseYaml()
+
+            // then
+            rendered sameAs "k: \"$value\"\n"
+            reparsed.mergeAdjacentText() sameAs events
+        }
+    }
+
+    @Test
     fun `should round-trip keys that need quoting`() = runTest {
         // given
         val keys = listOf(
