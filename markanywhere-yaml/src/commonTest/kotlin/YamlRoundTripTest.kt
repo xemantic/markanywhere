@@ -187,6 +187,40 @@ class YamlRoundTripTest {
     }
 
     @Test
+    fun `should quote a one-letter boolean key below the top level`() = runTest {
+        // given — go-yaml v2 decodes only the top-level keys into strings; a
+        // nested mapping, in an entry or in an item, is decoded with
+        // interface{} keys, so a plain `y:` there becomes the key `true`
+        val events = semanticEvents {
+            "entry"("key" to "params") {
+                "entry"("key" to "y") { +"1" }
+                "entry"("key" to "N") { +"2" }
+            }
+            "entry"("key" to "list") {
+                "item" {
+                    "entry"("key" to "n") { +"3" }
+                }
+            }
+            "entry"("key" to "y") { +"4" }
+        }
+
+        // when
+        val rendered = events.renderYaml()
+        val reparsed = flowOf(rendered).parseYaml()
+
+        // then
+        rendered sameAs """
+            params:
+              "y": "1"
+              "N": "2"
+            list:
+              - "n": "3"
+            y: "4"
+        """.trimIndent() + "\n"
+        reparsed.mergeAdjacentText() sameAs events
+    }
+
+    @Test
     fun `should keep YAML 1_1 typed front matter values as written`() = runTest {
         // given — Jekyll's documented date format, a short date, go-yaml v2
         // booleans and Psych numbers: the parser types them, so the writer

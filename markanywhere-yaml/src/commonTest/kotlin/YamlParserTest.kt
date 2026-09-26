@@ -25,7 +25,8 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.runTest
 import com.xemantic.kotlin.test.assert
 import kotlin.test.Test
-import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.TimeSource
 import kotlin.time.measureTime
 
@@ -502,21 +503,30 @@ class YamlParserTest {
         // given — a base prefix, digits and one character outside the base:
         // a pattern that lets the digits match two ways backtracks
         // quadratically over them, and every plain scalar is typed
-        val values = listOf("0x", "0b", "+0x", "-0b").map { prefix ->
-            prefix + "1".repeat(50_000) + "g"
+        fun nearMisses(length: Int) = listOf("0x", "0b", "+0x", "-0b").map { prefix ->
+            prefix + "1".repeat(length) + "g"
         }
+        // the best of a few runs, so a pause of the runtime is not measured
+        fun timeToResolve(values: List<String>): Duration = List(3) {
+            TimeSource.Monotonic.measureTime {
+                for (value in values) {
+                    assert(yamlScalarType(value) == null)
+                    assert(!isUnsafePlainScalar(value))
+                }
+            }
+        }.min()
+        val short = nearMisses(25_000)
+        val long = nearMisses(100_000)
 
         // when
-        val elapsed = TimeSource.Monotonic.measureTime {
-            for (value in values) {
-                assert(yamlScalarType(value) == null)
-                assert(!isUnsafePlainScalar(value))
-            }
-        }
+        val shortTime = timeToResolve(short)
+        val longTime = timeToResolve(long)
 
-        // then — linear takes milliseconds, quadratic minutes; the bound
-        // is far from both so a slow runner cannot trip it
-        assert(elapsed < 20.seconds)
+        // then — four times the input takes about four times as long when
+        // linear, sixteen times when quadratic; the allowance absorbs the
+        // timer's resolution when both are only milliseconds, and no absolute
+        // bound is set, since a Native or JS regex engine is much slower
+        assert(longTime < shortTime * 8 + 50.milliseconds)
     }
 
     @Test
@@ -939,6 +949,31 @@ class YamlParserTest {
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "entry"("key" to "geo") {
                 "entry"("key" to "lat", "type" to "float") { +"1.5" }
+            }
+        }
+    }
+
+    @Test
+    fun `DIVERGENCE - should read a hash right after a closed token as a comment`() = runTest {
+        // given — YAML 1.2 §6.6 wants whitespace before a comment, but the
+        // front matter readers (PyYAML, Psych, go-yaml v2 — all libyaml's
+        // scanner) start one at any `#` after a quoted scalar or a flow
+        // collection, and read these lines as the values below; a strict
+        // reader (npm `yaml`, snakeyaml-engine) refuses them instead
+        val textFlow = "a: \"x\"#b\nc: 'y'#d\ntags: [e]#f\ngeo: {g: 1}#h\n".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parseYaml()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "entry"("key" to "a") { +"x" }
+            "entry"("key" to "c") { +"y" }
+            "entry"("key" to "tags") {
+                "item" { +"e" }
+            }
+            "entry"("key" to "geo") {
+                "entry"("key" to "g", "type" to "int") { +"1" }
             }
         }
     }

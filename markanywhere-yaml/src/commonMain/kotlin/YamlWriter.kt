@@ -48,7 +48,7 @@ import com.xemantic.markanywhere.SemanticEvent
  * - a key is written plain only when identifier-shaped (letters, digits,
  *   `_`, `-`, `.`, starting with a letter or `_`) and not a key a reader
  *   would type — Psych takes a bare `yes:` or `nULL:` as a boolean / null
- *   key — and double-quoted otherwise, even where YAML would not require it;
+ *   key, go-yaml v2 a `y:` below the top level — and double-quoted otherwise, even where YAML would not require it;
  * - a `text` child of a container (the parser's verbatim fallback for a
  *   line outside its YAML subset) is written as-is, on its own line(s).
  *
@@ -72,7 +72,9 @@ public class YamlWriter(
         // the column this node's own line starts at
         val indent: Int,
         // the column this node's children start at
-        val childIndent: Int
+        val childIndent: Int,
+        // no entry or item encloses it — a key of the root mapping
+        val topLevel: Boolean
     ) {
         var state: State = UNDECIDED
         val scalar = StringBuilder()
@@ -80,7 +82,7 @@ public class YamlWriter(
     }
 
     private val stack = ArrayDeque<Node>().apply {
-        addLast(Node(OTHER, key = null, type = null, indent = 0, childIndent = 0))
+        addLast(Node(OTHER, key = null, type = null, indent = 0, childIndent = 0, topLevel = true))
     }
 
     // True right after `-` was written for an item whose first child
@@ -111,7 +113,8 @@ public class YamlWriter(
         }
         val indent = parent.childIndent
         val childIndent = if (kind == OTHER) indent else indent + 2
-        stack.addLast(Node(kind, event.attributes["key"], event.attributes["type"], indent, childIndent))
+        val topLevel = parent.topLevel && !parent.isValue
+        stack.addLast(Node(kind, event.attributes["key"], event.attributes["type"], indent, childIndent, topLevel))
     }
 
     private fun text(text: String) {
@@ -153,14 +156,14 @@ public class YamlWriter(
             atLineStart = false
             afterDash = true
         } else {
-            out(linePrefix(node) + renderKey(node.key) + ":\n")
+            out(linePrefix(node) + renderKey(node) + ":\n")
             atLineStart = true
         }
         if (pendingVerbatim != null) writeVerbatim(pendingVerbatim)
     }
 
     private fun writeLine(node: Node, value: String) {
-        val head = if (node.kind == ITEM) "-" else renderKey(node.key) + ":"
+        val head = if (node.kind == ITEM) "-" else renderKey(node) + ":"
         out(linePrefix(node) + head + (if (value.isEmpty()) "" else " $value") + "\n")
         atLineStart = true
     }
@@ -231,13 +234,13 @@ public class YamlWriter(
     }
 
     // A key is written plain only when it is identifier-shaped and would not
-    // be typed (`yes`, `nULL`): the Markdown parser's front matter detection requires
+    // be typed (`yes`, `nULL`, a nested `y`): the Markdown parser's front matter detection requires
     // the first line to pass `isYamlKeyLine` (such a key, or a quoted one),
     // so quoting everything else keeps whatever entry comes first
     // re-detectable. The character rules are shared with that check.
-    private fun renderKey(key: String?): String {
-        val k = key ?: ""
-        return if (isIdentifierKey(k) && !isTypedPlainKey(k)) k else quoted(k)
+    private fun renderKey(node: Node): String {
+        val k = node.key ?: ""
+        return if (isIdentifierKey(k) && !isTypedPlainKey(k, node.topLevel)) k else quoted(k)
     }
 }
 
@@ -294,9 +297,9 @@ private fun quoted(s: String): String = buildString {
         '\r' -> +"\\r"
         '\t' -> +"\\t"
         else -> when {
-            c.isSurrogate() && s.isYamlUnprintableAt(i) -> +'\uFFFD'
-            s.isYamlUnprintableAt(i) -> +("\\u" + c.code.toString(16).padStart(4, '0'))
-            else -> +c
+            !s.isYamlUnprintableAt(i) -> +c
+            c.isSurrogate() -> +'\uFFFD'
+            else -> +("\\u" + c.code.toString(16).padStart(4, '0'))
         }
     }
     +'"'

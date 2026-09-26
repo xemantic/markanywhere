@@ -547,8 +547,11 @@ private fun isSequenceEntry(content: String): Boolean =
 
 // True when only whitespace or a `#` comment follows index [from], the end
 // of a quoted scalar or a flow collection. Not [isCommentStartAt]: that is
-// the rule inside a plain scalar, while after a closed token every reader
-// (libyaml, PyYAML) starts a comment at any `#`, even with no space (`"x"#b`).
+// the rule inside a plain scalar, while after a closed token the front
+// matter readers (PyYAML, Psych, go-yaml v2 — all libyaml's scanner) start a
+// comment at any `#`, even with no space (`"x"#b`). DIVERGENCE: YAML 1.2
+// §6.6 wants whitespace first, and a strict reader (npm `yaml`,
+// snakeyaml-engine) refuses such a line; the writer never produces one.
 private fun isBlankOrComment(s: String, from: Int): Boolean {
     val i = skipSpaces(s, from)
     return i >= s.length || s[i] == '#'
