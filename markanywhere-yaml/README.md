@@ -41,7 +41,7 @@ The vocabulary is deliberately small and the key lives in an attribute, so a key
 - The kind of value follows from the children: text only is a scalar, nested `entry` marks are a mapping, nested `item` marks are a sequence.
 - `type` is present only on a non-string scalar: `bool`, `int`, `float`, `null`, `timestamp`.
   A plain scalar is typed exactly when some reader front matter is written for reads it as something other than a string — the YAML 1.2 core schema, plus the YAML 1.1 shapes Psych (Jekyll), PyYAML and go-yaml v2 (Hugo) still type — so a Jekyll / Hugo document round-trips as written.
-  Beyond the core schema that means booleans and nulls in any letter case and `y` / `n`, numbers with `_` / `,` separators or a binary / octal / upper-case base prefix (`1_000`, `1,000`, `0b101`, `0X1F`), base-60 numbers (`12:30` is an `int`), and timestamps with a one-digit month or day or a colonless offset (`2016-01-01 12:00:00 -0500`); a date only when it is in the calendar.
+  Beyond the core schema that means booleans and nulls in any letter case and `y` / `n`, numbers with `_` / `,` separators or a binary / octal / upper-case base prefix (`1_000`, `1,000`, `0b101`, `0X1F`), base-60 numbers (`12:30` is an `int`), and timestamps with a one-digit month or day or a colonless offset (`2016-01-01 12:00:00 -0500`); a date only when it is in the calendar, and a number only go-yaml v2 reads only within its 64-bit range (`1e999` stays a string).
   So `type="int"` / `type="float"` says a reader reads a number, not that the text is a Kotlin literal: reading the value yourself takes that reader's rules (drop the separators, resolve the prefix or the base 60).
   No text and no type is an empty string; a bare `key:` is `type="null"`; an empty `[]` / `{}` is `type="seq"` / `type="map"` with no children.
 - All marks are untagged.
@@ -53,7 +53,7 @@ Block mappings and sequences (a sequence may sit at its key's own indentation), 
 Streaming: a `key: value` line commits on its newline.
 A bare `key:` (or `-`) is held for one line to decide between a nested block and a null value; a block scalar is buffered until it closes — never past the enclosing construct.
 
-DIVERGENCE (never throws, never loses content): a line outside that subset — a complex `? key`, a directive, a document marker, a multi-line flow collection or quoted scalar, a plain scalar's continuation line, a `- item` inside a mapping — is emitted **verbatim** (with its `\n`) as a text child of the container it sits in, and the writer writes it back as-is.
+DIVERGENCE (never throws, never loses content): a line outside that subset — a complex `? key`, a directive, a document marker, a multi-line flow collection or quoted scalar, a plain scalar's continuation line, a `- item` inside a mapping, a shape the front matter readers read differently from one another (`[draft:, x]`, `{a:[1]}`, `|-#note`) — is emitted **verbatim** (with its `\n`) as a text child of the container it sits in, and the writer writes it back as-is.
 Anchors, aliases and tags are not resolved: a plain scalar starting with `&`, `*` or `!` is just a string.
 
 ## Writing

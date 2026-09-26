@@ -42,8 +42,8 @@ package com.xemantic.markanywhere.yaml
 //   without a colon (`2016-01-01 12:00:00 -0500`, Jekyll's documented
 //   format) — a date only when it is in the calendar, a date and time only
 //   within the ranges Psych's `Time` accepts (it normalises `2023-02-31`).
-// Not modelled: a float that overflows (`7e700`), which go-yaml v2 alone
-// reads as a string.
+// A shape go-yaml v2 alone reads as a number is typed only within the
+// range it parses (`1e999`, `0X` and 17 hex digits are strings to it).
 // Typing such a value keeps a source document as written: the writer writes
 // a typed scalar bare, so only a *string* of one of these shapes is quoted.
 
@@ -158,8 +158,7 @@ internal fun yamlScalarType(text: String): String? {
     // a date is the only shape with a `-` after four digits, and a time
     // follows one, so a timestamp never runs the number patterns
     if (text.isTimestampShaped()) {
-        val timestamp = YAML_TIMESTAMP.matchEntire(text)
-        return if (timestamp != null && isTimestampInRange(timestamp.groupValues)) "timestamp" else null
+        return if (timestampVerdict(text) == TYPED) "timestamp" else null
     }
     // … and base 60 is the only number with a `:`
     if (':' in text) {
@@ -172,13 +171,44 @@ internal fun yamlScalarType(text: String): String? {
     if (PSYCH_DECIMAL_INT.matches(text) && text.hasSeparatorsBeforeDigits()) return "int"
     if (PYYAML_FLOAT.matches(text) || PSYCH_FLOAT.matches(text)) return "float"
     if (first == '.') {
-        if (GO_YAML_DOT_FLOAT.matches(text) && text.hasUnderscoresBetweenDigits()) return "float"
+        if (GO_YAML_DOT_FLOAT.matches(text) && text.hasUnderscoresBetweenDigits() &&
+            text.replace("_", "").toDouble().isFinite()
+        ) {
+            return "float"
+        }
     } else {
         val plain = if ('_' in text) text.replace("_", "") else text
-        if (GO_YAML_INT.matches(plain)) return "int"
-        if (GO_YAML_FLOAT.matches(plain)) return "float"
+        if (GO_YAML_INT.matches(plain) && plain.fitsGoYamlInt()) return "int"
+        if (GO_YAML_FLOAT.matches(plain) && plain.toDouble().isFinite()) return "float"
     }
     return null
+}
+
+// Whether go-yaml v2 parses this integer (`_` already deleted): Go's
+// `ParseInt` takes a sign and up to 64 bits signed, `ParseUint` no sign and
+// up to 64 bits unsigned; its own `0b` prefix hands the rest after it,
+// sign included, to the same two.
+private fun String.fitsGoYamlInt(): Boolean {
+    val binarySigned = startsWith("0b-") || startsWith("0b+")
+    val number = if (binarySigned) substring(2) else this
+    val sign = number[0].takeIf { it == '-' || it == '+' }
+    val unsigned = if (sign != null) number.substring(1) else number
+    val (radix, digits) = when {
+        binarySigned -> 2 to unsigned
+        unsigned.length > 1 && unsigned[0] == '0' -> when (unsigned[1]) {
+            'x', 'X' -> 16 to unsigned.substring(2)
+            'o', 'O' -> 8 to unsigned.substring(2)
+            'b', 'B' -> 2 to unsigned.substring(2)
+            else -> 8 to unsigned.substring(1)
+        }
+        else -> 10 to unsigned
+    }
+    val magnitude = digits.toULongOrNull(radix) ?: return false
+    return when (sign) {
+        '-' -> magnitude <= Long.MIN_VALUE.toULong()
+        '+' -> magnitude <= Long.MAX_VALUE.toULong()
+        else -> true
+    }
 }
 
 // Whether the text starts like a [YAML_TIMESTAMP]: four digits, after an
@@ -210,6 +240,20 @@ private fun isBase60Tail(tail: String): Boolean =
 private fun isBase60Int(groups: List<String>): Boolean {
     val tail = groups[2]
     return isBase60Tail(tail) && (groups[1] != "0" || tail.count { it == ':' } <= 2)
+}
+
+private enum class TimestampVerdict { NONE, TYPED, REFUSED }
+
+// For a timestamp-shaped text: [TimestampVerdict.TYPED] when some reader
+// types it, [TimestampVerdict.REFUSED] when PyYAML resolves its shape and
+// then refuses the value, [TimestampVerdict.NONE] for a plain string.
+private fun timestampVerdict(text: String): TimestampVerdict {
+    val groups = YAML_TIMESTAMP.matchEntire(text)?.groupValues ?: return NONE
+    return when {
+        isTimestampInRange(groups) -> TYPED
+        isPyYamlTimestamp(groups) -> REFUSED
+        else -> NONE
+    }
 }
 
 // Whether a [YAML_TIMESTAMP] match is also PyYAML's own shape: no sign on the
@@ -277,16 +321,14 @@ private val YAML_REJECTED = anchored("""=|<<|[-+]?0[bx][_,]+|[-+]?\.[eE][-+][0-9
 // Whether a plain scalar would not read back as this string in every
 // reader: the parser types it, or some reader refuses it.
 internal fun isUnsafePlainScalar(text: String): Boolean {
+    // typed or refused, decided by one match of the timestamp pattern
+    if (text.isTimestampShaped()) return timestampVerdict(text) != NONE
     if (yamlScalarType(text) != null) return true
-    // every refused shape starts with one of these, so the patterns only
-    // run on a string that can match them
+    // every other refused shape starts with one of these, so the pattern
+    // only runs on a string that can match it
     val first = text.firstOrNull() ?: return false
-    if (first != '=' && first != '<' && first != '-' && first != '+' && first != '.' && first !in '0'..'9') {
-        return false
-    }
-    if (YAML_REJECTED.matches(text)) return true
-    val timestamp = YAML_TIMESTAMP.matchEntire(text)
-    return timestamp != null && isPyYamlTimestamp(timestamp.groupValues)
+    return (first == '=' || first == '<' || first == '0' || first == '+' || first == '-' || first == '.') &&
+        YAML_REJECTED.matches(text)
 }
 
 // Whether a plain identifier-shaped mapping key would be read as something

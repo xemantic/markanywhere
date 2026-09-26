@@ -36,7 +36,7 @@ import kotlin.test.Test
 class Gfm_06_11_Test {
 
     @Test
-    fun `example 657 - DIVERGENCE disallowed inline tags are dropped not escaped`() = runTest {
+    fun `example 657 - DIVERGENCE - disallowed inline tags are dropped not escaped`() = runTest {
         // given
         val textFlow = buildString {
             +"<strong> <title> <style> <em>\n"

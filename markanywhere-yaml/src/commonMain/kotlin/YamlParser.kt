@@ -52,7 +52,10 @@ import kotlinx.coroutines.flow.FlowCollector
  *
  * DIVERGENCE (verbatim fallback): a line the subset does not understand —
  * complex keys, directives, multi-line flow collections or quoted scalars,
- * a plain scalar's continuation line, a `- item` inside a mapping — is
+ * a plain scalar's continuation line, a `- item` inside a mapping, or a
+ * shape the front matter readers read differently from one another (a
+ * flow scalar's `:` before `,` / `[` / `]` / `{` / `}`, a block scalar
+ * header followed by `#` with no space) — is
  * emitted **verbatim** (with its `\n`) as a text child of the container it
  * sits in, so nothing is lost and [YamlWriter] can write it back as-is.
  * Anchors, aliases and tags are not resolved: a plain scalar starting with
@@ -397,7 +400,10 @@ public class YamlParser(
             }
             i++
         }
-        if (!isBlankOrComment(s, i)) return null
+        // PyYAML wants whitespace before a comment here, unlike after a
+        // quoted scalar or a flow collection (`|-#x` is refused)
+        val rest = skipSpaces(s, i)
+        if (rest < s.length && !s.isCommentStartAt(rest)) return null
         return Value.Block(folded, chomp, digit)
     }
 
@@ -480,8 +486,8 @@ public class YamlParser(
         var i = start
         while (i < s.length) {
             val c = s[i]
-            if (s.isMappingColonAt(i) || c == ':' && (s[i + 1] == ',' || s[i + 1] == '}')) break
-            if (c == ',' || c == '}' || c == ']' || c == '[' || c == '{' || s.isCommentStartAt(i)) return null
+            if (s.isMappingColonAt(i)) break
+            if (c in FLOW_INDICATORS || s.isFlowColonAt(i) || s.isCommentStartAt(i)) return null
             i++
         }
         val key = s.substring(start, i).trim()
@@ -496,7 +502,7 @@ public class YamlParser(
         while (i < s.length) {
             val c = s[i]
             if (c == ',' || c == ']' || c == '}') break
-            if (s.isMappingColonAt(i) || s.isCommentStartAt(i)) return null
+            if (s.isMappingColonAt(i) || s.isFlowColonAt(i) || s.isCommentStartAt(i)) return null
             i++
         }
         val text = s.substring(start, i).trim()
@@ -529,6 +535,16 @@ private const val ITEM = "item"
 // Indicator characters that cannot start a plain mapping key in the
 // supported subset (`-` is handled by the sequence check first).
 private const val KEY_FORBIDDEN_START = "[]{}&*!|>%@`,"
+
+private const val FLOW_INDICATORS = ",[]{}"
+
+// A `:` followed by a flow indicator inside a flow collection, where the
+// readers disagree: PyYAML ends the plain scalar there (`[a:, b]` holds the
+// mapping `{a: null}`), Psych refuses the line and go-yaml v2 reads the
+// colon as content (`"a:"`). No reading is right for all three, so the
+// line is left outside the subset and kept as written.
+private fun String.isFlowColonAt(i: Int): Boolean =
+    this[i] == ':' && i + 1 < length && this[i + 1] in FLOW_INDICATORS
 
 private fun leadingSpaces(s: String): Int {
     var i = 0

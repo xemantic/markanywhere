@@ -243,6 +243,24 @@ class YamlRoundTripTest {
     }
 
     @Test
+    fun `should keep a line the readers disagree on as written`() = runTest {
+        // given — PyYAML, Psych and go-yaml v2 read a colon before a flow
+        // indicator three different ways, and PyYAML alone refuses a hash
+        // right after a block scalar header, so these lines stay verbatim
+        val source = """
+            tags: [draft:, x]
+            geo: {a:[1, 2]}
+            text: |-#x
+        """.trimIndent() + "\n"
+
+        // when
+        val rendered = flowOf(source).parseYaml().renderYaml()
+
+        // then
+        rendered sameAs source
+    }
+
+    @Test
     fun `should quote a string go-yaml v2 reads as a number once underscores are removed`() = runTest {
         // given
         val values = listOf("1_e5", "1e5_", "1_E5", "+_1", "+_1.", "0_x1", "0X1F")
@@ -266,6 +284,7 @@ class YamlRoundTripTest {
         // given
         val values = listOf(
             "1,", "1,,2", "._0", ".e5", "2024-2-30", "2024-5-32", "2024-01-01 10:00:00 +530",
+            "1e999", ".5e999", "0XFFFFFFFFFFFFFFFFF", "0o7777777777777777777777777",
         )
         for (value in values) {
             val events = semanticEvents {
@@ -283,7 +302,7 @@ class YamlRoundTripTest {
     }
 
     @Test
-    fun `should DIVERGENCE quote a plain scalar a reader refuses to load`() = runTest {
+    fun `DIVERGENCE - should quote a plain scalar a reader refuses to load`() = runTest {
         // given — the parser leaves these strings (no reader has a type for
         // them), but PyYAML or Psych refuse the whole document when they are
         // plain, so the writer quotes them and the first render rewrites the
@@ -366,7 +385,7 @@ class YamlRoundTripTest {
     }
 
     @Test
-    fun `should DIVERGENCE write a lone surrogate as the replacement character`() = runTest {
+    fun `DIVERGENCE - should write a lone surrogate as the replacement character`() = runTest {
         // given — a lone surrogate (a JS string cut mid-pair) has no YAML
         // representation: raw it is outside the printable set, and Psych and
         // go-yaml refuse its `\u` escape as an invalid code point, so either
@@ -395,7 +414,7 @@ class YamlRoundTripTest {
     }
 
     @Test
-    fun `should DIVERGENCE write a lone surrogate in a key as the replacement character`() = runTest {
+    fun `DIVERGENCE - should write a lone surrogate in a key as the replacement character`() = runTest {
         // given
         val events = semanticEvents {
             "entry"("key" to "a\uD800") { +"v" }

@@ -128,7 +128,7 @@ class FrontMatterRoundTripTest {
     }
 
     @Test
-    fun `should DIVERGENCE not re-detect a root sequence front matter`() = runTest {
+    fun `DIVERGENCE - should not re-detect a root sequence front matter`() = runTest {
         // given — YAML allows a root sequence, but front matter detection
         // requires a mapping key on line 2 (`---` + `- a` is a thematic
         // break followed by a list in Markdown, and no front matter consumer

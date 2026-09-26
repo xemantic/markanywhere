@@ -25,10 +25,6 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.runTest
 import com.xemantic.kotlin.test.assert
 import kotlin.test.Test
-import kotlin.time.Duration
-import kotlin.time.Duration.Companion.milliseconds
-import kotlin.time.TimeSource
-import kotlin.time.measureTime
 
 /**
  * Specifies the streaming YAML parser and its event representation.
@@ -467,7 +463,64 @@ class YamlParserTest {
     }
 
     @Test
-    fun `should DIVERGENCE not type a plain scalar a reader refuses to load`() = runTest {
+    fun `should not type a number go-yaml v2 alone reads and then overflows`() = runTest {
+        // given — PyYAML and Psych need a `.` and a signed exponent for a
+        // float and take only lower-case `0x` / `0b` prefixes, so go-yaml v2
+        // alone reads these shapes as numbers, and it falls back to a string
+        // when the value overflows its int64 / uint64 / float64
+        val textFlow = """
+            a: 1e999
+            b: .5e999
+            c: 0XFFFFFFFFFFFFFFFFF
+            d: 0o7777777777777777777777777
+            e: +0XFFFFFFFFFFFFFFFF
+            f: -0X8000000000000001
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parseYaml()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "entry"("key" to "a") { +"1e999" }
+            "entry"("key" to "b") { +".5e999" }
+            "entry"("key" to "c") { +"0XFFFFFFFFFFFFFFFFF" }
+            "entry"("key" to "d") { +"0o7777777777777777777777777" }
+            "entry"("key" to "e") { +"+0XFFFFFFFFFFFFFFFF" }
+            "entry"("key" to "f") { +"-0X8000000000000001" }
+        }
+    }
+
+    @Test
+    fun `should type a number go-yaml v2 alone reads within its range`() = runTest {
+        // given — the largest uint64 and the smallest int64 still fit, a
+        // decimal too large for an integer is read as a float, and an
+        // underflowing float is zero rather than an error
+        val textFlow = """
+            a: 0XFFFFFFFFFFFFFFFF
+            b: -0X8000000000000000
+            c: 0b-1000000000000000000000000000000000000000000000000000000000000000
+            d: -_99999999999999999999
+            e: 1e-999
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parseYaml()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "entry"("key" to "a", "type" to "int") { +"0XFFFFFFFFFFFFFFFF" }
+            "entry"("key" to "b", "type" to "int") { +"-0X8000000000000000" }
+            "entry"("key" to "c", "type" to "int") {
+                +"0b-1000000000000000000000000000000000000000000000000000000000000000"
+            }
+            "entry"("key" to "d", "type" to "float") { +"-_99999999999999999999" }
+            "entry"("key" to "e", "type" to "float") { +"1e-999" }
+        }
+    }
+
+    @Test
+    fun `DIVERGENCE - should not type a plain scalar a reader refuses to load`() = runTest {
         // given — PyYAML resolves `=` and `<<` to its value / merge tags and
         // then refuses to construct them; it refuses a date not in the
         // calendar or a time / offset out of range (which Psych reads as a
@@ -499,34 +552,25 @@ class YamlParserTest {
     }
 
     @Test
-    fun `should resolve a long near-miss of a base prefixed number in linear time`() {
-        // given — a base prefix, digits and one character outside the base:
+    fun `should resolve a long near-miss of a base prefixed number`() {
+        // given — a base prefix, a long digit run and one character outside
+        // the base but still numeric-shaped, so the number patterns do run:
         // a pattern that lets the digits match two ways backtracks
-        // quadratically over them, and every plain scalar is typed
-        fun nearMisses(length: Int) = listOf("0x", "0b", "+0x", "-0b").map { prefix ->
-            prefix + "1".repeat(length) + "g"
+        // quadratically, which at this length is hours instead of
+        // milliseconds — a regression hangs the test rather than failing an
+        // assertion, since a wall-clock bound would be flaky across targets
+        val values = listOf("0x", "+0x").map { it + "1".repeat(500_000) + "." } +
+            listOf("0b", "-0b").map { it + "1".repeat(500_000) + "2" }
+
+        for (value in values) {
+            // when
+            val type = yamlScalarType(value)
+            val unsafe = isUnsafePlainScalar(value)
+
+            // then
+            assert(type == null)
+            assert(!unsafe)
         }
-        // the best of a few runs, so a pause of the runtime is not measured
-        fun timeToResolve(values: List<String>): Duration = List(3) {
-            TimeSource.Monotonic.measureTime {
-                for (value in values) {
-                    assert(yamlScalarType(value) == null)
-                    assert(!isUnsafePlainScalar(value))
-                }
-            }
-        }.min()
-        val short = nearMisses(25_000)
-        val long = nearMisses(100_000)
-
-        // when
-        val shortTime = timeToResolve(short)
-        val longTime = timeToResolve(long)
-
-        // then — four times the input takes about four times as long when
-        // linear, sixteen times when quadratic; the allowance absorbs the
-        // timer's resolution when both are only milliseconds, and no absolute
-        // bound is set, since a Native or JS regex engine is much slower
-        assert(longTime < shortTime * 8 + 50.milliseconds)
     }
 
     @Test
@@ -1029,7 +1073,56 @@ class YamlParserTest {
     }
 
     @Test
-    fun `should DIVERGENCE keep an unrecognised line verbatim`() = runTest {
+    fun `DIVERGENCE - should keep a flow scalar with a colon before a flow indicator verbatim`() = runTest {
+        // given — the readers disagree on a plain flow scalar whose `:` is
+        // followed by `,` / `[` / `]` / `{` / `}`: PyYAML reads a mapping
+        // (`[{draft: null}, x]`), Psych refuses the line, go-yaml v2 reads
+        // the colon as content (`"draft:"`), so no single reading is right and
+        // the line is kept as written; a colon followed by anything else is
+        // content for all three
+        val textFlow = """
+            title: x
+            tags: [draft:, x]
+            one: [a:]
+            geo: {a:[1, 2]}
+            nested: {a:{b: 1}}
+            empty: {a:, b: 1}
+            last: {a:}
+            time: [a:b]
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parseYaml()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "entry"("key" to "title") { +"x" }
+            +"tags: [draft:, x]\none: [a:]\ngeo: {a:[1, 2]}\nnested: {a:{b: 1}}\nempty: {a:, b: 1}\nlast: {a:}\n"
+            "entry"("key" to "time") {
+                "item" { +"a:b" }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep a block scalar header with a hash right after it verbatim`() = runTest {
+        // given — Psych and go-yaml v2 read `|-#x` as a header and a comment,
+        // but PyYAML refuses it, so the line is outside the subset; with
+        // whitespace before the `#` every reader takes the comment
+        val textFlow = "a: |-#x\nb: | #y\n  z\n".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parseYaml()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            +"a: |-#x\n"
+            "entry"("key" to "b") { +"z\n" }
+        }
+    }
+
+    @Test
+    fun `DIVERGENCE - should keep an unrecognised line verbatim`() = runTest {
         // given — a complex key, a multi-line flow sequence, an unterminated
         // quote, a `key:value` without a space and a tab-indented line are
         // outside the subset; each line survives verbatim (with its newline)
@@ -1057,7 +1150,7 @@ class YamlParserTest {
     }
 
     @Test
-    fun `should DIVERGENCE keep a sequence line inside a mapping verbatim`() = runTest {
+    fun `DIVERGENCE - should keep a sequence line inside a mapping verbatim`() = runTest {
         // given — a `- item` at the mapping's own indentation is a YAML error
         val textFlow = """
             title: x
@@ -1075,7 +1168,7 @@ class YamlParserTest {
     }
 
     @Test
-    fun `should DIVERGENCE parse anchors aliases and tags as plain strings`() = runTest {
+    fun `DIVERGENCE - should parse anchors aliases and tags as plain strings`() = runTest {
         // given
         val textFlow = """
             base: &b value
@@ -1095,7 +1188,7 @@ class YamlParserTest {
     }
 
     @Test
-    fun `should DIVERGENCE accept a mapping indicator inside a plain value`() = runTest {
+    fun `DIVERGENCE - should accept a mapping indicator inside a plain value`() = runTest {
         // given — YAML readers (Psych, PyYAML) reject both lines
         val textFlow = """
             note: Note: see
