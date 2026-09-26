@@ -35,8 +35,10 @@ import com.xemantic.markanywhere.SemanticEvent
  * - a scalar with a `type` (`bool`, `int`, `float`, `null`, `timestamp`) is
  *   written bare; a string is written plain unless a plain scalar would
  *   re-parse as something else — reserved literals, numbers, timestamps,
- *   a leading indicator, `: `, ` #`, surrounding whitespace, a control
- *   character — in which case it is double-quoted with the YAML escapes;
+ *   including the YAML 1.1 shapes the parser types (`12:30`, `1_000`,
+ *   `yEs`), a leading indicator, `: ` or a trailing `:`, ` #`, surrounding
+ *   whitespace, a line break or tab, a character YAML requires escaped —
+ *   in which case it is double-quoted with the YAML escapes;
  * - a multi-line string becomes a literal block scalar (`|`, `|-`, `|+`
  *   according to its trailing newlines) unless its first line starts with
  *   whitespace or it has no content, which fall back to a quoted scalar;
@@ -44,9 +46,9 @@ import com.xemantic.markanywhere.SemanticEvent
  *   text is a bare `key:`; `type=seq` / `type=map` with no children are
  *   `[]` / `{}`;
  * - a key is written plain only when identifier-shaped (letters, digits,
- *   `_`, `-`, `.`, starting with a letter or `_`) and not a reserved
- *   literal — a YAML 1.1 reader takes a bare `yes:` as a boolean key — and
- *   double-quoted otherwise, even where YAML would not require it;
+ *   `_`, `-`, `.`, starting with a letter or `_`) and not a key a reader
+ *   would type — Psych takes a bare `yes:` or `nULL:` as a boolean / null
+ *   key, go-yaml v2 a `y:` below the top level — and double-quoted otherwise, even where YAML would not require it;
  * - a `text` child of a container (the parser's verbatim fallback for a
  *   line outside its YAML subset) is written as-is, on its own line(s).
  *
@@ -70,7 +72,9 @@ public class YamlWriter(
         // the column this node's own line starts at
         val indent: Int,
         // the column this node's children start at
-        val childIndent: Int
+        val childIndent: Int,
+        // no entry or item encloses it — a key of the root mapping
+        val topLevel: Boolean
     ) {
         var state: State = UNDECIDED
         val scalar = StringBuilder()
@@ -78,7 +82,7 @@ public class YamlWriter(
     }
 
     private val stack = ArrayDeque<Node>().apply {
-        addLast(Node(OTHER, key = null, type = null, indent = 0, childIndent = 0))
+        addLast(Node(OTHER, key = null, type = null, indent = 0, childIndent = 0, topLevel = true))
     }
 
     // True right after `-` was written for an item whose first child
@@ -109,7 +113,8 @@ public class YamlWriter(
         }
         val indent = parent.childIndent
         val childIndent = if (kind == OTHER) indent else indent + 2
-        stack.addLast(Node(kind, event.attributes["key"], event.attributes["type"], indent, childIndent))
+        val topLevel = parent.topLevel && !parent.isValue
+        stack.addLast(Node(kind, event.attributes["key"], event.attributes["type"], indent, childIndent, topLevel))
     }
 
     private fun text(text: String) {
@@ -151,14 +156,14 @@ public class YamlWriter(
             atLineStart = false
             afterDash = true
         } else {
-            out(linePrefix(node) + renderKey(node.key) + ":\n")
+            out(linePrefix(node) + renderKey(node) + ":\n")
             atLineStart = true
         }
         if (pendingVerbatim != null) writeVerbatim(pendingVerbatim)
     }
 
     private fun writeLine(node: Node, value: String) {
-        val head = if (node.kind == ITEM) "-" else renderKey(node.key) + ":"
+        val head = if (node.kind == ITEM) "-" else renderKey(node) + ":"
         out(linePrefix(node) + head + (if (value.isEmpty()) "" else " $value") + "\n")
         atLineStart = true
     }
@@ -200,7 +205,11 @@ public class YamlWriter(
     private fun canBlock(text: String): Boolean {
         val first = text[0]
         if (first == ' ' || first == '\t' || first == '\n') return false
-        for (c in text) if (c != '\n' && c != '\t' && c < ' ') return false
+        for (i in text.indices) {
+            val c = text[i]
+            // a carriage return would be read as a line break
+            if (c == '\r' || text.isYamlUnprintableAt(i)) return false
+        }
         return text.trimEnd('\n').isNotEmpty()
     }
 
@@ -224,14 +233,14 @@ public class YamlWriter(
         return sb.toString()
     }
 
-    // A key is written plain only when it is identifier-shaped and not a
-    // reserved literal: the Markdown parser's front matter detection requires
+    // A key is written plain only when it is identifier-shaped and would not
+    // be typed (`yes`, `nULL`, a nested `y`): the Markdown parser's front matter detection requires
     // the first line to pass `isYamlKeyLine` (such a key, or a quoted one),
     // so quoting everything else keeps whatever entry comes first
     // re-detectable. The character rules are shared with that check.
-    private fun renderKey(key: String?): String {
-        val k = key ?: ""
-        return if (isIdentifierKey(k) && yamlScalarType(k) == null) k else quoted(k)
+    private fun renderKey(node: Node): String {
+        val k = node.key ?: ""
+        return if (isIdentifierKey(k) && !isTypedPlainKey(k, node.topLevel)) k else quoted(k)
     }
 }
 
@@ -239,32 +248,59 @@ public class YamlWriter(
 // double-quoted output (see YAML 1.2 §6.4 / §6.6).
 private const val YAML_INDICATORS = "-?:,[]{}#&*!|>'\"%@`"
 
-// A character a plain scalar cannot carry: C0 / DEL / NEL and the Unicode
-// line and paragraph separators (YAML 1.2 §5.1 printable characters).
-private val Char.isYamlControl: Boolean
-    get() = this < ' ' || this == '\u007f' || this == '\u0085' || this == '\u2028' || this == '\u2029'
+// Whether the character at [i] may only appear `\u`-escaped: it is outside
+// YAML's printable set (YAML 1.2 §5.1 — C0 controls other than tab, line
+// feed and carriage return, DEL, the C1 controls, U+FFFE / U+FFFF, a
+// surrogate not part of a pair), which Psych and PyYAML refuse anywhere in a
+// document; a byte order mark, which must not appear inside a document
+// (§5.2); or a line break for a YAML 1.1 reader (NEL, the Unicode line and
+// paragraph separators). A lone surrogate has no valid YAML representation
+// at all — raw it is unprintable, and Psych and go-yaml refuse its `\u`
+// escape — so [quoted] writes it as U+FFFD (DIVERGENCE: lossy). Tab, line feed
+// and carriage return are printable — each writer path decides where it can
+// keep them.
+private fun String.isYamlUnprintableAt(i: Int): Boolean {
+    val c = this[i]
+    return when {
+        c.isHighSurrogate() -> i + 1 == length || !this[i + 1].isLowSurrogate()
+        c.isLowSurrogate() -> i == 0 || !this[i - 1].isHighSurrogate()
+        else -> (c < ' ' && c != '\t' && c != '\n' && c != '\r') ||
+            c in '\u007f'..'\u009f' || c == '\u2028' || c == '\u2029' ||
+            c == '\ufeff' || c == '\ufffe' || c == '\uffff'
+    }
+}
 
-// A plain scalar the parser would not read back as the same string: one it
-// would type (`yamlScalarType`), or whose shape is an indicator, a comment,
-// a mapping colon, surrounding whitespace or a control character.
+// A plain scalar a reader would not read back as the same string: one the
+// parser would type or a reader refuses (`isUnsafePlainScalar`), or whose
+// shape is an indicator, a comment (`#` after whitespace), a mapping colon
+// (`:` before whitespace or at the end), surrounding whitespace, a line
+// break or tab, or an unprintable character. A `:` or `#` anywhere else
+// is plain content (`https://x/y`, `C#`), as is an inner `"` or `\`.
 private fun needsQuoting(s: String): Boolean {
     if (s.isEmpty()) return true
     if (s.first().isWhitespace() || s.last().isWhitespace()) return true
     if (s[0] in YAML_INDICATORS) return true
-    for (c in s) if (c == ':' || c == '#' || c == '"' || c == '\\' || c.isYamlControl) return true
-    return yamlScalarType(s) != null
+    for (i in s.indices) {
+        val c = s[i]
+        if (c == '\n' || c == '\r' || c == '\t' || s.isYamlUnprintableAt(i)) return true
+        if (s.isMappingColonAt(i) || s.isCommentStartAt(i)) return true
+    }
+    return isUnsafePlainScalar(s)
 }
 
 private fun quoted(s: String): String = buildString {
     +'"'
-    for (c in s) when {
-        c == '\\' -> +"\\\\"
-        c == '"' -> +"\\\""
-        c == '\n' -> +"\\n"
-        c == '\r' -> +"\\r"
-        c == '\t' -> +"\\t"
-        c.isYamlControl -> +("\\u" + c.code.toString(16).padStart(4, '0'))
-        else -> +c
+    for (i in s.indices) when (val c = s[i]) {
+        '\\' -> +"\\\\"
+        '"' -> +"\\\""
+        '\n' -> +"\\n"
+        '\r' -> +"\\r"
+        '\t' -> +"\\t"
+        else -> when {
+            !s.isYamlUnprintableAt(i) -> +c
+            c.isSurrogate() -> +'\uFFFD'
+            else -> +("\\u" + c.code.toString(16).padStart(4, '0'))
+        }
     }
     +'"'
 }

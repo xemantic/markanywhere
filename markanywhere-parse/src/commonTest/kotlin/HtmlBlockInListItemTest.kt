@@ -98,7 +98,7 @@ class HtmlBlockInListItemTest {
     }
 
     @Test
-    fun `type 1 pre block inside list item DIVERGENCE`() = runTest {
+    fun `DIVERGENCE - type 1 pre block inside list item`() = runTest {
         // given
         val textFlow = /* language=markdown */ """
             - intro
@@ -298,7 +298,7 @@ class HtmlBlockInListItemTest {
     }
 
     @Test
-    fun `blank line inside list-internal html block stays in raw mode DIVERGENCE`() = runTest {
+    fun `DIVERGENCE - blank line inside list-internal html block stays in raw mode`() = runTest {
         // given: a blank line inside a `<div>` block. At top level this would
         // transition the block to sub-parse mode and the `- nested` line would
         // open a Markdown list. Inside a list item we stay in raw-text mode
@@ -444,7 +444,7 @@ class HtmlBlockInListItemTest {
     }
 
     @Test
-    fun `type 1 pre block with multi-line opener inside list item DIVERGENCE`() = runTest {
+    fun `DIVERGENCE - type 1 pre block with multi-line opener inside list item`() = runTest {
         // given: `<pre` on the marker line, attribute on the next line, `>`
         // closes the opener. Exercises the buffered-opener path in the type-1
         // branch of `streamListHtmlBlockLine` — `firstLineBuffer` accumulates

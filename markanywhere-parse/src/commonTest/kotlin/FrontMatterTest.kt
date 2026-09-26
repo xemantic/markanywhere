@@ -168,7 +168,7 @@ class FrontMatterTest {
     }
 
     @Test
-    fun `should DIVERGENCE auto-close unterminated front matter at EOF`() = runTest {
+    fun `DIVERGENCE - should auto-close unterminated front matter at EOF`() = runTest {
         // given — opener but no closer. DIVERGENCE: spec-correct behavior would
         // require buffering the whole document to detect the missing closer
         // and fall back to a thematic break + paragraphs. The streaming parser

@@ -65,6 +65,369 @@ class YamlRoundTripTest {
     }
 
     @Test
+    fun `should write a colon or hash that is not an indicator plain`() = runTest {
+        // given — `:` not followed by a space and `#` not after a space are
+        // plain-scalar content for every YAML reader (issue #80)
+        val values = listOf(
+            "https://xemantic.com/contact", "a:b", "C#", "a#b", "say \"hi\"", "C:\\path",
+        )
+        for (value in values) {
+            val source = "k: $value\n"
+
+            // when
+            val rendered = flowOf(source).parseYaml().renderYaml()
+            val reparsed = flowOf(rendered).parseYaml()
+
+            // then
+            rendered sameAs source
+            reparsed.mergeAdjacentText() sameAs semanticEvents {
+                "entry"("key" to "k") { +value }
+            }
+        }
+    }
+
+    @Test
+    fun `should write a colon or hash that is not an indicator plain in a sequence item`() = runTest {
+        // given — an item's content is first checked for a compact mapping
+        // (`- key: value`), so a `:` or `#` there takes a different path
+        // through the parser than an entry value
+        val source = "k:\n  - https://xemantic.com/contact\n  - a:b\n  - C#\n  - a#b\n"
+
+        // when
+        val rendered = flowOf(source).parseYaml().renderYaml()
+        val reparsed = flowOf(rendered).parseYaml()
+
+        // then
+        rendered sameAs source
+        reparsed.mergeAdjacentText() sameAs semanticEvents {
+            "entry"("key" to "k") {
+                "item" { +"https://xemantic.com/contact" }
+                "item" { +"a:b" }
+                "item" { +"C#" }
+                "item" { +"a#b" }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep quoting a colon or hash that is an indicator and YAML 1_1 sexagesimals`() = runTest {
+        // given — a mapping colon, a comment, a leading indicator, and base-60
+        // numbers a YAML 1.1 reader (Psych, PyYAML) would type as int / float
+        val values = listOf(
+            "Note: see", "ends:", "a #b", "12:30", "+1:30", "190:20:30.15", "#tag", ": x",
+        )
+        for (value in values) {
+            val events = semanticEvents {
+                "entry"("key" to "k") { +value }
+            }
+
+            // when
+            val rendered = events.renderYaml()
+            val reparsed = flowOf(rendered).parseYaml()
+
+            // then
+            rendered sameAs "k: \"$value\"\n"
+            reparsed.mergeAdjacentText() sameAs events
+        }
+    }
+
+    @Test
+    fun `should quote a string a YAML 1_1 reader would type`() = runTest {
+        // given — plain scalars YAML 1.2 reads as strings, but Psych (Jekyll)
+        // or PyYAML type as a number, time, boolean or null, or refuse
+        val values = listOf(
+            "2024-05-01T10:00:00+0100", "2024-05-01 10:00:00 +0100", "2024-5-1",
+            "1_000", "1,000", "0b101", "+0x1F", "1_000.5", "1,000.5", "1.5_0", ".e+4",
+            "yEs", "oFF", "nULL", "y", "Y", "n", "N", ".Nan", ".iNf", "+.InF", "-.INf", "=", "<<",
+        )
+        for (value in values) {
+            val events = semanticEvents {
+                "entry"("key" to "k") { +value }
+            }
+
+            // when
+            val rendered = events.renderYaml()
+            val reparsed = flowOf(rendered).parseYaml()
+
+            // then
+            rendered sameAs "k: \"$value\"\n"
+            reparsed.mergeAdjacentText() sameAs events
+        }
+    }
+
+    @Test
+    fun `should quote a key a YAML 1_1 reader would type`() = runTest {
+        // given — Psych reads booleans and nulls in any letter case
+        val events = semanticEvents {
+            "entry"("key" to "yEs") { +"v" }
+            "entry"("key" to "nULL") { +"v" }
+        }
+
+        // when
+        val rendered = events.renderYaml()
+        val reparsed = flowOf(rendered).parseYaml()
+
+        // then
+        rendered sameAs "\"yEs\": v\n\"nULL\": v\n"
+        reparsed.mergeAdjacentText() sameAs events
+    }
+
+    @Test
+    fun `should not quote a one-letter boolean key`() = runTest {
+        // given — go-yaml v2 reads a plain `y` / `n` value as a boolean, but
+        // decodes a front matter key into a string, and neither Psych nor
+        // PyYAML types them at all
+        val source = "x: 1\ny: 2\nn: 3\nY: 4\nN: 5\n"
+
+        // when
+        val rendered = flowOf(source).parseYaml().renderYaml()
+
+        // then
+        rendered sameAs source
+    }
+
+    @Test
+    fun `should quote a one-letter boolean key below the top level`() = runTest {
+        // given — go-yaml v2 decodes only the top-level keys into strings; a
+        // nested mapping, in an entry or in an item, is decoded with
+        // interface{} keys, so a plain `y:` there becomes the key `true`
+        val events = semanticEvents {
+            "entry"("key" to "params") {
+                "entry"("key" to "y") { +"1" }
+                "entry"("key" to "N") { +"2" }
+            }
+            "entry"("key" to "list") {
+                "item" {
+                    "entry"("key" to "n") { +"3" }
+                }
+            }
+            "entry"("key" to "y") { +"4" }
+        }
+
+        // when
+        val rendered = events.renderYaml()
+        val reparsed = flowOf(rendered).parseYaml()
+
+        // then
+        rendered sameAs """
+            params:
+              "y": "1"
+              "N": "2"
+            list:
+              - "n": "3"
+            y: "4"
+        """.trimIndent() + "\n"
+        reparsed.mergeAdjacentText() sameAs events
+    }
+
+    @Test
+    fun `should keep YAML 1_1 typed front matter values as written`() = runTest {
+        // given — Jekyll's documented date format, a short date, go-yaml v2
+        // booleans and Psych numbers: the parser types them, so the writer
+        // writes them back bare instead of quoting them into strings
+        val source = """
+            date: 2016-01-01 12:00:00 -0500
+            short: 2024-5-1
+            answer: y
+            mixed: yEs
+            big: 1_000
+            time: 12:30
+            offset: 2024-01-01 10:00:00 +05:99
+        """.trimIndent() + "\n"
+
+        // when
+        val rendered = flowOf(source).parseYaml().renderYaml()
+
+        // then
+        rendered sameAs source
+    }
+
+    @Test
+    fun `should keep a line the readers disagree on as written`() = runTest {
+        // given — PyYAML, Psych and go-yaml v2 read a colon before a flow
+        // indicator three different ways, and PyYAML alone refuses a hash
+        // right after a block scalar header, so these lines stay verbatim
+        val source = """
+            tags: [draft:, x]
+            geo: {a:[1, 2]}
+            text: |-#x
+        """.trimIndent() + "\n"
+
+        // when
+        val rendered = flowOf(source).parseYaml().renderYaml()
+
+        // then
+        rendered sameAs source
+    }
+
+    @Test
+    fun `should quote a string go-yaml v2 reads as a number once underscores are removed`() = runTest {
+        // given
+        val values = listOf("1_e5", "1e5_", "1_E5", "+_1", "+_1.", "0_x1", "0X1F")
+        for (value in values) {
+            val events = semanticEvents {
+                "entry"("key" to "k") { +value }
+            }
+
+            // when
+            val rendered = events.renderYaml()
+            val reparsed = flowOf(rendered).parseYaml()
+
+            // then
+            rendered sameAs "k: \"$value\"\n"
+            reparsed.mergeAdjacentText() sameAs events
+        }
+    }
+
+    @Test
+    fun `should not quote a shape no reader types`() = runTest {
+        // given
+        val values = listOf(
+            "1,", "1,,2", "._0", ".e5", "2024-2-30", "2024-5-32", "2024-01-01 10:00:00 +530",
+            "1e999", ".5e999", "0XFFFFFFFFFFFFFFFFF", "0o7777777777777777777777777",
+        )
+        for (value in values) {
+            val events = semanticEvents {
+                "entry"("key" to "k") { +value }
+            }
+
+            // when
+            val rendered = events.renderYaml()
+            val reparsed = flowOf(rendered).parseYaml()
+
+            // then
+            rendered sameAs "k: $value\n"
+            reparsed.mergeAdjacentText() sameAs events
+        }
+    }
+
+    @Test
+    fun `DIVERGENCE - should quote a plain scalar a reader refuses to load`() = runTest {
+        // given — the parser leaves these strings (no reader has a type for
+        // them), but PyYAML or Psych refuse the whole document when they are
+        // plain, so the writer quotes them and the first render rewrites the
+        // source; PyYAML refuses a timestamp shape out of range
+        val source = """
+            a: =
+            b: <<
+            c: 2024-13-45
+            d: 2024-01-01 24:30:00
+            e: 0x_
+            f: .e+4
+            g: 2024-01-01 10:00:00 +23:99
+        """.trimIndent() + "\n"
+
+        // when
+        val rendered = flowOf(source).parseYaml().renderYaml()
+
+        // then
+        rendered sameAs """
+            a: "="
+            b: "<<"
+            c: "2024-13-45"
+            d: "2024-01-01 24:30:00"
+            e: "0x_"
+            f: ".e+4"
+            g: "2024-01-01 10:00:00 +23:99"
+        """.trimIndent() + "\n"
+    }
+
+    @Test
+    fun `should not quote a float shape without a digit`() = runTest {
+        // given
+        val values = listOf(".", "+.", "._")
+        for (value in values) {
+            val events = semanticEvents {
+                "entry"("key" to "k") { +value }
+            }
+
+            // when
+            val rendered = events.renderYaml()
+            val reparsed = flowOf(rendered).parseYaml()
+
+            // then
+            rendered sameAs "k: $value\n"
+            reparsed.mergeAdjacentText() sameAs events
+        }
+    }
+
+    @Test
+    fun `should escape every character YAML does not allow in a document`() = runTest {
+        // given — C1 controls (mojibake like a Windows-1252 apostrophe read
+        // as Latin-1) and the U+FFFE / U+FFFF non-characters are outside
+        // YAML's printable set (YAML 1.2 §5.1): Psych and PyYAML refuse
+        // the whole document when they appear raw, even in a block scalar;
+        // a byte order mark must not appear inside a document (§5.2)
+        val values = listOf(
+            "It\u0092s" to "\"It\\u0092s\"",
+            "a\u0080b" to "\"a\\u0080b\"",
+            "\u009f" to "\"\\u009f\"",
+            "x\uFFFEy" to "\"x\\ufffey\"",
+            "x\uFFFF" to "\"x\\uffff\"",
+            "first\u0092\nsecond" to "\"first\\u0092\\nsecond\"",
+            "\uFEFFTitle" to "\"\\ufeffTitle\"",
+            "first\n\uFEFFsecond" to "\"first\\n\\ufeffsecond\"",
+            "smile 😀" to "smile 😀",
+        )
+        for ((value, expected) in values) {
+            val events = semanticEvents {
+                "entry"("key" to "k") { +value }
+            }
+
+            // when
+            val rendered = events.renderYaml()
+            val reparsed = flowOf(rendered).parseYaml()
+
+            // then
+            rendered sameAs "k: $expected\n"
+            reparsed.mergeAdjacentText() sameAs events
+        }
+    }
+
+    @Test
+    fun `DIVERGENCE - should write a lone surrogate as the replacement character`() = runTest {
+        // given — a lone surrogate (a JS string cut mid-pair) has no YAML
+        // representation: raw it is outside the printable set, and Psych and
+        // go-yaml refuse its `\u` escape as an invalid code point, so either
+        // loses the whole document; U+FFFD keeps it loadable, but the
+        // surrogate does not survive the round-trip
+        val values = listOf(
+            "lone \uD800 high" to "lone \uFFFD high",
+            "lone \uDC00 low" to "lone \uFFFD low",
+            "\uDC00\uD800" to "\uFFFD\uFFFD",
+        )
+        for ((value, replaced) in values) {
+            val events = semanticEvents {
+                "entry"("key" to "k") { +value }
+            }
+
+            // when
+            val rendered = events.renderYaml()
+            val reparsed = flowOf(rendered).parseYaml()
+
+            // then
+            rendered sameAs "k: \"$replaced\"\n"
+            reparsed.mergeAdjacentText() sameAs semanticEvents {
+                "entry"("key" to "k") { +replaced }
+            }
+        }
+    }
+
+    @Test
+    fun `DIVERGENCE - should write a lone surrogate in a key as the replacement character`() = runTest {
+        // given
+        val events = semanticEvents {
+            "entry"("key" to "a\uD800") { +"v" }
+        }
+
+        // when
+        val rendered = events.renderYaml()
+
+        // then
+        rendered sameAs "\"a\uFFFD\": v\n"
+    }
+
+    @Test
     fun `should round-trip keys that need quoting`() = runTest {
         // given
         val keys = listOf(

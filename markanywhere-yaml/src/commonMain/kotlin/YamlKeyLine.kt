@@ -44,9 +44,7 @@ public fun isYamlKeyLine(line: String): Boolean {
         j
     }
     while (i < line.length && line[i] == ' ') i++
-    if (i >= line.length || line[i] != ':') return false
-    i++
-    return i == line.length || line[i] == ' ' || line[i] == '\t'
+    return i < line.length && line.isMappingColonAt(i)
 }
 
 // A key [YamlWriter] may write plain: identifier-shaped, so it passes

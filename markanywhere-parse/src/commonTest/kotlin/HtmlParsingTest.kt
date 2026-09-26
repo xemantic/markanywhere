@@ -401,7 +401,7 @@ class HtmlParsingTest {
      * over spec-faithful escaping.
      */
     @Test
-    fun `DIVERGENCE inline disallowed script tag and its body are dropped`() = runTest {
+    fun `DIVERGENCE - inline disallowed script tag and its body are dropped`() = runTest {
         // given
         val src = "before<script>alert(1)</script>after\n"
 
@@ -419,7 +419,7 @@ class HtmlParsingTest {
      * including HTML-like substrings, is dropped.
      */
     @Test
-    fun `DIVERGENCE inline disallowed style tag and its body are dropped`() = runTest {
+    fun `DIVERGENCE - inline disallowed style tag and its body are dropped`() = runTest {
         // given
         val src = "x<style>a::before{content:\"<x>\"}</style>y\n"
 
@@ -437,7 +437,7 @@ class HtmlParsingTest {
      * the final `>` (`</script   >`), mirroring the block-1 close rule.
      */
     @Test
-    fun `DIVERGENCE inline disallowed close tag tolerates trailing whitespace`() = runTest {
+    fun `DIVERGENCE - inline disallowed close tag tolerates trailing whitespace`() = runTest {
         // given
         val src = "a<script>js</script\t >b\n"
 
@@ -539,7 +539,7 @@ class HtmlParsingTest {
      * always close their `<script>`/`<style>`, so this edge is benign in practice.
      */
     @Test
-    fun `DIVERGENCE unclosed inline disallowed opener drops only the rest of its line`() = runTest {
+    fun `DIVERGENCE - unclosed inline disallowed opener drops only the rest of its line`() = runTest {
         // given
         val src = "keep<script>dropped to end of line\nnext line\n"
 

@@ -35,8 +35,12 @@ import kotlinx.coroutines.flow.FlowCollector
  *   sequence is nested `item` marks. The root is a mapping (top-level
  *   `entry` marks) or a sequence (top-level `item` marks) — no wrapper mark.
  * - A non-string scalar carries `type` = `bool` / `int` / `float` / `null` /
- *   `timestamp` (YAML 1.2 core schema, plus the 1.1 `yes`/`no`/`on`/`off`
- *   booleans so a Jekyll / Hugo document round-trips as written). An empty
+ *   `timestamp`: typed exactly when a front matter reader — the YAML 1.2
+ *   core schema, or the YAML 1.1 shapes of Psych (Jekyll), PyYAML and
+ *   go-yaml v2 (Hugo) — reads it as other than a string (`y`, `yEs`,
+ *   `1_000`, `0X1F`, `12:30`, `2024-5-1`), so a Jekyll / Hugo document
+ *   round-trips as written. A number keeps that reader's syntax (separators,
+ *   base prefixes, base 60) in its text. An empty
  *   flow collection carries `type` = `seq` / `map`. An empty string is an
  *   entry with no text and no type; a missing value (`key:`) is `type=null`.
  *
@@ -48,13 +52,23 @@ import kotlinx.coroutines.flow.FlowCollector
  *
  * DIVERGENCE (verbatim fallback): a line the subset does not understand —
  * complex keys, directives, multi-line flow collections or quoted scalars,
- * a plain scalar's continuation line, a `- item` inside a mapping — is
+ * a plain scalar's continuation line, a `- item` inside a mapping, or a
+ * shape the front matter readers read differently from one another (a
+ * flow scalar's `:` before `,` / `[` / `]` / `{` / `}`, a block scalar
+ * header followed by `#` with no space) — is
  * emitted **verbatim** (with its `\n`) as a text child of the container it
  * sits in, so nothing is lost and [YamlWriter] can write it back as-is.
  * Anchors, aliases and tags are not resolved: a plain scalar starting with
  * `&` / `*` / `!` is just a string. Document markers (`---`, `...`) and
  * directives are not recognised — a multi-document stream is outside the
  * subset.
+ *
+ * DIVERGENCE (lenient plain scalars): a mapping entry's plain value
+ * containing a mapping indicator — `k: Note: see`, `k: ends:` — is read as
+ * the string after the first `: `, where YAML (Psych, PyYAML) rejects the
+ * line. A sequence item is not lenient: `- Note: see` is a compact mapping
+ * (an item holding the entry `Note`), as in YAML. This does not make such a
+ * value safe to write plain: [YamlWriter] still quotes it.
  *
  * Streaming: a `key: value` line commits on its newline. A bare `key:` (or
  * `-`) is held for one line to decide between a nested block and a null
@@ -335,17 +349,15 @@ public class YamlParser(
             val (key, end) = scanQuoted(content) ?: return null
             var i = end
             while (i < content.length && content[i] == ' ') i++
-            if (i >= content.length || content[i] != ':') return null
-            if (i + 1 < content.length && content[i + 1] != ' ' && content[i + 1] != '\t') return null
+            if (i >= content.length || !content.isMappingColonAt(i)) return null
             return key to content.substring(i + 1)
         }
         if (first in KEY_FORBIDDEN_START) return null
         if (content == "?" || content.startsWith("? ")) return null
         var i = 0
         while (i < content.length) {
-            val c = content[i]
-            if (c == ':' && (i + 1 == content.length || content[i + 1] == ' ' || content[i + 1] == '\t')) break
-            if (c == '#' && i > 0 && content[i - 1] == ' ') return null
+            if (content.isMappingColonAt(i)) break
+            if (content.isCommentStartAt(i)) return null
             i++
         }
         if (i == content.length) return null
@@ -388,7 +400,10 @@ public class YamlParser(
             }
             i++
         }
-        if (!isBlankOrComment(s, i)) return null
+        // PyYAML wants whitespace before a comment here, unlike after a
+        // quoted scalar or a flow collection (`|-#x` is refused)
+        val rest = skipSpaces(s, i)
+        if (rest < s.length && !s.isCommentStartAt(rest)) return null
         return Value.Block(folded, chomp, digit)
     }
 
@@ -471,8 +486,8 @@ public class YamlParser(
         var i = start
         while (i < s.length) {
             val c = s[i]
-            if (c == ':' && (i + 1 >= s.length || s[i + 1] == ' ' || s[i + 1] == ',' || s[i + 1] == '}')) break
-            if (c == ',' || c == '}' || c == ']' || c == '[' || c == '{') return null
+            if (s.isMappingColonAt(i)) break
+            if (c in FLOW_INDICATORS || s.isFlowColonAt(i) || s.isCommentStartAt(i)) return null
             i++
         }
         val key = s.substring(start, i).trim()
@@ -487,8 +502,7 @@ public class YamlParser(
         while (i < s.length) {
             val c = s[i]
             if (c == ',' || c == ']' || c == '}') break
-            if (c == ':' && (i + 1 >= s.length || s[i + 1] == ' ')) return null
-            if (c == '#' && i > start && s[i - 1] == ' ') return null
+            if (s.isMappingColonAt(i) || s.isFlowColonAt(i) || s.isCommentStartAt(i)) return null
             i++
         }
         val text = s.substring(start, i).trim()
@@ -522,6 +536,16 @@ private const val ITEM = "item"
 // supported subset (`-` is handled by the sequence check first).
 private const val KEY_FORBIDDEN_START = "[]{}&*!|>%@`,"
 
+private const val FLOW_INDICATORS = ",[]{}"
+
+// A `:` followed by a flow indicator inside a flow collection, where the
+// readers disagree: PyYAML ends the plain scalar there (`[a:, b]` holds the
+// mapping `{a: null}`), Psych refuses the line and go-yaml v2 reads the
+// colon as content (`"a:"`). No reading is right for all three, so the
+// line is left outside the subset and kept as written.
+private fun String.isFlowColonAt(i: Int): Boolean =
+    this[i] == ':' && i + 1 < length && this[i + 1] in FLOW_INDICATORS
+
 private fun leadingSpaces(s: String): Int {
     var i = 0
     while (i < s.length && s[i] == ' ') i++
@@ -537,18 +561,22 @@ private fun skipSpaces(s: String, from: Int): Int {
 private fun isSequenceEntry(content: String): Boolean =
     content == "-" || content.startsWith("- ") || content.startsWith("-\t")
 
-// True when only whitespace or a `#` comment follows index [from].
+// True when only whitespace or a `#` comment follows index [from], the end
+// of a quoted scalar or a flow collection. Not [isCommentStartAt]: that is
+// the rule inside a plain scalar, while after a closed token the front
+// matter readers (PyYAML, Psych, go-yaml v2 — all libyaml's scanner) start a
+// comment at any `#`, even with no space (`"x"#b`). DIVERGENCE: YAML 1.2
+// §6.6 wants whitespace first, and a strict reader (npm `yaml`,
+// snakeyaml-engine) refuses such a line; the writer never produces one.
 private fun isBlankOrComment(s: String, from: Int): Boolean {
     val i = skipSpaces(s, from)
-    return i >= s.length || (s[i] == '#' && (i == from || s[i - 1] == ' ' || s[i - 1] == '\t'))
+    return i >= s.length || s[i] == '#'
 }
 
 // A ` #` (hash preceded by whitespace) starts a trailing comment.
 private fun stripTrailingComment(value: String): String {
     for (i in 1 until value.length) {
-        if (value[i] == '#' && (value[i - 1] == ' ' || value[i - 1] == '\t')) {
-            return value.substring(0, i)
-        }
+        if (value.isCommentStartAt(i)) return value.substring(0, i)
     }
     return value
 }
@@ -630,40 +658,4 @@ private fun StringBuilder.appendCodePointCompat(code: Int) {
     val v = code - 0x10000
     append(((v shr 10) + 0xD800).toChar())
     append(((v and 0x3FF) + 0xDC00).toChar())
-}
-
-private val YAML_NULLS = setOf("null", "Null", "NULL", "~")
-
-// YAML 1.2 core schema booleans plus the 1.1 forms still common in front
-// matter (Jekyll's and Hugo's YAML readers accept them).
-private val YAML_BOOLS = setOf(
-    "true", "True", "TRUE", "false", "False", "FALSE",
-    "yes", "Yes", "YES", "no", "No", "NO",
-    "on", "On", "ON", "off", "Off", "OFF"
-)
-
-// Each pattern is explicitly anchored: Kotlin/JS resolves `matches` through
-// the leftmost match, so an unanchored alternation lets the first branch win
-// on a prefix (`0x1F` matched `[0-9]+` as `0`, a full timestamp matched its
-// date-only branch) and the whole-input check then fails — JVM backtracks
-// across the branches and never showed it.
-private val YAML_INT = Regex("""^(?:[-+]?[0-9]+|0o[0-7]+|0x[0-9a-fA-F]+)$""")
-
-private val YAML_FLOAT = Regex(
-    """^(?:[-+]?(\.[0-9]+|[0-9]+(\.[0-9]*)?)([eE][-+]?[0-9]+)?|[-+]?\.(inf|Inf|INF)|\.(nan|NaN|NAN))$"""
-)
-
-private val YAML_TIMESTAMP = Regex(
-    """^(?:[0-9]{4}-[0-9]{2}-[0-9]{2}""" +
-        """|[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}([Tt]|[ \t]+)[0-9]{1,2}:[0-9]{2}:[0-9]{2}(\.[0-9]*)?([ \t]*(Z|[-+][0-9]{1,2}(:[0-9]{2})?))?)$"""
-)
-
-// The `type` a plain scalar resolves to, or null for a string.
-internal fun yamlScalarType(text: String): String? = when {
-    text in YAML_NULLS -> "null"
-    text in YAML_BOOLS -> "bool"
-    YAML_INT.matches(text) -> "int"
-    YAML_FLOAT.matches(text) -> "float"
-    YAML_TIMESTAMP.matches(text) -> "timestamp"
-    else -> null
 }
