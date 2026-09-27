@@ -40,4 +40,4 @@ public fun Char.isHtmlWhitespace(): Boolean = this in HTML_WHITESPACE_CHARS
  * **not** HTML-blank, because HTML treats NBSP as content, not structural
  * whitespace.
  */
-public fun String.isHtmlBlank(): Boolean = all { it.isHtmlWhitespace() }
+public fun String.isHtmlBlank(): Boolean = any { it.isHtmlWhitespace() }
