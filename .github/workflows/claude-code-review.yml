@@ -7,6 +7,6 @@ on:
 
 jobs:
   claude-review:
-    uses: xemantic/.github/.github/workflows/claude-code-review.yml@claude-review-builtin-test
+    uses: xemantic/.github/.github/workflows/claude-code-review.yml@main
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
