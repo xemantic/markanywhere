@@ -839,6 +839,227 @@ class SimplifyHtmlTest {
     }
 
     @Test
+    fun `should drop application-state meta values from frontmatter`() = runTest {
+        // given — single-page-app state serialised into <meta content>, the
+        // shapes that swamped LinkedIn's front matter (issue #82)
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    "meta"("name" to "__init", "content" to "{\"a\":1}") { }
+                    "meta"("name" to "storage-inventory", "content" to "  [1,2,3]") { }
+                    "meta"("name" to "como-err", "content" to "[{\"x\":1}]") { }
+                    "meta"("name" to "empty-list", "content" to "[]") { }
+                    "meta"("name" to "feed/config/environment", "content" to "%7B%22x%22%3A1%7D") { }
+                    "meta"("name" to "jam/config/environment", "content" to "%7b%7d") { }
+                    "meta"("name" to "hash-list", "content" to "%5B%22a%22%5D") { }
+                    "meta"("name" to "description", "content" to "Save {50%} today") { }
+                }
+                "body" { "p" { +"text" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then — only a *leading* JSON object/array marks state
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "description") { +"Save {50%} today" }
+            }
+            "p" { +"text" }
+        }
+    }
+
+    @Test
+    fun `should keep meta values opening with a bracketed tag`() = runTest {
+        // given — human-readable prefixes, not JSON arrays
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    "meta"("name" to "description", "content" to "[Solved] How to fix X") { }
+                    "meta"("name" to "og:title", "content" to "[PDF] Annual report") { }
+                    "meta"("name" to "abstract", "content" to "[1] Introduction") { }
+                }
+                "body" { "p" { +"text" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "description") { +"[Solved] How to fix X" }
+                "entry"("key" to "og:title") { +"[PDF] Annual report" }
+                "entry"("key" to "abstract") { +"[1] Introduction" }
+            }
+            "p" { +"text" }
+        }
+    }
+
+    @Test
+    fun `should drop meta values longer than the cap from frontmatter`() = runTest {
+        // given — the cap still fits a long academic abstract
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    "meta"("name" to "blob", "content" to "x".repeat(4097)) { }
+                    "meta"("name" to "citation_abstract", "content" to "y".repeat(4096)) { }
+                }
+                "body" { "p" { +"text" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "citation_abstract") { +"y".repeat(4096) }
+            }
+            "p" { +"text" }
+        }
+    }
+
+    @Test
+    fun `should drop blank meta values from frontmatter`() = runTest {
+        // given — NBSP is HTML content, not whitespace
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    "meta"("name" to "keywords", "content" to "") { }
+                    "meta"("name" to "abstract", "content" to " \t\n") { }
+                    "meta"("name" to "separator", "content" to "\u00A0") { }
+                    "meta"("name" to "section/topic", "content" to "Politics") { }
+                    "meta"("name" to "description", "content" to "A doc") { }
+                    "meta"("name" to "og:title", "content" to "Hello") { }
+                    "meta"("name" to "author", "content" to "Alice") { }
+                    "meta"("name" to "article:published_time", "content" to "2026-09-27T10:00:00Z") { }
+                }
+                "body" { "p" { +"text" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then — ordinary metadata survives, a `/` in the name included
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "separator") { +"\u00A0" }
+                "entry"("key" to "section/topic") { +"Politics" }
+                "entry"("key" to "description") { +"A doc" }
+                "entry"("key" to "og:title") { +"Hello" }
+                "entry"("key" to "author") { +"Alice" }
+                "entry"("key" to "article:published_time") { +"2026-09-27T10:00:00Z" }
+            }
+            "p" { +"text" }
+        }
+    }
+
+    @Test
+    fun `should keep the first non-blank title when head holds several`() = runTest {
+        // given — e.g. after a client-side navigation (issue #82)
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    "title" { +"  " }
+                    "title" { +"A" }
+                    "title" { +"B" }
+                }
+                "body" { "p" { +"x" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then — not "AB", not "B"
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"A" }
+            }
+            "p" { +"x" }
+        }
+    }
+
+    @Test
+    fun `should prefer the title element over a title meta preceding it`() = runTest {
+        // given
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    "meta"("name" to "title", "content" to "SEO blurb") { }
+                    "title" { +"Actual Page" }
+                }
+                "body" { "p" { +"x" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"Actual Page" }
+            }
+            "p" { +"x" }
+        }
+    }
+
+    @Test
+    fun `should prefer the title element over a title meta following it`() = runTest {
+        // given
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    "title" { +"Actual Page" }
+                    "meta"("name" to "title", "content" to "SEO blurb") { }
+                }
+                "body" { "p" { +"x" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"Actual Page" }
+            }
+            "p" { +"x" }
+        }
+    }
+
+    @Test
+    fun `should fall back to a title meta when no title element is present`() = runTest {
+        // given
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    "meta"("name" to "title", "content" to "SEO blurb") { }
+                }
+                "body" { "p" { +"x" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"SEO blurb" }
+            }
+            "p" { +"x" }
+        }
+    }
+
+    @Test
     fun `should not emit frontmatter when head yields no metadata`() = runTest {
         // given
         val input = semanticEvents(tagged = true) {
