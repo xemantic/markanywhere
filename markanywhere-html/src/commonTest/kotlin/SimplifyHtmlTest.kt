@@ -1093,7 +1093,7 @@ class SimplifyHtmlTest {
     }
 
     @Test
-    fun `should judge a long flat JSON array by its words, not its quotes and commas`() = runTest {
+    fun `should judge a long flat JSON array by its words and not its quotes and commas`() = runTest {
         // given — both past the cap; the quotes and commas serialising the
         // words are not the punctuation of state, a list of hashes still is
         val words = (1..600).joinToString(",", "[", "]") { "\"tag$it\"" }

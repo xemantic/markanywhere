@@ -20,7 +20,7 @@ sentinel=NO_CRITICAL_FINDINGS
 
 cd "$(git rev-parse --show-toplevel)"
 
-if ! git diff --quiet HEAD; then
+if [[ -n "$(git status --porcelain)" ]]; then
   echo "working tree has uncommitted changes — commit or stash them first" >&2
   exit 1
 fi
@@ -79,7 +79,8 @@ $(cat "$review")" \
     exit 0
   fi
 
-  if ! git diff --quiet HEAD; then
+  # --porcelain also lists untracked files (e.g. a new regression test)
+  if [[ -n "$(git status --porcelain)" ]]; then
     echo "round $round left uncommitted changes (build red?) — stopping, see $fix_log" >&2
     exit 1
   fi
