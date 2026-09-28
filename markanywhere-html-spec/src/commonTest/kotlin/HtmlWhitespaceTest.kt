@@ -72,17 +72,29 @@ class HtmlWhitespaceTest {
 
     @Test
     fun `should strip and collapse HTML whitespace`() {
-        assert("\n  Foo\t\r\n  Bar \u000C".stripAndCollapseHtmlWhitespace() == "Foo Bar")
+        // when
+        val result = "\n  Foo\t\r\n  Bar \u000C".stripAndCollapseHtmlWhitespace()
+
+        // then
+        assert(result == "Foo Bar")
     }
 
     @Test
     fun `should keep NBSP when stripping and collapsing HTML whitespace`() {
-        assert("\u00A0 a  \u00A0b ".stripAndCollapseHtmlWhitespace() == "\u00A0 a \u00A0b")
+        // when
+        val result = "\u00A0 a  \u00A0b ".stripAndCollapseHtmlWhitespace()
+
+        // then
+        assert(result == "\u00A0 a \u00A0b")
     }
 
     @Test
     fun `should strip and collapse a blank string to empty`() {
-        assert(" \t\n".stripAndCollapseHtmlWhitespace() == "")
+        // when
+        val result = " \t\n".stripAndCollapseHtmlWhitespace()
+
+        // then
+        assert(result == "")
     }
 
 }

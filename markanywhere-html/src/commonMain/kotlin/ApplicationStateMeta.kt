@@ -38,6 +38,8 @@ import kotlinx.serialization.json.JsonPrimitive
 //   nested array, a flag, a `null`). A flat list of words or numbers —
 //   an empty one included — is metadata a person writes (`keywords`,
 //   `article:tag`, `citation_volume`);
+// - a JSON string whose content is itself state by these rules — state
+//   serialised twice, a common single-page-app double encoding;
 // - a value longer than [MAX_META_VALUE_LENGTH] that does not read as text —
 //   the backstop for opaque blobs of any other shape (base64, hash lists,
 //   truncated JSON), which a long abstract in prose is not.
@@ -52,12 +54,17 @@ internal fun isApplicationStateMeta(content: String): Boolean {
 // characters. Past this, a value must read as text to be kept.
 private const val MAX_META_VALUE_LENGTH = 4096
 
+// Recursion unwraps one JSON string per level, and each level's escaping at
+// least doubles the backslashes before a quote, so the depth stays
+// logarithmic in the value's length.
 private fun String.isJsonState(): Boolean {
     val first = firstOrNull()
-    if (first != '{' && first != '[') return false
+    if (first != '{' && first != '[' && first != '"') return false
     return when (val json = parseJsonOrNull()) {
         is JsonObject -> true
         is JsonArray -> json.any { !it.isWordOrNumber() }
+        is JsonPrimitive -> json.isString &&
+                json.content.trim { it.isHtmlWhitespace() }.isJsonState()
         else -> false
     }
 }
@@ -69,16 +76,31 @@ private fun String.isJsonState(): Boolean {
 // base64 and hex never contain one) — sparse enough for a list of long
 // compound words, while the punctuation of serialised data (quotes,
 // brackets, `=`, `|`, `\`) stays rare.
+// Chars are counted as code points: a surrogate pair — a letter of a
+// supplementary-plane script (CJK Extension B, historic scripts) or an emoji,
+// which the common stdlib cannot classify — counts once, as a letter of a
+// script without spaces; serialised data never holds one.
 private fun String.readsAsText(): Boolean {
+    var chars = 0
     var letters = 0
     var wordBreaks = 0
     var dataPunctuation = 0
-    for (c in this) {
+    var i = 0
+    while (i < length) {
+        val c = this[i]
+        chars++
+        if (c.isHighSurrogate() && getOrNull(i + 1)?.isLowSurrogate() == true) {
+            letters++
+            wordBreaks++
+            i += 2
+            continue
+        }
         if (c.isLetter()) letters++
         if (c.isWhitespace() || c == ',' || c == ';' || c.code > 0x7F && c.isLetter()) wordBreaks++
         else if (c in DATA_PUNCTUATION) dataPunctuation++
+        i++
     }
-    return letters * 2 >= length && wordBreaks * 16 >= length && dataPunctuation * 20 < length
+    return letters * 2 >= chars && wordBreaks * 16 >= chars && dataPunctuation * 20 < chars
 }
 
 private const val DATA_PUNCTUATION = "{}[]\"<>=|\\"

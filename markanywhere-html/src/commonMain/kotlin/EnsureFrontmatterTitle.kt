@@ -25,19 +25,23 @@ import kotlinx.coroutines.flow.Flow
  * Ensures the stream starts with a `frontmatter` mark defining a `title`,
  * deriving a missing title from the first `h1`.
  *
- * A stream whose leading `frontmatter` already holds a usable top-level
- * `entry` with `key="title"` (in any ASCII letter case, and only the first
- * such entry counts, as [wrapInHtmlDocument] reads it) — one with non-blank
- * text, or one holding a nested structure — passes through untouched. Otherwise the frontmatter is
- * held back and the title is derived from the very first `h1` following it
- * (only blank text may intervene): the `h1` subtree's flattened text —
- * its text events plus the `alt` of every `img` mark, in document order,
- * the way an accessible name is computed from content — trimmed, internal
- * whitespace collapsed to single spaces — becomes the `title`, injected as
- * the first `entry` of the frontmatter (or put in
- * place of a `title` entry that is blank or `null`, such as a bare `title:`
- * line), and only then the frontmatter and the buffered `h1` are emitted,
- * in source order. When no frontmatter exists at all, one carrying just the
+ * The title entry judged is the one [wrapInHtmlDocument] reads: the first
+ * top-level `entry` with `key="title"` (in any ASCII letter case) holding a
+ * scalar — entries holding a nested structure, an empty collection or `null`
+ * are skipped, as there. A stream whose leading `frontmatter` holds such an
+ * entry with non-blank text passes through untouched. Otherwise the
+ * frontmatter is held back and the title is derived from the very first `h1`
+ * following it (only blank text may intervene): the `h1` subtree's flattened
+ * text — its text events plus the `alt` of every `img` mark, in document
+ * order, the way an accessible name is computed from content — trimmed,
+ * internal whitespace collapsed to single spaces — becomes the `title`, and
+ * only then the frontmatter and the buffered `h1` are emitted, in source
+ * order. The derived title replaces, in place and keeping its key's spelling,
+ * the blank scalar title entry, else the first `null` one (a bare `title:`
+ * line); without either it is injected as the first `entry` of the
+ * frontmatter — unless a title entry holding a nested structure or an empty
+ * collection is present, which is then left to stand alone: replacing it
+ * would lose content, and a second entry would duplicate its key. When no frontmatter exists at all, one carrying just the
  * derived `title` is synthesized as the **first** event — ahead of any
  * blank text that preceded the `h1`, since [wrapInHtmlDocument] reads only
  * a frontmatter that opens the stream.
@@ -60,16 +64,27 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
     var frontmatterDepth = 0
     var hasTitle = false
 
-    // the span of a top-level `title` entry that carries no usable title
-    // (blank text, `type=null`) within `frontmatterEvents`, replaced by the
-    // derived entry on commit; `titleStart` < 0 when there is none
+    // the span (and key) of the top-level `title` entry within
+    // `frontmatterEvents` replaced by the derived entry on commit;
+    // `titleStart` < 0 when there is none
     var titleStart = -1
     var titleEnd = -1
-    // the top-level title entry currently open: its text, and whether it
-    // holds nested marks (then it is kept as is, whatever its text); only
-    // the first title entry is judged, the one wrapInHtmlDocument reads
-    var titleSeen = false
+    var titleKey = "title"
+    // the first scalar title entry — the one wrapInHtmlDocument reads — has
+    // been judged
+    var scalarTitleSeen = false
+    // the first `null` title entry, the fallback slot for the derived one
+    var nullTitleStart = -1
+    var nullTitleEnd = -1
+    var nullTitleKey = "title"
+    // a title entry holding a nested structure or an empty collection
+    var unreadableTitleSeen = false
+    // the top-level title entry currently open: where it starts, its key,
+    // `type` and text, and whether it holds nested marks
     var inTitleEntry = false
+    var titleEntryStart = -1
+    var titleEntryKey = "title"
+    var titleEntryType: String? = null
     var titleHasChildren = false
     val titleText = StringBuilder()
 
@@ -94,8 +109,8 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
         flushBlanks()
     }
 
-    suspend fun emitTitleEntry(title: String) {
-        "entry"("key" to "title") { +title }
+    suspend fun emitTitleEntry(title: String, key: String = "title") {
+        "entry"("key" to key) { +title }
     }
 
     suspend fun commitHeading() {
@@ -113,7 +128,7 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
             // entry in place of the unusable title entry
             frontmatterEvents = null
             emit(held.subList(0, titleStart))
-            emitTitleEntry(title)
+            emitTitleEntry(title, titleKey)
             emit(held.subList(titleEnd + 1, held.size))
             flushBlanks()
         } else {
@@ -146,8 +161,10 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
                     frontmatterEvents = mutableListOf(event)
                     frontmatterDepth = 1
                     hasTitle = false
-                    titleSeen = false
                     titleStart = -1
+                    scalarTitleSeen = false
+                    nullTitleStart = -1
+                    unreadableTitleSeen = false
                     state = InFrontmatter
                 }
                 event is Mark && event.name == "h1" -> startHeading(event)
@@ -166,13 +183,15 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
                         frontmatterDepth++
                         if (frontmatterDepth == 2) {
                             // a top-level entry (a direct child)
-                            inTitleEntry = !titleSeen && event.name == "entry" &&
-                                    event["key"]?.asciiLowercase() == "title"
+                            val key = event["key"]
+                            inTitleEntry = event.name == "entry" &&
+                                    key?.asciiLowercase() == "title"
                             if (inTitleEntry) {
-                                titleSeen = true
+                                titleEntryStart = events.lastIndex
+                                titleEntryKey = key!!
+                                titleEntryType = event["type"]
                                 titleHasChildren = false
                                 titleText.clear()
-                                titleStart = events.lastIndex
                             }
                         } else if (inTitleEntry) {
                             titleHasChildren = true
@@ -182,18 +201,43 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
                     is Unmark -> when (--frontmatterDepth) {
                         1 -> if (inTitleEntry) {
                             inTitleEntry = false
-                            if (titleHasChildren || titleText.isNotBlank()) {
-                                hasTitle = true
-                                titleStart = -1
-                            } else {
-                                titleEnd = events.lastIndex
+                            val type = titleEntryType
+                            when {
+                                titleHasChildren || type != null && type != "null" &&
+                                        type !in SCALAR_ENTRY_TYPES -> unreadableTitleSeen = true
+                                type == "null" -> if (nullTitleStart < 0) {
+                                    nullTitleStart = titleEntryStart
+                                    nullTitleEnd = events.lastIndex
+                                    nullTitleKey = titleEntryKey
+                                }
+                                !scalarTitleSeen -> {
+                                    scalarTitleSeen = true
+                                    if (titleText.isNotBlank()) {
+                                        hasTitle = true
+                                    } else {
+                                        titleStart = titleEntryStart
+                                        titleEnd = events.lastIndex
+                                        titleKey = titleEntryKey
+                                    }
+                                }
                             }
                         }
-                        0 -> if (hasTitle) {
-                            flushHeld()
-                            state = PassThrough
-                        } else {
-                            state = AwaitingHeading
+                        0 -> {
+                            if (!scalarTitleSeen) {
+                                if (nullTitleStart >= 0) {
+                                    titleStart = nullTitleStart
+                                    titleEnd = nullTitleEnd
+                                    titleKey = nullTitleKey
+                                } else if (unreadableTitleSeen) {
+                                    hasTitle = true
+                                }
+                            }
+                            if (hasTitle) {
+                                flushHeld()
+                                state = PassThrough
+                            } else {
+                                state = AwaitingHeading
+                            }
                         }
                     }
                 }

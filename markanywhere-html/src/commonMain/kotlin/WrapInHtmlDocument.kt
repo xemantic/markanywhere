@@ -95,7 +95,7 @@ public fun Flow<SemanticEvent>.wrapInHtmlDocument(): Flow<SemanticEvent> = seman
                     if (depth == 1) {
                         val type = event["type"]
                         entryKey = if (
-                            event.name == "entry" && (type == null || type in SCALAR_TYPES)
+                            event.name == "entry" && (type == null || type in SCALAR_ENTRY_TYPES)
                         ) event["key"] else null
                         entryText.clear()
                     } else {
@@ -135,10 +135,3 @@ public fun Flow<SemanticEvent>.wrapInHtmlDocument(): Flow<SemanticEvent> = seman
     unmark("body")
     unmark("html")
 }
-
-// Scalar `type`s whose text is meaningful as a `<meta content>` (`null` and
-// the empty collections are not).
-// The keys that become `<title>` and `<html lang>` rather than a `<meta>`.
-private val HEAD_KEYS = setOf("title", "lang")
-
-private val SCALAR_TYPES = setOf("bool", "int", "float", "timestamp")

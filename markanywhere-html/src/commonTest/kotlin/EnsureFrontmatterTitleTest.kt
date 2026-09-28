@@ -568,10 +568,10 @@ class EnsureFrontmatterTitleTest {
         // when
         val output = input.ensureFrontmatterTitle()
 
-        // then
+        // then — replaced in place, spelled as it was
         output sameAs semanticEvents {
             "frontmatter" {
-                "entry"("key" to "title") { +"Hello" }
+                "entry"("key" to "TITLE") { +"Hello" }
                 "entry"("key" to "author") { +"Alice" }
             }
             "h1" { +"Hello" }
@@ -650,6 +650,139 @@ class EnsureFrontmatterTitleTest {
                 }
             }
             "h1" { +"Hello" }
+        }
+    }
+
+    @Test
+    fun `should pass through a title variant following a null title entry`() = runTest {
+        // given — wrapInHtmlDocument skips the null entry and reads the
+        // variant after it as the title
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title", "type" to "null") { }
+                "entry"("key" to "Title") { +"Real" }
+            }
+            "h1" { +"Heading" }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title", "type" to "null") { }
+                "entry"("key" to "Title") { +"Real" }
+            }
+            "h1" { +"Heading" }
+        }
+    }
+
+    @Test
+    fun `should keep a title variant following a null title entry in the head`() = runTest {
+        // given
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title", "type" to "null") { }
+                "entry"("key" to "Title") { +"Real" }
+            }
+            "h1" { +"Heading" }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle().wrapInHtmlDocument()
+
+        // then
+        output sameAs semanticEvents {
+            "html" {
+                "head" {
+                    "title" { +"Real" }
+                }
+                "body" {
+                    "h1" { +"Heading" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should replace a blank title variant following a nested title entry`() = runTest {
+        // given — wrapInHtmlDocument skips the nested entry, so the blank
+        // variant after it is the title it reads
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") {
+                    "entry"("key" to "en") { +"Hello" }
+                }
+                "entry"("key" to "Title") { }
+            }
+            "h1" { +"Heading" }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle().wrapInHtmlDocument()
+
+        // then
+        output sameAs semanticEvents {
+            "html" {
+                "head" {
+                    "title" { +"Heading" }
+                }
+                "body" {
+                    "h1" { +"Heading" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should replace a null title entry following a nested title entry`() = runTest {
+        // given
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") {
+                    "entry"("key" to "en") { +"Hello" }
+                }
+                "entry"("key" to "Title", "type" to "null") { }
+            }
+            "h1" { +"Heading" }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") {
+                    "entry"("key" to "en") { +"Hello" }
+                }
+                "entry"("key" to "Title") { +"Heading" }
+            }
+            "h1" { +"Heading" }
+        }
+    }
+
+    @Test
+    fun `should keep a title entry holding an empty collection`() = runTest {
+        // given — `title: []`, unreadable as a title but not replaceable
+        // without losing it
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title", "type" to "seq") { }
+            }
+            "h1" { +"Heading" }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title", "type" to "seq") { }
+            }
+            "h1" { +"Heading" }
         }
     }
 

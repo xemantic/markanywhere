@@ -947,6 +947,63 @@ class SimplifyHtmlTest {
     }
 
     @Test
+    fun `should drop JSON state serialised into a JSON string`() = runTest {
+        // given — a single-page-app double encoding, and one nested deeper;
+        // a quoted phrase and a JSON string of words stay metadata
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    "meta"("name" to "app-state", "content" to "\"{\\\"user\\\":{\\\"id\\\":1}}\"") { }
+                    "meta"("name" to "app-state-2", "content" to "\"\\\"[{\\\\\\\"id\\\\\\\":1}]\\\"\"") { }
+                    "meta"("name" to "description", "content" to "\"Hello\" world") { }
+                    "meta"("name" to "subject", "content" to "\"{Draft} notes\"") { }
+                }
+                "body" { "p" { +"text" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "description") { +"\"Hello\" world" }
+                "entry"("key" to "subject") { +"\"{Draft} notes\"" }
+            }
+            "p" { +"text" }
+        }
+    }
+
+    @Test
+    fun `should keep long text written in supplementary-plane letters or emoji`() = runTest {
+        // given — each of these letters and emoji is a UTF-16 surrogate pair
+        val extensionB = "\uD840\uDC00\uD840\uDC01\uD840\uDC02。".repeat(700)
+        val emoji = "Party \uD83C\uDF89\uD83C\uDF89\uD83C\uDF89\uD83C\uDF89 time! ".repeat(200)
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    "meta"("name" to "description", "content" to extensionB) { }
+                    "meta"("name" to "og:description", "content" to emoji) { }
+                }
+                "body" { "p" { +"text" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "description") { +extensionB }
+                "entry"("key" to "og:description") { +emoji }
+            }
+            "p" { +"text" }
+        }
+    }
+
+    @Test
     fun `should keep long comma-separated keyword lists`() = runTest {
         // given — list separators break words as spaces do, and long compound
         // words keep a list sparse in breaks; a list of hashes stays dropped
@@ -1083,6 +1140,52 @@ class SimplifyHtmlTest {
             "html"("lang" to " ") {
                 "head" {
                     "meta"("name" to "lang", "content" to "de") { }
+                }
+                "body" { "p" { +"x" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "lang") { +"de" }
+            }
+            "p" { +"x" }
+        }
+    }
+
+    @Test
+    fun `should trim HTML whitespace around the html lang`() = runTest {
+        // given
+        val input = semanticEvents(tagged = true) {
+            "html"("lang" to " en\n") {
+                "head" { }
+                "body" { "p" { +"x" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "lang") { +"en" }
+            }
+            "p" { +"x" }
+        }
+    }
+
+    @Test
+    fun `should trim HTML whitespace around a lang meta`() = runTest {
+        // given
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    "meta"("name" to "LANG", "content" to "\tde\n") { }
                 }
                 "body" { "p" { +"x" } }
             }
@@ -1403,12 +1506,12 @@ class SimplifyHtmlTest {
     }
 
     @Test
-    fun `should trim a title meta like a title element`() = runTest {
+    fun `should strip and collapse a title meta like a title element`() = runTest {
         // given
         val input = semanticEvents(tagged = true) {
             "html" {
                 "head" {
-                    "meta"("name" to "title", "content" to "  SEO blurb\n") { }
+                    "meta"("name" to "title", "content" to "  SEO\n    blurb\n") { }
                 }
                 "body" { "p" { +"x" } }
             }

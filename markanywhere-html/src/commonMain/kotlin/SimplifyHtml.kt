@@ -260,7 +260,7 @@ public fun Flow<SemanticEvent>.simplifyHtml(
     // --- metadata extraction (explicit per-tag) -------------------------
 
     match("html") { event ->
-        event["lang"]?.let {
+        event["lang"]?.trim { it.isHtmlWhitespace() }?.let {
             if (it.isNotBlank()) metadata.add("lang", it)
         }
         children()
@@ -307,13 +307,16 @@ public fun Flow<SemanticEvent>.simplifyHtml(
                 && !isNoiseMetaName(normalizedName)
                 && !isApplicationStateMeta(content)
             ) {
-                when (normalizedName) {
-                    // the two keys wrapInHtmlDocument turns back into <title>
-                    // and <html lang>, spelled as it reads them
-                    "title" -> metadata.add("title", content.trim { it.isHtmlWhitespace() })
-                    "lang" -> metadata.add("lang", content)
-                    else -> metadata.add(name, content)
+                val value = when (normalizedName) {
+                    // as a <title> element's text reads (document.title)
+                    "title" -> content.stripAndCollapseHtmlWhitespace()
+                    // as <html lang> is read above
+                    "lang" -> content.trim { it.isHtmlWhitespace() }
+                    else -> content
                 }
+                // the keys wrapInHtmlDocument turns back into <title> and
+                // <html lang> are spelled as it reads them
+                metadata.add(if (normalizedName in HEAD_KEYS) normalizedName else name, value)
             }
         }
     }

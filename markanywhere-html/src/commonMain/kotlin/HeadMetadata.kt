@@ -18,6 +18,15 @@ package com.xemantic.markanywhere.html
 
 import com.xemantic.markanywhere.html.spec.asciiLowercase
 
+// The keys wrapInHtmlDocument turns into `<title>` and `<html lang>` rather
+// than a `<meta>`, spelled as it reads them.
+internal val HEAD_KEYS = setOf("title", "lang")
+
+// The front matter `entry` types whose text is meaningful as head metadata
+// (`null` and the empty collections are not); an entry without a `type` is a
+// string.
+internal val SCALAR_ENTRY_TYPES = setOf("bool", "int", "float", "timestamp")
+
 // A front matter entry: the name as first spelled, and its value.
 internal data class MetadataEntry(val key: String, val value: String)
 
