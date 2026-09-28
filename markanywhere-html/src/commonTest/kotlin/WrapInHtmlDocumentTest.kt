@@ -33,7 +33,7 @@ import kotlin.test.Test
  * `entry` marks) feeds the `head`: the `title` entry becomes `<title>`,
  * `lang` becomes the `<html lang>` attribute, every other top-level scalar
  * entry becomes a `<meta name content>` — the inverse of `simplifyHtml`'s
- * head-to-frontmatter extraction.
+ * head-to-frontmatter extraction, minus the values it discards.
  */
 class WrapInHtmlDocumentTest {
 
@@ -285,6 +285,34 @@ class WrapInHtmlDocumentTest {
         }
     }
 
+    @Test
+    fun `should round-trip through simplifyHtml except the values it discards`() = runTest {
+        // given — simplifyHtml keeps no blank value and no application state
+        // (a JSON object or array, or an over-long blob), so those entries do
+        // not come back; text that merely looks bracketed does
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"Page" }
+                "entry"("key" to "summary") { +"{draft} notes" }
+                "entry"("key" to "keywords") { }
+                "entry"("key" to "state") { +"{\"a\":1}" }
+                "entry"("key" to "blob") { +"x".repeat(4097) }
+            }
+            "p" { +"Hi" }
+        }
+
+        // when
+        val output = input.wrapInHtmlDocument().simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"Page" }
+                "entry"("key" to "summary") { +"{draft} notes" }
+            }
+            "p" { +"Hi" }
+        }
+    }
 
     @Test
     fun `should use an entry left open when the stream ends inside the frontmatter`() = runTest {

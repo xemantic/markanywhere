@@ -133,11 +133,13 @@ import kotlinx.coroutines.flow.Flow
  * matter vocabulary — just before `<body>` content streams through. Technical meta
  * names that carry no content signal (rendering hints, crawler / verification
  * directives, platform tile metadata — see [isNoiseMetaName]) are dropped so
- * they don't inflate the frontmatter, and so is application state that
- * single-page apps ship in `<meta>` (serialised JSON, framework config
- * blobs — see [isApplicationStateMeta]). When `<head>` holds several
- * `<title>`s, the first non-blank one wins, over a `<meta name="title">` too. If `<head>` is absent or yields no
- * metadata, no frontmatter mark is emitted.
+ * they don't inflate the frontmatter, and so are a blank value and
+ * application state that single-page apps ship in `<meta>` (serialised JSON,
+ * framework config blobs — see [isApplicationStateMeta]). Those are the
+ * values that do not survive a [wrapInHtmlDocument] round-trip. When `<head>`
+ * holds several `<title>`s, the first non-blank one wins, over a
+ * `<meta name="title">` (in any letter case) too. If `<head>` is absent or
+ * yields no metadata, no frontmatter mark is emitted.
  *
  * Matcher registration is grouped: per-tag explicit matchers come first
  * (so they win the `firstOrNull` race), then a small number of
@@ -170,7 +172,14 @@ public fun Flow<SemanticEvent>.simplifyHtml(
 
     val metadata = mutableMapOf<String, String>()
     val titleText = StringBuilder()
-    var titleElementSeen = false
+    // Title candidates, resolved once when `<head>` closes: the first
+    // non-blank `<title>` wins, else the first non-blank `<meta name="title">`
+    // — unlike `document.title`, which takes the first `<title>` even when
+    // blank, since a blank title tells the reader nothing. The entry lands
+    // where the first candidate appeared.
+    var elementTitle: String? = null
+    var metaTitle: String? = null
+    var titlePosition = -1
 
     // Attribute map kept on a preserved element: its own [names] whitelist, the
     // ARIA name/state keep-set, and any caller-requested [keepAttributes]. An
@@ -252,9 +261,11 @@ public fun Flow<SemanticEvent>.simplifyHtml(
         // swallowed (see the mode-scoped matchText below); emit no mark.
         children(mode = "head")
         afterClose {
-            if (metadata.isNotEmpty()) {
+            val entries = metadata.toList().toMutableList()
+            (elementTitle ?: metaTitle)?.let { entries.add(titlePosition, "title" to it) }
+            if (entries.isNotEmpty()) {
                 "frontmatter" {
-                    for ((key, value) in metadata) {
+                    for ((key, value) in entries) {
                         "entry"("key" to key) { +value }
                     }
                 }
@@ -263,19 +274,16 @@ public fun Flow<SemanticEvent>.simplifyHtml(
     }
 
     match("title") {
-        // Capture the title's text into metadata; the mark itself is dropped.
+        // Capture the title's text as a candidate; the mark itself is dropped.
         // A page can carry several <title>s (e.g. after a client-side
-        // navigation): each is collected on its own and the first non-blank
-        // one wins — unlike `document.title`, which takes the first even when
-        // blank, since a blank title tells the reader nothing. It also wins
-        // over a `<meta name="title">` in either order.
+        // navigation), so each is collected on its own.
         titleText.clear()
         children(mode = "titleText")
         afterClose {
-            val trimmed = titleText.toString().trim()
-            if (trimmed.isNotEmpty() && !titleElementSeen) {
-                titleElementSeen = true
-                metadata["title"] = trimmed
+            val trimmed = titleText.toString().trim { it.isHtmlWhitespace() }
+            if (trimmed.isNotEmpty() && elementTitle == null) {
+                elementTitle = trimmed
+                if (titlePosition < 0) titlePosition = metadata.size
             }
         }
     }
@@ -284,11 +292,19 @@ public fun Flow<SemanticEvent>.simplifyHtml(
         val name = event["name"]
         val content = event["content"]
         if (name != null && content != null
+            && !content.isHtmlBlank()
             && !isNoiseMetaName(name)
             && !isApplicationStateMeta(content)
-            && !(name == "title" && titleElementSeen)
         ) {
-            metadata[name] = content
+            // Meta names are ASCII case-insensitive (HTML §4.2.5).
+            if (name.equals("title", ignoreCase = true)) {
+                if (metaTitle == null) {
+                    metaTitle = content
+                    if (titlePosition < 0) titlePosition = metadata.size
+                }
+            } else {
+                metadata[name] = content
+            }
         }
     }
 
@@ -706,47 +722,6 @@ private fun isNoiseMetaName(name: String): Boolean {
             || n.endsWith("-verify")
             || n.startsWith("verify-")
 }
-
-// Single-page apps use `<meta>` as a transport for application state
-// (LinkedIn: `__init`, `spark/hash-includes`, Ember's percent-encoded
-// `<app>/config/environment`, … — 95% of a page's Markdown, issue #82). A
-// name denylist cannot keep up with names private to each site's framework,
-// so these rules judge the *value*, which is what tells metadata apart from
-// state:
-// - a value opening a JSON object or array, raw or percent-encoded — a `{`
-//   elsewhere is fine, and so is a bracketed tag (`[Solved] …`, `[1] …`):
-//   `[` counts only when followed by what a JSON array can start with and
-//   the value ends with `]`;
-// - a value longer than [MAX_META_VALUE_LENGTH] — the backstop for opaque
-//   blobs of any other shape (base64, hash lists);
-// - an HTML-blank value, which tells the reader nothing.
-private fun isApplicationStateMeta(content: String): Boolean {
-    if (content.isHtmlBlank()) return true
-    val value = content.trim { it.isHtmlWhitespace() }
-    return value.length > MAX_META_VALUE_LENGTH
-            || value.startsWith('{')
-            || value.startsWith("%7B", ignoreCase = true)
-            || value.startsWith('[') && value.endsWith(']')
-            && value.drop(1).trimStart { it.isHtmlWhitespace() }.startsJsonValue()
-            || value.startsWith("%5B", ignoreCase = true) && value.endsWith("%5D", ignoreCase = true)
-            && value.drop(3).startsPercentEncodedJsonValue()
-}
-
-// What may follow a JSON array's `[`: a value (object, array, string, number)
-// or the `]` of an empty array.
-private fun String.startsJsonValue(): Boolean =
-    firstOrNull()?.let { it in "{[\"]-" || it.isDigit() } ?: false
-
-private fun String.startsPercentEncodedJsonValue(): Boolean =
-    PERCENT_ENCODED_JSON_STARTS.any { startsWith(it, ignoreCase = true) }
-            || firstOrNull()?.let { it == '-' || it.isDigit() } ?: false
-
-private val PERCENT_ENCODED_JSON_STARTS = listOf("%7B", "%5B", "%22", "%5D")
-
-// Real metadata is short: `description` / `og:description` rarely exceed 300
-// characters, and the cap still fits a full academic abstract
-// (`citation_abstract`, `dc.description`).
-private const val MAX_META_VALUE_LENGTH = 4096
 
 private val NOISE_META_NAMES = setOf(
     "viewport", "referrer", "generator", "theme-color", "color-scheme",
