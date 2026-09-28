@@ -17,7 +17,6 @@
 package com.xemantic.markanywhere.html
 
 import com.xemantic.markanywhere.html.spec.isHtmlWhitespace
-import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -29,46 +28,68 @@ import kotlinx.serialization.json.JsonPrimitive
 // (LinkedIn: `__init`, `spark/hash-includes`, Ember's percent-encoded
 // `<app>/config/environment`, … — 95% of a page's Markdown, issue #82). A
 // name denylist cannot keep up with names private to each site's framework,
-// so this judges the *value*, which is what tells metadata apart from state:
-// - a value that parses as a JSON object, raw or percent-encoded. Parsing,
-//   not a look at the first and last char, is what keeps human text that
-//   merely starts with a bracket (`[Solved] …`, `{Draft} …`,
-//   `[2024] Annual report [PDF]`);
-// - a JSON array that is percent-encoded, or holds anything but strings and
-//   numbers (an object, a nested array, a flag, a `null`), or nothing at all.
-//   A flat list of words or numbers is metadata a person writes
-//   (`keywords`, `article:tag`, `citation_volume`);
-// - a value longer than [MAX_META_VALUE_LENGTH] — the backstop for opaque
-//   blobs of any other shape (base64, hash lists, truncated JSON).
+// so this judges the *value*, which is what tells metadata apart from state.
+// A percent-encoded value is judged by what it decodes to, so the verdict
+// never depends on the encoding:
+// - a value that parses as a JSON object. Parsing, not a look at the first
+//   and last char, is what keeps human text that merely starts with a
+//   bracket (`[Solved] …`, `{Draft} …`, `[2024] Annual report [PDF]`);
+// - a JSON array holding anything but strings and numbers (an object, a
+//   nested array, a flag, a `null`). A flat list of words or numbers —
+//   an empty one included — is metadata a person writes (`keywords`,
+//   `article:tag`, `citation_volume`);
+// - a value longer than [MAX_META_VALUE_LENGTH] that does not read as text —
+//   the backstop for opaque blobs of any other shape (base64, hash lists,
+//   truncated JSON), which a long abstract in prose is not.
 internal fun isApplicationStateMeta(content: String): Boolean {
     val value = content.trim { it.isHtmlWhitespace() }
-    if (value.length > MAX_META_VALUE_LENGTH) return true
-    val first = value.firstOrNull()
-    return when {
-        first == '{' || first == '[' -> when (val json = value.parseJsonOrNull()) {
-            is JsonObject -> true
-            is JsonArray -> json.isEmpty() || json.any { !it.isWordOrNumber() }
-            else -> false
-        }
-        first == '%' -> value.percentDecodedOrNull()?.parseJsonOrNull()
-            .let { it is JsonObject || it is JsonArray }
+    if (value.length > MAX_META_VALUE_LENGTH && !value.readsAsText()) return true
+    return value.isJsonState() || value.firstOrNull() == '%' &&
+            value.percentDecodedOrNull()?.trim { it.isHtmlWhitespace() }?.isJsonState() == true
+}
+
+// Real metadata is short: `description` / `og:description` rarely exceed 300
+// characters. Past this, a value must read as text to be kept.
+private const val MAX_META_VALUE_LENGTH = 4096
+
+private fun String.isJsonState(): Boolean {
+    val first = firstOrNull()
+    if (first != '{' && first != '[') return false
+    return when (val json = parseJsonOrNull()) {
+        is JsonObject -> true
+        is JsonArray -> json.any { !it.isWordOrNumber() }
         else -> false
     }
 }
 
-// Real metadata is short: `description` / `og:description` rarely exceed 300
-// characters, and the cap still fits a full academic abstract
-// (`citation_abstract`, `dc.description`).
-private const val MAX_META_VALUE_LENGTH = 4096
+// Prose breaks into words: at least one char in ten is whitespace, or a
+// letter of a script written without spaces (anything past ASCII — base64
+// and hex never contain one), while the punctuation of serialised data
+// (quotes, brackets, `=`, `;`, `|`, `\`) stays rare.
+private fun String.readsAsText(): Boolean {
+    var wordBreaks = 0
+    var dataPunctuation = 0
+    for (c in this) {
+        if (c.isWhitespace() || c.code > 0x7F && c.isLetter()) wordBreaks++
+        else if (c in DATA_PUNCTUATION) dataPunctuation++
+    }
+    return wordBreaks * 10 >= length && dataPunctuation * 20 < length
+}
 
+private const val DATA_PUNCTUATION = "{}[]\"<>=;|\\"
+
+// Never throws: the value is page-controlled, and a malformed one is simply
+// not JSON, whatever the parser reports it with.
 private fun String.parseJsonOrNull(): JsonElement? = try {
     Json.parseToJsonElement(this)
-} catch (_: SerializationException) {
+} catch (_: Exception) {
     null
 }
 
-// kotlinx's tree reader takes any unquoted token as a literal (`[PDF]` parses
-// as an array), so everything that is not a string, a flag or `null` counts —
+// kotlinx's tree reader is no strict validator: it takes any unquoted token
+// as a literal (`[PDF]` parses as an array, `{"a":abc}` as an object) and
+// never checks a number, so the verdict rests on the element's shape, never
+// on "it parsed". Everything that is not a string, a flag or `null` counts —
 // a number, or a word that no JSON writer would have produced.
 private fun JsonElement.isWordOrNumber(): Boolean =
     this is JsonPrimitive && this !is JsonNull && (isString || content != "true" && content != "false")

@@ -18,6 +18,7 @@ package com.xemantic.markanywhere.html
 
 import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.flow.semanticEvents
+import com.xemantic.markanywhere.html.spec.asciiLowercase
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -28,8 +29,7 @@ import kotlinx.coroutines.flow.Flow
  * YAML `---` front matter, holding `entry` marks) feeds the `head` — the
  * inverse of [simplifyHtml]'s head-to-frontmatter extraction, so the two
  * round-trip, except for the values [simplifyHtml] discards (a blank value,
- * application state such as a JSON object or an over-long blob) and for keys
- * differing only in letter case, which HTML reads as one `<meta>` name:
+ * application state such as a JSON object or an opaque over-long blob):
  *
  * - the `title` entry becomes `<title>`
  * - the `lang` entry becomes the `lang` attribute on `<html>`
@@ -37,7 +37,10 @@ import kotlinx.coroutines.flow.Flow
  *
  * Only top-level scalar entries are interpreted — exactly the shape
  * [simplifyHtml] produces. A nested mapping or sequence, a null value, and
- * verbatim text are skipped (never an error); a later duplicate key wins.
+ * verbatim text are skipped (never an error). Keys are read the way HTML
+ * reads `<meta>` names, ASCII case-insensitively — a `Title` entry is the
+ * title — and a later duplicate key, in any letter case, wins (value and
+ * spelling) at the position of the first.
  * A `frontmatter` mark appearing anywhere past the first event is ordinary
  * content and flows into `body` verbatim.
  *
@@ -56,7 +59,12 @@ public fun Flow<SemanticEvent>.wrapInHtmlDocument(): Flow<SemanticEvent> = seman
     // the top-level entry being read, null when it is not a scalar to keep
     var entryKey: String? = null
     val entryText = StringBuilder()
-    val metadata = LinkedHashMap<String, String>()
+    // keyed by the ASCII-lowercased key: the entry's spelling and its value
+    val metadata = LinkedHashMap<String, Pair<String, String>>()
+
+    fun putEntry(key: String) {
+        metadata[key.asciiLowercase()] = key to entryText.toString()
+    }
 
     // `head` and its subtree are lexically scoped, so the paired `"name" { }`
     // builder fits; `html` and `body` close only at end-of-stream, so their
@@ -67,18 +75,18 @@ public fun Flow<SemanticEvent>.wrapInHtmlDocument(): Flow<SemanticEvent> = seman
         mark(
             "html",
             attributes = metadata["lang"]
-                ?.let { mapOf("lang" to it) }
+                ?.let { (_, lang) -> mapOf("lang" to lang) }
                 ?: emptyMap()
         )
         "head" {
-            metadata["title"]?.let { title ->
+            metadata["title"]?.let { (_, title) ->
                 "title" {
                     +title
                 }
             }
-            for ((key, value) in metadata) {
-                if (key == "title" || key == "lang") continue
-                "meta"("name" to key, "content" to value) {}
+            for ((normalizedKey, entry) in metadata) {
+                if (normalizedKey == "title" || normalizedKey == "lang") continue
+                "meta"("name" to entry.first, "content" to entry.second) {}
             }
         }
         mark("body")
@@ -104,7 +112,7 @@ public fun Flow<SemanticEvent>.wrapInHtmlDocument(): Flow<SemanticEvent> = seman
                     openDocument()
                 } else {
                     if (depth == 1) {
-                        entryKey?.let { metadata[it] = entryText.toString() }
+                        entryKey?.let { putEntry(it) }
                         entryKey = null
                     }
                     depth--
@@ -126,7 +134,7 @@ public fun Flow<SemanticEvent>.wrapInHtmlDocument(): Flow<SemanticEvent> = seman
     // still used, including an entry left open — its text is complete by
     // then; an empty stream yields the bare skeleton.
     if (collectingFrontmatter && depth == 1) {
-        entryKey?.let { metadata[it] = entryText.toString() }
+        entryKey?.let { putEntry(it) }
     }
     if (!opened) openDocument()
     unmark("body")

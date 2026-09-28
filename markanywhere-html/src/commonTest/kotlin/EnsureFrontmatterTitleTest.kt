@@ -533,6 +533,52 @@ class EnsureFrontmatterTitleTest {
     }
 
     @Test
+    fun `should pass through a title entry in any letter case`() = runTest {
+        // given — wrapInHtmlDocument reads a `Title` key as the title
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "Title") { +"My Page" }
+            }
+            "h1" { +"Heading" }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "Title") { +"My Page" }
+            }
+            "h1" { +"Heading" }
+        }
+    }
+
+    @Test
+    fun `should replace a blank title entry in any letter case with the derived title`() = runTest {
+        // given
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "TITLE") { +" " }
+                "entry"("key" to "author") { +"Alice" }
+            }
+            "h1" { +"Hello" }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"Hello" }
+                "entry"("key" to "author") { +"Alice" }
+            }
+            "h1" { +"Hello" }
+        }
+    }
+
+    @Test
     fun `should keep a title entry holding a nested structure`() = runTest {
         // given — not a usable title, but replacing it would lose content
         val input = semanticEvents {

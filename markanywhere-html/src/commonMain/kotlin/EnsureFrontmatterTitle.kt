@@ -18,6 +18,7 @@ package com.xemantic.markanywhere.html
 
 import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.flow.semanticEvents
+import com.xemantic.markanywhere.html.spec.asciiLowercase
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -25,7 +26,8 @@ import kotlinx.coroutines.flow.Flow
  * deriving a missing title from the first `h1`.
  *
  * A stream whose leading `frontmatter` already holds a usable top-level
- * `entry` with `key="title"` — one with non-blank text, or one holding a
+ * `entry` with `key="title"` (in any ASCII letter case, as
+ * [wrapInHtmlDocument] reads it) — one with non-blank text, or one holding a
  * nested structure — passes through untouched. Otherwise the frontmatter is
  * held back and the title is derived from the very first `h1` following it
  * (only blank text may intervene): the `h1` subtree's flattened text —
@@ -161,7 +163,7 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
                         frontmatterDepth++
                         if (frontmatterDepth == 2) {
                             // a top-level entry (a direct child)
-                            inTitleEntry = event.name == "entry" && event["key"] == "title"
+                            inTitleEntry = event.name == "entry" && event["key"]?.asciiLowercase() == "title"
                             if (inTitleEntry) {
                                 titleHasChildren = false
                                 titleText.clear()

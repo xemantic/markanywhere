@@ -315,29 +315,54 @@ class WrapInHtmlDocumentTest {
     }
 
     @Test
-    fun `should merge keys differing only in letter case on a round-trip through simplifyHtml`() = runTest {
-        // given — HTML reads meta names case-insensitively, so the first
-        // spelling wins, and any `title` spelling is the title
+    fun `should read keys ASCII case-insensitively like meta names`() = runTest {
+        // given — a later key differing only in letter case is a duplicate,
+        // so it wins (spelling and value) at the position of the first
         val input = semanticEvents {
             "frontmatter" {
-                "entry"("key" to "title") { +"Page" }
-                "entry"("key" to "Title") { +"Subtitle" }
+                "entry"("key" to "Title") { +"My Page" }
+                "entry"("key" to "LANG") { +"de" }
                 "entry"("key" to "Author") { +"Alice" }
+                "entry"("key" to "description") { +"A doc" }
                 "entry"("key" to "author") { +"Bob" }
             }
-            "p" { +"Hi" }
         }
 
         // when
-        val output = input.wrapInHtmlDocument().simplifyHtml()
+        val output = input.wrapInHtmlDocument()
+
+        // then
+        output sameAs semanticEvents {
+            "html"("lang" to "de") {
+                "head" {
+                    "title" { +"My Page" }
+                    "meta"("name" to "author", "content" to "Bob") { }
+                    "meta"("name" to "description", "content" to "A doc") { }
+                }
+                "body" { }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep a title key in any letter case on a round-trip through ensureFrontmatterTitle and simplifyHtml`() = runTest {
+        // given — the H1 must not displace the `Title` entry
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "Title") { +"My Page" }
+            }
+            "h1" { +"Heading" }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle().wrapInHtmlDocument().simplifyHtml()
 
         // then
         output sameAs semanticEvents {
             "frontmatter" {
-                "entry"("key" to "title") { +"Page" }
-                "entry"("key" to "Author") { +"Alice" }
+                "entry"("key" to "title") { +"My Page" }
             }
-            "p" { +"Hi" }
+            "h1" { +"Heading" }
         }
     }
 

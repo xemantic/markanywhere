@@ -1,3 +1,8 @@
+public final class com/xemantic/markanywhere/html/spec/AsciiCaseKt {
+	public static final fun asciiLowercase (C)C
+	public static final fun asciiLowercase (Ljava/lang/String;)Ljava/lang/String;
+}
+
 public final class com/xemantic/markanywhere/html/spec/HtmlElementsKt {
 	public static final fun getHTML_RAW_TEXT_ELEMENTS ()Ljava/util/Set;
 	public static final fun getHTML_VOID_ELEMENTS ()Ljava/util/Set;

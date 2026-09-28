@@ -18,7 +18,7 @@ package com.xemantic.markanywhere.html
 
 import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.dump.AccessibilityAnnotations
-import com.xemantic.markanywhere.html.spec.isHtmlBlank
+import com.xemantic.markanywhere.html.spec.asciiLowercase
 import com.xemantic.markanywhere.html.spec.isHtmlWhitespace
 import com.xemantic.markanywhere.transform.MatcherScope
 import com.xemantic.markanywhere.transform.transform
@@ -133,7 +133,8 @@ import kotlinx.coroutines.flow.Flow
  * matter vocabulary — just before `<body>` content streams through. Technical meta
  * names that carry no content signal (rendering hints, crawler / verification
  * directives, platform tile metadata — see [isNoiseMetaName]) are dropped so
- * they don't inflate the frontmatter, and so are a blank value and
+ * they don't inflate the frontmatter, and so are a blank value (NBSP-only
+ * included, `<html lang>` too) and
  * application state that single-page apps ship in `<meta>` (serialised JSON,
  * framework config blobs — see [isApplicationStateMeta]). Meta names are
  * ASCII case-insensitive, so of several names differing only in letter case
@@ -172,19 +173,16 @@ public fun Flow<SemanticEvent>.simplifyHtml(
     svgMode: SvgMode = SvgMode.RESOLVE,
 ): Flow<SemanticEvent> = transform {
 
-    // Keyed by the first spelling of each name; insertion order is the
-    // front matter order.
-    val metadata = mutableMapOf<String, String>()
-    // Meta names are ASCII case-insensitive (HTML §4.2.5): the first
-    // occurrence of a name, in any letter case, wins.
-    val metadataNames = mutableSetOf<String>()
+    // Meta names are ASCII case-insensitive (HTML §4.2.5), so entries are
+    // keyed by the folded name, holding the first spelling and its value:
+    // the first occurrence of a name, in any letter case, wins. Insertion
+    // order is the front matter order.
+    val metadata = mutableMapOf<String, MetadataEntry>()
     val titleText = StringBuilder()
     // The first non-blank `<title>` wins, over a `<meta name="title">` too —
     // unlike `document.title`, which takes the first `<title>` even when
     // blank, since a blank title tells the reader nothing. Overwriting a meta
-    // title keeps the entry where the first candidate appeared. Blank is
-    // judged as `ensureFrontmatterTitle` judges it (NBSP included), so a
-    // title kept here is never replaced there.
+    // title keeps the entry where the first candidate appeared.
     var titleFromElement = false
 
     // Attribute map kept on a preserved element: its own [names] whitelist, the
@@ -259,8 +257,7 @@ public fun Flow<SemanticEvent>.simplifyHtml(
 
     match("html") { event ->
         event["lang"]?.let {
-            metadata["lang"] = it
-            metadataNames += "lang"
+            if (!it.isBlankMetadata()) metadata["lang"] = MetadataEntry("lang", it)
         }
         children()
     }
@@ -272,7 +269,7 @@ public fun Flow<SemanticEvent>.simplifyHtml(
         afterClose {
             if (metadata.isNotEmpty()) {
                 "frontmatter" {
-                    for ((key, value) in metadata) {
+                    for ((key, value) in metadata.values) {
                         "entry"("key" to key) { +value }
                     }
                 }
@@ -287,10 +284,8 @@ public fun Flow<SemanticEvent>.simplifyHtml(
         titleText.clear()
         children(mode = "titleText")
         afterClose {
-            val trimmed = titleText.toString().trim { it.isHtmlWhitespace() }
-            if (trimmed.isNotBlank() && !titleFromElement) {
-                metadata["title"] = trimmed
-                metadataNames += "title"
+            if (!titleFromElement && !titleText.isBlankMetadata()) {
+                metadata["title"] = MetadataEntry("title", titleText.trim { it.isHtmlWhitespace() }.toString())
                 titleFromElement = true
             }
         }
@@ -299,19 +294,19 @@ public fun Flow<SemanticEvent>.simplifyHtml(
     match("meta") { event ->
         val name = event["name"]
         val content = event["content"]
-        if (name != null && content != null
-            && !content.isHtmlBlank()
-            && !isNoiseMetaName(name)
-            && !isApplicationStateMeta(content)
-        ) {
+        if (name != null && content != null && !content.isBlankMetadata()) {
+            // cheapest checks first: the JSON parse runs only for a name
+            // that would otherwise be kept
             val normalizedName = name.asciiLowercase()
-            if (normalizedName == "title") {
-                val trimmed = content.trim { it.isHtmlWhitespace() }
-                if (trimmed.isNotBlank() && metadataNames.add("title")) {
-                    metadata["title"] = trimmed
+            if (normalizedName !in metadata
+                && !isNoiseMetaName(normalizedName)
+                && !isApplicationStateMeta(content)
+            ) {
+                metadata[normalizedName] = if (normalizedName == "title") {
+                    MetadataEntry("title", content.trim { it.isHtmlWhitespace() })
+                } else {
+                    MetadataEntry(name, content)
                 }
-            } else if (metadataNames.add(normalizedName)) {
-                metadata[name] = content
             }
         }
     }
@@ -717,28 +712,27 @@ private val ARIA_KEEP = arrayOf(
     "aria-modal",
 )
 
-// HTML's "ASCII lowercase": unlike [String.lowercase] or
-// `equals(ignoreCase = true)`, it folds only `A`–`Z`, so `tıtle` (dotless ı)
-// does not match `title`.
-private fun String.asciiLowercase(): String =
-    if (none { it in 'A'..'Z' }) this else String(CharArray(length) {
-        val c = this[it]
-        if (c in 'A'..'Z') c + ('a' - 'A') else c
-    })
+// A front matter entry: the name as first spelled, and its value.
+private data class MetadataEntry(val key: String, val value: String)
+
+// A metadata value that tells a reader nothing — judged with Unicode
+// whitespace (NBSP included), not HTML's: rendered, an NBSP-only value is as
+// empty as a blank one. `ensureFrontmatterTitle` judges a title the same way,
+// so a title kept here is never replaced there.
+private fun CharSequence.isBlankMetadata(): Boolean = isBlank()
 
 // Technical `<meta name>` values that carry no content signal for an LLM and
 // only inflate the frontmatter: rendering hints, crawler / verification
 // directives, and platform tile metadata. Dropped from the extracted metadata.
 // A denylist (rather than an allowlist) keeps unknown-but-possibly-useful names
 // — `description`, `keywords`, `author`, `og:*`, `article:*`, … — by default.
-private fun isNoiseMetaName(name: String): Boolean {
-    val n = name.asciiLowercase()
-    return n in NOISE_META_NAMES
-            || NOISE_META_PREFIXES.any { n.startsWith(it) }
-            || n.endsWith("-verification")
-            || n.endsWith("-verify")
-            || n.startsWith("verify-")
-}
+// Takes the name already ASCII-lowercased.
+private fun isNoiseMetaName(normalizedName: String): Boolean =
+    normalizedName in NOISE_META_NAMES
+            || NOISE_META_PREFIXES.any { normalizedName.startsWith(it) }
+            || normalizedName.endsWith("-verification")
+            || normalizedName.endsWith("-verify")
+            || normalizedName.startsWith("verify-")
 
 private val NOISE_META_NAMES = setOf(
     "viewport", "referrer", "generator", "theme-color", "color-scheme",

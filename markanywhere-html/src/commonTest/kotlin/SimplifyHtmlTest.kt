@@ -848,10 +848,10 @@ class SimplifyHtmlTest {
                     "meta"("name" to "__init", "content" to "{\"a\":1}") { }
                     "meta"("name" to "storage-inventory", "content" to "  [[1,2],[3]]") { }
                     "meta"("name" to "como-err", "content" to "[{\"x\":1}]") { }
-                    "meta"("name" to "empty-list", "content" to "[]") { }
+                    "meta"("name" to "empty-object", "content" to "{}") { }
                     "meta"("name" to "feed/config/environment", "content" to "%7B%22x%22%3A1%7D") { }
                     "meta"("name" to "jam/config/environment", "content" to "%7b%7d") { }
-                    "meta"("name" to "hash-list", "content" to "%5B%22a%22%5D") { }
+                    "meta"("name" to "encoded-flags", "content" to "%5Btrue%5D") { }
                     "meta"("name" to "flags", "content" to "[true,false]") { }
                     "meta"("name" to "slots", "content" to "[null]") { }
                     "meta"("name" to "spaced", "content" to "%5B%20%7B%22a%22%3A1%7D%20%5D") { }
@@ -865,7 +865,8 @@ class SimplifyHtmlTest {
         val output = input.simplifyHtml()
 
         // then — only a value that *is* a JSON object, or an array that is
-        // not a flat list of words or numbers, marks state
+        // not a flat list of words or numbers, raw or percent-encoded, marks
+        // state
         output sameAs semanticEvents {
             "frontmatter" {
                 "entry"("key" to "description") { +"Save {50%} today" }
@@ -912,13 +913,20 @@ class SimplifyHtmlTest {
     }
 
     @Test
-    fun `should drop meta values longer than the cap from frontmatter`() = runTest {
-        // given — the cap still fits a long academic abstract
+    fun `should drop meta values longer than the cap unless they read as text`() = runTest {
+        // given — past the cap only prose survives: a long abstract, in a
+        // script written with spaces or without
+        val abstract = "Background: we study the effect of X on Y. ".repeat(110)
+        val cjkAbstract = "本研究では大規模言語モデルの挙動を分析した。".repeat(200)
         val input = semanticEvents(tagged = true) {
             "html" {
                 "head" {
                     "meta"("name" to "blob", "content" to "x".repeat(4097)) { }
-                    "meta"("name" to "citation_abstract", "content" to "y".repeat(4096)) { }
+                    "meta"("name" to "hashes", "content" to "0123456789abcdef, ".repeat(300)) { }
+                    "meta"("name" to "truncated-json", "content" to "{\"id\": 1, \"tags\": [\"a\", \"b\"], ".repeat(150)) { }
+                    "meta"("name" to "short-blob", "content" to "y".repeat(4096)) { }
+                    "meta"("name" to "citation_abstract", "content" to abstract) { }
+                    "meta"("name" to "dc.description", "content" to cjkAbstract) { }
                 }
                 "body" { "p" { +"text" } }
             }
@@ -930,7 +938,44 @@ class SimplifyHtmlTest {
         // then
         output sameAs semanticEvents {
             "frontmatter" {
-                "entry"("key" to "citation_abstract") { +"y".repeat(4096) }
+                "entry"("key" to "short-blob") { +"y".repeat(4096) }
+                "entry"("key" to "citation_abstract") { +abstract }
+                "entry"("key" to "dc.description") { +cjkAbstract }
+            }
+            "p" { +"text" }
+        }
+    }
+
+    @Test
+    fun `should keep malformed JSON-looking meta values as text without throwing`() = runTest {
+        // given — page-controlled input the JSON parser rejects in any way
+        val malformed = listOf(
+            "[\"\\u12\"]",
+            "{\"a\":\"\\",
+            "[1e99999999999999999999]",
+            "[".repeat(2000) + "]".repeat(1999),
+            "{\"a\":\"\u0000\"",
+        )
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    malformed.forEachIndexed { i, value ->
+                        "meta"("name" to "m$i", "content" to value) { }
+                    }
+                }
+                "body" { "p" { +"text" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                malformed.forEachIndexed { i, value ->
+                    "entry"("key" to "m$i") { +value }
+                }
             }
             "p" { +"text" }
         }
@@ -938,7 +983,7 @@ class SimplifyHtmlTest {
 
     @Test
     fun `should drop blank meta values from frontmatter`() = runTest {
-        // given — NBSP is HTML content, not whitespace
+        // given — an NBSP-only value tells a reader as little as a blank one
         val input = semanticEvents(tagged = true) {
             "html" {
                 "head" {
@@ -961,7 +1006,6 @@ class SimplifyHtmlTest {
         // then — ordinary metadata survives, a `/` in the name included
         output sameAs semanticEvents {
             "frontmatter" {
-                "entry"("key" to "separator") { +"\u00A0" }
                 "entry"("key" to "section/topic") { +"Politics" }
                 "entry"("key" to "description") { +"A doc" }
                 "entry"("key" to "og:title") { +"Hello" }
@@ -969,6 +1013,30 @@ class SimplifyHtmlTest {
                 "entry"("key" to "article:published_time") { +"2026-09-27T10:00:00Z" }
             }
             "p" { +"text" }
+        }
+    }
+
+    @Test
+    fun `should skip a blank html lang in favour of a lang meta`() = runTest {
+        // given
+        val input = semanticEvents(tagged = true) {
+            "html"("lang" to " ") {
+                "head" {
+                    "meta"("name" to "lang", "content" to "de") { }
+                }
+                "body" { "p" { +"x" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "lang") { +"de" }
+            }
+            "p" { +"x" }
         }
     }
 
@@ -1130,7 +1198,8 @@ class SimplifyHtmlTest {
 
     @Test
     fun `should keep a flat JSON list of words or numbers in frontmatter`() = runTest {
-        // given — a list a person writes, not serialised state
+        // given — a list a person writes, not serialised state — an empty
+        // one, or one percent-encoded, included
         val input = semanticEvents(tagged = true) {
             "html" {
                 "head" {
@@ -1139,6 +1208,9 @@ class SimplifyHtmlTest {
                     "meta"("name" to "citation_volume", "content" to "[2024]") { }
                     "meta"("name" to "chapters", "content" to "[1, 2, 3]") { }
                     "meta"("name" to "label", "content" to "[PDF]") { }
+                    "meta"("name" to "none", "content" to "[]") { }
+                    "meta"("name" to "none-spaced", "content" to "[ ]") { }
+                    "meta"("name" to "encoded", "content" to "%5B%22a%22%5D") { }
                 }
                 "body" { "p" { +"text" } }
             }
@@ -1155,6 +1227,9 @@ class SimplifyHtmlTest {
                 "entry"("key" to "citation_volume") { +"[2024]" }
                 "entry"("key" to "chapters") { +"[1, 2, 3]" }
                 "entry"("key" to "label") { +"[PDF]" }
+                "entry"("key" to "none") { +"[]" }
+                "entry"("key" to "none-spaced") { +"[ ]" }
+                "entry"("key" to "encoded") { +"%5B%22a%22%5D" }
             }
             "p" { +"text" }
         }

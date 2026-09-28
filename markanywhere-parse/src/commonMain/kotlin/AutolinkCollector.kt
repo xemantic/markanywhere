@@ -17,6 +17,7 @@
 package com.xemantic.markanywhere.parse
 
 import com.xemantic.markanywhere.SemanticEvent
+import com.xemantic.markanywhere.html.spec.asciiLowercase
 import com.xemantic.markanywhere.html.spec.isHtmlWhitespace
 import com.xemantic.markanywhere.parse.AutolinkCollector.Companion.SUPPRESS_NAMES
 import kotlinx.coroutines.flow.FlowCollector
@@ -616,11 +617,8 @@ private fun String.regionMatchesAsciiCi(
         val a = this[thisOffset + i]
         val b = other[otherOffset + i]
         if (a == b) continue
-        if (a.foldAsciiLower() == b.foldAsciiLower()) continue
+        if (a.asciiLowercase() == b.asciiLowercase()) continue
         return false
     }
     return true
 }
-
-private fun Char.foldAsciiLower(): Char =
-    if (this in 'A'..'Z') (this.code or 0x20).toChar() else this
