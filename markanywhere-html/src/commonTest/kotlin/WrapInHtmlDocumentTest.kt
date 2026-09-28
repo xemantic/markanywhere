@@ -130,8 +130,8 @@ class WrapInHtmlDocumentTest {
     }
 
     @Test
-    fun `should include typed scalars and skip nested null and verbatim content`() = runTest {
-        // given — only a top-level scalar is representable as head metadata
+    fun `should include typed scalars and skip nested null blank and verbatim content`() = runTest {
+        // given — only a top-level non-blank scalar is head metadata
         val input = semanticEvents {
             "frontmatter" {
                 "entry"("key" to "title") { +"Hello" }
@@ -159,7 +159,6 @@ class WrapInHtmlDocumentTest {
                 "head" {
                     "title" { +"Hello" }
                     "meta"("name" to "year", "content" to "2026") { }
-                    "meta"("name" to "blank", "content" to "") { }
                 }
                 "body" { }
             }
@@ -345,6 +344,58 @@ class WrapInHtmlDocumentTest {
     }
 
     @Test
+    fun `should not let a blank key hide a later variant differing in letter case`() = runTest {
+        // given — simplifyHtml never extracts a blank value, so a blank key
+        // must not win the duplicate policy either, or the round-trip loses
+        // the real value
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "description") { +"" }
+                "entry"("key" to "Description") { +"A real summary" }
+                "entry"("key" to "lang") { +" " }
+                "entry"("key" to "Lang") { +"de" }
+                "entry"("key" to "title") { }
+                "entry"("key" to "Title") { +"Page" }
+            }
+        }
+
+        // when
+        val output = input.wrapInHtmlDocument()
+
+        // then
+        output sameAs semanticEvents {
+            "html"("lang" to "de") {
+                "head" {
+                    "title" { +"Page" }
+                    "meta"("name" to "Description", "content" to "A real summary") { }
+                }
+                "body" { }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep a later non-blank variant of a blank key on a round-trip through simplifyHtml`() = runTest {
+        // given
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "description") { +"" }
+                "entry"("key" to "Description") { +"A real summary" }
+            }
+        }
+
+        // when
+        val output = input.wrapInHtmlDocument().simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "Description") { +"A real summary" }
+            }
+        }
+    }
+
+    @Test
     fun `should keep a title key in any letter case on a round-trip through ensureFrontmatterTitle and simplifyHtml`() = runTest {
         // given — the H1 must not displace the `Title` entry
         val input = semanticEvents {
@@ -396,8 +447,8 @@ class WrapInHtmlDocumentTest {
 
     @Test
     fun `should agree with ensureFrontmatterTitle when the first title variant is blank`() = runTest {
-        // given — the blank first title is the one both judge, so it is
-        // replaced by the heading rather than shadowed by the later variant
+        // given — both skip the blank first title, so the later usable
+        // variant is the title and the heading does not displace it
         val input = semanticEvents {
             "frontmatter" {
                 "entry"("key" to "title") { }
@@ -413,7 +464,7 @@ class WrapInHtmlDocumentTest {
         output sameAs semanticEvents {
             "html" {
                 "head" {
-                    "title" { +"Heading" }
+                    "title" { +"Foo" }
                 }
                 "body" {
                     "h1" { +"Heading" }

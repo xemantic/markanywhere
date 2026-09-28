@@ -217,6 +217,42 @@ class EnsureFrontmatterTitleTest {
     }
 
     @Test
+    fun `should keep a non-breaking space inside the derived title`() = runTest {
+        // given — NBSP is content, not HTML whitespace, as for a <title>
+        // read by simplifyHtml; an NBSP-only heading still yields no title
+        val input = semanticEvents {
+            "h1" { +"\u00A0Foo\u00A0Bar\n" }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"\u00A0Foo\u00A0Bar" }
+            }
+            "h1" { +"\u00A0Foo\u00A0Bar\n" }
+        }
+    }
+
+    @Test
+    fun `should not derive a title from a heading of non-breaking spaces`() = runTest {
+        // given
+        val input = semanticEvents {
+            "h1" { +"\u00A0\u00A0" }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then
+        output sameAs semanticEvents {
+            "h1" { +"\u00A0\u00A0" }
+        }
+    }
+
+    @Test
     fun `should not mistake a nested title entry for a top-level one`() = runTest {
         // given — only a direct child `entry key=title` counts
         val input = semanticEvents {
@@ -533,8 +569,9 @@ class EnsureFrontmatterTitleTest {
     }
 
     @Test
-    fun `should pass through a title entry in any letter case`() = runTest {
-        // given — wrapInHtmlDocument reads a `Title` key as the title
+    fun `should respell a title entry in another letter case as title`() = runTest {
+        // given — wrapInHtmlDocument reads a `Title` key as the title, but
+        // front matter readers matching keys case-sensitively (Jekyll) do not
         val input = semanticEvents {
             "frontmatter" {
                 "entry"("key" to "Title") { +"My Page" }
@@ -548,7 +585,7 @@ class EnsureFrontmatterTitleTest {
         // then
         output sameAs semanticEvents {
             "frontmatter" {
-                "entry"("key" to "Title") { +"My Page" }
+                "entry"("key" to "title") { +"My Page" }
             }
             "h1" { +"Heading" }
         }
@@ -568,10 +605,10 @@ class EnsureFrontmatterTitleTest {
         // when
         val output = input.ensureFrontmatterTitle()
 
-        // then — replaced in place, spelled as it was
+        // then — replaced in place, spelled as every reader reads it
         output sameAs semanticEvents {
             "frontmatter" {
-                "entry"("key" to "TITLE") { +"Hello" }
+                "entry"("key" to "title") { +"Hello" }
                 "entry"("key" to "author") { +"Alice" }
             }
             "h1" { +"Hello" }
@@ -579,9 +616,10 @@ class EnsureFrontmatterTitleTest {
     }
 
     @Test
-    fun `should judge only the first title entry in any letter case`() = runTest {
-        // given — wrapInHtmlDocument takes the first title variant, so a
-        // later usable one does not make a blank first one usable
+    fun `should pass through a usable title variant following a blank title entry`() = runTest {
+        // given — wrapInHtmlDocument skips a blank entry, as simplifyHtml
+        // never extracts one, and reads the later variant; the `title` key
+        // is taken, so the variant keeps its spelling
         val input = semanticEvents {
             "frontmatter" {
                 "entry"("key" to "title") { +" " }
@@ -596,7 +634,7 @@ class EnsureFrontmatterTitleTest {
         // then
         output sameAs semanticEvents {
             "frontmatter" {
-                "entry"("key" to "title") { +"Hello" }
+                "entry"("key" to "title") { +" " }
                 "entry"("key" to "Title") { +"Later" }
             }
             "h1" { +"Hello" }

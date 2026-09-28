@@ -27,20 +27,27 @@ import kotlinx.coroutines.flow.Flow
  *
  * A **leading** `frontmatter` block (the untagged mark the parser emits for
  * YAML `---` front matter, holding `entry` marks) feeds the `head` — the
- * inverse of [simplifyHtml]'s head-to-frontmatter extraction, so the two
- * round-trip, except for the values [simplifyHtml] discards (a blank value,
- * application state such as a JSON object or an opaque over-long blob):
+ * inverse of [simplifyHtml]'s head-to-frontmatter extraction:
  *
  * - the `title` entry becomes `<title>`
  * - the `lang` entry becomes the `lang` attribute on `<html>`
  * - every other top-level scalar entry becomes a void `<meta name content>`
  *
  * Only top-level scalar entries are interpreted — exactly the shape
- * [simplifyHtml] produces. A nested mapping or sequence, a null value, and
- * verbatim text are skipped (never an error). Keys are read the way HTML
- * reads `<meta>` names, ASCII case-insensitively — a `Title` entry is the
- * title — and of duplicate keys, in any letter case, the first one wins
- * (spelling and value), as in [simplifyHtml].
+ * [simplifyHtml] produces. A nested mapping or sequence, a null value, a
+ * blank value and verbatim text are skipped (never an error). Keys are read
+ * the way HTML reads `<meta>` names, ASCII case-insensitively — a `Title`
+ * entry is the title — and of duplicate keys, in any letter case, the first
+ * one wins (spelling and value), as in [simplifyHtml].
+ *
+ * Passing the result back through [simplifyHtml] restores the front matter
+ * except for what either side normalises or discards: skipped entries
+ * (above) and values [simplifyHtml] drops (noise names such as `viewport`,
+ * application state such as a JSON object or an opaque over-long blob) are
+ * gone, case-variant duplicates are merged, the `title` and `lang` keys come
+ * back spelled in lowercase, the title with its whitespace stripped and
+ * collapsed (as `document.title` reads it) and `lang` trimmed, and a typed
+ * scalar comes back as a string.
  * A `frontmatter` mark appearing anywhere past the first event is ordinary
  * content and flows into `body` verbatim.
  *

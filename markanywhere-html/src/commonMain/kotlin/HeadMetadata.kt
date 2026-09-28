@@ -34,7 +34,9 @@ internal data class MetadataEntry(val key: String, val value: String)
 // the way HTML reads `<meta>` names: ASCII case-insensitively (HTML §4.2.5).
 // The one duplicate policy [simplifyHtml] and [wrapInHtmlDocument] share, so
 // the two stay inverses whichever way a document travels: the first
-// occurrence of a name, in any letter case, wins — spelling and value.
+// occurrence of a name, in any letter case, with a non-blank value wins —
+// spelling and value. A blank value carries nothing for a reader, so it is
+// never added, and cannot shadow a later non-blank variant.
 internal class HeadMetadata {
 
     private val entries = LinkedHashMap<String, MetadataEntry>()
@@ -47,8 +49,9 @@ internal class HeadMetadata {
 
     operator fun get(name: String): MetadataEntry? = entries[name.asciiLowercase()]
 
-    // Adds the entry unless its name is already present.
+    // Adds the entry unless its value is blank or its name already present.
     fun add(key: String, value: String) {
+        if (value.isBlank()) return
         val name = key.asciiLowercase()
         if (name !in entries) entries[name] = MetadataEntry(key, value)
     }

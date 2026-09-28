@@ -39,7 +39,8 @@ import kotlinx.serialization.json.JsonPrimitive
 //   an empty one included — is metadata a person writes (`keywords`,
 //   `article:tag`, `citation_volume`);
 // - a JSON string whose content is itself state by these rules — state
-//   serialised twice, a common single-page-app double encoding;
+//   serialised twice, a common single-page-app double encoding — whether
+//   it stands alone or as an element of an array;
 // - a value longer than [MAX_META_VALUE_LENGTH] that does not read as text —
 //   the backstop for opaque blobs of any other shape (base64, hash lists,
 //   truncated JSON), which a long abstract in prose is not.
@@ -62,15 +63,18 @@ private fun String.isJsonState(): Boolean {
     if (first != '{' && first != '[' && first != '"') return false
     return when (val json = parseJsonOrNull()) {
         is JsonObject -> true
-        is JsonArray -> json.any { !it.isWordOrNumber() }
-        is JsonPrimitive -> json.isString &&
-                json.content.trim { it.isHtmlWhitespace() }.isJsonState()
+        is JsonArray -> json.any { !it.isWordOrNumber() || it.isEncodedState() }
+        is JsonPrimitive -> json.isEncodedState()
         else -> false
     }
 }
 
+private fun JsonElement.isEncodedState(): Boolean =
+    this is JsonPrimitive && isString && content.trim { it.isHtmlWhitespace() }.isJsonState()
+
 // Text is made of words: at least half the chars are letters (hex and
-// number lists are mostly digits), and at least one char in sixteen breaks a
+// number lists are mostly digits) — a combining mark counting as one, since
+// scripts like Devanagari and vowel-marked Arabic write vowels as marks —, and at least one char in sixteen breaks a
 // word — whitespace, a list separator (`,` `;`, so `a,b,c` keywords count),
 // or a letter of a script written without spaces (anything past ASCII —
 // base64 and hex never contain one) — sparse enough for a list of long
@@ -95,13 +99,18 @@ private fun String.readsAsText(): Boolean {
             i += 2
             continue
         }
-        if (c.isLetter()) letters++
+        if (c.isLetter() || c.category in COMBINING_MARKS) letters++
         if (c.isWhitespace() || c == ',' || c == ';' || c.code > 0x7F && c.isLetter()) wordBreaks++
         else if (c in DATA_PUNCTUATION) dataPunctuation++
         i++
     }
     return letters * 2 >= chars && wordBreaks * 16 >= chars && dataPunctuation * 20 < chars
 }
+
+private val COMBINING_MARKS = setOf(
+    CharCategory.NON_SPACING_MARK,
+    CharCategory.COMBINING_SPACING_MARK,
+)
 
 private const val DATA_PUNCTUATION = "{}[]\"<>=|\\"
 

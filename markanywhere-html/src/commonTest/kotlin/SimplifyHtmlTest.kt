@@ -1004,6 +1004,61 @@ class SimplifyHtmlTest {
     }
 
     @Test
+    fun `should keep long text in scripts writing vowels as combining marks`() = runTest {
+        // given — Devanagari matras and viramas, and Arabic harakat, are marks
+        // (Mn / Mc), not letters: under half of these chars are letters
+        val hindi = "किन्तु प्रत्येक व्यक्ति की स्वतन्त्रता सुनिश्चित है। ".repeat(100)
+        val arabic = "بِسْمِ ٱللَّٰهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ ".repeat(150)
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    "meta"("name" to "description", "content" to hindi) { }
+                    "meta"("name" to "og:description", "content" to arabic) { }
+                }
+                "body" { "p" { +"text" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "description") { +hindi }
+                "entry"("key" to "og:description") { +arabic }
+            }
+            "p" { +"text" }
+        }
+    }
+
+    @Test
+    fun `should drop a JSON array of JSON-encoded state`() = runTest {
+        // given — each element is state serialised into a string, as the
+        // same payload unwrapped to a bare JSON string would be
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    "meta"("name" to "app-state", "content" to "[\"{\\\"id\\\":1,\\\"token\\\":\\\"x\\\"}\", \"{\\\"id\\\":2}\"]") { }
+                    "meta"("name" to "keywords", "content" to "[\"{Draft}\", \"notes\"]") { }
+                }
+                "body" { "p" { +"text" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "keywords") { +"[\"{Draft}\", \"notes\"]" }
+            }
+            "p" { +"text" }
+        }
+    }
+
+    @Test
     fun `should keep long comma-separated keyword lists`() = runTest {
         // given — list separators break words as spaces do, and long compound
         // words keep a list sparse in breaks; a list of hashes stays dropped

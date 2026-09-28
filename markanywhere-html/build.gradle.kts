@@ -42,7 +42,6 @@ kotlin {
                 implementation(project(":markanywhere-dump"))
                 implementation(project(":markanywhere-html-spec"))
                 api(libs.kotlinx.coroutines.core)
-                implementation(libs.kotlinx.serialization.json)
                 implementation(libs.xemantic.kotlin.core)
             }
         }
