@@ -167,7 +167,7 @@ class WrapInHtmlDocumentTest {
     }
 
     @Test
-    fun `should let a later duplicate key win`() = runTest {
+    fun `should let the first of duplicate keys win`() = runTest {
         // given
         val input = semanticEvents {
             "frontmatter" {
@@ -183,7 +183,7 @@ class WrapInHtmlDocumentTest {
         output sameAs semanticEvents {
             "html" {
                 "head" {
-                    "meta"("name" to "author", "content" to "Bob") { }
+                    "meta"("name" to "author", "content" to "Alice") { }
                 }
                 "body" { }
             }
@@ -317,7 +317,7 @@ class WrapInHtmlDocumentTest {
     @Test
     fun `should read keys ASCII case-insensitively like meta names`() = runTest {
         // given — a later key differing only in letter case is a duplicate,
-        // so it wins (spelling and value) at the position of the first
+        // so the first one wins, spelling and value, as in simplifyHtml
         val input = semanticEvents {
             "frontmatter" {
                 "entry"("key" to "Title") { +"My Page" }
@@ -336,7 +336,7 @@ class WrapInHtmlDocumentTest {
             "html"("lang" to "de") {
                 "head" {
                     "title" { +"My Page" }
-                    "meta"("name" to "author", "content" to "Bob") { }
+                    "meta"("name" to "Author", "content" to "Alice") { }
                     "meta"("name" to "description", "content" to "A doc") { }
                 }
                 "body" { }
@@ -363,6 +363,62 @@ class WrapInHtmlDocumentTest {
                 "entry"("key" to "title") { +"My Page" }
             }
             "h1" { +"Heading" }
+        }
+    }
+
+    @Test
+    fun `should agree with ensureFrontmatterTitle when a later title variant is blank`() = runTest {
+        // given — the usable first title is kept by ensureFrontmatterTitle,
+        // so the blank variant after it must not blank the <title>
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"Foo" }
+                "entry"("key" to "Title") { }
+            }
+            "h1" { +"Heading" }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle().wrapInHtmlDocument()
+
+        // then
+        output sameAs semanticEvents {
+            "html" {
+                "head" {
+                    "title" { +"Foo" }
+                }
+                "body" {
+                    "h1" { +"Heading" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should agree with ensureFrontmatterTitle when the first title variant is blank`() = runTest {
+        // given — the blank first title is the one both judge, so it is
+        // replaced by the heading rather than shadowed by the later variant
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { }
+                "entry"("key" to "Title") { +"Foo" }
+            }
+            "h1" { +"Heading" }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle().wrapInHtmlDocument()
+
+        // then
+        output sameAs semanticEvents {
+            "html" {
+                "head" {
+                    "title" { +"Heading" }
+                }
+                "body" {
+                    "h1" { +"Heading" }
+                }
+            }
         }
     }
 

@@ -70,4 +70,19 @@ class HtmlWhitespaceTest {
         assert(!"text".isHtmlBlank())
     }
 
+    @Test
+    fun `should strip and collapse HTML whitespace`() {
+        assert("\n  Foo\t\r\n  Bar \u000C".stripAndCollapseHtmlWhitespace() == "Foo Bar")
+    }
+
+    @Test
+    fun `should keep NBSP when stripping and collapsing HTML whitespace`() {
+        assert("\u00A0 a  \u00A0b ".stripAndCollapseHtmlWhitespace() == "\u00A0 a \u00A0b")
+    }
+
+    @Test
+    fun `should strip and collapse a blank string to empty`() {
+        assert(" \t\n".stripAndCollapseHtmlWhitespace() == "")
+    }
+
 }

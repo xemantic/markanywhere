@@ -62,21 +62,26 @@ private fun String.isJsonState(): Boolean {
     }
 }
 
-// Prose breaks into words: at least one char in ten is whitespace, or a
-// letter of a script written without spaces (anything past ASCII — base64
-// and hex never contain one), while the punctuation of serialised data
-// (quotes, brackets, `=`, `;`, `|`, `\`) stays rare.
+// Text is made of words: at least half the chars are letters (hex and
+// number lists are mostly digits), and at least one char in sixteen breaks a
+// word — whitespace, a list separator (`,` `;`, so `a,b,c` keywords count),
+// or a letter of a script written without spaces (anything past ASCII —
+// base64 and hex never contain one) — sparse enough for a list of long
+// compound words, while the punctuation of serialised data (quotes,
+// brackets, `=`, `|`, `\`) stays rare.
 private fun String.readsAsText(): Boolean {
+    var letters = 0
     var wordBreaks = 0
     var dataPunctuation = 0
     for (c in this) {
-        if (c.isWhitespace() || c.code > 0x7F && c.isLetter()) wordBreaks++
+        if (c.isLetter()) letters++
+        if (c.isWhitespace() || c == ',' || c == ';' || c.code > 0x7F && c.isLetter()) wordBreaks++
         else if (c in DATA_PUNCTUATION) dataPunctuation++
     }
-    return wordBreaks * 10 >= length && dataPunctuation * 20 < length
+    return letters * 2 >= length && wordBreaks * 16 >= length && dataPunctuation * 20 < length
 }
 
-private const val DATA_PUNCTUATION = "{}[]\"<>=;|\\"
+private const val DATA_PUNCTUATION = "{}[]\"<>=|\\"
 
 // Never throws: the value is page-controlled, and a malformed one is simply
 // not JSON, whatever the parser reports it with.
@@ -103,8 +108,8 @@ private fun String.percentDecodedOrNull(): String? {
     while (i < length) {
         val c = this[i]
         if (c == '%') {
-            val high = getOrNull(i + 1)?.digitToIntOrNull(16) ?: return null
-            val low = getOrNull(i + 2)?.digitToIntOrNull(16) ?: return null
+            val high = getOrNull(i + 1)?.asciiHexDigitOrNull() ?: return null
+            val low = getOrNull(i + 2)?.asciiHexDigitOrNull() ?: return null
             bytes[size++] = (high * 16 + low).toByte()
             i += 3
         } else {
@@ -114,4 +119,12 @@ private fun String.percentDecodedOrNull(): String? {
         }
     }
     return bytes.decodeToString(0, size)
+}
+
+// Unlike [Char.digitToIntOrNull], which also takes non-ASCII Unicode digits.
+private fun Char.asciiHexDigitOrNull(): Int? = when (this) {
+    in '0'..'9' -> this - '0'
+    in 'a'..'f' -> this - 'a' + 10
+    in 'A'..'F' -> this - 'A' + 10
+    else -> null
 }

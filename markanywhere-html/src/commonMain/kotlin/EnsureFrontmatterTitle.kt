@@ -26,9 +26,9 @@ import kotlinx.coroutines.flow.Flow
  * deriving a missing title from the first `h1`.
  *
  * A stream whose leading `frontmatter` already holds a usable top-level
- * `entry` with `key="title"` (in any ASCII letter case, as
- * [wrapInHtmlDocument] reads it) — one with non-blank text, or one holding a
- * nested structure — passes through untouched. Otherwise the frontmatter is
+ * `entry` with `key="title"` (in any ASCII letter case, and only the first
+ * such entry counts, as [wrapInHtmlDocument] reads it) — one with non-blank
+ * text, or one holding a nested structure — passes through untouched. Otherwise the frontmatter is
  * held back and the title is derived from the very first `h1` following it
  * (only blank text may intervene): the `h1` subtree's flattened text —
  * its text events plus the `alt` of every `img` mark, in document order,
@@ -66,7 +66,9 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
     var titleStart = -1
     var titleEnd = -1
     // the top-level title entry currently open: its text, and whether it
-    // holds nested marks (then it is kept as is, whatever its text)
+    // holds nested marks (then it is kept as is, whatever its text); only
+    // the first title entry is judged, the one wrapInHtmlDocument reads
+    var titleSeen = false
     var inTitleEntry = false
     var titleHasChildren = false
     val titleText = StringBuilder()
@@ -144,6 +146,7 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
                     frontmatterEvents = mutableListOf(event)
                     frontmatterDepth = 1
                     hasTitle = false
+                    titleSeen = false
                     titleStart = -1
                     state = InFrontmatter
                 }
@@ -163,8 +166,10 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
                         frontmatterDepth++
                         if (frontmatterDepth == 2) {
                             // a top-level entry (a direct child)
-                            inTitleEntry = event.name == "entry" && event["key"]?.asciiLowercase() == "title"
+                            inTitleEntry = !titleSeen && event.name == "entry" &&
+                                    event["key"]?.asciiLowercase() == "title"
                             if (inTitleEntry) {
+                                titleSeen = true
                                 titleHasChildren = false
                                 titleText.clear()
                                 titleStart = events.lastIndex

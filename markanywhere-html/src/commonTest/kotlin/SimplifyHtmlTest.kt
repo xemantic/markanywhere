@@ -947,6 +947,66 @@ class SimplifyHtmlTest {
     }
 
     @Test
+    fun `should keep long comma-separated keyword lists`() = runTest {
+        // given — list separators break words as spaces do, and long compound
+        // words keep a list sparse in breaks; a list of hashes stays dropped
+        val compact = (1..600).joinToString(",") { "tag$it" }
+        val german = List(100) { "Bundesverfassungsgericht, Rechtsprechung" }.joinToString(", ")
+        val semicolons = List(160) { "Verwaltungsgerichtsbarkeit" }.joinToString("; ")
+        val hashes = (1..300).joinToString(",") { "0123456789abcdef" }
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    "meta"("name" to "keywords", "content" to compact) { }
+                    "meta"("name" to "news_keywords", "content" to german) { }
+                    "meta"("name" to "subject", "content" to semicolons) { }
+                    "meta"("name" to "hashes", "content" to hashes) { }
+                }
+                "body" { "p" { +"text" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "keywords") { +compact }
+                "entry"("key" to "news_keywords") { +german }
+                "entry"("key" to "subject") { +semicolons }
+            }
+            "p" { +"text" }
+        }
+    }
+
+    @Test
+    fun `should not decode a percent escape made of non-ASCII digits`() = runTest {
+        // given — an Arabic-Indic seven is no hex digit, so this is not a
+        // percent-encoded JSON object but text
+        val value = "%\u0667B%22a%22%3A1%7D"
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    "meta"("name" to "config", "content" to value) { }
+                }
+                "body" { "p" { +"text" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "config") { +value }
+            }
+            "p" { +"text" }
+        }
+    }
+
+    @Test
     fun `should keep malformed JSON-looking meta values as text without throwing`() = runTest {
         // given — page-controlled input the JSON parser rejects in any way
         val malformed = listOf(
@@ -1023,6 +1083,56 @@ class SimplifyHtmlTest {
             "html"("lang" to " ") {
                 "head" {
                     "meta"("name" to "lang", "content" to "de") { }
+                }
+                "body" { "p" { +"x" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "lang") { +"de" }
+            }
+            "p" { +"x" }
+        }
+    }
+
+    @Test
+    fun `should prefer html lang over a lang meta in any letter case`() = runTest {
+        // given — the document language is the root element's attribute
+        val input = semanticEvents(tagged = true) {
+            "html"("lang" to "en") {
+                "head" {
+                    "meta"("name" to "Lang", "content" to "de") { }
+                    "meta"("name" to "lang", "content" to "fr") { }
+                }
+                "body" { "p" { +"x" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "lang") { +"en" }
+            }
+            "p" { +"x" }
+        }
+    }
+
+    @Test
+    fun `should spell a lang meta in any letter case as the lang key`() = runTest {
+        // given — without <html lang> the meta is the only language there is,
+        // and the front matter says so in the key wrapInHtmlDocument reads
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    "meta"("name" to "LANG", "content" to "de") { }
                 }
                 "body" { "p" { +"x" } }
             }
@@ -1461,6 +1571,31 @@ class SimplifyHtmlTest {
         output sameAs semanticEvents {
             "frontmatter" {
                 "entry"("key" to "title") { +"Spaced Title" }
+            }
+            "p" { +"x" }
+        }
+    }
+
+    @Test
+    fun `should collapse whitespace inside a pretty-printed title`() = runTest {
+        // given — like document.title, which strips and collapses ASCII
+        // whitespace; the NBSP is content and stays
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    "title" { +"\n    Foo\n    Bar\u00A0\u00A0Baz\n  " }
+                }
+                "body" { "p" { +"x" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"Foo Bar\u00A0\u00A0Baz" }
             }
             "p" { +"x" }
         }

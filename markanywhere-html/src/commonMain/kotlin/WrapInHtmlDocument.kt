@@ -39,8 +39,8 @@ import kotlinx.coroutines.flow.Flow
  * [simplifyHtml] produces. A nested mapping or sequence, a null value, and
  * verbatim text are skipped (never an error). Keys are read the way HTML
  * reads `<meta>` names, ASCII case-insensitively — a `Title` entry is the
- * title — and a later duplicate key, in any letter case, wins (value and
- * spelling) at the position of the first.
+ * title — and of duplicate keys, in any letter case, the first one wins
+ * (spelling and value), as in [simplifyHtml].
  * A `frontmatter` mark appearing anywhere past the first event is ordinary
  * content and flows into `body` verbatim.
  *
@@ -59,12 +59,7 @@ public fun Flow<SemanticEvent>.wrapInHtmlDocument(): Flow<SemanticEvent> = seman
     // the top-level entry being read, null when it is not a scalar to keep
     var entryKey: String? = null
     val entryText = StringBuilder()
-    // keyed by the ASCII-lowercased key: the entry's spelling and its value
-    val metadata = LinkedHashMap<String, Pair<String, String>>()
-
-    fun putEntry(key: String) {
-        metadata[key.asciiLowercase()] = key to entryText.toString()
-    }
+    val metadata = HeadMetadata()
 
     // `head` and its subtree are lexically scoped, so the paired `"name" { }`
     // builder fits; `html` and `body` close only at end-of-stream, so their
@@ -75,18 +70,18 @@ public fun Flow<SemanticEvent>.wrapInHtmlDocument(): Flow<SemanticEvent> = seman
         mark(
             "html",
             attributes = metadata["lang"]
-                ?.let { (_, lang) -> mapOf("lang" to lang) }
+                ?.let { mapOf("lang" to it.value) }
                 ?: emptyMap()
         )
         "head" {
-            metadata["title"]?.let { (_, title) ->
+            metadata["title"]?.let {
                 "title" {
-                    +title
+                    +it.value
                 }
             }
-            for ((normalizedKey, entry) in metadata) {
-                if (normalizedKey == "title" || normalizedKey == "lang") continue
-                "meta"("name" to entry.first, "content" to entry.second) {}
+            for ((key, value) in metadata.values) {
+                if (key.asciiLowercase() in HEAD_KEYS) continue
+                "meta"("name" to key, "content" to value) {}
             }
         }
         mark("body")
@@ -112,7 +107,7 @@ public fun Flow<SemanticEvent>.wrapInHtmlDocument(): Flow<SemanticEvent> = seman
                     openDocument()
                 } else {
                     if (depth == 1) {
-                        entryKey?.let { putEntry(it) }
+                        entryKey?.let { metadata.add(it, entryText.toString()) }
                         entryKey = null
                     }
                     depth--
@@ -134,7 +129,7 @@ public fun Flow<SemanticEvent>.wrapInHtmlDocument(): Flow<SemanticEvent> = seman
     // still used, including an entry left open — its text is complete by
     // then; an empty stream yields the bare skeleton.
     if (collectingFrontmatter && depth == 1) {
-        entryKey?.let { putEntry(it) }
+        entryKey?.let { metadata.add(it, entryText.toString()) }
     }
     if (!opened) openDocument()
     unmark("body")
@@ -143,4 +138,7 @@ public fun Flow<SemanticEvent>.wrapInHtmlDocument(): Flow<SemanticEvent> = seman
 
 // Scalar `type`s whose text is meaningful as a `<meta content>` (`null` and
 // the empty collections are not).
+// The keys that become `<title>` and `<html lang>` rather than a `<meta>`.
+private val HEAD_KEYS = setOf("title", "lang")
+
 private val SCALAR_TYPES = setOf("bool", "int", "float", "timestamp")

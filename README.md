@@ -86,7 +86,7 @@ Will print:
 ### Wrapping parsed Markdown in a complete HTML document
 
 `wrapInHtmlDocument()` (in `markanywhere-html`) wraps the event stream in an `html`/`head`/`body` structure, populating the `head` from a leading front matter block: `title` becomes `<title>`, `lang` becomes the `<html lang>` attribute, and every other flat key becomes a `<meta name content>` — the exact inverse of `simplifyHtml`'s `<head>`-to-front-matter extraction, so the two round-trip — except for the values `simplifyHtml` discards as carrying nothing for a reader (a blank value, and application state such as a JSON object or an opaque over-long blob).
-Keys are read ASCII case-insensitively, as HTML reads `<meta>` names: a `Title` key is the title, and of keys differing only in letter case the later one wins, as for an exact duplicate.
+Keys are read ASCII case-insensitively, as HTML reads `<meta>` names: a `Title` key is the title, and of keys differing only in letter case the first one wins, as for an exact duplicate — the same rule `simplifyHtml` applies to `<meta>` names.
 
 ```kotlin
 val document = """

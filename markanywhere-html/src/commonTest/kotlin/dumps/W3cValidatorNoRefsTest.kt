@@ -51,7 +51,7 @@ class W3cValidatorNoRefsTest {
         markdown sameAsMarkdown """
             ---
             lang: en
-            title: Ready to check  - Nu Html Checker
+            title: Ready to check - Nu Html Checker
             ---
             
             # [Nu Html Checker](.)

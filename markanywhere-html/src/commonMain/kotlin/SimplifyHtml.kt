@@ -20,6 +20,7 @@ import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.dump.AccessibilityAnnotations
 import com.xemantic.markanywhere.html.spec.asciiLowercase
 import com.xemantic.markanywhere.html.spec.isHtmlWhitespace
+import com.xemantic.markanywhere.html.spec.stripAndCollapseHtmlWhitespace
 import com.xemantic.markanywhere.transform.MatcherScope
 import com.xemantic.markanywhere.transform.transform
 import kotlinx.coroutines.flow.Flow
@@ -138,10 +139,13 @@ import kotlinx.coroutines.flow.Flow
  * application state that single-page apps ship in `<meta>` (serialised JSON,
  * framework config blobs — see [isApplicationStateMeta]). Meta names are
  * ASCII case-insensitive, so of several names differing only in letter case
- * the first one (spelling and value) wins. Those discarded values and merged
+ * the first one (spelling and value) wins, as in [wrapInHtmlDocument]; a
+ * `lang` meta is spelled `lang` and yields to `<html lang>`, the document's
+ * actual language. Those discarded values and merged
  * names are what does not survive a [wrapInHtmlDocument] round-trip. When
  * `<head>` holds several `<title>`s, the first non-blank one wins, over a
- * `<meta name="title">` (in any letter case) too. If `<head>` is absent or
+ * `<meta name="title">` (in any letter case) too, with its whitespace
+ * stripped and collapsed as `document.title` does. If `<head>` is absent or
  * yields no metadata, no frontmatter mark is emitted.
  *
  * Matcher registration is grouped: per-tag explicit matchers come first
@@ -173,11 +177,11 @@ public fun Flow<SemanticEvent>.simplifyHtml(
     svgMode: SvgMode = SvgMode.RESOLVE,
 ): Flow<SemanticEvent> = transform {
 
-    // Meta names are ASCII case-insensitive (HTML §4.2.5), so entries are
-    // keyed by the folded name, holding the first spelling and its value:
-    // the first occurrence of a name, in any letter case, wins. Insertion
-    // order is the front matter order.
-    val metadata = mutableMapOf<String, MetadataEntry>()
+    // A value that tells a reader nothing is never added — blank judged with
+    // Unicode whitespace (NBSP included), not HTML's: rendered, an NBSP-only
+    // value is as empty as a blank one. `ensureFrontmatterTitle` judges a
+    // title the same way, so a title kept here is never replaced there.
+    val metadata = HeadMetadata()
     val titleText = StringBuilder()
     // The first non-blank `<title>` wins, over a `<meta name="title">` too —
     // unlike `document.title`, which takes the first `<title>` even when
@@ -257,7 +261,7 @@ public fun Flow<SemanticEvent>.simplifyHtml(
 
     match("html") { event ->
         event["lang"]?.let {
-            if (!it.isBlankMetadata()) metadata["lang"] = MetadataEntry("lang", it)
+            if (it.isNotBlank()) metadata.add("lang", it)
         }
         children()
     }
@@ -284,8 +288,9 @@ public fun Flow<SemanticEvent>.simplifyHtml(
         titleText.clear()
         children(mode = "titleText")
         afterClose {
-            if (!titleFromElement && !titleText.isBlankMetadata()) {
-                metadata["title"] = MetadataEntry("title", titleText.trim { it.isHtmlWhitespace() }.toString())
+            if (!titleFromElement && titleText.isNotBlank()) {
+                // as `document.title` reads it
+                metadata["title"] = titleText.toString().stripAndCollapseHtmlWhitespace()
                 titleFromElement = true
             }
         }
@@ -294,7 +299,7 @@ public fun Flow<SemanticEvent>.simplifyHtml(
     match("meta") { event ->
         val name = event["name"]
         val content = event["content"]
-        if (name != null && content != null && !content.isBlankMetadata()) {
+        if (name != null && !content.isNullOrBlank()) {
             // cheapest checks first: the JSON parse runs only for a name
             // that would otherwise be kept
             val normalizedName = name.asciiLowercase()
@@ -302,10 +307,12 @@ public fun Flow<SemanticEvent>.simplifyHtml(
                 && !isNoiseMetaName(normalizedName)
                 && !isApplicationStateMeta(content)
             ) {
-                metadata[normalizedName] = if (normalizedName == "title") {
-                    MetadataEntry("title", content.trim { it.isHtmlWhitespace() })
-                } else {
-                    MetadataEntry(name, content)
+                when (normalizedName) {
+                    // the two keys wrapInHtmlDocument turns back into <title>
+                    // and <html lang>, spelled as it reads them
+                    "title" -> metadata.add("title", content.trim { it.isHtmlWhitespace() })
+                    "lang" -> metadata.add("lang", content)
+                    else -> metadata.add(name, content)
                 }
             }
         }
@@ -711,15 +718,6 @@ private val ARIA_KEEP = arrayOf(
     // state that changes what a reader (or an agent) should do about it.
     "aria-modal",
 )
-
-// A front matter entry: the name as first spelled, and its value.
-private data class MetadataEntry(val key: String, val value: String)
-
-// A metadata value that tells a reader nothing — judged with Unicode
-// whitespace (NBSP included), not HTML's: rendered, an NBSP-only value is as
-// empty as a blank one. `ensureFrontmatterTitle` judges a title the same way,
-// so a title kept here is never replaced there.
-private fun CharSequence.isBlankMetadata(): Boolean = isBlank()
 
 // Technical `<meta name>` values that carry no content signal for an LLM and
 // only inflate the frontmatter: rendering hints, crawler / verification

@@ -41,3 +41,22 @@ public fun Char.isHtmlWhitespace(): Boolean = this in HTML_WHITESPACE_CHARS
  * whitespace.
  */
 public fun String.isHtmlBlank(): Boolean = all { it.isHtmlWhitespace() }
+
+/**
+ * This string with leading and trailing [HTML whitespace][isHtmlWhitespace]
+ * removed and every inner run of it replaced by a single space — the WHATWG
+ * Infra "strip and collapse ASCII whitespace", the normalisation behind
+ * `document.title`. NBSP is content and stays.
+ */
+public fun String.stripAndCollapseHtmlWhitespace(): String = buildString(length) {
+    var pendingSpace = false
+    for (c in this@stripAndCollapseHtmlWhitespace) {
+        if (c.isHtmlWhitespace()) {
+            pendingSpace = isNotEmpty()
+        } else {
+            if (pendingSpace) append(' ')
+            pendingSpace = false
+            append(c)
+        }
+    }
+}

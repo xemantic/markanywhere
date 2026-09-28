@@ -11,6 +11,8 @@ so code that reads a semantic event stream carrying HTML attributes can use it w
 |---------------------------------------------------|------------------------------------------------------------------------------------------------|
 | `HTML_WHITESPACE_CHARS`, `Char.isHtmlWhitespace()` | HTML "ASCII whitespace": TAB, LF, FF, CR, SPACE — not NBSP, which HTML treats as content      |
 | `String.isHtmlBlank()`                            | Empty or HTML whitespace only                                                                  |
+| `String.stripAndCollapseHtmlWhitespace()`         | Trimmed of HTML whitespace, inner runs collapsed to one space, as `document.title` reads it     |
+| `Char.asciiLowercase()`, `String.asciiLowercase()` | ASCII lowercase: only `A`–`Z` fold, as HTML compares names "ASCII case-insensitively"          |
 | `HTML_VOID_ELEMENTS`                              | Elements with no content and no closing tag, including the obsolete `keygen` and `param`       |
 | `HTML_RAW_TEXT_ELEMENTS`                          | `script` and `style`, whose content is neither escaped nor parsed as markup                    |
 | `SemanticEvent.Mark.classList`                    | The distinct class names of a mark's `class` attribute, like the DOM's `classList`             |
