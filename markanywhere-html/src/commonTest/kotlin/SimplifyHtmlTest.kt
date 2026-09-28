@@ -846,7 +846,7 @@ class SimplifyHtmlTest {
             "html" {
                 "head" {
                     "meta"("name" to "__init", "content" to "{\"a\":1}") { }
-                    "meta"("name" to "storage-inventory", "content" to "  [1,2,3]") { }
+                    "meta"("name" to "storage-inventory", "content" to "  [[1,2],[3]]") { }
                     "meta"("name" to "como-err", "content" to "[{\"x\":1}]") { }
                     "meta"("name" to "empty-list", "content" to "[]") { }
                     "meta"("name" to "feed/config/environment", "content" to "%7B%22x%22%3A1%7D") { }
@@ -864,7 +864,8 @@ class SimplifyHtmlTest {
         // when
         val output = input.simplifyHtml()
 
-        // then — only a value that *is* a JSON object/array marks state
+        // then — only a value that *is* a JSON object, or an array that is
+        // not a flat list of words or numbers, marks state
         output sameAs semanticEvents {
             "frontmatter" {
                 "entry"("key" to "description") { +"Save {50%} today" }
@@ -1108,7 +1109,7 @@ class SimplifyHtmlTest {
         val input = semanticEvents(tagged = true) {
             "html" {
                 "head" {
-                    "title" { +"  Page \n" }
+                    "title" { +" \u00A0Page\u00A0\n" }
                     "title" { +"Later" }
                 }
                 "body" { "p" { +"x" } }
@@ -1121,7 +1122,174 @@ class SimplifyHtmlTest {
         // then
         output sameAs semanticEvents {
             "frontmatter" {
-                "entry"("key" to "title") { +" Page " }
+                "entry"("key" to "title") { +"\u00A0Page\u00A0" }
+            }
+            "p" { +"x" }
+        }
+    }
+
+    @Test
+    fun `should keep a flat JSON list of words or numbers in frontmatter`() = runTest {
+        // given — a list a person writes, not serialised state
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    "meta"("name" to "keywords", "content" to "[\"Kotlin\",\"Multiplatform\"]") { }
+                    "meta"("name" to "article:tag", "content" to "[\"politics\"]") { }
+                    "meta"("name" to "citation_volume", "content" to "[2024]") { }
+                    "meta"("name" to "chapters", "content" to "[1, 2, 3]") { }
+                    "meta"("name" to "label", "content" to "[PDF]") { }
+                }
+                "body" { "p" { +"text" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "keywords") { +"[\"Kotlin\",\"Multiplatform\"]" }
+                "entry"("key" to "article:tag") { +"[\"politics\"]" }
+                "entry"("key" to "citation_volume") { +"[2024]" }
+                "entry"("key" to "chapters") { +"[1, 2, 3]" }
+                "entry"("key" to "label") { +"[PDF]" }
+            }
+            "p" { +"text" }
+        }
+    }
+
+    @Test
+    fun `should drop a malformed-JSON-looking value only when it parses`() = runTest {
+        // given — not JSON, so kept as text: trailing commas, crossed brackets
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    "meta"("name" to "a", "content" to "[1,]") { }
+                    "meta"("name" to "b", "content" to "{\"a\":1,}") { }
+                    "meta"("name" to "c", "content" to "[}") { }
+                    "meta"("name" to "d", "content" to "{draft}") { }
+                }
+                "body" { "p" { +"text" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "a") { +"[1,]" }
+                "entry"("key" to "b") { +"{\"a\":1,}" }
+                "entry"("key" to "c") { +"[}" }
+                "entry"("key" to "d") { +"{draft}" }
+            }
+            "p" { +"text" }
+        }
+    }
+
+    @Test
+    fun `should skip a title of non-breaking spaces only`() = runTest {
+        // given — blank as ensureFrontmatterTitle judges it, which would
+        // otherwise replace it and lose the later title
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    "title" { +"\u00A0\u00A0" }
+                    "title" { +"Real Page" }
+                    "meta"("name" to "title", "content" to "\u00A0") { }
+                }
+                "body" { "p" { +"x" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"Real Page" }
+            }
+            "p" { +"x" }
+        }
+    }
+
+    @Test
+    fun `should trim a title meta like a title element`() = runTest {
+        // given
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    "meta"("name" to "title", "content" to "  SEO blurb\n") { }
+                }
+                "body" { "p" { +"x" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"SEO blurb" }
+            }
+            "p" { +"x" }
+        }
+    }
+
+    @Test
+    fun `should keep the first of meta names differing only in letter case`() = runTest {
+        // given — meta names are ASCII case-insensitive (HTML §4.2.5)
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    "meta"("name" to "Description", "content" to "First") { }
+                    "meta"("name" to "author", "content" to "Alice") { }
+                    "meta"("name" to "description", "content" to "Second") { }
+                    "meta"("name" to "AUTHOR", "content" to "Bob") { }
+                }
+                "body" { "p" { +"x" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "Description") { +"First" }
+                "entry"("key" to "author") { +"Alice" }
+            }
+            "p" { +"x" }
+        }
+    }
+
+    @Test
+    fun `should fold only ASCII letter case in meta names`() = runTest {
+        // given — a dotless ı is not an i, whatever Unicode case folding says
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    "title" { +"Page" }
+                    "meta"("name" to "t\u0131tle", "content" to "Other") { }
+                }
+                "body" { "p" { +"x" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"Page" }
+                "entry"("key" to "t\u0131tle") { +"Other" }
             }
             "p" { +"x" }
         }

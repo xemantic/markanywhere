@@ -315,6 +315,33 @@ class WrapInHtmlDocumentTest {
     }
 
     @Test
+    fun `should merge keys differing only in letter case on a round-trip through simplifyHtml`() = runTest {
+        // given — HTML reads meta names case-insensitively, so the first
+        // spelling wins, and any `title` spelling is the title
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"Page" }
+                "entry"("key" to "Title") { +"Subtitle" }
+                "entry"("key" to "Author") { +"Alice" }
+                "entry"("key" to "author") { +"Bob" }
+            }
+            "p" { +"Hi" }
+        }
+
+        // when
+        val output = input.wrapInHtmlDocument().simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"Page" }
+                "entry"("key" to "Author") { +"Alice" }
+            }
+            "p" { +"Hi" }
+        }
+    }
+
+    @Test
     fun `should use an entry left open when the stream ends inside the frontmatter`() = runTest {
         // given — a broken upstream contract: neither the entry nor the
         // frontmatter is closed. Built from raw events on purpose: the

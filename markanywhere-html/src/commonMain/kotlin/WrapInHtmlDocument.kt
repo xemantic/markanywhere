@@ -28,7 +28,8 @@ import kotlinx.coroutines.flow.Flow
  * YAML `---` front matter, holding `entry` marks) feeds the `head` — the
  * inverse of [simplifyHtml]'s head-to-frontmatter extraction, so the two
  * round-trip, except for the values [simplifyHtml] discards (a blank value,
- * application state such as a JSON object or an over-long blob):
+ * application state such as a JSON object or an over-long blob) and for keys
+ * differing only in letter case, which HTML reads as one `<meta>` name:
  *
  * - the `title` entry becomes `<title>`
  * - the `lang` entry becomes the `lang` attribute on `<html>`

@@ -135,9 +135,11 @@ import kotlinx.coroutines.flow.Flow
  * directives, platform tile metadata — see [isNoiseMetaName]) are dropped so
  * they don't inflate the frontmatter, and so are a blank value and
  * application state that single-page apps ship in `<meta>` (serialised JSON,
- * framework config blobs — see [isApplicationStateMeta]). Those are the
- * values that do not survive a [wrapInHtmlDocument] round-trip. When `<head>`
- * holds several `<title>`s, the first non-blank one wins, over a
+ * framework config blobs — see [isApplicationStateMeta]). Meta names are
+ * ASCII case-insensitive, so of several names differing only in letter case
+ * the first one (spelling and value) wins. Those discarded values and merged
+ * names are what does not survive a [wrapInHtmlDocument] round-trip. When
+ * `<head>` holds several `<title>`s, the first non-blank one wins, over a
  * `<meta name="title">` (in any letter case) too. If `<head>` is absent or
  * yields no metadata, no frontmatter mark is emitted.
  *
@@ -170,16 +172,20 @@ public fun Flow<SemanticEvent>.simplifyHtml(
     svgMode: SvgMode = SvgMode.RESOLVE,
 ): Flow<SemanticEvent> = transform {
 
+    // Keyed by the first spelling of each name; insertion order is the
+    // front matter order.
     val metadata = mutableMapOf<String, String>()
+    // Meta names are ASCII case-insensitive (HTML §4.2.5): the first
+    // occurrence of a name, in any letter case, wins.
+    val metadataNames = mutableSetOf<String>()
     val titleText = StringBuilder()
-    // Title candidates, resolved once when `<head>` closes: the first
-    // non-blank `<title>` wins, else the first non-blank `<meta name="title">`
-    // — unlike `document.title`, which takes the first `<title>` even when
-    // blank, since a blank title tells the reader nothing. The entry lands
-    // where the first candidate appeared.
-    var elementTitle: String? = null
-    var metaTitle: String? = null
-    var titlePosition = -1
+    // The first non-blank `<title>` wins, over a `<meta name="title">` too —
+    // unlike `document.title`, which takes the first `<title>` even when
+    // blank, since a blank title tells the reader nothing. Overwriting a meta
+    // title keeps the entry where the first candidate appeared. Blank is
+    // judged as `ensureFrontmatterTitle` judges it (NBSP included), so a
+    // title kept here is never replaced there.
+    var titleFromElement = false
 
     // Attribute map kept on a preserved element: its own [names] whitelist, the
     // ARIA name/state keep-set, and any caller-requested [keepAttributes]. An
@@ -252,7 +258,10 @@ public fun Flow<SemanticEvent>.simplifyHtml(
     // --- metadata extraction (explicit per-tag) -------------------------
 
     match("html") { event ->
-        event["lang"]?.let { metadata["lang"] = it }
+        event["lang"]?.let {
+            metadata["lang"] = it
+            metadataNames += "lang"
+        }
         children()
     }
 
@@ -261,11 +270,9 @@ public fun Flow<SemanticEvent>.simplifyHtml(
         // swallowed (see the mode-scoped matchText below); emit no mark.
         children(mode = "head")
         afterClose {
-            val entries = metadata.toList().toMutableList()
-            (elementTitle ?: metaTitle)?.let { entries.add(titlePosition, "title" to it) }
-            if (entries.isNotEmpty()) {
+            if (metadata.isNotEmpty()) {
                 "frontmatter" {
-                    for ((key, value) in entries) {
+                    for ((key, value) in metadata) {
                         "entry"("key" to key) { +value }
                     }
                 }
@@ -281,9 +288,10 @@ public fun Flow<SemanticEvent>.simplifyHtml(
         children(mode = "titleText")
         afterClose {
             val trimmed = titleText.toString().trim { it.isHtmlWhitespace() }
-            if (trimmed.isNotEmpty() && elementTitle == null) {
-                elementTitle = trimmed
-                if (titlePosition < 0) titlePosition = metadata.size
+            if (trimmed.isNotBlank() && !titleFromElement) {
+                metadata["title"] = trimmed
+                metadataNames += "title"
+                titleFromElement = true
             }
         }
     }
@@ -296,13 +304,13 @@ public fun Flow<SemanticEvent>.simplifyHtml(
             && !isNoiseMetaName(name)
             && !isApplicationStateMeta(content)
         ) {
-            // Meta names are ASCII case-insensitive (HTML §4.2.5).
-            if (name.equals("title", ignoreCase = true)) {
-                if (metaTitle == null) {
-                    metaTitle = content
-                    if (titlePosition < 0) titlePosition = metadata.size
+            val normalizedName = name.asciiLowercase()
+            if (normalizedName == "title") {
+                val trimmed = content.trim { it.isHtmlWhitespace() }
+                if (trimmed.isNotBlank() && metadataNames.add("title")) {
+                    metadata["title"] = trimmed
                 }
-            } else {
+            } else if (metadataNames.add(normalizedName)) {
                 metadata[name] = content
             }
         }
@@ -709,13 +717,22 @@ private val ARIA_KEEP = arrayOf(
     "aria-modal",
 )
 
+// HTML's "ASCII lowercase": unlike [String.lowercase] or
+// `equals(ignoreCase = true)`, it folds only `A`–`Z`, so `tıtle` (dotless ı)
+// does not match `title`.
+private fun String.asciiLowercase(): String =
+    if (none { it in 'A'..'Z' }) this else String(CharArray(length) {
+        val c = this[it]
+        if (c in 'A'..'Z') c + ('a' - 'A') else c
+    })
+
 // Technical `<meta name>` values that carry no content signal for an LLM and
 // only inflate the frontmatter: rendering hints, crawler / verification
 // directives, and platform tile metadata. Dropped from the extracted metadata.
 // A denylist (rather than an allowlist) keeps unknown-but-possibly-useful names
 // — `description`, `keywords`, `author`, `og:*`, `article:*`, … — by default.
 private fun isNoiseMetaName(name: String): Boolean {
-    val n = name.lowercase()
+    val n = name.asciiLowercase()
     return n in NOISE_META_NAMES
             || NOISE_META_PREFIXES.any { n.startsWith(it) }
             || n.endsWith("-verification")
