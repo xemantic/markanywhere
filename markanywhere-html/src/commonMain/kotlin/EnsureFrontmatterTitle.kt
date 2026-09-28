@@ -26,7 +26,9 @@ import kotlinx.coroutines.flow.Flow
  * Ensures the stream starts with a `frontmatter` mark defining a `title`,
  * deriving a missing title from the first `h1`.
  *
- * The title entry judged is the one [wrapInHtmlDocument] reads: the first
+ * The frontmatter and title entry judged are the ones [wrapInHtmlDocument]
+ * reads: an untagged `frontmatter` mark that is the very first event — one
+ * anywhere else, or a tagged one, is ordinary content — and in it the first
  * top-level `entry` with `key="title"` (in any ASCII letter case) holding
  * non-blank scalar text — entries holding a nested structure, an empty
  * collection, `null` or blank text are skipped, as there. A stream whose
@@ -41,12 +43,13 @@ import kotlinx.coroutines.flow.Flow
  * content — with its HTML whitespace stripped and collapsed, as
  * `document.title` reads a `<title>`, becomes the `title`, and only then the
  * frontmatter and the buffered `h1` are emitted, in source order. The
- * derived title replaces, in place, the first blank scalar title entry, else
- * the first `null` one (a bare `title:` line), spelling its key `title` on
- * the same terms as above; without either it is injected as the first
- * `entry` of the frontmatter — unless a title entry holding a nested
- * structure or an empty collection is present, which is then left to stand
- * alone: replacing it would lose content, and a second entry would
+ * derived title replaces, in place, the first blank or `null` (a bare
+ * `title:` line) entry spelled `title`, else the first blank scalar title
+ * entry in another spelling, else the first `null` one — spelling its key
+ * `title` on the same terms as above; without any it is injected as the
+ * first `entry` of the frontmatter — unless an entry spelled `title` holding
+ * a nested structure or an empty collection is present, which is then left
+ * to stand alone: replacing it would lose content, and a second entry would
  * duplicate its key. When no frontmatter exists at all, one carrying just
  * the derived `title` is synthesized as the **first** event — ahead of any
  * blank text that preceded the `h1`, since [wrapInHtmlDocument] reads only
@@ -72,13 +75,14 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
     // top-level title entries (in any letter case) within `frontmatterEvents`
     // the first non-blank scalar one — the one wrapInHtmlDocument reads
     var usableTitle: TitleSlot? = null
-    // the first blank scalar one, and the first `null` one, the slots the
-    // derived title replaces, in this order
+    // the first blank or `null` one spelled exactly `title`, the first blank
+    // scalar one and the first `null` one, the slots the derived title
+    // replaces, in this order
+    var exactTitle: TitleSlot? = null
     var blankTitle: TitleSlot? = null
     var nullTitle: TitleSlot? = null
-    // one holding a nested structure or an empty collection
-    var unreadableTitleSeen = false
-    // an entry spelled exactly `title`, which a respelled key would duplicate
+    // an entry spelled exactly `title`, which a respelled key or an injected
+    // entry would duplicate
     var titleKeyTaken = false
     // the slot replaced by the derived entry on commit
     var replacedTitle: TitleSlot? = null
@@ -161,10 +165,9 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
     collect { event ->
         when (state) {
             AtStart -> when {
-                event is Mark && event.name == "frontmatter" -> {
-                    // a frontmatter is only ever the first event, but keep
-                    // whatever preceded it in source order
-                    flushBlanks()
+                // only a frontmatter opening the stream is the page's
+                // metadata; anywhere else it is content, as for wrapInHtmlDocument
+                event is Mark && !event.isTagged && event.name == "frontmatter" && blanks.isEmpty() -> {
                     frontmatterEvents = mutableListOf(event)
                     frontmatterDepth = 1
                     state = InFrontmatter
@@ -204,11 +207,18 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
                             val slot = open.copy(end = events.lastIndex)
                             val type = openTitleType
                             when {
-                                openTitleHasChildren || type != null && type != "null" &&
-                                        type !in SCALAR_ENTRY_TYPES -> unreadableTitleSeen = true
-                                type == "null" -> if (nullTitle == null) nullTitle = slot
-                                openTitleText.isNotBlank() -> if (usableTitle == null) usableTitle = slot
-                                else -> if (blankTitle == null) blankTitle = slot
+                                // unreadable: kept, never replaced
+                                openTitleHasChildren || type != "null" && !isScalarEntryType(type) -> {}
+                                type == "null" -> {
+                                    if (nullTitle == null) nullTitle = slot
+                                    if (exactTitle == null && slot.key == "title") exactTitle = slot
+                                }
+                                isMetadataValue(openTitleText.toString()) ->
+                                    if (usableTitle == null) usableTitle = slot
+                                else -> {
+                                    if (blankTitle == null) blankTitle = slot
+                                    if (exactTitle == null && slot.key == "title") exactTitle = slot
+                                }
                             }
                         }
                         0 -> {
@@ -219,8 +229,11 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
                                     attributes = mark.attributes + ("key" to "title")
                                 )
                             }
-                            replacedTitle = blankTitle ?: nullTitle
-                            if (usable != null || replacedTitle == null && unreadableTitleSeen) {
+                            replacedTitle = exactTitle ?: blankTitle ?: nullTitle
+                            // with no slot to replace, an entry spelled
+                            // `title` left is unreadable: injecting would
+                            // duplicate its key
+                            if (usable != null || replacedTitle == null && titleKeyTaken) {
                                 flushHeld()
                                 state = PassThrough
                             } else {

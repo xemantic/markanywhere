@@ -260,9 +260,7 @@ public fun Flow<SemanticEvent>.simplifyHtml(
     // --- metadata extraction (explicit per-tag) -------------------------
 
     match("html") { event ->
-        event["lang"]?.trim { it.isHtmlWhitespace() }?.let {
-            if (it.isNotBlank()) metadata.add("lang", it)
-        }
+        event["lang"]?.let { metadata.add("lang", it.trim { c -> c.isHtmlWhitespace() }) }
         children()
     }
 
@@ -303,7 +301,7 @@ public fun Flow<SemanticEvent>.simplifyHtml(
             // cheapest checks first: the JSON parse runs only for a name
             // that would otherwise be kept
             val normalizedName = name.asciiLowercase()
-            if (normalizedName !in metadata
+            if (name !in metadata
                 && !isNoiseMetaName(normalizedName)
                 && !isApplicationStateMeta(content)
             ) {

@@ -1093,6 +1093,62 @@ class SimplifyHtmlTest {
     }
 
     @Test
+    fun `should judge a long flat JSON array by its words, not its quotes and commas`() = runTest {
+        // given — both past the cap; the quotes and commas serialising the
+        // words are not the punctuation of state, a list of hashes still is
+        val words = (1..600).joinToString(",", "[", "]") { "\"tag$it\"" }
+        val hashes = (1..300).joinToString(",", "[", "]") { "\"0123456789abcdef\"" }
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    "meta"("name" to "keywords", "content" to words) { }
+                    "meta"("name" to "hashes", "content" to hashes) { }
+                }
+                "body" { "p" { +"text" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "keywords") { +words }
+            }
+            "p" { +"text" }
+        }
+    }
+
+    @Test
+    fun `should judge the length of a percent-encoded value by what it decodes to`() = runTest {
+        // given — prose whose encoding is past the cap while its text is not,
+        // and an encoded blob past it either way
+        val prose = "本研究では大規模言語モデルの挙動を分析した。".repeat(30).percentEncoded()
+        val blob = ("A" + "x".repeat(5000)).percentEncoded()
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    "meta"("name" to "description", "content" to prose) { }
+                    "meta"("name" to "blob", "content" to blob) { }
+                }
+                "body" { "p" { +"text" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "description") { +prose }
+            }
+            "p" { +"text" }
+        }
+    }
+
+    @Test
     fun `should not decode a percent escape made of non-ASCII digits`() = runTest {
         // given — an Arabic-Indic seven is no hex digit, so this is not a
         // percent-encoded JSON object but text
@@ -2379,4 +2435,9 @@ class SimplifyHtmlTest {
         }
     }
 
+}
+
+// Every byte as a `%XX` escape of its UTF-8 encoding.
+private fun String.percentEncoded(): String = encodeToByteArray().joinToString("") {
+    "%" + (it.toInt() and 0xFF).toString(16).uppercase().padStart(2, '0')
 }

@@ -23,14 +23,15 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonPrimitive
 
 // Single-page apps use `<meta>` as a transport for application state
 // (LinkedIn: `__init`, `spark/hash-includes`, Ember's percent-encoded
 // `<app>/config/environment`, … — 95% of a page's Markdown, issue #82). A
 // name denylist cannot keep up with names private to each site's framework,
 // so this judges the *value*, which is what tells metadata apart from state.
-// A percent-encoded value is judged by what it decodes to, so the verdict
-// never depends on the encoding:
+// A percent-encoded value is judged by what it decodes to, by every rule
+// below, so the verdict never depends on the encoding:
 // - a value that parses as a JSON object. Parsing, not a look at the first
 //   and last char, is what keeps human text that merely starts with a
 //   bracket (`[Solved] …`, `{Draft} …`, `[2024] Annual report [PDF]`);
@@ -43,34 +44,43 @@ import kotlinx.serialization.json.JsonPrimitive
 //   it stands alone or as an element of an array;
 // - a value longer than [MAX_META_VALUE_LENGTH] that does not read as text —
 //   the backstop for opaque blobs of any other shape (base64, hash lists,
-//   truncated JSON), which a long abstract in prose is not.
+//   truncated JSON), which a long abstract in prose is not. A flat JSON
+//   array is read by its elements, not the quotes and commas serialising
+//   them, so a long list of words is kept while a long list of hashes is not.
 internal fun isApplicationStateMeta(content: String): Boolean {
-    val value = content.trim { it.isHtmlWhitespace() }
-    if (value.length > MAX_META_VALUE_LENGTH && !value.readsAsText()) return true
-    return value.isJsonState() || value.firstOrNull() == '%' &&
-            value.percentDecodedOrNull()?.trim { it.isHtmlWhitespace() }?.isJsonState() == true
+    val value = content.trimHtmlWhitespace().let {
+        if (it.firstOrNull() == '%') it.percentDecodedOrNull()?.trimHtmlWhitespace() ?: it else it
+    }
+    val json = value.parseJsonCandidateOrNull()
+    if (json?.isState() == true) return true
+    val text = if (json is JsonArray) json.joinToString(" ") { it.jsonPrimitive.content } else value
+    return text.length > MAX_META_VALUE_LENGTH && !text.readsAsText()
 }
 
 // Real metadata is short: `description` / `og:description` rarely exceed 300
 // characters. Past this, a value must read as text to be kept.
 private const val MAX_META_VALUE_LENGTH = 4096
 
+private fun String.trimHtmlWhitespace(): String = trim { it.isHtmlWhitespace() }
+
+// Only a value opening like a JSON object, array or string is parsed.
+private fun String.parseJsonCandidateOrNull(): JsonElement? {
+    val first = firstOrNull()
+    return if (first == '{' || first == '[' || first == '"') parseJsonOrNull() else null
+}
+
 // Recursion unwraps one JSON string per level, and each level's escaping at
 // least doubles the backslashes before a quote, so the depth stays
 // logarithmic in the value's length.
-private fun String.isJsonState(): Boolean {
-    val first = firstOrNull()
-    if (first != '{' && first != '[' && first != '"') return false
-    return when (val json = parseJsonOrNull()) {
-        is JsonObject -> true
-        is JsonArray -> json.any { !it.isWordOrNumber() || it.isEncodedState() }
-        is JsonPrimitive -> json.isEncodedState()
-        else -> false
-    }
+private fun JsonElement.isState(): Boolean = when (this) {
+    is JsonObject -> true
+    is JsonArray -> any { !it.isWordOrNumber() || it.isEncodedState() }
+    is JsonPrimitive -> isEncodedState()
 }
 
 private fun JsonElement.isEncodedState(): Boolean =
-    this is JsonPrimitive && isString && content.trim { it.isHtmlWhitespace() }.isJsonState()
+    this is JsonPrimitive && isString &&
+            content.trimHtmlWhitespace().parseJsonCandidateOrNull()?.isState() == true
 
 // Text is made of words: at least half the chars are letters (hex and
 // number lists are mostly digits) — a combining mark counting as one, since

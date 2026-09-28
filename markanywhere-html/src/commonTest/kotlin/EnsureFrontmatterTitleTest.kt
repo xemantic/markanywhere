@@ -825,6 +825,102 @@ class EnsureFrontmatterTitleTest {
     }
 
     @Test
+    fun `should replace the slot spelled title over a blank variant preceding it`() = runTest {
+        // given — `Title: ""` then `title:`; a case-sensitive reader
+        // (Jekyll, Hugo) reads only the latter
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "Title") { }
+                "entry"("key" to "title", "type" to "null") { }
+            }
+            "h1" { +"Heading" }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "Title") { }
+                "entry"("key" to "title") { +"Heading" }
+            }
+            "h1" { +"Heading" }
+        }
+    }
+
+    @Test
+    fun `should inject a title next to an unreadable title variant`() = runTest {
+        // given — `Title: []`, which wrapInHtmlDocument skips; a `title` entry
+        // collides with nothing
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "Title", "type" to "seq") { }
+            }
+            "h1" { +"Heading" }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"Heading" }
+                "entry"("key" to "Title", "type" to "seq") { }
+            }
+            "h1" { +"Heading" }
+        }
+    }
+
+    @Test
+    fun `should treat a frontmatter after leading blank text as content`() = runTest {
+        // given — wrapInHtmlDocument reads only a frontmatter opening the
+        // stream, so this one is body content, not the page's metadata
+        val input = semanticEvents {
+            +"\n"
+            "frontmatter" {
+                "entry"("key" to "author") { +"Alice" }
+            }
+            "h1" { +"Heading" }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then
+        output sameAs semanticEvents {
+            +"\n"
+            "frontmatter" {
+                "entry"("key" to "author") { +"Alice" }
+            }
+            "h1" { +"Heading" }
+        }
+    }
+
+    @Test
+    fun `should treat a tagged frontmatter as content`() = runTest {
+        // given — a literal `<frontmatter>` tag, not front matter
+        val input = semanticEvents {
+            tag("frontmatter") {
+                "entry"("key" to "author") { +"Alice" }
+            }
+            "h1" { +"Heading" }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then
+        output sameAs semanticEvents {
+            tag("frontmatter") {
+                "entry"("key" to "author") { +"Alice" }
+            }
+            "h1" { +"Heading" }
+        }
+    }
+
+    @Test
     fun `should derive the head title for parsed Markdown with a bare title key`() = runTest {
         // given
         val document = flowOf(

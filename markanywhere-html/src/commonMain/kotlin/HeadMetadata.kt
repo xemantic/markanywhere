@@ -25,7 +25,16 @@ internal val HEAD_KEYS = setOf("title", "lang")
 // The front matter `entry` types whose text is meaningful as head metadata
 // (`null` and the empty collections are not); an entry without a `type` is a
 // string.
-internal val SCALAR_ENTRY_TYPES = setOf("bool", "int", "float", "timestamp")
+private val SCALAR_ENTRY_TYPES = setOf("bool", "int", "float", "timestamp")
+
+// Whether an `entry` of this `type` holds a scalar that is head metadata —
+// the rule wrapInHtmlDocument reads entries by and ensureFrontmatterTitle
+// judges title entries by.
+internal fun isScalarEntryType(type: String?): Boolean =
+    type == null || type in SCALAR_ENTRY_TYPES
+
+// Whether a value carries anything for a reader — a blank one does not.
+internal fun isMetadataValue(value: String): Boolean = value.isNotBlank()
 
 // A front matter entry: the name as first spelled, and its value.
 internal data class MetadataEntry(val key: String, val value: String)
@@ -45,13 +54,14 @@ internal class HeadMetadata {
 
     fun isNotEmpty(): Boolean = entries.isNotEmpty()
 
+    // Every lookup takes a name as spelled; folding it is this class's job.
     operator fun contains(name: String): Boolean = name.asciiLowercase() in entries
 
     operator fun get(name: String): MetadataEntry? = entries[name.asciiLowercase()]
 
     // Adds the entry unless its value is blank or its name already present.
     fun add(key: String, value: String) {
-        if (value.isBlank()) return
+        if (!isMetadataValue(value)) return
         val name = key.asciiLowercase()
         if (name !in entries) entries[name] = MetadataEntry(key, value)
     }

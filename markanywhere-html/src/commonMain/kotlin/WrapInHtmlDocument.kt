@@ -102,7 +102,7 @@ public fun Flow<SemanticEvent>.wrapInHtmlDocument(): Flow<SemanticEvent> = seman
                     if (depth == 1) {
                         val type = event["type"]
                         entryKey = if (
-                            event.name == "entry" && (type == null || type in SCALAR_ENTRY_TYPES)
+                            event.name == "entry" && isScalarEntryType(type)
                         ) event["key"] else null
                         entryText.clear()
                     } else {
