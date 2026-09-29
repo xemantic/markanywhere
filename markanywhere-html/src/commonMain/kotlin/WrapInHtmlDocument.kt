@@ -107,9 +107,7 @@ public fun Flow<SemanticEvent>.wrapInHtmlDocument(): Flow<SemanticEvent> = seman
             reader != null -> if (reader.read(event)) openDocument()
             !opened -> when {
                 event is Mark && !event.isTagged && event.name == "frontmatter" -> {
-                    frontmatter = FrontMatterEntryReader { entry ->
-                        if (entry.isHeadMetadata) metadata.addFromFrontMatter(entry.key, entry.text)
-                    }.also { it.read(event) }
+                    frontmatter = FrontMatterEntryReader(metadata::addFromFrontMatter).also { it.read(event) }
                 }
                 event is Text && event.text.isHtmlBlank() -> blanks += event
                 else -> {

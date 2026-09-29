@@ -1141,6 +1141,121 @@ class EnsureFrontmatterTitleTest {
     }
 
     @Test
+    fun `should derive a title past a non-breaking space before the h1`() = runTest {
+        // given — an `&nbsp;` spacer only stops a frontmatter following it
+        // from opening the stream; a synthesized one goes first anyway
+        val input = semanticEvents {
+            +"\u00A0"
+            "h1" { +"Hello" }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"Hello" }
+            }
+            +"\u00A0"
+            "h1" { +"Hello" }
+        }
+    }
+
+    @Test
+    fun `should derive a title past a non-breaking space between the frontmatter and the h1`() = runTest {
+        // given
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "author") { +"Alice" }
+            }
+            +"\u00A0"
+            "h1" { +"Hello" }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"Hello" }
+                "entry"("key" to "author") { +"Alice" }
+            }
+            +"\u00A0"
+            "h1" { +"Hello" }
+        }
+    }
+
+    @Test
+    fun `should drop empty title entries when the h1 yields no title`() = runTest {
+        // given — duplicate keys make js-yaml reject the whole front matter
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title", "type" to "null") { }
+                "entry"("key" to "author") { +"Alice" }
+                "entry"("key" to "title") { }
+            }
+            "h1" { }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "author") { +"Alice" }
+            }
+            "h1" { }
+        }
+    }
+
+    @Test
+    fun `should drop empty title entries when no h1 follows`() = runTest {
+        // given
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title", "type" to "null") { }
+                "entry"("key" to "Title") { }
+                "entry"("key" to "author") { +"Alice" }
+            }
+            "p" { +"Body." }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "author") { +"Alice" }
+            }
+            "p" { +"Body." }
+        }
+    }
+
+    @Test
+    fun `should collapse line-breaking whitespace in the derived title`() = runTest {
+        // given — a line or paragraph separator, a vertical tab or a next
+        // line char pasted into a heading would break the title's line
+        val input = semanticEvents {
+            "h1" { +"Foo\u2028Bar\u000BBaz\u2029\u0085Qux" }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"Foo Bar Baz Qux" }
+            }
+            "h1" { +"Foo\u2028Bar\u000BBaz\u2029\u0085Qux" }
+        }
+    }
+
+    @Test
     fun `should treat a tagged frontmatter as content`() = runTest {
         // given — a literal `<frontmatter>` tag, not front matter
         val input = semanticEvents {

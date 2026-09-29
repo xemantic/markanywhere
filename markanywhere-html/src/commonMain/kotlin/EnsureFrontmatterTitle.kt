@@ -51,12 +51,13 @@ import kotlinx.coroutines.flow.Flow
  * entry is dropped.
  *
  * Otherwise the frontmatter is held back and the title is derived from the
- * very first `h1` following it (only HTML whitespace text may intervene): the
+ * very first `h1` following it (only blank text may intervene — an NBSP
+ * included, which keeps a frontmatter *following* it from opening the
+ * stream, but not a synthesized one from going first): the
  * `h1` subtree's flattened text — its text events plus the `alt` of every
  * `img` mark, in document order, the way an accessible name is computed from
- * content — with its HTML whitespace stripped and collapsed, as
- * `document.title` reads a `<title>`, and any other whitespace at its edges
- * trimmed, becomes the `title`, and only then the frontmatter and the
+ * content — normalized as [normalizeTitle] reads a `<title>` — becomes the
+ * `title`, and only then the frontmatter and the
  * buffered `h1` are emitted, in source order. The derived entry takes the
  * place of the first title entry, every other one dropped, or is injected as
  * the first `entry` of a frontmatter without any. When no frontmatter exists
@@ -65,8 +66,9 @@ import kotlinx.coroutines.flow.Flow
  *
  * When no title can be derived — the first non-blank event after the
  * frontmatter is not an `h1`, the `h1` yields no text, or the stream ends —
- * everything held is flushed unchanged: a stream without a leading `h1`
- * passes through untouched and no empty frontmatter is fabricated.
+ * everything held is flushed unchanged but for the empty title entries of
+ * the frontmatter, dropped as above: a stream without a leading `h1` passes
+ * through untouched and no empty frontmatter is fabricated.
  *
  * Buffering is bounded to the frontmatter subtree plus one `h1` subtree —
  * everything after the decision point is forwarded as it arrives.
@@ -89,6 +91,9 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
     // blank text held before the first h1 (ahead of the frontmatter, or
     // between it and the h1), replayed in source order on commit
     val blanks = mutableListOf<SemanticEvent>()
+    // whether all of `blanks` is HTML whitespace, which alone lets a
+    // frontmatter following it open the stream
+    var blanksAreHtmlWhitespace = true
 
     // the h1 subtree, buffered between its mark and balanced unmark so the
     // title can be derived from the flattened text
@@ -101,9 +106,14 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
         blanks.clear()
     }
 
+    fun holdBlank(event: SemanticEvent.Text) {
+        blanks += event
+        if (!event.text.isHtmlBlank()) blanksAreHtmlWhitespace = false
+    }
+
     // emits the held frontmatter — `prepended` right after its mark, the span
-    // of each slot in `rewrite` replaced by its events (none drops the entry)
-    // — then the blanks held with it
+    // of each slot in `rewrite` (in source order, as `titleSlots` is) replaced
+    // by its events (none drops the entry) — then the blanks held with it
     suspend fun flushHeld(
         rewrite: Map<FrontMatterEntry, List<SemanticEvent>> = emptyMap(),
         prepended: List<SemanticEvent> = emptyList()
@@ -112,7 +122,7 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
             emit(held.first())
             emit(prepended)
             var next = 1
-            for ((slot, events) in rewrite.entries.sortedBy { it.key.start }) {
+            for ((slot, events) in rewrite) {
                 emit(held.subList(next, slot.start))
                 emit(events)
                 next = slot.end + 1
@@ -129,11 +139,17 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
         flushHeld(titleSlots.associateWith { if (it == slot) entry else emptyList() })
     }
 
+    // emits the held frontmatter without its empty title entries, keeping
+    // the nested ones
+    suspend fun flushWithoutEmptyTitles() {
+        flushHeld(titleSlots.filterNot { it.hasChildren }.associateWith { emptyList() })
+    }
+
     suspend fun commitHeading() {
         val title = headingText.toString().normalizeTitle()
         val slot = titleSlots.firstOrNull()
         when {
-            !isMetadataValue(title) -> flushHeld()
+            !isMetadataValue(title) -> flushWithoutEmptyTitles()
             frontmatterEvents == null -> {
                 "frontmatter" {
                     emit(titleEntry(title))
@@ -162,7 +178,7 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
             }
             // a nested title is content, not ours to replace
             titleSlots.any { it.hasChildren } -> {
-                flushHeld(titleSlots.filterNot { it.hasChildren }.associateWith { emptyList() })
+                flushWithoutEmptyTitles()
                 PassThrough
             }
             else -> AwaitingHeading
@@ -178,15 +194,16 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
     collect { event ->
         when (state) {
             AtStart -> when {
-                // only a frontmatter opening the stream (but for blank text)
-                // is the page's metadata; anywhere else it is content
-                event is Mark && !event.isTagged && event.name == "frontmatter" -> {
+                // only a frontmatter opening the stream (but for HTML
+                // whitespace text) is the page's metadata; anywhere else it
+                // is content
+                event is Mark && !event.isTagged && event.name == "frontmatter" && blanksAreHtmlWhitespace -> {
                     frontmatterEvents = mutableListOf(event)
                     reader.read(event)
                     state = InFrontmatter
                 }
                 event is Mark && event.name == "h1" -> startHeading(event)
-                event is Text && event.text.isHtmlBlank() -> blanks += event
+                event is Text && event.text.isBlank() -> holdBlank(event)
                 else -> {
                     flushBlanks()
                     emit(event)
@@ -198,10 +215,10 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
                 if (reader.read(event)) judgeFrontmatter()
             }
             AwaitingHeading -> when (event) {
-                is Text if event.text.isHtmlBlank() -> blanks += event
+                is Text if event.text.isBlank() -> holdBlank(event)
                 is Mark if event.name == "h1" -> startHeading(event)
                 else -> {
-                    flushHeld()
+                    flushWithoutEmptyTitles()
                     emit(event)
                     state = PassThrough
                 }
@@ -230,10 +247,10 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
 
     // an unclosed h1 (broken upstream contract) still commits so no buffered
     // events are lost; otherwise flush whatever is still held
-    if (state == InHeading) {
-        commitHeading()
-    } else {
-        flushHeld()
+    when (state) {
+        InHeading -> commitHeading()
+        AwaitingHeading -> flushWithoutEmptyTitles()
+        else -> flushHeld()
     }
 }
 

@@ -39,14 +39,22 @@ internal fun isMetadataValue(value: String): Boolean = value.any { !it.isInvisib
 
 // Whitespace (NBSP included) or an invisible format char such as a
 // zero-width space or a byte order mark.
-private fun Char.isInvisible(): Boolean = isWhitespace() || category == CharCategory.FORMAT
+private fun Char.isInvisible(): Boolean = isWhitespace() || category == FORMAT
 
 // A title as `document.title` reads a `<title>` — HTML whitespace stripped
 // and collapsed — with any other invisible char at its edges (the NBSP
 // padding an icon often leaves, a byte order mark) trimmed too: inside, NBSP
 // is content and stays, at an edge it only forces the title into quotes.
+// Whitespace that breaks a line (a vertical tab, a line or paragraph
+// separator, a next line char) collapses like HTML whitespace, as a title is
+// one line.
 internal fun String.normalizeTitle(): String =
-    stripAndCollapseHtmlWhitespace().trim { it.isInvisible() }
+    map { if (it in LINE_BREAKING_WHITESPACE) ' ' else it }
+        .joinToString("")
+        .stripAndCollapseHtmlWhitespace()
+        .trim { it.isInvisible() }
+
+private const val LINE_BREAKING_WHITESPACE = "\u000B\u0085\u2028\u2029"
 
 // Whether a front matter entry spelled `candidate` supersedes an earlier one
 // of the same name spelled `existing`, as front matter readers resolve a
@@ -91,14 +99,17 @@ internal class HeadMetadata {
     }
 
     // Adds a front matter entry the way its readers resolve a duplicate key
-    // ([frontMatterKeySupersedes]). The name keeps the position of its first
+    // ([frontMatterKeySupersedes]), unless it is no head metadata
+    // ([FrontMatterEntry.isHeadMetadata], the rule ensureFrontmatterTitle
+    // judges title entries by). The name keeps the position of its first
     // occurrence.
-    fun addFromFrontMatter(key: String, value: String) {
-        if (!isMetadataValue(value)) return
+    fun addFromFrontMatter(entry: FrontMatterEntry) {
+        if (!entry.isHeadMetadata) return
+        val key = entry.key
         val name = key.asciiLowercase()
         val existing = entries[name]
         if (existing == null || frontMatterKeySupersedes(existing.key, key)) {
-            entries[name] = MetadataEntry(key, value)
+            entries[name] = MetadataEntry(key, entry.text)
         }
     }
 

@@ -972,6 +972,33 @@ class SimplifyHtmlTest {
     }
 
     @Test
+    fun `should drop state percent-encoded inside a JSON string or more than once`() = runTest {
+        // given — encoding state once more, in either layer, must not hide it
+        val state = "{\"modulePrefix\":\"app\"}"
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    "meta"("name" to "app/config", "content" to "\"${state.percentEncoded()}\"") { }
+                    "meta"("name" to "app/config-2", "content" to state.percentEncoded().percentEncoded()) { }
+                    "meta"("name" to "subject", "content" to "\"50%25 off\"") { }
+                }
+                "body" { "p" { +"text" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "subject") { +"\"50%25 off\"" }
+            }
+            "p" { +"text" }
+        }
+    }
+
+    @Test
     fun `should keep long text written in supplementary-plane letters or emoji`() = runTest {
         // given — each of these letters and emoji is a UTF-16 surrogate pair
         val extensionB = "\uD840\uDC00\uD840\uDC01\uD840\uDC02。".repeat(700)
@@ -1146,15 +1173,20 @@ class SimplifyHtmlTest {
     }
 
     @Test
-    fun `should drop a long array opening with a nested element unless it reads as text`() = runTest {
+    fun `should drop a long array holding a nested element unless it reads as text`() = runTest {
         // given — state if it parses, a blob if it does not; neither is text
         val state = (1..600).joinToString(",", "[", "]") { "[$it,$it]" }
         val truncated = state.dropLast(1)
+        // the nested element need not come first
+        val late = (1..600).joinToString(",", "[\"x\",", "]") { "{\"id\":$it}" }
+        val lateTruncated = late.dropLast(1)
         val input = semanticEvents(tagged = true) {
             "html" {
                 "head" {
                     "meta"("name" to "state", "content" to state) { }
                     "meta"("name" to "truncated", "content" to truncated) { }
+                    "meta"("name" to "late", "content" to late) { }
+                    "meta"("name" to "late-truncated", "content" to lateTruncated) { }
                 }
                 "body" { "p" { +"text" } }
             }
