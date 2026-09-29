@@ -17,6 +17,8 @@ max_rounds=${2:-5}
 permission_mode=${PERMISSION_MODE:-acceptEdits}
 log_dir=${LOG_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/review-fix-loop.XXXXXX")}
 sentinel=NO_CRITICAL_FINDINGS
+# running the JS tests narrows this lock, which breaks the full build if committed
+yarn_lock=kotlin-js-store/yarn.lock
 
 cd "$(git rev-parse --show-toplevel)"
 
@@ -61,7 +63,8 @@ not intentional divergences documented in CLAUDE.md. Check each one against the 
 For each bug you fix, follow the TDD rule in CLAUDE.md: add a permanent, named regression test first,
 watch it fail, then fix. Drop a finding whose test does not fail.
 Run jvmTest for every module you touched, the JS tests if you changed a commonMain Regex,
-and apiCheck if you changed public API. If everything is green, create ONE commit (never stage .claude/)
+and apiCheck if you changed public API. If everything is green, create ONE commit
+(never stage .claude/ or $yarn_lock — the JS test build narrows the lock; leave it, it is reverted for you)
 matching the subject style of \`git log -5 --format=%s\`, and end its message with:
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 If you cannot get the build green, do not commit.
@@ -74,15 +77,23 @@ $(cat "$review")" \
     --allowedTools "${fix_tools[@]}" \
     > "$fix_log"
 
-  if [[ "$(tail -n 1 "$fix_log" | tr -d '[:space:]')" == "$sentinel" ]]; then
-    echo "done: no critical/major findings left after $round round(s)"
-    exit 0
+  if ! git diff --quiet "$head_before" HEAD -- "$yarn_lock"; then
+    echo "round $round committed $yarn_lock (narrowed by the JS tests?) — stopping, see $fix_log" >&2
+    exit 1
   fi
+  git checkout -- "$yarn_lock"
 
-  # --porcelain also lists untracked files (e.g. a new regression test)
+  # checked before the sentinel, so a fixer that edited files and then printed
+  # it cannot end the loop with a dirty tree; --porcelain also lists untracked
+  # files (e.g. a new regression test)
   if [[ -n "$(git status --porcelain)" ]]; then
     echo "round $round left uncommitted changes (build red?) — stopping, see $fix_log" >&2
     exit 1
+  fi
+
+  if [[ "$(tail -n 1 "$fix_log" | tr -d '[:space:]')" == "$sentinel" ]]; then
+    echo "done: no critical/major findings left after $round round(s)"
+    exit 0
   fi
 
   if [[ "$(git rev-parse HEAD)" == "$head_before" ]]; then
