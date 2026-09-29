@@ -616,10 +616,10 @@ class EnsureFrontmatterTitleTest {
     }
 
     @Test
-    fun `should pass through a usable title variant following a blank title entry`() = runTest {
+    fun `should respell a usable title variant following a blank title entry dropping the blank one`() = runTest {
         // given — wrapInHtmlDocument skips a blank entry, as simplifyHtml
-        // never extracts one, and reads the later variant; the `title` key
-        // is taken, so the variant keeps its spelling
+        // never extracts one, and reads the later variant, while a
+        // case-sensitive reader (Jekyll, Hugo) reads only the blank `title`
         val input = semanticEvents {
             "frontmatter" {
                 "entry"("key" to "title") { +" " }
@@ -631,11 +631,10 @@ class EnsureFrontmatterTitleTest {
         // when
         val output = input.ensureFrontmatterTitle()
 
-        // then
+        // then — the blank entry carried nothing for either reader
         output sameAs semanticEvents {
             "frontmatter" {
-                "entry"("key" to "title") { +" " }
-                "entry"("key" to "Title") { +"Later" }
+                "entry"("key" to "title") { +"Later" }
             }
             "h1" { +"Hello" }
         }
@@ -692,7 +691,7 @@ class EnsureFrontmatterTitleTest {
     }
 
     @Test
-    fun `should pass through a title variant following a null title entry`() = runTest {
+    fun `should respell a title variant following a null title entry dropping the null one`() = runTest {
         // given — wrapInHtmlDocument skips the null entry and reads the
         // variant after it as the title
         val input = semanticEvents {
@@ -709,8 +708,7 @@ class EnsureFrontmatterTitleTest {
         // then
         output sameAs semanticEvents {
             "frontmatter" {
-                "entry"("key" to "title", "type" to "null") { }
-                "entry"("key" to "Title") { +"Real" }
+                "entry"("key" to "title") { +"Real" }
             }
             "h1" { +"Heading" }
         }
@@ -874,9 +872,10 @@ class EnsureFrontmatterTitleTest {
     }
 
     @Test
-    fun `should treat a frontmatter after leading blank text as content`() = runTest {
-        // given — wrapInHtmlDocument reads only a frontmatter opening the
-        // stream, so this one is body content, not the page's metadata
+    fun `should move a frontmatter preceded by blank text ahead of it`() = runTest {
+        // given — blank text before the first element is insignificant, and
+        // renderMarkdown drops it, but wrapInHtmlDocument reads only a
+        // frontmatter opening the stream
         val input = semanticEvents {
             +"\n"
             "frontmatter" {
@@ -890,8 +889,113 @@ class EnsureFrontmatterTitleTest {
 
         // then
         output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"Heading" }
+                "entry"("key" to "author") { +"Alice" }
+            }
+            +"\n"
+            "h1" { +"Heading" }
+        }
+    }
+
+    @Test
+    fun `should put the title of a frontmatter preceded by blank text into the head`() = runTest {
+        // given
+        val input = semanticEvents {
             +"\n"
             "frontmatter" {
+                "entry"("key" to "title") { +"Page" }
+            }
+            "h1" { +"Heading" }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle().wrapInHtmlDocument()
+
+        // then
+        output sameAs semanticEvents {
+            "html" {
+                "head" {
+                    "title" { +"Page" }
+                }
+                "body" {
+                    +"\n"
+                    "h1" { +"Heading" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should drop a blank title entry following a usable one`() = runTest {
+        // given — a front matter reader keeps the later duplicate, so the
+        // blank entry would hide the title wrapInHtmlDocument reads
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"Real" }
+                "entry"("key" to "author") { +"Alice" }
+                "entry"("key" to "title") { }
+            }
+            "h1" { +"Heading" }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"Real" }
+                "entry"("key" to "author") { +"Alice" }
+            }
+            "h1" { +"Heading" }
+        }
+    }
+
+    @Test
+    fun `should respell the last usable title variant as wrapInHtmlDocument reads it`() = runTest {
+        // given
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "Title") { +"First" }
+                "entry"("key" to "TITLE") { +"Last" }
+            }
+            "h1" { +"Heading" }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "Title") { +"First" }
+                "entry"("key" to "title") { +"Last" }
+            }
+            "h1" { +"Heading" }
+        }
+    }
+
+    @Test
+    fun `should drop every other empty title entry when deriving the title`() = runTest {
+        // given — a front matter reader keeps the later `title:`, which
+        // would hide the derived title in the first slot
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { }
+                "entry"("key" to "author") { +"Alice" }
+                "entry"("key" to "title", "type" to "null") { }
+            }
+            "h1" { +"Heading" }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"Heading" }
                 "entry"("key" to "author") { +"Alice" }
             }
             "h1" { +"Heading" }

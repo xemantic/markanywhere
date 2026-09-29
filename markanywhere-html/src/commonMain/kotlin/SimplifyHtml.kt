@@ -19,7 +19,7 @@ package com.xemantic.markanywhere.html
 import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.dump.AccessibilityAnnotations
 import com.xemantic.markanywhere.html.spec.asciiLowercase
-import com.xemantic.markanywhere.html.spec.isHtmlWhitespace
+import com.xemantic.markanywhere.html.spec.stripHtmlWhitespace
 import com.xemantic.markanywhere.html.spec.stripAndCollapseHtmlWhitespace
 import com.xemantic.markanywhere.transform.MatcherScope
 import com.xemantic.markanywhere.transform.transform
@@ -260,7 +260,7 @@ public fun Flow<SemanticEvent>.simplifyHtml(
     // --- metadata extraction (explicit per-tag) -------------------------
 
     match("html") { event ->
-        event["lang"]?.let { metadata.add("lang", it.trim { c -> c.isHtmlWhitespace() }) }
+        event["lang"]?.let { metadata.addFromHtml("lang", it.stripHtmlWhitespace()) }
         children()
     }
 
@@ -309,12 +309,12 @@ public fun Flow<SemanticEvent>.simplifyHtml(
                     // as a <title> element's text reads (document.title)
                     "title" -> content.stripAndCollapseHtmlWhitespace()
                     // as <html lang> is read above
-                    "lang" -> content.trim { it.isHtmlWhitespace() }
+                    "lang" -> content.stripHtmlWhitespace()
                     else -> content
                 }
                 // the keys wrapInHtmlDocument turns back into <title> and
                 // <html lang> are spelled as it reads them
-                metadata.add(if (normalizedName in HEAD_KEYS) normalizedName else name, value)
+                metadata.addFromHtml(if (normalizedName in HEAD_KEYS) normalizedName else name, value)
             }
         }
     }

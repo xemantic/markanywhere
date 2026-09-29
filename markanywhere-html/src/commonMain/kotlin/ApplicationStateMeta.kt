@@ -16,7 +16,7 @@
 
 package com.xemantic.markanywhere.html
 
-import com.xemantic.markanywhere.html.spec.isHtmlWhitespace
+import com.xemantic.markanywhere.html.spec.stripHtmlWhitespace
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -48,11 +48,13 @@ import kotlinx.serialization.json.jsonPrimitive
 //   array is read by its elements, not the quotes and commas serialising
 //   them, so a long list of words is kept while a long list of hashes is not.
 internal fun isApplicationStateMeta(content: String): Boolean {
-    val value = content.trimHtmlWhitespace().let {
-        if (it.firstOrNull() == '%') it.percentDecodedOrNull()?.trimHtmlWhitespace() ?: it else it
+    val value = content.stripHtmlWhitespace().let {
+        if (it.firstOrNull() == '%') it.percentDecodedOrNull()?.stripHtmlWhitespace() ?: it else it
     }
     val json = value.parseJsonCandidateOrNull()
     if (json?.isState() == true) return true
+    // a flat array's words are never longer than the value serialising them
+    if (value.length <= MAX_META_VALUE_LENGTH) return false
     val text = if (json is JsonArray) json.joinToString(" ") { it.jsonPrimitive.content } else value
     return text.length > MAX_META_VALUE_LENGTH && !text.readsAsText()
 }
@@ -60,8 +62,6 @@ internal fun isApplicationStateMeta(content: String): Boolean {
 // Real metadata is short: `description` / `og:description` rarely exceed 300
 // characters. Past this, a value must read as text to be kept.
 private const val MAX_META_VALUE_LENGTH = 4096
-
-private fun String.trimHtmlWhitespace(): String = trim { it.isHtmlWhitespace() }
 
 // Only a value opening like a JSON object, array or string is parsed.
 private fun String.parseJsonCandidateOrNull(): JsonElement? {
@@ -80,7 +80,7 @@ private fun JsonElement.isState(): Boolean = when (this) {
 
 private fun JsonElement.isEncodedState(): Boolean =
     this is JsonPrimitive && isString &&
-            content.trimHtmlWhitespace().parseJsonCandidateOrNull()?.isState() == true
+            content.stripHtmlWhitespace().parseJsonCandidateOrNull()?.isState() == true
 
 // Text is made of words: at least half the chars are letters (hex and
 // number lists are mostly digits) — a combining mark counting as one, since

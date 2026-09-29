@@ -37,8 +37,11 @@ import kotlinx.coroutines.flow.Flow
  * [simplifyHtml] produces. A nested mapping or sequence, a null value, a
  * blank value and verbatim text are skipped (never an error). Keys are read
  * the way HTML reads `<meta>` names, ASCII case-insensitively — a `Title`
- * entry is the title — and of duplicate keys, in any letter case, the first
- * one wins (spelling and value), as in [simplifyHtml].
+ * entry is the title. Of duplicate keys the later one wins, as front matter
+ * readers (Jekyll, PyYAML) resolve them, except that a key spelled in
+ * lowercase — the spelling a case-sensitive reader looks up — beats a
+ * variant in another letter case wherever it occurs; the winner keeps the
+ * position of the first duplicate.
  *
  * Passing the result back through [simplifyHtml] restores the front matter
  * except for what either side normalises or discards: skipped entries
@@ -114,7 +117,7 @@ public fun Flow<SemanticEvent>.wrapInHtmlDocument(): Flow<SemanticEvent> = seman
                     openDocument()
                 } else {
                     if (depth == 1) {
-                        entryKey?.let { metadata.add(it, entryText.toString()) }
+                        entryKey?.let { metadata.addFromFrontMatter(it, entryText.toString()) }
                         entryKey = null
                     }
                     depth--
@@ -136,7 +139,7 @@ public fun Flow<SemanticEvent>.wrapInHtmlDocument(): Flow<SemanticEvent> = seman
     // still used, including an entry left open — its text is complete by
     // then; an empty stream yields the bare skeleton.
     if (collectingFrontmatter && depth == 1) {
-        entryKey?.let { metadata.add(it, entryText.toString()) }
+        entryKey?.let { metadata.addFromFrontMatter(it, entryText.toString()) }
     }
     if (!opened) openDocument()
     unmark("body")

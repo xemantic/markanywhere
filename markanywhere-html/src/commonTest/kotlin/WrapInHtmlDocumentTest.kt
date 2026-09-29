@@ -166,8 +166,8 @@ class WrapInHtmlDocumentTest {
     }
 
     @Test
-    fun `should let the first of duplicate keys win`() = runTest {
-        // given
+    fun `should let the last of duplicate keys win as front matter readers do`() = runTest {
+        // given — Psych (Jekyll) and PyYAML keep the later duplicate
         val input = semanticEvents {
             "frontmatter" {
                 "entry"("key" to "author") { +"Alice" }
@@ -182,7 +182,60 @@ class WrapInHtmlDocumentTest {
         output sameAs semanticEvents {
             "html" {
                 "head" {
+                    "meta"("name" to "author", "content" to "Bob") { }
+                }
+                "body" { }
+            }
+        }
+    }
+
+    @Test
+    fun `should read the title front matter readers read of duplicate title keys`() = runTest {
+        // given
+        val document = flowOf(
+            """
+            ---
+            title: Draft
+            author: Alice
+            title: Final
+            ---
+            """.trimIndent()
+        )
+
+        // when
+        val output = document.parse().wrapInHtmlDocument()
+
+        // then
+        output sameAs semanticEvents {
+            "html" {
+                "head" {
+                    "title" { +"Final" }
                     "meta"("name" to "author", "content" to "Alice") { }
+                }
+                "body" { }
+            }
+        }
+    }
+
+    @Test
+    fun `should prefer the lowercase spelling of a key over a later variant`() = runTest {
+        // given — a case-sensitive reader (Jekyll) looks up `title`, whatever
+        // follows it in another letter case
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"Real" }
+                "entry"("key" to "Title") { +"Variant" }
+            }
+        }
+
+        // when
+        val output = input.wrapInHtmlDocument()
+
+        // then
+        output sameAs semanticEvents {
+            "html" {
+                "head" {
+                    "title" { +"Real" }
                 }
                 "body" { }
             }
@@ -315,8 +368,8 @@ class WrapInHtmlDocumentTest {
 
     @Test
     fun `should read keys ASCII case-insensitively like meta names`() = runTest {
-        // given — a later key differing only in letter case is a duplicate,
-        // so the first one wins, spelling and value, as in simplifyHtml
+        // given — a key differing only in letter case is a duplicate, and
+        // its lowercase spelling wins, at the position of the first one
         val input = semanticEvents {
             "frontmatter" {
                 "entry"("key" to "Title") { +"My Page" }
@@ -335,7 +388,7 @@ class WrapInHtmlDocumentTest {
             "html"("lang" to "de") {
                 "head" {
                     "title" { +"My Page" }
-                    "meta"("name" to "Author", "content" to "Alice") { }
+                    "meta"("name" to "author", "content" to "Bob") { }
                     "meta"("name" to "description", "content" to "A doc") { }
                 }
                 "body" { }

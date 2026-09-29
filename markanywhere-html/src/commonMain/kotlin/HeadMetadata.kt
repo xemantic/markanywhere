@@ -41,11 +41,11 @@ internal data class MetadataEntry(val key: String, val value: String)
 
 // The `<head>` metadata a front matter holds, in insertion order and keyed
 // the way HTML reads `<meta>` names: ASCII case-insensitively (HTML §4.2.5).
-// The one duplicate policy [simplifyHtml] and [wrapInHtmlDocument] share, so
-// the two stay inverses whichever way a document travels: the first
-// occurrence of a name, in any letter case, with a non-blank value wins —
-// spelling and value. A blank value carries nothing for a reader, so it is
-// never added, and cannot shadow a later non-blank variant.
+// A blank value carries nothing for a reader, so it is never added, and
+// cannot shadow a variant holding one. Duplicates resolve the way readers of
+// the format they were read from resolve them — [simplifyHtml] reads HTML,
+// [wrapInHtmlDocument] YAML. The two policies need not agree for the two to
+// stay inverses: each emits a single entry per name.
 internal class HeadMetadata {
 
     private val entries = LinkedHashMap<String, MetadataEntry>()
@@ -59,11 +59,27 @@ internal class HeadMetadata {
 
     operator fun get(name: String): MetadataEntry? = entries[name.asciiLowercase()]
 
-    // Adds the entry unless its value is blank or its name already present.
-    fun add(key: String, value: String) {
+    // Adds a `<meta>` read from HTML, where the first of duplicate elements
+    // is the one a query finds: the first occurrence of a name, in any letter
+    // case, wins — spelling and value.
+    fun addFromHtml(key: String, value: String) {
         if (!isMetadataValue(value)) return
         val name = key.asciiLowercase()
         if (name !in entries) entries[name] = MetadataEntry(key, value)
+    }
+
+    // Adds a front matter entry the way its readers resolve a duplicate key
+    // (Psych — Jekyll's — and PyYAML keep the later one), except that the
+    // lowercase spelling, the one a case-sensitive reader such as Jekyll
+    // looks up for `title`, beats a variant wherever it occurs. The name keeps
+    // the position of its first occurrence.
+    fun addFromFrontMatter(key: String, value: String) {
+        if (!isMetadataValue(value)) return
+        val name = key.asciiLowercase()
+        val existing = entries[name]
+        if (existing == null || key == name || existing.key != name) {
+            entries[name] = MetadataEntry(key, value)
+        }
     }
 
     // Sets the entry whether or not its name is present, keeping the position
