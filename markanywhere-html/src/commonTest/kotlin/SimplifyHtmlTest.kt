@@ -1117,6 +1117,59 @@ class SimplifyHtmlTest {
     }
 
     @Test
+    fun `should measure a flat JSON array by its elements as the same list written plainly`() = runTest {
+        // given — over the cap as written, under it once the quotes and
+        // commas are gone: short, as the same hashes written plainly are
+        val jsonHashes = (1..380).joinToString(",", "[", "]") { "\"a1b2c3d4\"" }
+        val plainHashes = (1..380).joinToString(" ") { "a1b2c3d4" }
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    "meta"("name" to "json-hashes", "content" to jsonHashes) { }
+                    "meta"("name" to "plain-hashes", "content" to plainHashes) { }
+                }
+                "body" { "p" { +"text" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "json-hashes") { +jsonHashes }
+                "entry"("key" to "plain-hashes") { +plainHashes }
+            }
+            "p" { +"text" }
+        }
+    }
+
+    @Test
+    fun `should drop a long array opening with a nested element unless it reads as text`() = runTest {
+        // given — state if it parses, a blob if it does not; neither is text
+        val state = (1..600).joinToString(",", "[", "]") { "[$it,$it]" }
+        val truncated = state.dropLast(1)
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    "meta"("name" to "state", "content" to state) { }
+                    "meta"("name" to "truncated", "content" to truncated) { }
+                }
+                "body" { "p" { +"text" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "p" { +"text" }
+        }
+    }
+
+    @Test
     fun `should judge the length of a percent-encoded value as it is written`() = runTest {
         // given — a value is written to the front matter still encoded, so
         // prose whose escapes run past the cap is as opaque there as a blob,
@@ -1516,6 +1569,32 @@ class SimplifyHtmlTest {
             "frontmatter" {
                 "entry"("key" to "author") { +"Alice" }
                 "entry"("key" to "title") { +"First" }
+            }
+            "p" { +"x" }
+        }
+    }
+
+    @Test
+    fun `should trim invisible format chars at the edges of a title`() = runTest {
+        // given — a byte order mark and a zero-width space show nothing, at
+        // an edge they would only force the title into quotes
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    "title" { +"\uFEFFMy\u200BPage\u200B" }
+                    "meta"("name" to "Title", "content" to "\u200BIgnored") { }
+                }
+                "body" { "p" { +"x" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"My\u200BPage" }
             }
             "p" { +"x" }
         }

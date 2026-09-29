@@ -34,17 +34,19 @@ private val SCALAR_ENTRY_TYPES = setOf("bool", "int", "float", "timestamp")
 internal fun isScalarEntryType(type: String?): Boolean =
     type == null || type in SCALAR_ENTRY_TYPES
 
-// Whether a value carries anything for a reader: a char that shows — not
-// whitespace (NBSP included) and not an invisible format char such as a
+// Whether a value carries anything for a reader: a char that shows.
+internal fun isMetadataValue(value: String): Boolean = value.any { !it.isInvisible() }
+
+// Whitespace (NBSP included) or an invisible format char such as a
 // zero-width space or a byte order mark.
-internal fun isMetadataValue(value: String): Boolean =
-    value.any { !it.isWhitespace() && it.category != CharCategory.FORMAT }
+private fun Char.isInvisible(): Boolean = isWhitespace() || category == CharCategory.FORMAT
 
 // A title as `document.title` reads a `<title>` — HTML whitespace stripped
-// and collapsed — with any other whitespace at its edges (the NBSP padding an
-// icon often leaves) trimmed too: inside, NBSP is content and stays, at an
-// edge it only forces the title into quotes.
-internal fun String.normalizeTitle(): String = stripAndCollapseHtmlWhitespace().trim()
+// and collapsed — with any other invisible char at its edges (the NBSP
+// padding an icon often leaves, a byte order mark) trimmed too: inside, NBSP
+// is content and stays, at an edge it only forces the title into quotes.
+internal fun String.normalizeTitle(): String =
+    stripAndCollapseHtmlWhitespace().trim { it.isInvisible() }
 
 // Whether a front matter entry spelled `candidate` supersedes an earlier one
 // of the same name spelled `existing`, as front matter readers resolve a

@@ -45,9 +45,11 @@ import kotlinx.serialization.json.jsonPrimitive
 //   the backstop for opaque blobs of any other shape (base64, hash lists,
 //   truncated JSON), which a long abstract in prose is not. It judges the
 //   value as it will be written, so a percent-encoded one by its escapes,
-//   never by what they decode to. A flat JSON array is read by its elements,
-//   not the quotes and commas serialising them, so a long list of words is
-//   kept while a long list of hashes is not.
+//   never by what they decode to. A flat JSON array is measured by its
+//   elements joined, not the quotes and commas serialising them — its length
+//   as well as whether it reads as text — so it is judged as the same list
+//   written plainly would be: a long list of words is kept, a long list of
+//   hashes is not, and one whose elements fit under the cap is short.
 internal fun isApplicationStateMeta(content: String): Boolean {
     val written = content.stripHtmlWhitespace()
     val decoded = if (written.firstOrNull() == '%') written.percentDecodedOrNull()?.stripHtmlWhitespace() else null
@@ -55,12 +57,16 @@ internal fun isApplicationStateMeta(content: String): Boolean {
     val long = written.length > MAX_META_VALUE_LENGTH
     // An over-long value is kept only if it reads as text, whatever it
     // parses as, so a blob — megabytes of JSON, say — is dropped unparsed.
-    // Only a raw array must be parsed first, to be read by its words.
+    // Only a raw array must be parsed first, to be read by its words — unless
+    // its first element is an object or an array: then it is state if it
+    // parses and a blob if it does not, dropped either way.
     val readByWords = decoded == null && value.firstOrNull() == '['
-    if (long && !readByWords && !written.readsAsText()) return true
+    if (long && (!readByWords || value.opensNestedElement()) && !written.readsAsText()) return true
     val json = value.parseJsonCandidateOrNull()
     if (json?.isState() == true) return true
     if (!long || !readByWords) return false
+    // a flat array is measured by its elements joined, in length as in text,
+    // as the same elements written as a plain list would be
     val text = if (json is JsonArray) json.joinToString(" ") { it.jsonPrimitive.content } else written
     return text.length > MAX_META_VALUE_LENGTH && !text.readsAsText()
 }
@@ -68,6 +74,15 @@ internal fun isApplicationStateMeta(content: String): Boolean {
 // Real metadata is short: `description` / `og:description` rarely exceed 300
 // characters. Past this, a value must read as text to be kept.
 private const val MAX_META_VALUE_LENGTH = 4096
+
+// Whether this array's first element opens an object or an array.
+private fun String.opensNestedElement(): Boolean {
+    var i = 1
+    while (i < length && this[i] in JSON_WHITESPACE) i++
+    return i < length && (this[i] == '{' || this[i] == '[')
+}
+
+private const val JSON_WHITESPACE = " \t\n\r"
 
 // Only a value opening like a JSON object, array or string is parsed.
 private fun String.parseJsonCandidateOrNull(): JsonElement? {

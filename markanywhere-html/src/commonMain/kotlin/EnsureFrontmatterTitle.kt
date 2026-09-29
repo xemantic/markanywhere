@@ -35,6 +35,13 @@ import kotlinx.coroutines.flow.Flow
  * scalar text with visible content is usable — entries holding a nested
  * structure, an empty collection, `null` or blank text are not, as there.
  *
+ * A title entry holding a nested structure (localized titles, say) is no
+ * title for [wrapInHtmlDocument], but it is content: with no usable title
+ * entry beside it, no title is derived, and the frontmatter passes through
+ * with only its empty title entries — `null`, blank, an empty collection —
+ * dropped, as they carry nothing and a duplicate key makes js-yaml reject the
+ * whole front matter.
+ *
  * Whenever a title comes out, the frontmatter holds exactly one title entry,
  * spelled `title`: every front matter reader then reads the same title —
  * whether it matches keys case-sensitively (Jekyll) or not, keeps the later
@@ -71,17 +78,13 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
     // the held frontmatter subtree (mark + body events + unmark); null when
     // no frontmatter was present and a default one is to be synthesized
     var frontmatterEvents: MutableList<SemanticEvent>? = null
-    var frontmatterDepth = 0
 
     // the top-level title entries (in any letter case) within
-    // `frontmatterEvents`, in source order
-    val titleSlots = mutableListOf<TitleSlot>()
-    // the top-level title entry currently open: its mark and start, its
-    // text, and whether it holds nested marks
-    var openTitle: SemanticEvent.Mark? = null
-    var openTitleStart = -1
-    var openTitleHasChildren = false
-    val openTitleText = StringBuilder()
+    // `frontmatterEvents`, in source order, their spans indexing it
+    val titleSlots = mutableListOf<FrontMatterEntry>()
+    val reader = FrontMatterEntryReader { entry ->
+        if (entry.key.asciiLowercase() == "title") titleSlots += entry
+    }
 
     // blank text held before the first h1 (ahead of the frontmatter, or
     // between it and the h1), replayed in source order on commit
@@ -102,7 +105,7 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
     // of each slot in `rewrite` replaced by its events (none drops the entry)
     // — then the blanks held with it
     suspend fun flushHeld(
-        rewrite: Map<TitleSlot, List<SemanticEvent>> = emptyMap(),
+        rewrite: Map<FrontMatterEntry, List<SemanticEvent>> = emptyMap(),
         prepended: List<SemanticEvent> = emptyList()
     ) {
         frontmatterEvents?.let { held ->
@@ -122,7 +125,7 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
 
     // emits the held frontmatter with `entry` in place of `slot`, every
     // other title entry dropped
-    suspend fun flushWithSingleTitle(slot: TitleSlot, entry: List<SemanticEvent>) {
+    suspend fun flushWithSingleTitle(slot: FrontMatterEntry, entry: List<SemanticEvent>) {
         flushHeld(titleSlots.associateWith { if (it == slot) entry else emptyList() })
     }
 
@@ -149,14 +152,20 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
     suspend fun judgeFrontmatter() {
         // the entry wrapInHtmlDocument reads
         val usable = titleSlots
-            .filter { it.usable }
+            .filter { it.isHeadMetadata }
             .reduceOrNull { read, next -> if (frontMatterKeySupersedes(read.key, next.key)) next else read }
-        if (usable != null) {
-            val events = frontmatterEvents!!.subList(usable.start, usable.end + 1)
-            flushWithSingleTitle(usable, respelled(events))
-            state = PassThrough
-        } else {
-            state = AwaitingHeading
+        state = when {
+            usable != null -> {
+                val events = frontmatterEvents!!.subList(usable.start, usable.end + 1)
+                flushWithSingleTitle(usable, respelled(events))
+                PassThrough
+            }
+            // a nested title is content, not ours to replace
+            titleSlots.any { it.hasChildren } -> {
+                flushHeld(titleSlots.filterNot { it.hasChildren }.associateWith { emptyList() })
+                PassThrough
+            }
+            else -> AwaitingHeading
         }
     }
 
@@ -173,7 +182,7 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
                 // is the page's metadata; anywhere else it is content
                 event is Mark && !event.isTagged && event.name == "frontmatter" -> {
                     frontmatterEvents = mutableListOf(event)
-                    frontmatterDepth = 1
+                    reader.read(event)
                     state = InFrontmatter
                 }
                 event is Mark && event.name == "h1" -> startHeading(event)
@@ -185,35 +194,8 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
                 }
             }
             InFrontmatter -> {
-                val events = frontmatterEvents!!
-                events += event
-                when (event) {
-                    is Mark -> {
-                        frontmatterDepth++
-                        if (frontmatterDepth == 2) {
-                            // a top-level entry (a direct child)
-                            if (event.name == "entry" && event["key"]?.asciiLowercase() == "title") {
-                                openTitle = event
-                                openTitleStart = events.lastIndex
-                                openTitleHasChildren = false
-                                openTitleText.clear()
-                            }
-                        } else if (openTitle != null) {
-                            openTitleHasChildren = true
-                        }
-                    }
-                    is Text -> if (openTitle != null && frontmatterDepth == 2) openTitleText.append(event.text)
-                    is Unmark -> when (--frontmatterDepth) {
-                        1 -> openTitle?.let { open ->
-                            openTitle = null
-                            val type = open["type"]
-                            val usable = !openTitleHasChildren && isScalarEntryType(type) &&
-                                    isMetadataValue(openTitleText.toString())
-                            titleSlots += TitleSlot(openTitleStart, events.lastIndex, open["key"]!!, usable)
-                        }
-                        0 -> judgeFrontmatter()
-                    }
-                }
+                frontmatterEvents!! += event
+                if (reader.read(event)) judgeFrontmatter()
             }
             AwaitingHeading -> when (event) {
                 is Text if event.text.isHtmlBlank() -> blanks += event
@@ -258,10 +240,6 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
 private enum class State {
     AtStart, InFrontmatter, AwaitingHeading, InHeading, PassThrough
 }
-
-// A top-level title entry: the span of its events within the held
-// frontmatter, its key as spelled, and whether it holds a usable title.
-private data class TitleSlot(val start: Int, val end: Int, val key: String, val usable: Boolean)
 
 // A top-level front matter `title` entry holding the scalar `value`.
 private fun titleEntry(value: String): List<SemanticEvent> = listOf(

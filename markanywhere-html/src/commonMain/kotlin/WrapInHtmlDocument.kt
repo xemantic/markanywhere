@@ -67,13 +67,9 @@ import kotlinx.coroutines.flow.Flow
 public fun Flow<SemanticEvent>.wrapInHtmlDocument(): Flow<SemanticEvent> = semanticEvents {
 
     var opened = false
-    var collectingFrontmatter = false
-    // nesting depth inside the frontmatter: 1 while inside a top-level entry
-    var depth = 0
-    // the top-level entry being read, null when it is not a scalar to keep
-    var entryKey: String? = null
-    val entryText = StringBuilder()
     val metadata = HeadMetadata()
+    // reads the frontmatter while it is being collected
+    var frontmatter: FrontMatterEntryReader? = null
     // blank text ahead of the frontmatter, replayed at the start of `body`
     val blanks = mutableListOf<SemanticEvent>()
 
@@ -82,7 +78,7 @@ public fun Flow<SemanticEvent>.wrapInHtmlDocument(): Flow<SemanticEvent> = seman
     // unmark cannot come from a builder block — explicit mark/unmark instead.
     suspend fun openDocument() {
         opened = true
-        collectingFrontmatter = false
+        frontmatter = null
         mark(
             "html",
             attributes = metadata["lang"]
@@ -106,34 +102,14 @@ public fun Flow<SemanticEvent>.wrapInHtmlDocument(): Flow<SemanticEvent> = seman
     }
 
     collect { event ->
+        val reader = frontmatter
         when {
-            collectingFrontmatter -> when (event) {
-                is Mark -> {
-                    depth++
-                    if (depth == 1) {
-                        val type = event["type"]
-                        entryKey = if (
-                            event.name == "entry" && isScalarEntryType(type)
-                        ) event["key"] else null
-                        entryText.clear()
-                    } else {
-                        entryKey = null // a nested mark: not a scalar
-                    }
-                }
-                is Text -> if (depth == 1) entryText.append(event.text)
-                is Unmark -> if (depth == 0) {
-                    openDocument()
-                } else {
-                    if (depth == 1) {
-                        entryKey?.let { metadata.addFromFrontMatter(it, entryText.toString()) }
-                        entryKey = null
-                    }
-                    depth--
-                }
-            }
+            reader != null -> if (reader.read(event)) openDocument()
             !opened -> when {
                 event is Mark && !event.isTagged && event.name == "frontmatter" -> {
-                    collectingFrontmatter = true
+                    frontmatter = FrontMatterEntryReader { entry ->
+                        if (entry.isHeadMetadata) metadata.addFromFrontMatter(entry.key, entry.text)
+                    }.also { it.read(event) }
                 }
                 event is Text && event.text.isHtmlBlank() -> blanks += event
                 else -> {
@@ -146,11 +122,9 @@ public fun Flow<SemanticEvent>.wrapInHtmlDocument(): Flow<SemanticEvent> = seman
     }
 
     // An unclosed frontmatter at end of stream (broken upstream contract) is
-    // still used, including an entry left open — its text is complete by
-    // then; an empty stream yields the bare skeleton.
-    if (collectingFrontmatter && depth == 1) {
-        entryKey?.let { metadata.addFromFrontMatter(it, entryText.toString()) }
-    }
+    // still used, including an entry left open; an empty stream yields the
+    // bare skeleton.
+    frontmatter?.finish()
     if (!opened) openDocument()
     unmark("body")
     unmark("html")

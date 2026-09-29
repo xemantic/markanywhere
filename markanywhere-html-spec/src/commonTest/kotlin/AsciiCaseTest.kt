@@ -43,4 +43,17 @@ class AsciiCaseTest {
         assert(umlaut == "Ärger")
         assert(kelvin == 'K')
     }
+
+    @Test
+    fun `should not fold a Kelvin sign into an ASCII k as lowercase does`() {
+        // given
+        val kelvinKey = "\u212Aey"
+
+        // when
+        val lowered = kelvinKey.asciiLowercase()
+
+        // then
+        assert(kelvinKey.lowercase() == "key")
+        assert(lowered == kelvinKey)
+    }
 }

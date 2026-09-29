@@ -30,8 +30,10 @@ public fun Char.asciiLowercase(): Char =
 
 /**
  * This string with every ASCII upper alpha replaced by its lowercase
- * counterpart (see [Char.asciiLowercase]) — unlike [String.lowercase], `tıtle`
- * (a dotless ı) stays distinct from `title`.
+ * counterpart (see [Char.asciiLowercase]) — unlike [String.lowercase], which
+ * folds some non-ASCII letters into ASCII ones: `"\u212Aey".lowercase()`
+ * (a Kelvin sign `K`, U+212A) is `"key"`, while this leaves it unchanged, so
+ * it never matches a `key` name.
  */
 public fun String.asciiLowercase(): String =
     if (none { it in 'A'..'Z' }) this else CharArray(length) { this[it].asciiLowercase() }.concatToString()
