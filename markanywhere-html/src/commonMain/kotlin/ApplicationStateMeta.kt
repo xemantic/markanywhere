@@ -20,7 +20,6 @@ import com.xemantic.markanywhere.html.spec.stripHtmlWhitespace
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonPrimitive
@@ -30,32 +29,39 @@ import kotlinx.serialization.json.jsonPrimitive
 // `<app>/config/environment`, … — 95% of a page's Markdown, issue #82). A
 // name denylist cannot keep up with names private to each site's framework,
 // so this judges the *value*, which is what tells metadata apart from state.
-// A percent-encoded value is judged by what it decodes to, by every rule
-// below, so the verdict never depends on the encoding:
+// A percent-encoded value's structure is judged by what it decodes to, so
+// encoding state does not hide it:
 // - a value that parses as a JSON object. Parsing, not a look at the first
 //   and last char, is what keeps human text that merely starts with a
 //   bracket (`[Solved] …`, `{Draft} …`, `[2024] Annual report [PDF]`);
-// - a JSON array holding anything but strings and numbers (an object, a
-//   nested array, a flag, a `null`). A flat list of words or numbers —
-//   an empty one included — is metadata a person writes (`keywords`,
-//   `article:tag`, `citation_volume`);
+// - a JSON array holding an object or a nested array. A flat list of
+//   scalars — an empty one included — is metadata a person writes
+//   (`keywords`, `article:tag`, `citation_volume`), whether a bare word in it
+//   reads as a string, a number, a flag or `null`;
 // - a JSON string whose content is itself state by these rules — state
 //   serialised twice, a common single-page-app double encoding — whether
 //   it stands alone or as an element of an array;
 // - a value longer than [MAX_META_VALUE_LENGTH] that does not read as text —
 //   the backstop for opaque blobs of any other shape (base64, hash lists,
-//   truncated JSON), which a long abstract in prose is not. A flat JSON
-//   array is read by its elements, not the quotes and commas serialising
-//   them, so a long list of words is kept while a long list of hashes is not.
+//   truncated JSON), which a long abstract in prose is not. It judges the
+//   value as it will be written, so a percent-encoded one by its escapes,
+//   never by what they decode to. A flat JSON array is read by its elements,
+//   not the quotes and commas serialising them, so a long list of words is
+//   kept while a long list of hashes is not.
 internal fun isApplicationStateMeta(content: String): Boolean {
-    val value = content.stripHtmlWhitespace().let {
-        if (it.firstOrNull() == '%') it.percentDecodedOrNull()?.stripHtmlWhitespace() ?: it else it
-    }
+    val written = content.stripHtmlWhitespace()
+    val decoded = if (written.firstOrNull() == '%') written.percentDecodedOrNull()?.stripHtmlWhitespace() else null
+    val value = decoded ?: written
+    val long = written.length > MAX_META_VALUE_LENGTH
+    // An over-long value is kept only if it reads as text, whatever it
+    // parses as, so a blob — megabytes of JSON, say — is dropped unparsed.
+    // Only a raw array must be parsed first, to be read by its words.
+    val readByWords = decoded == null && value.firstOrNull() == '['
+    if (long && !readByWords && !written.readsAsText()) return true
     val json = value.parseJsonCandidateOrNull()
     if (json?.isState() == true) return true
-    // a flat array's words are never longer than the value serialising them
-    if (value.length <= MAX_META_VALUE_LENGTH) return false
-    val text = if (json is JsonArray) json.joinToString(" ") { it.jsonPrimitive.content } else value
+    if (!long || !readByWords) return false
+    val text = if (json is JsonArray) json.joinToString(" ") { it.jsonPrimitive.content } else written
     return text.length > MAX_META_VALUE_LENGTH && !text.readsAsText()
 }
 
@@ -74,7 +80,7 @@ private fun String.parseJsonCandidateOrNull(): JsonElement? {
 // logarithmic in the value's length.
 private fun JsonElement.isState(): Boolean = when (this) {
     is JsonObject -> true
-    is JsonArray -> any { !it.isWordOrNumber() || it.isEncodedState() }
+    is JsonArray -> any { it !is JsonPrimitive || it.isEncodedState() }
     is JsonPrimitive -> isEncodedState()
 }
 
@@ -131,14 +137,6 @@ private fun String.parseJsonOrNull(): JsonElement? = try {
 } catch (_: Exception) {
     null
 }
-
-// kotlinx's tree reader is no strict validator: it takes any unquoted token
-// as a literal (`[PDF]` parses as an array, `{"a":abc}` as an object) and
-// never checks a number, so the verdict rests on the element's shape, never
-// on "it parsed". Everything that is not a string, a flag or `null` counts —
-// a number, or a word that no JSON writer would have produced.
-private fun JsonElement.isWordOrNumber(): Boolean =
-    this is JsonPrimitive && this !is JsonNull && (isString || content != "true" && content != "false")
 
 // Decodes `%XX` escapes as UTF-8, or null when the value is not
 // percent-encoded text (a malformed escape, a raw non-ASCII char).

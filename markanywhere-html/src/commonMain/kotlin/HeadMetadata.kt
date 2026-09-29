@@ -34,8 +34,11 @@ private val SCALAR_ENTRY_TYPES = setOf("bool", "int", "float", "timestamp")
 internal fun isScalarEntryType(type: String?): Boolean =
     type == null || type in SCALAR_ENTRY_TYPES
 
-// Whether a value carries anything for a reader — a blank one does not.
-internal fun isMetadataValue(value: String): Boolean = value.isNotBlank()
+// Whether a value carries anything for a reader: a char that shows — not
+// whitespace (NBSP included) and not an invisible format char such as a
+// zero-width space or a byte order mark.
+internal fun isMetadataValue(value: String): Boolean =
+    value.any { !it.isWhitespace() && it.category != CharCategory.FORMAT }
 
 // A title as `document.title` reads a `<title>` — HTML whitespace stripped
 // and collapsed — with any other whitespace at its edges (the NBSP padding an

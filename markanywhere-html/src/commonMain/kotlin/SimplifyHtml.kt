@@ -131,12 +131,16 @@ import kotlinx.coroutines.flow.Flow
  * and emitted as a single synthetic `frontmatter` mark holding one `entry`
  * (`key` attribute, value as text) per item — the parser's structured front
  * matter vocabulary — just before `<body>` content streams through. Technical meta
- * names that carry no content signal (rendering hints, crawler / verification
- * directives, platform tile metadata — see [isNoiseMetaName]) are dropped so
- * they don't inflate the frontmatter, and so are a blank value (NBSP-only
- * included, `<html lang>` too) and
- * application state that single-page apps ship in `<meta>` (serialised JSON,
- * framework config blobs — see [isApplicationStateMeta]). Meta names are
+ * names that carry no content signal (rendering hints such as `viewport` and
+ * `theme-color`, crawler / verification directives such as `robots` and
+ * `*-verification`, platform tile metadata such as `msapplication-*` and
+ * `apple-*`) are dropped so they don't inflate the frontmatter, and so are a
+ * value with nothing visible in it (whitespace, NBSP included, or invisible
+ * format chars such as a zero-width space — `<html lang>` too) and
+ * application state that single-page apps ship in `<meta>`: a JSON object, a
+ * JSON array holding an object or a nested array, JSON state serialised into
+ * a JSON string — raw or percent-encoded — and a value over 4096 chars that,
+ * as written, does not read as text. Meta names are
  * ASCII case-insensitive, so of several names differing only in letter case
  * the first one (spelling and value) wins, as HTML resolves duplicate
  * `<meta>` elements — unlike [wrapInHtmlDocument], which resolves duplicate
@@ -179,10 +183,11 @@ public fun Flow<SemanticEvent>.simplifyHtml(
     svgMode: SvgMode = SvgMode.RESOLVE,
 ): Flow<SemanticEvent> = transform {
 
-    // A value that tells a reader nothing is never added — blank judged with
-    // Unicode whitespace (NBSP included), not HTML's: rendered, an NBSP-only
-    // value is as empty as a blank one. `ensureFrontmatterTitle` judges a
-    // title the same way, so a title kept here is never replaced there.
+    // A value that tells a reader nothing is never added — judged by
+    // `isMetadataValue`, not HTML whitespace: rendered, an NBSP-only or
+    // zero-width value is as empty as a blank one. `ensureFrontmatterTitle`
+    // judges a title the same way, so a title kept here is never replaced
+    // there.
     val metadata = HeadMetadata()
     val titleText = StringBuilder()
     // The first non-blank `<title>` wins, over a `<meta name="title">` too —
@@ -288,9 +293,10 @@ public fun Flow<SemanticEvent>.simplifyHtml(
         titleText.clear()
         children(mode = "titleText")
         afterClose {
-            if (!titleFromElement && titleText.isNotBlank()) {
-                // as `document.title` reads it, edges trimmed (normalizeTitle)
-                metadata["title"] = titleText.toString().normalizeTitle()
+            // as `document.title` reads it, edges trimmed (normalizeTitle)
+            val title = titleText.toString().normalizeTitle()
+            if (!titleFromElement && isMetadataValue(title)) {
+                metadata["title"] = title
                 titleFromElement = true
             }
         }

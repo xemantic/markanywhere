@@ -19,6 +19,7 @@ package com.xemantic.markanywhere.html
 import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.html.spec.asciiLowercase
+import com.xemantic.markanywhere.html.spec.isHtmlBlank
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -51,15 +52,16 @@ import kotlinx.coroutines.flow.Flow
  * back spelled in lowercase, the title with its whitespace stripped and
  * collapsed (as `document.title` reads it) and `lang` trimmed, and a typed
  * scalar comes back as a string.
- * Blank text ahead of the frontmatter is insignificant — it is moved to the
- * start of `body`, as [ensureFrontmatterTitle] moves it after the
+ * Text of HTML whitespace ahead of the frontmatter is insignificant — it is
+ * moved to the start of `body` (a non-breaking space is content, as
+ * everywhere in HTML, and opens the body instead), as [ensureFrontmatterTitle] moves it after the
  * frontmatter. A `frontmatter` mark appearing past any other event is
  * ordinary content and flows into `body` verbatim.
  *
- * Only leading blank text and the frontmatter subtree are read ahead
+ * Only leading whitespace text and the frontmatter subtree are read ahead
  * (bounded); without a frontmatter the document opening is emitted on the
- * first non-blank event and body content streams through untouched. All synthetic marks are untagged, consistent with the
- * parser's `frontmatter` mark and [simplifyHtml] output. An empty input
+ * first other event and body content streams through untouched. All
+ * synthetic marks are untagged, consistent with the parser's `frontmatter` mark and [simplifyHtml] output. An empty input
  * stream still yields the full document skeleton.
  */
 public fun Flow<SemanticEvent>.wrapInHtmlDocument(): Flow<SemanticEvent> = semanticEvents {
@@ -133,7 +135,7 @@ public fun Flow<SemanticEvent>.wrapInHtmlDocument(): Flow<SemanticEvent> = seman
                 event is Mark && !event.isTagged && event.name == "frontmatter" -> {
                     collectingFrontmatter = true
                 }
-                event is Text && event.text.isBlank() -> blanks += event
+                event is Text && event.text.isHtmlBlank() -> blanks += event
                 else -> {
                     openDocument()
                     emit(event)

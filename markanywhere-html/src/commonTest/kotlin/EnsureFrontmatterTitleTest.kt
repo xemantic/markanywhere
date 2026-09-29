@@ -642,7 +642,7 @@ class EnsureFrontmatterTitleTest {
     }
 
     @Test
-    fun `should pass through a usable first title entry followed by a blank variant`() = runTest {
+    fun `should drop a blank title variant following a usable title entry`() = runTest {
         // given
         val input = semanticEvents {
             "frontmatter" {
@@ -655,26 +655,26 @@ class EnsureFrontmatterTitleTest {
         // when
         val output = input.ensureFrontmatterTitle()
 
-        // then
+        // then — a single title entry, which no reader can take for another
         output sameAs semanticEvents {
             "frontmatter" {
                 "entry"("key" to "title") { +"Foo" }
-                "entry"("key" to "TITLE") { }
             }
             "h1" { +"Hello" }
         }
     }
 
     @Test
-    fun `should keep a title entry holding a nested structure`() = runTest {
-        // given — not a usable title, but replacing it would lose content
+    fun `should replace a title entry holding a nested structure with the derived title`() = runTest {
+        // given — no reader shows a mapping as the page title
         val input = semanticEvents {
             "frontmatter" {
                 "entry"("key" to "title") {
                     "entry"("key" to "en") { +"Hello" }
                 }
+                "entry"("key" to "author") { +"Alice" }
             }
-            "h1" { +"Hello" }
+            "h1" { +"Heading" }
         }
 
         // when
@@ -683,11 +683,10 @@ class EnsureFrontmatterTitleTest {
         // then
         output sameAs semanticEvents {
             "frontmatter" {
-                "entry"("key" to "title") {
-                    "entry"("key" to "en") { +"Hello" }
-                }
+                "entry"("key" to "title") { +"Heading" }
+                "entry"("key" to "author") { +"Alice" }
             }
-            "h1" { +"Hello" }
+            "h1" { +"Heading" }
         }
     }
 
@@ -773,7 +772,7 @@ class EnsureFrontmatterTitleTest {
     }
 
     @Test
-    fun `should replace a null title entry following a nested title entry`() = runTest {
+    fun `should replace a nested title entry and a null variant following it with one title`() = runTest {
         // given
         val input = semanticEvents {
             "frontmatter" {
@@ -791,19 +790,15 @@ class EnsureFrontmatterTitleTest {
         // then
         output sameAs semanticEvents {
             "frontmatter" {
-                "entry"("key" to "title") {
-                    "entry"("key" to "en") { +"Hello" }
-                }
-                "entry"("key" to "Title") { +"Heading" }
+                "entry"("key" to "title") { +"Heading" }
             }
             "h1" { +"Heading" }
         }
     }
 
     @Test
-    fun `should keep a title entry holding an empty collection`() = runTest {
-        // given — `title: []`, unreadable as a title but not replaceable
-        // without losing it
+    fun `should replace a title entry holding an empty collection with the derived title`() = runTest {
+        // given — `title: []`
         val input = semanticEvents {
             "frontmatter" {
                 "entry"("key" to "title", "type" to "seq") { }
@@ -817,19 +812,19 @@ class EnsureFrontmatterTitleTest {
         // then
         output sameAs semanticEvents {
             "frontmatter" {
-                "entry"("key" to "title", "type" to "seq") { }
+                "entry"("key" to "title") { +"Heading" }
             }
             "h1" { +"Heading" }
         }
     }
 
     @Test
-    fun `should replace the slot spelled title over a blank variant preceding it`() = runTest {
-        // given — `Title: ""` then `title:`; a case-sensitive reader
-        // (Jekyll, Hugo) reads only the latter
+    fun `should put the derived title in the first of several empty title entries`() = runTest {
+        // given — `Title: ""` then `title:`
         val input = semanticEvents {
             "frontmatter" {
                 "entry"("key" to "Title") { }
+                "entry"("key" to "author") { +"Alice" }
                 "entry"("key" to "title", "type" to "null") { }
             }
             "h1" { +"Heading" }
@@ -841,17 +836,17 @@ class EnsureFrontmatterTitleTest {
         // then
         output sameAs semanticEvents {
             "frontmatter" {
-                "entry"("key" to "Title") { }
                 "entry"("key" to "title") { +"Heading" }
+                "entry"("key" to "author") { +"Alice" }
             }
             "h1" { +"Heading" }
         }
     }
 
     @Test
-    fun `should inject a title next to an unreadable title variant`() = runTest {
-        // given — `Title: []`, which wrapInHtmlDocument skips; a `title` entry
-        // collides with nothing
+    fun `should replace an unreadable title variant with the derived title`() = runTest {
+        // given — `Title: []`, which wrapInHtmlDocument skips; a `title`
+        // entry beside it would duplicate the key for a reader folding case
         val input = semanticEvents {
             "frontmatter" {
                 "entry"("key" to "Title", "type" to "seq") { }
@@ -866,7 +861,6 @@ class EnsureFrontmatterTitleTest {
         output sameAs semanticEvents {
             "frontmatter" {
                 "entry"("key" to "title") { +"Heading" }
-                "entry"("key" to "Title", "type" to "seq") { }
             }
             "h1" { +"Heading" }
         }
@@ -954,10 +948,9 @@ class EnsureFrontmatterTitleTest {
     }
 
     @Test
-    fun `should move a usable title entry after a later unreadable one`() = runTest {
-        // given — a front matter reader keeps the later duplicate, so the
-        // collection would hide the title wrapInHtmlDocument reads; moving the
-        // usable entry after it keeps both entries
+    fun `should drop an unreadable title entry following a usable one`() = runTest {
+        // given — `title: Real` then `title: []`: a later-wins reader would
+        // read the collection, and js-yaml rejects the duplicate key outright
         val input = semanticEvents {
             "frontmatter" {
                 "entry"("key" to "title") { +"Real" }
@@ -965,26 +958,25 @@ class EnsureFrontmatterTitleTest {
                 "entry"("key" to "title", "type" to "seq") { }
                 "entry"("key" to "tags") { +"x" }
             }
-            "h1" { +"Heading" }
+            "p" { +"Body." }
         }
 
         // when
         val output = input.ensureFrontmatterTitle()
 
-        // then
+        // then — decided without an h1, as a usable title needs none
         output sameAs semanticEvents {
             "frontmatter" {
-                "entry"("key" to "author") { +"Alice" }
-                "entry"("key" to "title", "type" to "seq") { }
                 "entry"("key" to "title") { +"Real" }
+                "entry"("key" to "author") { +"Alice" }
                 "entry"("key" to "tags") { +"x" }
             }
-            "h1" { +"Heading" }
+            "p" { +"Body." }
         }
     }
 
     @Test
-    fun `should respell the last usable title variant as wrapInHtmlDocument reads it`() = runTest {
+    fun `should keep only the title variant wrapInHtmlDocument reads`() = runTest {
         // given
         val input = semanticEvents {
             "frontmatter" {
@@ -1000,7 +992,6 @@ class EnsureFrontmatterTitleTest {
         // then
         output sameAs semanticEvents {
             "frontmatter" {
-                "entry"("key" to "Title") { +"First" }
                 "entry"("key" to "title") { +"Last" }
             }
             "h1" { +"Heading" }
@@ -1034,10 +1025,9 @@ class EnsureFrontmatterTitleTest {
     }
 
     @Test
-    fun `should put a derived title after a later nested title entry`() = runTest {
-        // given — `title:` then `title: {en: Hello}`; a front matter reader
-        // keeps the later duplicate, so the derived title in the first slot
-        // would be hidden by the mapping wrapInHtmlDocument skips
+    fun `should leave a single title when deriving it past a later nested title entry`() = runTest {
+        // given — `title:` then `title: {en: Hello}`; a later-wins reader
+        // would read the mapping over a derived title in the first slot
         val input = semanticEvents {
             "frontmatter" {
                 "entry"("key" to "title", "type" to "null") { }
@@ -1055,11 +1045,71 @@ class EnsureFrontmatterTitleTest {
         // then
         output sameAs semanticEvents {
             "frontmatter" {
-                "entry"("key" to "author") { +"Alice" }
-                "entry"("key" to "title") {
-                    "entry"("key" to "en") { +"Hello" }
-                }
                 "entry"("key" to "title") { +"Heading" }
+                "entry"("key" to "author") { +"Alice" }
+            }
+            "h1" { +"Heading" }
+        }
+    }
+
+    @Test
+    fun `should not derive a title from an invisible h1`() = runTest {
+        // given — a zero-width space shows nothing
+        val input = semanticEvents {
+            "h1" { +"\u200B" }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then
+        output sameAs semanticEvents {
+            "h1" { +"\u200B" }
+        }
+    }
+
+    @Test
+    fun `should treat a zero-width title entry as blank`() = runTest {
+        // given
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"\u200B" }
+            }
+            "h1" { +"Heading" }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"Heading" }
+            }
+            "h1" { +"Heading" }
+        }
+    }
+
+    @Test
+    fun `should keep a non-breaking space before the frontmatter as content`() = runTest {
+        // given — NBSP is content in HTML, so the frontmatter does not open
+        // the stream
+        val input = semanticEvents {
+            +"\u00A0"
+            "frontmatter" {
+                "entry"("key" to "author") { +"Alice" }
+            }
+            "h1" { +"Heading" }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then
+        output sameAs semanticEvents {
+            +"\u00A0"
+            "frontmatter" {
+                "entry"("key" to "author") { +"Alice" }
             }
             "h1" { +"Heading" }
         }

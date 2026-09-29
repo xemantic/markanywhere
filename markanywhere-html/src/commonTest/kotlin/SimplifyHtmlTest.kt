@@ -851,9 +851,6 @@ class SimplifyHtmlTest {
                     "meta"("name" to "empty-object", "content" to "{}") { }
                     "meta"("name" to "feed/config/environment", "content" to "%7B%22x%22%3A1%7D") { }
                     "meta"("name" to "jam/config/environment", "content" to "%7b%7d") { }
-                    "meta"("name" to "encoded-flags", "content" to "%5Btrue%5D") { }
-                    "meta"("name" to "flags", "content" to "[true,false]") { }
-                    "meta"("name" to "slots", "content" to "[null]") { }
                     "meta"("name" to "spaced", "content" to "%5B%20%7B%22a%22%3A1%7D%20%5D") { }
                     "meta"("name" to "description", "content" to "Save {50%} today") { }
                 }
@@ -865,8 +862,7 @@ class SimplifyHtmlTest {
         val output = input.simplifyHtml()
 
         // then — only a value that *is* a JSON object, or an array that is
-        // not a flat list of words or numbers, raw or percent-encoded, marks
-        // state
+        // not a flat list of scalars, raw or percent-encoded, marks state
         output sameAs semanticEvents {
             "frontmatter" {
                 "entry"("key" to "description") { +"Save {50%} today" }
@@ -1121,16 +1117,46 @@ class SimplifyHtmlTest {
     }
 
     @Test
-    fun `should judge the length of a percent-encoded value by what it decodes to`() = runTest {
-        // given — prose whose encoding is past the cap while its text is not,
-        // and an encoded blob past it either way
-        val prose = "本研究では大規模言語モデルの挙動を分析した。".repeat(30).percentEncoded()
+    fun `should judge the length of a percent-encoded value as it is written`() = runTest {
+        // given — a value is written to the front matter still encoded, so
+        // prose whose escapes run past the cap is as opaque there as a blob,
+        // while a short encoded value is kept
+        val longProse = "本研究では大規模言語モデルの挙動を分析した。".repeat(30).percentEncoded()
+        val shortProse = "本研究では大規模言語モデルの挙動を分析した。".percentEncoded()
         val blob = ("A" + "x".repeat(5000)).percentEncoded()
         val input = semanticEvents(tagged = true) {
             "html" {
                 "head" {
-                    "meta"("name" to "description", "content" to prose) { }
+                    "meta"("name" to "description", "content" to longProse) { }
                     "meta"("name" to "blob", "content" to blob) { }
+                    "meta"("name" to "abstract", "content" to shortProse) { }
+                }
+                "body" { "p" { +"text" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "abstract") { +shortProse }
+            }
+            "p" { +"text" }
+        }
+    }
+
+    @Test
+    fun `should drop a long JSON object even when its content reads as text`() = runTest {
+        // given — an over-long value that reads as text is still parsed, so
+        // state wrapping prose is not kept for its prose
+        val prose = "A study of how language models behave in long dialogues. ".repeat(100)
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    "meta"("name" to "state", "content" to "{\"text\": \"$prose\"}") { }
+                    "meta"("name" to "description", "content" to prose) { }
                 }
                 "body" { "p" { +"text" } }
             }
@@ -1523,9 +1549,10 @@ class SimplifyHtmlTest {
     }
 
     @Test
-    fun `should keep a flat JSON list of words or numbers in frontmatter`() = runTest {
+    fun `should keep a flat JSON list of scalars in frontmatter`() = runTest {
         // given — a list a person writes, not serialised state — an empty
-        // one, or one percent-encoded, included
+        // one, one percent-encoded, and one whose bare words JSON would read
+        // as flags or `null` included
         val input = semanticEvents(tagged = true) {
             "html" {
                 "head" {
@@ -1537,6 +1564,10 @@ class SimplifyHtmlTest {
                     "meta"("name" to "none", "content" to "[]") { }
                     "meta"("name" to "none-spaced", "content" to "[ ]") { }
                     "meta"("name" to "encoded", "content" to "%5B%22a%22%5D") { }
+                    "meta"("name" to "nothing", "content" to "[null]") { }
+                    "meta"("name" to "answer", "content" to "[true]") { }
+                    "meta"("name" to "options", "content" to "[true, false]") { }
+                    "meta"("name" to "encoded-flag", "content" to "%5Btrue%5D") { }
                 }
                 "body" { "p" { +"text" } }
             }
@@ -1556,6 +1587,10 @@ class SimplifyHtmlTest {
                 "entry"("key" to "none") { +"[]" }
                 "entry"("key" to "none-spaced") { +"[ ]" }
                 "entry"("key" to "encoded") { +"%5B%22a%22%5D" }
+                "entry"("key" to "nothing") { +"[null]" }
+                "entry"("key" to "answer") { +"[true]" }
+                "entry"("key" to "options") { +"[true, false]" }
+                "entry"("key" to "encoded-flag") { +"%5Btrue%5D" }
             }
             "p" { +"text" }
         }
@@ -1601,6 +1636,33 @@ class SimplifyHtmlTest {
                     "title" { +"\u00A0\u00A0" }
                     "title" { +"Real Page" }
                     "meta"("name" to "title", "content" to "\u00A0") { }
+                }
+                "body" { "p" { +"x" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"Real Page" }
+            }
+            "p" { +"x" }
+        }
+    }
+
+    @Test
+    fun `should skip a title of invisible format chars only`() = runTest {
+        // given — a zero-width space or a byte order mark is not whitespace,
+        // yet shows nothing
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    "title" { +"\u200B" }
+                    "meta"("name" to "title", "content" to "Real Page") { }
+                    "meta"("name" to "description", "content" to "\uFEFF\u200B") { }
                 }
                 "body" { "p" { +"x" } }
             }

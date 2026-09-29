@@ -299,6 +299,34 @@ class WrapInHtmlDocumentTest {
     }
 
     @Test
+    fun `should treat a frontmatter preceded by a non-breaking space as content`() = runTest {
+        // given — NBSP is content in HTML, so the frontmatter does not open
+        // the stream
+        val input = semanticEvents {
+            +"\u00A0"
+            "frontmatter" {
+                "entry"("key" to "title") { +"Page" }
+            }
+        }
+
+        // when
+        val output = input.wrapInHtmlDocument()
+
+        // then
+        output sameAs semanticEvents {
+            "html" {
+                "head" { }
+                "body" {
+                    +"\u00A0"
+                    "frontmatter" {
+                        "entry"("key" to "title") { +"Page" }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
     fun `should wrap parsed Markdown in a complete HTML document`() = runTest {
         // given
         val markdown = """
