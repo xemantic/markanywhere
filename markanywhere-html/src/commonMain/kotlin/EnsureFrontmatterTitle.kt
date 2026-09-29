@@ -27,10 +27,10 @@ import kotlinx.coroutines.flow.Flow
  * deriving a missing title from the first `h1`.
  *
  * The frontmatter judged is the one [wrapInHtmlDocument] reads: an untagged
- * `frontmatter` mark opening the stream — blank text before it is
- * insignificant, and the frontmatter is emitted ahead of it, so that
- * [wrapInHtmlDocument] reads it too; one anywhere else, or a tagged one, is
- * ordinary content. Its title entries are its top-level `entry` marks with
+ * `frontmatter` mark opening the stream, blank text before it being
+ * insignificant — the frontmatter is emitted ahead of that text, so it opens
+ * the stream as Markdown front matter must; one anywhere else, or a tagged
+ * one, is ordinary content. Its title entries are its top-level `entry` marks with
  * `key="title"` in any ASCII letter case, and one holding non-blank scalar
  * text is usable — entries holding a nested structure, an empty collection,
  * `null` or blank text are not, as there.
@@ -38,11 +38,13 @@ import kotlinx.coroutines.flow.Flow
  * With a usable title entry the frontmatter passes through, edited only so
  * that a front matter reader — matching keys case-sensitively and keeping
  * the later of duplicate keys — reads the title [wrapInHtmlDocument] reads:
- * every blank or `null` entry spelled `title` is dropped, and when the
- * usable entry [wrapInHtmlDocument] picks is spelled in another letter case
- * (`Title`) its key is respelled `title` — unless an entry spelled `title`
- * holding a nested structure or an empty collection is present, which the
- * respelling would duplicate.
+ * every blank or `null` entry spelled `title` is dropped; when the usable
+ * entry [wrapInHtmlDocument] picks is spelled `title` and followed by one
+ * holding a nested structure or an empty collection, it is moved right after
+ * that one; and when it is spelled in another letter case (`Title`) its key
+ * is respelled `title` — unless an entry spelled `title` holding a nested
+ * structure or an empty collection is present, which the respelling would
+ * duplicate.
  *
  * Otherwise the frontmatter is held back and the title is derived from the
  * very first `h1` following it (only blank text may intervene): the `h1`
@@ -177,13 +179,24 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
         if (usable != null) {
             val edits = dropEmptyTitles()
             val held = frontmatterEvents!!
+            // an unreadable entry spelled `title` after the usable one, which
+            // a later-wins reader would read instead
+            val shadowing = titleSlots.lastOrNull { it.kind == UNREADABLE && it.key == "title" }
+                ?.takeIf { usable.key == "title" && it.start > usable.start }
             flushHeld(
-                if (usable.key == "title" || titleKeyTaken) edits
-                else edits + (usable to {
-                    val mark = held[usable.start] as Mark
-                    emit(mark.copy(attributes = mark.attributes + ("key" to "title")))
-                    emit(held.subList(usable.start + 1, usable.end + 1))
-                })
+                when {
+                    // the usable entry moved right after the shadowing one
+                    shadowing != null -> edits + (usable to {}) + (shadowing to {
+                        emit(held.subList(shadowing.start, shadowing.end + 1))
+                        emit(held.subList(usable.start, usable.end + 1))
+                    })
+                    usable.key == "title" || titleKeyTaken -> edits
+                    else -> edits + (usable to {
+                        val mark = held[usable.start] as Mark
+                        emit(mark.copy(attributes = mark.attributes + ("key" to "title")))
+                        emit(held.subList(usable.start + 1, usable.end + 1))
+                    })
+                }
             )
             state = PassThrough
             return

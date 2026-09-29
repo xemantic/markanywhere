@@ -271,6 +271,34 @@ class WrapInHtmlDocumentTest {
     }
 
     @Test
+    fun `should read a frontmatter preceded by blank text into the head`() = runTest {
+        // given — blank text is insignificant, as for ensureFrontmatterTitle
+        val input = semanticEvents {
+            +"\n"
+            "frontmatter" {
+                "entry"("key" to "title") { +"Page" }
+            }
+            "p" { +"Body." }
+        }
+
+        // when
+        val output = input.wrapInHtmlDocument()
+
+        // then
+        output sameAs semanticEvents {
+            "html" {
+                "head" {
+                    "title" { +"Page" }
+                }
+                "body" {
+                    +"\n"
+                    "p" { +"Body." }
+                }
+            }
+        }
+    }
+
+    @Test
     fun `should wrap parsed Markdown in a complete HTML document`() = runTest {
         // given
         val markdown = """

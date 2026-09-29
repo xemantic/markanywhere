@@ -51,12 +51,14 @@ import kotlinx.coroutines.flow.Flow
  * back spelled in lowercase, the title with its whitespace stripped and
  * collapsed (as `document.title` reads it) and `lang` trimmed, and a typed
  * scalar comes back as a string.
- * A `frontmatter` mark appearing anywhere past the first event is ordinary
- * content and flows into `body` verbatim.
+ * Blank text ahead of the frontmatter is insignificant — it is moved to the
+ * start of `body`, as [ensureFrontmatterTitle] moves it after the
+ * frontmatter. A `frontmatter` mark appearing past any other event is
+ * ordinary content and flows into `body` verbatim.
  *
- * Only the frontmatter subtree is read ahead (bounded); without one the
- * document opening is emitted on the first event and body content streams
- * through untouched. All synthetic marks are untagged, consistent with the
+ * Only leading blank text and the frontmatter subtree are read ahead
+ * (bounded); without a frontmatter the document opening is emitted on the
+ * first non-blank event and body content streams through untouched. All synthetic marks are untagged, consistent with the
  * parser's `frontmatter` mark and [simplifyHtml] output. An empty input
  * stream still yields the full document skeleton.
  */
@@ -70,6 +72,8 @@ public fun Flow<SemanticEvent>.wrapInHtmlDocument(): Flow<SemanticEvent> = seman
     var entryKey: String? = null
     val entryText = StringBuilder()
     val metadata = HeadMetadata()
+    // blank text ahead of the frontmatter, replayed at the start of `body`
+    val blanks = mutableListOf<SemanticEvent>()
 
     // `head` and its subtree are lexically scoped, so the paired `"name" { }`
     // builder fits; `html` and `body` close only at end-of-stream, so their
@@ -95,6 +99,8 @@ public fun Flow<SemanticEvent>.wrapInHtmlDocument(): Flow<SemanticEvent> = seman
             }
         }
         mark("body")
+        emit(blanks)
+        blanks.clear()
     }
 
     collect { event ->
@@ -123,13 +129,15 @@ public fun Flow<SemanticEvent>.wrapInHtmlDocument(): Flow<SemanticEvent> = seman
                     depth--
                 }
             }
-            !opened -> if (
-                event is Mark && !event.isTagged && event.name == "frontmatter"
-            ) {
-                collectingFrontmatter = true
-            } else {
-                openDocument()
-                emit(event)
+            !opened -> when {
+                event is Mark && !event.isTagged && event.name == "frontmatter" -> {
+                    collectingFrontmatter = true
+                }
+                event is Text && event.text.isBlank() -> blanks += event
+                else -> {
+                    openDocument()
+                    emit(event)
+                }
             }
             else -> emit(event)
         }

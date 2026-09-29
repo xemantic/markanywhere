@@ -561,10 +561,10 @@ If the fix is bounded (one inline construct, one or two lines of lookahead), it'
 - `wrapInHtmlDocument` and `ensureFrontmatterTitle` read the front matter by **depth** (a direct child `entry` is depth 1 / 2 respectively, counted from the `frontmatter` mark): only top-level scalar entries become `<meta>`/`<title>`, only a top-level `entry key=title` counts as an existing title.
   Neither contains any YAML parsing — that was the ~300-line `Frontmatter.kt` codec this representation replaced; do not reintroduce a text-level reader.
   The two must agree on **which** title entry is read and what a *usable* one is (see the `ensureFrontmatterTitle` KDoc; the shared rules are `isScalarEntryType` / `isMetadataValue`), or the derived `h1` title silently displaces a real one: judging the first title entry *of any type or value* once let a leading `title:` / `title: ""` hide a later `Title: Real`, which `wrapInHtmlDocument` reads.
-  It also holds any blank text seen *before* the first `h1` so a synthesized `frontmatter` is the **first** event, the only position `wrapInHtmlDocument` reads it from.
+  Both treat blank text ahead of the frontmatter as insignificant; `ensureFrontmatterTitle` additionally emits the frontmatter (held or synthesized) **ahead** of that text, since rendered Markdown front matter must open the document.
   Duplicate keys resolve the way readers of the **source format** resolve them, so the two directions deliberately differ: `simplifyHtml` keeps the first `<meta>` of a name (HTML), `wrapInHtmlDocument` the later entry (Psych/PyYAML), the lowercase spelling beating a case variant (`HeadMetadata.addFromHtml` / `addFromFrontMatter`).
   Do not "align" them for the round-trip's sake — each side emits one entry per name, so neither ever sees the other's duplicates; aligning them once made `wrapInHtmlDocument` show a title no front matter reader shows.
-  For the same reason `ensureFrontmatterTitle` edits a frontmatter holding a usable title so a case-sensitive, later-wins reader reads that title too: it drops blank/`null` entries spelled `title` and respells the picked variant.
+  For the same reason `ensureFrontmatterTitle` edits a frontmatter holding a usable title so a case-sensitive, later-wins reader reads that title too (see its KDoc).
 
 ## Test conventions
 

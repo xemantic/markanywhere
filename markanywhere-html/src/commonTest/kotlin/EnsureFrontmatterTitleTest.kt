@@ -953,6 +953,36 @@ class EnsureFrontmatterTitleTest {
     }
 
     @Test
+    fun `should move a usable title entry after a later unreadable one`() = runTest {
+        // given — a front matter reader keeps the later duplicate, so the
+        // collection would hide the title wrapInHtmlDocument reads; moving the
+        // usable entry after it keeps both entries
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"Real" }
+                "entry"("key" to "author") { +"Alice" }
+                "entry"("key" to "title", "type" to "seq") { }
+                "entry"("key" to "tags") { +"x" }
+            }
+            "h1" { +"Heading" }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "author") { +"Alice" }
+                "entry"("key" to "title", "type" to "seq") { }
+                "entry"("key" to "title") { +"Real" }
+                "entry"("key" to "tags") { +"x" }
+            }
+            "h1" { +"Heading" }
+        }
+    }
+
+    @Test
     fun `should respell the last usable title variant as wrapInHtmlDocument reads it`() = runTest {
         // given
         val input = semanticEvents {

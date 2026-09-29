@@ -139,7 +139,9 @@ import kotlinx.coroutines.flow.Flow
  * application state that single-page apps ship in `<meta>` (serialised JSON,
  * framework config blobs — see [isApplicationStateMeta]). Meta names are
  * ASCII case-insensitive, so of several names differing only in letter case
- * the first one (spelling and value) wins, as in [wrapInHtmlDocument]; a
+ * the first one (spelling and value) wins, as HTML resolves duplicate
+ * `<meta>` elements — unlike [wrapInHtmlDocument], which resolves duplicate
+ * front matter keys as YAML readers do; a
  * `lang` meta is spelled `lang` and yields to `<html lang>`, the document's
  * actual language. Those discarded values and merged
  * names are what does not survive a [wrapInHtmlDocument] round-trip. When
@@ -299,9 +301,9 @@ public fun Flow<SemanticEvent>.simplifyHtml(
         val content = event["content"]
         if (name != null && !content.isNullOrBlank()) {
             // cheapest checks first: the JSON parse runs only for a name
-            // that would otherwise be kept
+            // that would otherwise be kept (the first of duplicates wins)
             val normalizedName = name.asciiLowercase()
-            if (name !in metadata
+            if (normalizedName !in metadata
                 && !isNoiseMetaName(normalizedName)
                 && !isApplicationStateMeta(content)
             ) {
