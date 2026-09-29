@@ -17,6 +17,7 @@
 package com.xemantic.markanywhere.html
 
 import com.xemantic.markanywhere.html.spec.asciiLowercase
+import com.xemantic.markanywhere.html.spec.stripAndCollapseHtmlWhitespace
 
 // The keys wrapInHtmlDocument turns into `<title>` and `<html lang>` rather
 // than a `<meta>`, spelled as it reads them.
@@ -35,6 +36,22 @@ internal fun isScalarEntryType(type: String?): Boolean =
 
 // Whether a value carries anything for a reader — a blank one does not.
 internal fun isMetadataValue(value: String): Boolean = value.isNotBlank()
+
+// A title as `document.title` reads a `<title>` — HTML whitespace stripped
+// and collapsed — with any other whitespace at its edges (the NBSP padding an
+// icon often leaves) trimmed too: inside, NBSP is content and stays, at an
+// edge it only forces the title into quotes.
+internal fun String.normalizeTitle(): String = stripAndCollapseHtmlWhitespace().trim()
+
+// Whether a front matter entry spelled `candidate` supersedes an earlier one
+// of the same name spelled `existing`, as front matter readers resolve a
+// duplicate key: the later one wins (Psych — Jekyll's — and PyYAML), except
+// that the lowercase spelling, the one a case-sensitive reader such as Jekyll
+// looks up for `title`, beats a variant wherever it occurs.
+internal fun frontMatterKeySupersedes(existing: String, candidate: String): Boolean {
+    val name = candidate.asciiLowercase()
+    return candidate == name || existing != name
+}
 
 // A front matter entry: the name as first spelled, and its value.
 internal data class MetadataEntry(val key: String, val value: String)
@@ -64,20 +81,18 @@ internal class HeadMetadata {
     // case, wins — spelling and value.
     fun addFromHtml(key: String, value: String) {
         if (!isMetadataValue(value)) return
-        val name = key.asciiLowercase()
-        if (name !in entries) entries[name] = MetadataEntry(key, value)
+        @OptIn(ExperimentalStdlibApi::class)
+        entries.getOrPutIfMissing(key.asciiLowercase()) { MetadataEntry(key, value) }
     }
 
     // Adds a front matter entry the way its readers resolve a duplicate key
-    // (Psych — Jekyll's — and PyYAML keep the later one), except that the
-    // lowercase spelling, the one a case-sensitive reader such as Jekyll
-    // looks up for `title`, beats a variant wherever it occurs. The name keeps
-    // the position of its first occurrence.
+    // ([frontMatterKeySupersedes]). The name keeps the position of its first
+    // occurrence.
     fun addFromFrontMatter(key: String, value: String) {
         if (!isMetadataValue(value)) return
         val name = key.asciiLowercase()
         val existing = entries[name]
-        if (existing == null || key == name || existing.key != name) {
+        if (existing == null || frontMatterKeySupersedes(existing.key, key)) {
             entries[name] = MetadataEntry(key, value)
         }
     }

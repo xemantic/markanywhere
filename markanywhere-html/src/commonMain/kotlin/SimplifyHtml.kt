@@ -20,7 +20,6 @@ import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.dump.AccessibilityAnnotations
 import com.xemantic.markanywhere.html.spec.asciiLowercase
 import com.xemantic.markanywhere.html.spec.stripHtmlWhitespace
-import com.xemantic.markanywhere.html.spec.stripAndCollapseHtmlWhitespace
 import com.xemantic.markanywhere.transform.MatcherScope
 import com.xemantic.markanywhere.transform.transform
 import kotlinx.coroutines.flow.Flow
@@ -147,7 +146,8 @@ import kotlinx.coroutines.flow.Flow
  * names are what does not survive a [wrapInHtmlDocument] round-trip. When
  * `<head>` holds several `<title>`s, the first non-blank one wins, over a
  * `<meta name="title">` (in any letter case) too, with its whitespace
- * stripped and collapsed as `document.title` does. If `<head>` is absent or
+ * stripped and collapsed as `document.title` does and any non-breaking space
+ * at its edges trimmed. If `<head>` is absent or
  * yields no metadata, no frontmatter mark is emitted.
  *
  * Matcher registration is grouped: per-tag explicit matchers come first
@@ -289,8 +289,8 @@ public fun Flow<SemanticEvent>.simplifyHtml(
         children(mode = "titleText")
         afterClose {
             if (!titleFromElement && titleText.isNotBlank()) {
-                // as `document.title` reads it
-                metadata["title"] = titleText.toString().stripAndCollapseHtmlWhitespace()
+                // as `document.title` reads it, edges trimmed (normalizeTitle)
+                metadata["title"] = titleText.toString().normalizeTitle()
                 titleFromElement = true
             }
         }
@@ -308,8 +308,8 @@ public fun Flow<SemanticEvent>.simplifyHtml(
                 && !isApplicationStateMeta(content)
             ) {
                 val value = when (normalizedName) {
-                    // as a <title> element's text reads (document.title)
-                    "title" -> content.stripAndCollapseHtmlWhitespace()
+                    // as a <title> element's text reads
+                    "title" -> content.normalizeTitle()
                     // as <html lang> is read above
                     "lang" -> content.stripHtmlWhitespace()
                     else -> content

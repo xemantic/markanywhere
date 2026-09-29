@@ -1496,12 +1496,14 @@ class SimplifyHtmlTest {
     }
 
     @Test
-    fun `should keep non-breaking spaces in a title`() = runTest {
-        // given — NBSP is content, not HTML whitespace, like in a meta value
+    fun `should keep non-breaking spaces inside a title trimming the edges`() = runTest {
+        // given — NBSP inside is content, not HTML whitespace, like in a meta
+        // value; at the edges it is padding, which would only force the
+        // title into quotes
         val input = semanticEvents(tagged = true) {
             "html" {
                 "head" {
-                    "title" { +" \u00A0Page\u00A0\n" }
+                    "title" { +" \u00A0Page\u00A0One\u00A0\n" }
                     "title" { +"Later" }
                 }
                 "body" { "p" { +"x" } }
@@ -1514,7 +1516,7 @@ class SimplifyHtmlTest {
         // then
         output sameAs semanticEvents {
             "frontmatter" {
-                "entry"("key" to "title") { +"\u00A0Page\u00A0" }
+                "entry"("key" to "title") { +"Page\u00A0One" }
             }
             "p" { +"x" }
         }

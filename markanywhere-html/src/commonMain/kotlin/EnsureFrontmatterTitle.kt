@@ -19,7 +19,6 @@ package com.xemantic.markanywhere.html
 import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.html.spec.asciiLowercase
-import com.xemantic.markanywhere.html.spec.stripAndCollapseHtmlWhitespace
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -51,13 +50,16 @@ import kotlinx.coroutines.flow.Flow
  * subtree's flattened text — its text events plus the `alt` of every `img`
  * mark, in document order, the way an accessible name is computed from
  * content — with its HTML whitespace stripped and collapsed, as
- * `document.title` reads a `<title>`, becomes the `title`, and only then the
+ * `document.title` reads a `<title>`, and any non-breaking space at its edges
+ * trimmed, becomes the `title`, and only then the
  * frontmatter and the buffered `h1` are emitted, in source order. The
  * derived title replaces, in place, the first blank or `null` (a bare
  * `title:` line) entry spelled `title` — dropping every other one, as above
  * — else the first blank scalar title entry in another spelling, else the
- * first `null` one, spelling its key `title` on the same terms as above;
- * without any it is injected as the first `entry` of the frontmatter —
+ * first `null` one, spelling its key `title` on the same terms as above —
+ * or, spelled `title`, it goes right after a later entry spelled `title`
+ * holding a nested structure or an empty collection, as a usable one is
+ * moved; without any it is injected as the first `entry` of the frontmatter —
  * unless an entry spelled `title` holding a nested structure or an empty
  * collection is present, which is then left to stand alone: replacing it
  * would lose content, and a second entry would duplicate its key. When no
@@ -92,12 +94,9 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
     var openTitleHasChildren = false
     val openTitleText = StringBuilder()
 
-    // the blank or `null` title entries spelled `title`, the slot of them (or
-    // of a variant) the derived title replaces, and whether an unreadable
-    // entry spelled `title` stands, which a respelled key would duplicate
-    var emptyTitles: List<TitleSlot> = emptyList()
-    var replacedTitle: TitleSlot? = null
-    var titleKeyTaken = false
+    // how a derived title goes into the held frontmatter, decided once it
+    // closes; null while none is held
+    var derivation: Derivation? = null
 
     // blank text held before the first h1 (ahead of the frontmatter, or
     // between it and the h1), replayed in source order on commit
@@ -114,14 +113,20 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
         blanks.clear()
     }
 
-    // emits the held frontmatter, the span of each slot in `edits` replaced
-    // by what its edit emits, then the blanks held with it
-    suspend fun flushHeld(edits: Map<TitleSlot, suspend () -> Unit> = emptyMap()) {
+    // emits the held frontmatter — `prepended` right after its mark, the span
+    // of each slot in `rewrite` replaced by its events (none drops the entry)
+    // — then the blanks held with it
+    suspend fun flushHeld(
+        rewrite: Map<TitleSlot, List<SemanticEvent>> = emptyMap(),
+        prepended: List<SemanticEvent> = emptyList()
+    ) {
         frontmatterEvents?.let { held ->
-            var next = 0
-            for ((slot, edit) in edits.entries.sortedBy { it.key.start }) {
+            emit(held.first())
+            emit(prepended)
+            var next = 1
+            for ((slot, events) in rewrite.entries.sortedBy { it.key.start }) {
                 emit(held.subList(next, slot.start))
-                edit()
+                emit(events)
                 next = slot.end + 1
             }
             emit(held.subList(next, held.size))
@@ -130,39 +135,41 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
         flushBlanks()
     }
 
-    suspend fun emitTitleEntry(title: String, key: String = "title") {
-        "entry"("key" to key) { +title }
+    // the events of a slot's entry within the held frontmatter
+    fun span(slot: TitleSlot): List<SemanticEvent> = frontmatterEvents!!.subList(slot.start, slot.end + 1)
+
+    // the rewrite putting `entry`, keyed `key`, in place of `slot` — or,
+    // spelled `title` and followed by an unreadable entry spelled `title`
+    // which a later-wins reader would read instead, right after that one
+    fun placed(slot: TitleSlot, entry: List<SemanticEvent>, key: String): Map<TitleSlot, List<SemanticEvent>> {
+        val shadowing = titleSlots
+            .lastOrNull { it.kind == UNREADABLE && it.key == "title" }
+            ?.takeIf { key == "title" && it.start > slot.start }
+        return if (shadowing == null) {
+            mapOf(slot to entry)
+        } else {
+            mapOf(slot to emptyList(), shadowing to span(shadowing) + entry)
+        }
     }
 
-    // the edits dropping every empty title entry spelled `title` but `kept`
-    fun dropEmptyTitles(kept: TitleSlot? = null): Map<TitleSlot, suspend () -> Unit> =
-        emptyTitles.filter { it != kept }.associateWith { {} }
+    fun dropping(slots: List<TitleSlot>): Map<TitleSlot, List<SemanticEvent>> =
+        slots.associateWith { emptyList() }
 
     suspend fun commitHeading() {
-        val title = headingText.toString().stripAndCollapseHtmlWhitespace()
-        val replaced = replacedTitle
+        val title = headingText.toString().normalizeTitle()
+        val plan = derivation
         when {
             !isMetadataValue(title) -> flushHeld()
             frontmatterEvents == null -> {
                 "frontmatter" {
-                    emitTitleEntry(title)
+                    emit(titleEntry(title, "title"))
                 }
                 flushBlanks()
             }
-            // the derived entry in place of the unusable title entry
-            replaced != null -> {
-                val key = if (titleKeyTaken) replaced.key else "title"
-                flushHeld(dropEmptyTitles(kept = replaced) + (replaced to { emitTitleEntry(title, key) }))
-            }
             // a single title entry prepended to the frontmatter's content
-            else -> {
-                val held = frontmatterEvents!!
-                frontmatterEvents = null
-                emit(held.first())
-                emitTitleEntry(title)
-                emit(held.subList(1, held.size))
-                flushBlanks()
-            }
+            plan!!.slot == null -> flushHeld(prepended = titleEntry(title, plan.key))
+            // the derived entry in place of the unusable title entry
+            else -> flushHeld(dropping(plan.dropped) + placed(plan.slot, titleEntry(title, plan.key), plan.key))
         }
         emit(headingEvents)
         headingEvents.clear()
@@ -171,45 +178,34 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
 
     // decides, once the frontmatter closes, whether it holds a usable title
     suspend fun judgeFrontmatter() {
-        titleKeyTaken = titleSlots.any { it.kind == UNREADABLE && it.key == "title" }
-        emptyTitles = titleSlots.filter { it.key == "title" && (it.kind == BLANK || it.kind == NULL) }
-        // the entry wrapInHtmlDocument reads (HeadMetadata.addFromFrontMatter)
-        val usable = titleSlots.lastOrNull { it.kind == USABLE && it.key == "title" }
-            ?: titleSlots.lastOrNull { it.kind == USABLE }
+        // an unreadable entry spelled `title`, which a respelled key would duplicate
+        val titleKeyTaken = titleSlots.any { it.kind == UNREADABLE && it.key == "title" }
+        val emptyTitles = titleSlots.filter { it.key == "title" && (it.kind == BLANK || it.kind == NULL) }
+        // the entry wrapInHtmlDocument reads
+        val usable = titleSlots
+            .filter { it.kind == USABLE }
+            .reduceOrNull { read, next -> if (frontMatterKeySupersedes(read.key, next.key)) next else read }
         if (usable != null) {
-            val edits = dropEmptyTitles()
-            val held = frontmatterEvents!!
-            // an unreadable entry spelled `title` after the usable one, which
-            // a later-wins reader would read instead
-            val shadowing = titleSlots.lastOrNull { it.kind == UNREADABLE && it.key == "title" }
-                ?.takeIf { usable.key == "title" && it.start > usable.start }
-            flushHeld(
-                when {
-                    // the usable entry moved right after the shadowing one
-                    shadowing != null -> edits + (usable to {}) + (shadowing to {
-                        emit(held.subList(shadowing.start, shadowing.end + 1))
-                        emit(held.subList(usable.start, usable.end + 1))
-                    })
-                    usable.key == "title" || titleKeyTaken -> edits
-                    else -> edits + (usable to {
-                        val mark = held[usable.start] as Mark
-                        emit(mark.copy(attributes = mark.attributes + ("key" to "title")))
-                        emit(held.subList(usable.start + 1, usable.end + 1))
-                    })
-                }
-            )
+            val key = if (titleKeyTaken) usable.key else "title"
+            val entry = if (key == usable.key) span(usable) else respelled(span(usable), key)
+            flushHeld(dropping(emptyTitles) + placed(usable, entry, key))
             state = PassThrough
             return
         }
-        replacedTitle = emptyTitles.firstOrNull()
+        val slot = emptyTitles.firstOrNull()
             ?: titleSlots.firstOrNull { it.kind == BLANK }
             ?: titleSlots.firstOrNull { it.kind == NULL }
         // with no slot to replace, an entry spelled `title` left is
         // unreadable: injecting would duplicate its key
-        if (replacedTitle == null && titleKeyTaken) {
+        if (slot == null && titleKeyTaken) {
             flushHeld()
             state = PassThrough
         } else {
+            derivation = Derivation(
+                slot = slot,
+                key = if (slot != null && titleKeyTaken) slot.key else "title",
+                dropped = emptyTitles.filter { it != slot }
+            )
             state = AwaitingHeading
         }
     }
@@ -326,3 +322,21 @@ private enum class TitleKind {
 // A top-level title entry: the span of its events within the held
 // frontmatter, its key as spelled, and how it reads.
 private data class TitleSlot(val start: Int, val end: Int, val key: String, val kind: TitleKind)
+
+// How a derived title goes into the held frontmatter: in place of `slot`
+// (null: prepended to the frontmatter's entries), keyed `key`, the `dropped`
+// empty title entries removed.
+private class Derivation(val slot: TitleSlot?, val key: String, val dropped: List<TitleSlot>)
+
+// A top-level front matter entry keyed `key` holding the scalar `value`.
+private fun titleEntry(value: String, key: String): List<SemanticEvent> = listOf(
+    SemanticEvent.Mark("entry", attributes = mapOf("key" to key)),
+    SemanticEvent.Text(value),
+    SemanticEvent.Unmark("entry")
+)
+
+// An entry's events with its key spelled `key`.
+private fun respelled(entry: List<SemanticEvent>, key: String): List<SemanticEvent> {
+    val mark = entry.first() as Mark
+    return listOf(mark.copy(attributes = mark.attributes + ("key" to key))) + entry.drop(1)
+}
