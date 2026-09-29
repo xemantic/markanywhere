@@ -16,7 +16,6 @@
 
 package com.xemantic.markanywhere.html
 
-import com.xemantic.markanywhere.html.spec.stripHtmlWhitespace
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -31,7 +30,8 @@ import kotlinx.serialization.json.jsonPrimitive
 // so this judges the *value*, which is what tells metadata apart from state.
 // A percent-encoded value's structure is judged by what it decodes to — undoing
 // the encoding as many times over as it was applied, and inside a JSON string
-// too — so encoding state does not hide it:
+// too — so encoding state does not hide it, nor do invisible chars (a byte
+// order mark, NBSP) at its edges or those of a JSON string within:
 // - a value that parses as a JSON object. Parsing, not a look at the first
 //   and last char, is what keeps human text that merely starts with a
 //   bracket (`[Solved] …`, `{Draft} …`, `[2024] Annual report [PDF]`);
@@ -52,23 +52,25 @@ import kotlinx.serialization.json.jsonPrimitive
 //   written plainly would be: a long list of words is kept, a long list of
 //   hashes is not, and one whose elements fit under the cap is short.
 internal fun isApplicationStateMeta(content: String): Boolean {
-    val written = content.stripHtmlWhitespace()
-    val decoded = written.percentDecodedOrNull()
-    val value = decoded ?: written
+    val written = content.trimInvisible()
     val long = written.length > MAX_META_VALUE_LENGTH
+    val writtenReadsAsText by lazy { written.readsAsText() }
     // An over-long value is kept only if it reads as text, whatever it
-    // parses as, so a blob — megabytes of JSON, say — is dropped unparsed.
-    // Only a raw array must be parsed first, to be read by its words — unless
-    // an element of it is an object or an array: then it is state if it
-    // parses and a blob if it does not, dropped either way.
-    val readByWords = decoded == null && value.firstOrNull() == '['
-    if (long && (!readByWords || value.hasNestedElement()) && !written.readsAsText()) return true
-    val json = value.parseJsonCandidateOrNull()
-    if (json?.isState(MAX_DECODING_DEPTH) == true) return true
+    // parses or decodes as, so a blob — megabytes of JSON or of escapes,
+    // say — is dropped unparsed and undecoded. Only a raw array must be
+    // parsed first, to be read by its words — unless an element of it is an
+    // object or an array: then it is state if it parses and a blob if it
+    // does not, dropped either way.
+    val readByWords = written.firstOrNull() == '['
+    if (long && (!readByWords || written.hasNestedElement()) && !writtenReadsAsText) return true
+    val decoded = written.percentDecodedOrNull(MAX_DECODING_DEPTH)
+    val json = (decoded?.value ?: written).parseJsonCandidateOrNull()
+    if (json?.isState(decoded?.layersLeft ?: MAX_DECODING_DEPTH) == true) return true
     if (!long || !readByWords) return false
+    if (json !is JsonArray) return !writtenReadsAsText
     // a flat array is measured by its elements joined, in length as in text,
     // as the same elements written as a plain list would be
-    val text = if (json is JsonArray) json.joinToString(" ") { it.jsonPrimitive.content } else written
+    val text = json.joinToString(" ") { it.jsonPrimitive.content }
     return text.length > MAX_META_VALUE_LENGTH && !text.readsAsText()
 }
 
@@ -97,9 +99,10 @@ private fun String.hasNestedElement(): Boolean {
     return false
 }
 
-// How many layers of encoding — percent-encoding, a JSON string — are undone
-// in all to find state. Real double encodings take two or three; the bound
-// keeps a crafted value from costing a pass over itself per layer.
+// How many layers of encoding — percent-encoding and JSON strings, one budget
+// for both — are undone, one within another, to find state. Real double
+// encodings take two or three; the bound keeps a crafted value from costing
+// a pass over itself per layer.
 private const val MAX_DECODING_DEPTH = 8
 
 // Only a value opening like a JSON object, array or string is parsed.
@@ -108,20 +111,22 @@ private fun String.parseJsonCandidateOrNull(): JsonElement? {
     return if (first == '{' || first == '[' || first == '"') parseJsonOrNull() else null
 }
 
-// Recursion unwraps one JSON string per level, `depth` bounding the levels
-// ([MAX_DECODING_DEPTH]).
-private fun JsonElement.isState(depth: Int): Boolean = when (this) {
+// Recursion unwraps one JSON string per level, `layers` bounding the
+// layers of encoding still to be undone ([MAX_DECODING_DEPTH]).
+private fun JsonElement.isState(layers: Int): Boolean = when (this) {
     is JsonObject -> true
-    is JsonArray -> any { it !is JsonPrimitive || it.isEncodedState(depth) }
-    is JsonPrimitive -> isEncodedState(depth)
+    is JsonArray -> any { it !is JsonPrimitive || it.isEncodedState(layers) }
+    is JsonPrimitive -> isEncodedState(layers)
 }
 
 // A JSON string whose content — percent-decoded, when it is encoded — is
 // state.
-private fun JsonElement.isEncodedState(depth: Int): Boolean {
-    if (this !is JsonPrimitive || !isString || depth == 0) return false
-    val content = content.stripHtmlWhitespace()
-    return (content.percentDecodedOrNull() ?: content).parseJsonCandidateOrNull()?.isState(depth - 1) == true
+private fun JsonElement.isEncodedState(layers: Int): Boolean {
+    if (this !is JsonPrimitive || !isString || layers == 0) return false
+    val content = content.trimInvisible()
+    val decoded = content.percentDecodedOrNull(layers - 1)
+    return (decoded?.value ?: content).parseJsonCandidateOrNull()
+        ?.isState(decoded?.layersLeft ?: (layers - 1)) == true
 }
 
 // Text is made of words: at least half the chars are letters (hex and
@@ -174,18 +179,21 @@ private fun String.parseJsonOrNull(): JsonElement? = try {
     null
 }
 
+// A value with some layers of its encoding undone, and how many more may be.
+private class Decoded(val value: String, val layersLeft: Int)
+
 // This value with its percent-encoding undone — as many times over as it was
-// applied, up to [MAX_DECODING_DEPTH] — and HTML whitespace stripped, or null
-// when it is not percent-encoded: it does not open with an escape, or its
-// first decoding fails.
-private fun String.percentDecodedOrNull(): String? {
+// applied, up to `layers` times — and invisible chars trimmed from its
+// edges, or null when it is not percent-encoded: it does not open with an
+// escape, its first decoding fails, or no layer may be undone.
+private fun String.percentDecodedOrNull(layers: Int): Decoded? {
     var value = this
-    var depth = 0
-    while (depth < MAX_DECODING_DEPTH && value.firstOrNull() == '%') {
-        value = value.percentDecodedOnceOrNull()?.stripHtmlWhitespace() ?: break
-        depth++
+    var left = layers
+    while (left > 0 && value.firstOrNull() == '%') {
+        value = value.percentDecodedOnceOrNull()?.trimInvisible() ?: break
+        left--
     }
-    return if (depth == 0) null else value
+    return if (left == layers) null else Decoded(value, left)
 }
 
 // Decodes `%XX` escapes as UTF-8, or null when the value is not

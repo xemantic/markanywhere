@@ -52,6 +52,10 @@ internal class FrontMatterEntryReader(
     private var openHasChildren = false
     private val openText = StringBuilder()
 
+    // Whether the root is a sequence: a top-level `item` was read.
+    var isSequence: Boolean = false
+        private set
+
     // Reads the next event of the subtree, the frontmatter mark first; true
     // once the frontmatter's own unmark is read.
     fun read(event: SemanticEvent): Boolean {
@@ -60,6 +64,7 @@ internal class FrontMatterEntryReader(
             is Mark -> {
                 depth++
                 if (depth == 2) {
+                    if (event.name == "item") isSequence = true
                     open = if (event.name == "entry" && event["key"] != null) event else null
                     openStart = index
                     openHasChildren = false

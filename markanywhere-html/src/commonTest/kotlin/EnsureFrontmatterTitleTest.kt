@@ -696,6 +696,63 @@ class EnsureFrontmatterTitleTest {
     }
 
     @Test
+    fun `should keep a nested title entry beside a usable title variant`() = runTest {
+        // given — the variant is what wrapInHtmlDocument reads, but keeping a
+        // single title entry would delete the localized titles
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") {
+                    "entry"("key" to "en") { +"Hello" }
+                    "entry"("key" to "de") { +"Hallo" }
+                }
+                "entry"("key" to "Title") { +"Hello" }
+                "entry"("key" to "TITLE") { +" " }
+            }
+            "h1" { +"Heading" }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") {
+                    "entry"("key" to "en") { +"Hello" }
+                    "entry"("key" to "de") { +"Hallo" }
+                }
+                "entry"("key" to "Title") { +"Hello" }
+            }
+            "h1" { +"Heading" }
+        }
+    }
+
+    @Test
+    fun `should not add a title entry to a frontmatter whose root is a sequence`() = runTest {
+        // given — a title entry beside the items would make the root neither
+        // a mapping nor a sequence, which no YAML reader loads
+        val input = semanticEvents {
+            "frontmatter" {
+                "item" { +"a" }
+                "item" { +"b" }
+            }
+            "h1" { +"Heading" }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "item" { +"a" }
+                "item" { +"b" }
+            }
+            "h1" { +"Heading" }
+        }
+    }
+
+    @Test
     fun `should respell a title variant following a null title entry dropping the null one`() = runTest {
         // given — wrapInHtmlDocument skips the null entry and reads the
         // variant after it as the title

@@ -999,6 +999,61 @@ class SimplifyHtmlTest {
     }
 
     @Test
+    fun `should drop state with invisible chars at its edges`() = runTest {
+        // given — a byte order mark, NBSP or zero-width space carries nothing
+        // for a reader, so it must not hide the JSON behind it
+        val state = "{\"user\":{\"id\":1}}"
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    "meta"("name" to "init", "content" to "\uFEFF$state") { }
+                    "meta"("name" to "init-2", "content" to "\u00A0$state\u200B") { }
+                    "meta"("name" to "init-3", "content" to "\"\uFEFF${state.replace("\"", "\\\"")}\"") { }
+                }
+                "body" { "p" { +"text" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "p" { +"text" }
+        }
+    }
+
+    @Test
+    fun `should undo at most eight layers of encoding in all`() = runTest {
+        // given — JSON-string and percent layers alternating count against one
+        // budget, so a value past it costs no more passes and is kept
+        val state = "{\"a\":1}"
+        fun String.jsonString() = "\"" + replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+        val eight = (1..4).fold(state) { value, _ -> value.jsonString().percentEncoded() }
+        val nine = eight.jsonString()
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    "meta"("name" to "eight", "content" to eight) { }
+                    "meta"("name" to "nine", "content" to nine) { }
+                }
+                "body" { "p" { +"text" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "nine") { +nine }
+            }
+            "p" { +"text" }
+        }
+    }
+
+    @Test
     fun `should keep long text written in supplementary-plane letters or emoji`() = runTest {
         // given — each of these letters and emoji is a UTF-16 surrogate pair
         val extensionB = "\uD840\uDC00\uD840\uDC01\uD840\uDC02。".repeat(700)

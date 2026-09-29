@@ -41,6 +41,10 @@ internal fun isMetadataValue(value: String): Boolean = value.any { !it.isInvisib
 // zero-width space or a byte order mark.
 private fun Char.isInvisible(): Boolean = isWhitespace() || category == FORMAT
 
+// This value with the chars [isMetadataValue] finds invisible trimmed from
+// its edges.
+internal fun String.trimInvisible(): String = trim { it.isInvisible() }
+
 // A title as `document.title` reads a `<title>` — HTML whitespace stripped
 // and collapsed — with any other invisible char at its edges (the NBSP
 // padding an icon often leaves, a byte order mark) trimmed too: inside, NBSP
@@ -49,10 +53,10 @@ private fun Char.isInvisible(): Boolean = isWhitespace() || category == FORMAT
 // separator, a next line char) collapses like HTML whitespace, as a title is
 // one line.
 internal fun String.normalizeTitle(): String =
-    map { if (it in LINE_BREAKING_WHITESPACE) ' ' else it }
-        .joinToString("")
+    CharArray(length) { if (this[it] in LINE_BREAKING_WHITESPACE) ' ' else this[it] }
+        .concatToString()
         .stripAndCollapseHtmlWhitespace()
-        .trim { it.isInvisible() }
+        .trimInvisible()
 
 private const val LINE_BREAKING_WHITESPACE = "\u000B\u0085\u2028\u2029"
 
@@ -66,7 +70,8 @@ internal fun frontMatterKeySupersedes(existing: String, candidate: String): Bool
     return candidate == name || existing != name
 }
 
-// A front matter entry: the name as first spelled, and its value.
+// A metadata entry: its name, spelled as where its value was read, and the
+// value.
 internal data class MetadataEntry(val key: String, val value: String)
 
 // The `<head>` metadata a front matter holds, in insertion order and keyed

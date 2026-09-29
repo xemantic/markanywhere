@@ -36,13 +36,16 @@ import kotlinx.coroutines.flow.Flow
  * structure, an empty collection, `null` or blank text are not, as there.
  *
  * A title entry holding a nested structure (localized titles, say) is no
- * title for [wrapInHtmlDocument], but it is content: with no usable title
- * entry beside it, no title is derived, and the frontmatter passes through
- * with only its empty title entries — `null`, blank, an empty collection —
+ * title for [wrapInHtmlDocument], but it is content: no title is derived,
+ * no other title entry respelled, and the frontmatter passes through with
+ * only its empty title entries — `null`, blank, an empty collection —
  * dropped, as they carry nothing and a duplicate key makes js-yaml reject the
- * whole front matter.
+ * whole front matter. A usable title variant beside it is kept as spelled,
+ * so readers may disagree on the title as they did on the input. A
+ * frontmatter whose root is a sequence (top-level `item` marks) has no place
+ * for a title entry and passes through unchanged.
  *
- * Whenever a title comes out, the frontmatter holds exactly one title entry,
+ * Otherwise, whenever a title comes out, the frontmatter holds exactly one title entry,
  * spelled `title`: every front matter reader then reads the same title —
  * whether it matches keys case-sensitively (Jekyll) or not, keeps the later
  * of duplicate keys (Psych, PyYAML) or rejects them (js-yaml) — and it is the
@@ -140,9 +143,13 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
     }
 
     // emits the held frontmatter without its empty title entries, keeping
-    // the nested ones
+    // the nested and the usable ones
     suspend fun flushWithoutEmptyTitles() {
-        flushHeld(titleSlots.filterNot { it.hasChildren }.associateWith { emptyList() })
+        flushHeld(
+            titleSlots
+                .filterNot { it.hasChildren || it.isHeadMetadata }
+                .associateWith { emptyList() }
+        )
     }
 
     suspend fun commitHeading() {
@@ -171,14 +178,15 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
             .filter { it.isHeadMetadata }
             .reduceOrNull { read, next -> if (frontMatterKeySupersedes(read.key, next.key)) next else read }
         state = when {
+            // a nested title is content, not ours to replace or drop; a
+            // sequence has no place for a title entry
+            titleSlots.any { it.hasChildren } || reader.isSequence -> {
+                flushWithoutEmptyTitles()
+                PassThrough
+            }
             usable != null -> {
                 val events = frontmatterEvents!!.subList(usable.start, usable.end + 1)
                 flushWithSingleTitle(usable, respelled(events))
-                PassThrough
-            }
-            // a nested title is content, not ours to replace
-            titleSlots.any { it.hasChildren } -> {
-                flushWithoutEmptyTitles()
                 PassThrough
             }
             else -> AwaitingHeading

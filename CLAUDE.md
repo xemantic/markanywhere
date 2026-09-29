@@ -562,6 +562,7 @@ If the fix is bounded (one inline construct, one or two lines of lookahead), it'
   Do not reintroduce a text-level YAML reader (the ~300-line `Frontmatter.kt` this replaced) or a private copy of the entry reader.
   Duplicate keys deliberately resolve differently per direction (`simplifyHtml` first `<meta>` wins as in HTML, `wrapInHtmlDocument` later entry wins as in Psych/PyYAML): each side emits one entry per name, so neither sees the other's duplicates — "aligning" them once made `wrapInHtmlDocument` show a title no front matter reader shows.
   `ensureFrontmatterTitle` never leaves duplicate title entries rather than reordering them for later-wins readers, because js-yaml (gray-matter: Eleventy, Astro, Gatsby) rejects a duplicate key and loses the whole front matter.
+  The one exception is a nested title entry (localized titles): it is content, so a usable variant beside it is kept as found rather than collapsing the two into one.
 
 ## Test conventions
 

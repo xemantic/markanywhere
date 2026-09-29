@@ -137,12 +137,9 @@ import kotlinx.coroutines.flow.Flow
  * `apple-*`) are dropped so they don't inflate the frontmatter, and so are a
  * value with nothing visible in it (whitespace, NBSP included, or invisible
  * format chars such as a zero-width space — `<html lang>` too) and
- * application state that single-page apps ship in `<meta>`: a JSON object, a
- * JSON array holding an object or a nested array, JSON state serialised into
- * a JSON string — raw or percent-encoded — and a value over 4096 chars that
- * does not read as text, judged as written (a percent-encoded one by its
- * escapes) except for a flat JSON array, whose length and text are those of
- * its elements joined — not the quotes and commas serialising them. Meta names are
+ * application state that single-page apps ship in `<meta>` — structured JSON
+ * (raw, percent-encoded or serialised into a JSON string) and opaque blobs
+ * over 4096 chars that do not read as text. Meta names are
  * ASCII case-insensitive, so of several names differing only in letter case
  * the first one (spelling and value) wins, as HTML resolves duplicate
  * `<meta>` elements — unlike [wrapInHtmlDocument], which resolves duplicate

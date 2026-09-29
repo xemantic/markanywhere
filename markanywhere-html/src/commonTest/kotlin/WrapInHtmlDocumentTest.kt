@@ -104,6 +104,30 @@ class WrapInHtmlDocumentTest {
     }
 
     @Test
+    fun `should trim HTML whitespace around the lang`() = runTest {
+        // given — as simplifyHtml trims it on the way in
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "lang") { +" en\n" }
+            }
+            "p" { +"Body." }
+        }
+
+        // when
+        val output = input.wrapInHtmlDocument()
+
+        // then
+        output sameAs semanticEvents {
+            "html"("lang" to "en") {
+                "head" { }
+                "body" {
+                    "p" { +"Body." }
+                }
+            }
+        }
+    }
+
+    @Test
     fun `should use scalar text verbatim including decoded quoting`() = runTest {
         // given — the parser has already decoded the YAML; the value carries a
         // colon, quotes and a newline as plain text
