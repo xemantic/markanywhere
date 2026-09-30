@@ -85,7 +85,10 @@ Will print:
 
 ### Wrapping parsed Markdown in a complete HTML document
 
-`wrapInHtmlDocument()` (in `markanywhere-html`) wraps the event stream in an `html`/`head`/`body` structure, populating the `head` from a leading front matter block: `title` becomes `<title>`, `lang` becomes the `<html lang>` attribute, and every other flat key becomes a `<meta name content>` — the exact inverse of `simplifyHtml`'s `<head>`-to-front-matter extraction, so the two round-trip.
+`wrapInHtmlDocument()` (in `markanywhere-html`) wraps the event stream in an `html`/`head`/`body` structure, populating the `head` from a leading front matter block: `title` becomes `<title>`, `lang` becomes the `<html lang>` attribute, and every other flat key becomes a `<meta name content>` — the inverse of `simplifyHtml`'s `<head>`-to-front-matter extraction.
+Keys are read ASCII case-insensitively, as HTML reads `<meta>` names: a `Title` key is the title.
+Of duplicate keys the later non-blank one wins, as front matter readers (Jekyll, PyYAML) resolve them, except that the lowercase spelling beats a variant in another letter case — `simplifyHtml` instead keeps the first of duplicate `<meta>` names, as HTML does.
+The two round-trip up to what they normalise or discard as carrying nothing for a reader: blank, nested and null values, technical noise names (`viewport`, `robots`, …), and application state (a JSON object, an opaque over-long blob) are dropped, case-variant keys are merged, `title` and `lang` come back spelled in lowercase, the title's whitespace is collapsed as `document.title` reads it, and a typed scalar comes back as a string.
 
 ```kotlin
 val document = """

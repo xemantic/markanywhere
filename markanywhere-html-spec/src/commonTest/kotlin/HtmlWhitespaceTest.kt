@@ -17,6 +17,7 @@
 package com.xemantic.markanywhere.html.spec
 
 import com.xemantic.kotlin.test.assert
+import com.xemantic.kotlin.test.sameAs
 import kotlin.test.Test
 
 class HtmlWhitespaceTest {
@@ -68,6 +69,33 @@ class HtmlWhitespaceTest {
     fun `a string with any content should not be HTML blank`() {
         assert(!"  a  ".isHtmlBlank())
         assert(!"text".isHtmlBlank())
+    }
+
+    @Test
+    fun `should strip and collapse HTML whitespace`() {
+        // when
+        val result = "\n  Foo\t\r\n  Bar \u000C".stripAndCollapseHtmlWhitespace()
+
+        // then
+        result sameAs "Foo Bar"
+    }
+
+    @Test
+    fun `should keep NBSP when stripping and collapsing HTML whitespace`() {
+        // when
+        val result = "\u00A0 a  \u00A0b ".stripAndCollapseHtmlWhitespace()
+
+        // then
+        result sameAs "\u00A0 a \u00A0b"
+    }
+
+    @Test
+    fun `should strip and collapse a blank string to empty`() {
+        // when
+        val result = " \t\n".stripAndCollapseHtmlWhitespace()
+
+        // then
+        result sameAs ""
     }
 
 }

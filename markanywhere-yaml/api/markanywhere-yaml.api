@@ -1,5 +1,6 @@
 public final class com/xemantic/markanywhere/yaml/YamlKeyLineKt {
 	public static final fun isYamlKeyLine (Ljava/lang/String;)Z
+	public static final fun yamlKeyLineKeyOrNull (Ljava/lang/String;)Ljava/lang/String;
 }
 
 public final class com/xemantic/markanywhere/yaml/YamlKt {

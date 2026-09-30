@@ -18,6 +18,7 @@ package com.xemantic.markanywhere.html
 
 import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.flow.semanticEvents
+import com.xemantic.markanywhere.html.spec.asciiLowercase
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -26,111 +27,112 @@ import kotlinx.coroutines.flow.Flow
  *
  * A **leading** `frontmatter` block (the untagged mark the parser emits for
  * YAML `---` front matter, holding `entry` marks) feeds the `head` — the
- * inverse of [simplifyHtml]'s head-to-frontmatter extraction, so the two
- * round-trip:
+ * inverse of [simplifyHtml]'s head-to-frontmatter extraction:
  *
- * - the `title` entry becomes `<title>`
- * - the `lang` entry becomes the `lang` attribute on `<html>`
+ * - the `title` entry, normalized as [simplifyHtml] reads a `<title>`,
+ *   becomes `<title>`
+ * - the `lang` entry, its HTML whitespace and any other invisible char at
+ *   its edges stripped, becomes the `lang` attribute on `<html>`
  * - every other top-level scalar entry becomes a void `<meta name content>`
  *
  * Only top-level scalar entries are interpreted — exactly the shape
- * [simplifyHtml] produces. A nested mapping or sequence, a null value, and
- * verbatim text are skipped (never an error); a later duplicate key wins.
- * A `frontmatter` mark appearing anywhere past the first event is ordinary
- * content and flows into `body` verbatim.
+ * [simplifyHtml] produces. A nested mapping or sequence, a null value, a
+ * blank value and verbatim text are skipped (never an error). Keys are read
+ * the way HTML reads `<meta>` names, ASCII case-insensitively — a `Title`
+ * entry is the title. Of duplicate keys the later one wins, as front matter
+ * readers (Jekyll, PyYAML) resolve them, except that a key spelled in
+ * lowercase — the spelling a case-sensitive reader looks up — beats a
+ * variant in another letter case wherever it occurs; the winner keeps the
+ * position of the first duplicate.
  *
- * Only the frontmatter subtree is read ahead (bounded); without one the
- * document opening is emitted on the first event and body content streams
- * through untouched. All synthetic marks are untagged, consistent with the
- * parser's `frontmatter` mark and [simplifyHtml] output. An empty input
- * stream still yields the full document skeleton.
+ * Passing the result back through [simplifyHtml] restores the front matter
+ * except for what either side normalises or discards: skipped entries
+ * (above) and values [simplifyHtml] drops (noise names such as `viewport`,
+ * application state such as a JSON object or an opaque over-long blob) are
+ * gone, case-variant duplicates are merged, the `title` and `lang` keys come
+ * back spelled in lowercase, the title and `lang` normalized as above, and a
+ * typed scalar comes back as a string.
+ *
+ * Text of HTML whitespace ahead of the frontmatter is insignificant — it is
+ * moved to the start of `body` (a non-breaking space is content, as
+ * everywhere in HTML, and opens the body instead), as
+ * [ensureFrontmatterTitle] moves it after the frontmatter. A `frontmatter`
+ * mark appearing past any other event is ordinary content and flows into
+ * `body` verbatim.
+ *
+ * Only leading whitespace text and the frontmatter subtree are read ahead
+ * (bounded); body content streams through untouched. Holding the leading
+ * whitespace delays nothing a reader would see — it renders as nothing, and
+ * so does the skeleton opened ahead of it — while opening the document on it
+ * would push a frontmatter following it into `body`. All synthetic marks are
+ * untagged, consistent with the parser's `frontmatter` mark and
+ * [simplifyHtml] output. An empty input stream still yields the full
+ * document skeleton.
  */
 public fun Flow<SemanticEvent>.wrapInHtmlDocument(): Flow<SemanticEvent> = semanticEvents {
 
     var opened = false
-    var collectingFrontmatter = false
-    // nesting depth inside the frontmatter: 1 while inside a top-level entry
-    var depth = 0
-    // the top-level entry being read, null when it is not a scalar to keep
-    var entryKey: String? = null
-    val entryText = StringBuilder()
-    val metadata = LinkedHashMap<String, String>()
+    val metadata = HeadMetadata()
+    // reads the frontmatter while it is being collected
+    var frontmatter: FrontMatterEntryReader? = null
+    // blank text ahead of the frontmatter, replayed at the start of `body`
+    val blanks = mutableListOf<SemanticEvent>()
 
     // `head` and its subtree are lexically scoped, so the paired `"name" { }`
     // builder fits; `html` and `body` close only at end-of-stream, so their
     // unmark cannot come from a builder block — explicit mark/unmark instead.
     suspend fun openDocument() {
         opened = true
-        collectingFrontmatter = false
+        frontmatter = null
         mark(
             "html",
             attributes = metadata["lang"]
-                ?.let { mapOf("lang" to it) }
+                // trimmed, as simplifyHtml reads it
+                ?.let { mapOf("lang" to it.value.normalizeLang()) }
                 ?: emptyMap()
         )
         "head" {
-            metadata["title"]?.let { title ->
+            metadata["title"]?.let {
                 "title" {
-                    +title
+                    // as simplifyHtml reads a <title>
+                    +it.value.normalizeTitle()
                 }
             }
-            for ((key, value) in metadata) {
-                if (key == "title" || key == "lang") continue
+            for ((key, value) in metadata.values) {
+                if (key.asciiLowercase() in HEAD_KEYS) continue
                 "meta"("name" to key, "content" to value) {}
             }
         }
         mark("body")
+        emit(blanks)
+        blanks.clear()
     }
 
     collect { event ->
+        val reader = frontmatter
         when {
-            collectingFrontmatter -> when (event) {
-                is Mark -> {
-                    depth++
-                    if (depth == 1) {
-                        val type = event["type"]
-                        entryKey = if (
-                            event.name == "entry" && (type == null || type in SCALAR_TYPES)
-                        ) event["key"] else null
-                        entryText.clear()
-                    } else {
-                        entryKey = null // a nested mark: not a scalar
-                    }
+            reader != null -> if (reader.read(event)) openDocument()
+            // `blanks` only ever holds text that may precede a frontmatter,
+            // so the mark alone decides whether it opens the stream
+            !opened -> when {
+                event.isFrontmatterMark() -> {
+                    frontmatter = FrontMatterEntryReader(metadata::addFromFrontMatter).also { it.read(event) }
                 }
-                is Text -> if (depth == 1) entryText.append(event.text)
-                is Unmark -> if (depth == 0) {
+                event.mayPrecedeFrontmatter() -> blanks += event
+                else -> {
                     openDocument()
-                } else {
-                    if (depth == 1) {
-                        entryKey?.let { metadata[it] = entryText.toString() }
-                        entryKey = null
-                    }
-                    depth--
+                    emit(event)
                 }
-            }
-            !opened -> if (
-                event is Mark && !event.isTagged && event.name == "frontmatter"
-            ) {
-                collectingFrontmatter = true
-            } else {
-                openDocument()
-                emit(event)
             }
             else -> emit(event)
         }
     }
 
     // An unclosed frontmatter at end of stream (broken upstream contract) is
-    // still used, including an entry left open — its text is complete by
-    // then; an empty stream yields the bare skeleton.
-    if (collectingFrontmatter && depth == 1) {
-        entryKey?.let { metadata[it] = entryText.toString() }
-    }
+    // still used, including an entry left open; an empty stream yields the
+    // bare skeleton.
+    frontmatter?.finish()
     if (!opened) openDocument()
     unmark("body")
     unmark("html")
 }
-
-// Scalar `type`s whose text is meaningful as a `<meta content>` (`null` and
-// the empty collections are not).
-private val SCALAR_TYPES = setOf("bool", "int", "float", "timestamp")

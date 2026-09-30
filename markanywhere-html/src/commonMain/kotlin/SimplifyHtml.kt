@@ -18,6 +18,7 @@ package com.xemantic.markanywhere.html
 
 import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.dump.AccessibilityAnnotations
+import com.xemantic.markanywhere.html.spec.asciiLowercase
 import com.xemantic.markanywhere.transform.MatcherScope
 import com.xemantic.markanywhere.transform.transform
 import kotlinx.coroutines.flow.Flow
@@ -129,10 +130,27 @@ import kotlinx.coroutines.flow.Flow
  * and emitted as a single synthetic `frontmatter` mark holding one `entry`
  * (`key` attribute, value as text) per item — the parser's structured front
  * matter vocabulary — just before `<body>` content streams through. Technical meta
- * names that carry no content signal (rendering hints, crawler / verification
- * directives, platform tile metadata — see [isNoiseMetaName]) are dropped so
- * they don't inflate the frontmatter. If `<head>` is absent or yields no
- * metadata, no frontmatter mark is emitted.
+ * names that carry no content signal (rendering hints such as `viewport` and
+ * `theme-color`, crawler / verification directives such as `robots` and
+ * `*-verification`, platform tile metadata such as `msapplication-*` and
+ * `apple-*`) are dropped so they don't inflate the frontmatter, and so are a
+ * value with nothing visible in it (whitespace, NBSP included, or invisible
+ * format chars such as a zero-width space — `<html lang>` too) and
+ * application state that single-page apps ship in `<meta>` — structured JSON
+ * (raw, percent-encoded or serialised into a JSON string) and opaque blobs
+ * over 4096 chars that do not read as text. Meta names are
+ * ASCII case-insensitive, so of several names differing only in letter case
+ * the first one (spelling and value) wins, as HTML resolves duplicate
+ * `<meta>` elements — unlike [wrapInHtmlDocument], which resolves duplicate
+ * front matter keys as YAML readers do; a
+ * `lang` meta is spelled `lang` and yields to `<html lang>`, the document's
+ * actual language. Those discarded values and merged
+ * names are what does not survive a [wrapInHtmlDocument] round-trip. When
+ * `<head>` holds several `<title>`s, the first non-blank one wins, over a
+ * `<meta name="title">` (in any letter case) too, with its whitespace
+ * stripped and collapsed as `document.title` does and any non-breaking space
+ * at its edges trimmed. If `<head>` is absent or
+ * yields no metadata, no frontmatter mark is emitted.
  *
  * Matcher registration is grouped: per-tag explicit matchers come first
  * (so they win the `firstOrNull` race), then a small number of
@@ -163,8 +181,18 @@ public fun Flow<SemanticEvent>.simplifyHtml(
     svgMode: SvgMode = SvgMode.RESOLVE,
 ): Flow<SemanticEvent> = transform {
 
-    val metadata = mutableMapOf<String, String>()
+    // A value that tells a reader nothing is never added — judged by
+    // `isMetadataValue`, not HTML whitespace: rendered, an NBSP-only or
+    // zero-width value is as empty as a blank one. `ensureFrontmatterTitle`
+    // judges a title the same way, so a title kept here is never replaced
+    // there.
+    val metadata = HeadMetadata()
     val titleText = StringBuilder()
+    // The first non-blank `<title>` wins, over a `<meta name="title">` too —
+    // unlike `document.title`, which takes the first `<title>` even when
+    // blank, since a blank title tells the reader nothing. Overwriting a meta
+    // title keeps the entry where the first candidate appeared.
+    var titleFromElement = false
 
     // Attribute map kept on a preserved element: its own [names] whitelist, the
     // ARIA name/state keep-set, and any caller-requested [keepAttributes]. An
@@ -237,7 +265,7 @@ public fun Flow<SemanticEvent>.simplifyHtml(
     // --- metadata extraction (explicit per-tag) -------------------------
 
     match("html") { event ->
-        event["lang"]?.let { metadata["lang"] = it }
+        event["lang"]?.let { metadata.addFromHtml("lang", it.normalizeLang()) }
         children()
     }
 
@@ -248,7 +276,7 @@ public fun Flow<SemanticEvent>.simplifyHtml(
         afterClose {
             if (metadata.isNotEmpty()) {
                 "frontmatter" {
-                    for ((key, value) in metadata) {
+                    for ((key, value) in metadata.values) {
                         "entry"("key" to key) { +value }
                     }
                 }
@@ -257,12 +285,17 @@ public fun Flow<SemanticEvent>.simplifyHtml(
     }
 
     match("title") {
-        // Capture the title's text into metadata; the mark itself is dropped.
+        // Capture the title's text as a candidate; the mark itself is dropped.
+        // A page can carry several <title>s (e.g. after a client-side
+        // navigation), so each is collected on its own.
+        titleText.clear()
         children(mode = "titleText")
         afterClose {
-            val trimmed = titleText.toString().trim()
-            if (trimmed.isNotEmpty()) {
-                metadata["title"] = trimmed
+            // as `document.title` reads it, edges trimmed (normalizeTitle)
+            val title = titleText.toString().normalizeTitle()
+            if (!titleFromElement && isMetadataValue(title)) {
+                metadata["title"] = title
+                titleFromElement = true
             }
         }
     }
@@ -270,8 +303,22 @@ public fun Flow<SemanticEvent>.simplifyHtml(
     match("meta") { event ->
         val name = event["name"]
         val content = event["content"]
-        if (name != null && content != null && !isNoiseMetaName(name)) {
-            metadata[name] = content
+        // cheapest checks first, so the JSON parse runs only for a meta
+        // that would otherwise be added
+        if (name != null && content != null && metadata.acceptsFromHtml(name, content)) {
+            val normalizedName = name.asciiLowercase()
+            if (!isNoiseMetaName(normalizedName) && !isApplicationStateMeta(content)) {
+                val value = when (normalizedName) {
+                    // as a <title> element's text reads
+                    "title" -> content.normalizeTitle()
+                    // as <html lang> is read above
+                    "lang" -> content.normalizeLang()
+                    else -> content
+                }
+                // the keys wrapInHtmlDocument turns back into <title> and
+                // <html lang> are spelled as it reads them
+                metadata.addFromHtml(if (normalizedName in HEAD_KEYS) normalizedName else name, value)
+            }
         }
     }
 
@@ -681,14 +728,13 @@ private val ARIA_KEEP = arrayOf(
 // directives, and platform tile metadata. Dropped from the extracted metadata.
 // A denylist (rather than an allowlist) keeps unknown-but-possibly-useful names
 // — `description`, `keywords`, `author`, `og:*`, `article:*`, … — by default.
-private fun isNoiseMetaName(name: String): Boolean {
-    val n = name.lowercase()
-    return n in NOISE_META_NAMES
-            || NOISE_META_PREFIXES.any { n.startsWith(it) }
-            || n.endsWith("-verification")
-            || n.endsWith("-verify")
-            || n.startsWith("verify-")
-}
+// Takes the name already ASCII-lowercased.
+private fun isNoiseMetaName(normalizedName: String): Boolean =
+    normalizedName in NOISE_META_NAMES
+            || NOISE_META_PREFIXES.any { normalizedName.startsWith(it) }
+            || normalizedName.endsWith("-verification")
+            || normalizedName.endsWith("-verify")
+            || normalizedName.startsWith("verify-")
 
 private val NOISE_META_NAMES = setOf(
     "viewport", "referrer", "generator", "theme-color", "color-scheme",
