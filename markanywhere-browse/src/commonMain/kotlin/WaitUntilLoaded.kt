@@ -17,6 +17,7 @@
 package com.xemantic.markanywhere.browse
 
 import dev.kdriver.cdp.domain.network
+import dev.kdriver.core.exceptions.TimeoutWaitingForReadyStateException
 import dev.kdriver.core.tab.ReadyState
 import dev.kdriver.core.tab.Tab
 import kotlinx.coroutines.*
@@ -43,19 +44,30 @@ import kotlin.time.Duration.Companion.seconds
  * yet rendered). On a never-quiet page the [timeout] cap inside each waiter
  * trips and capture proceeds anyway.
  *
- * @return `true` if both the network and the DOM went quiet within [timeout],
- *   `false` if either hit its cap (capture should still proceed — `false`
- *   means "best effort", not "failed").
+ * Unlike the other two, kdriver's [Tab.waitForReadyState] *throws*
+ * [TimeoutWaitingForReadyStateException] at its cap, so step 1 catches it and
+ * folds it into the result: a page whose document has fully arrived but whose
+ * `load` never fires (one sub-resource the server never answers) is still
+ * capturable, and throwing after a navigation or click that already happened
+ * would make a caller retry an action that went through.
+ *
+ * @return `true` if the document completed and both the network and the DOM
+ *   went quiet within [timeout], `false` if any of them hit its cap (capture
+ *   should still proceed — `false` means "best effort", not "failed").
  */
 public suspend fun Tab.waitUntilLoaded(
     networkIdleTime: Duration = 500.milliseconds,
     domQuietTime: Duration = 500.milliseconds,
     timeout: Duration = 15.seconds,
 ): Boolean = coroutineScope {
-    waitForReadyState(ReadyState.COMPLETE, timeout = timeout.inWholeMilliseconds)
+    val complete = try {
+        waitForReadyState(ReadyState.COMPLETE, timeout = timeout.inWholeMilliseconds)
+    } catch (_: TimeoutWaitingForReadyStateException) {
+        false
+    }
     val networkIdle = async { waitForNetworkIdle(networkIdleTime, timeout) }
     val domIdle = async { waitForDomIdle(domQuietTime, timeout) }
-    networkIdle.await() and domIdle.await()
+    complete and networkIdle.await() and domIdle.await()
 }
 
 /**
@@ -76,7 +88,7 @@ public suspend fun Tab.waitUntilLoaded(
  * races across the [Dispatchers.Default] threads the collectors may run on.
  *
  * @return `true` if the network went idle, `false` if [timeout] elapsed first
- *   (matching [Tab.waitForReadyState]'s boolean contract rather than throwing).
+ *   (a boolean contract rather than throwing, unlike [Tab.waitForReadyState]).
  */
 public suspend fun Tab.waitForNetworkIdle(
     idleTime: Duration = 500.milliseconds,

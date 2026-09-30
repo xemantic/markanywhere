@@ -17,6 +17,8 @@
 package com.xemantic.markanywhere.browse
 
 import com.xemantic.kotlin.test.assert
+import dev.kdriver.cdp.domain.Fetch
+import dev.kdriver.cdp.domain.fetch
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.time.Duration.Companion.milliseconds
@@ -145,6 +147,28 @@ class WaitUntilLoadedTest {
         }
 
         // then — AND of the two legs is false (capture should still proceed)
+        assert(!settled)
+    }
+
+    @Test
+    fun `waitUntilLoaded should report best-effort false when readyState never completes`() = runTest {
+        val settled = runInBrowser { browser ->
+            // given — a fully arrived document whose one image is never answered
+            // (paused via the Fetch domain, never continued), so the load event
+            // never fires and readyState stays "interactive"
+            val tab = browser.get()
+            tab.fetch.enable(patterns = listOf(Fetch.RequestPattern(urlPattern = "*stalled.png")))
+            tab.get(testPageUrl("stalled.html"))
+
+            // when
+            tab.waitUntilLoaded(
+                networkIdleTime = 300.milliseconds,
+                domQuietTime = 300.milliseconds,
+                timeout = 1500.milliseconds,
+            )
+        }
+
+        // then — the readyState cap folds into the result instead of throwing
         assert(!settled)
     }
 

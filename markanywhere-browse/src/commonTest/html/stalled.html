@@ -1,0 +1,30 @@
+<!--
+  ~ Copyright 2026 Kazimierz Pogoda / Xemantic
+  ~
+  ~ Licensed under the Apache License, Version 2.0 (the "License");
+  ~ you may not use this file except in compliance with the License.
+  ~ You may obtain a copy of the License at
+  ~
+  ~     https://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+  -->
+
+<!doctype html>
+<html lang="en">
+<head>
+    <title>Stalled</title>
+</head>
+<body>
+<h1>Stalled</h1>
+<!-- The test pauses this request via the CDP Fetch domain and never answers it,
+     standing in for a server that never responds (e.g. a Wayback Machine toolbar
+     asset): the document has fully arrived, but readyState never reaches
+     "complete" because the load event waits for this image. -->
+<img src="stalled.png" alt="">
+</body>
+</html>
