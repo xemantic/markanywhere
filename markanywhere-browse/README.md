@@ -96,10 +96,20 @@ val dump = PageSession(tab).dump()
    never sees).
 
 Steps 2 and 3 run concurrently and **both** must report quiet — each covers the
-other's blind spot. All three return a boolean: `true` if it genuinely settled,
-`false` if a `timeout` cap tripped first. A `false` means "best effort, proceed
-anyway", **not** "failed" — on a never-quiet page you still capture. The waiters
-are also usable standalone (`tab.waitForNetworkIdle()`, `tab.waitForDomIdle()`).
+other's blind spot. All three steps share the one `timeout` budget, so the call
+returns within it however the page behaves, and it never throws on page
+behaviour: an evaluation lost to a navigation (e.g. right after a click) is
+retried against the new document.
+
+`waitUntilLoaded()` returns a `PageLoad` reporting each signal. `settled` is
+`true` if the page genuinely settled; `false` means "best effort, proceed
+anyway", **not** "failed" — on a never-quiet page you still capture. `parsed`
+tells a busy page apart from a truncated one: when it is `false` the document
+itself never finished parsing (a response still streaming, a parser-blocking
+script never delivered), so a capture would be cut off partway through the body.
+The waiters are also usable standalone (`tab.waitForNetworkIdle()`,
+`tab.waitForDomIdle()`), returning `true` if they settled and `false` if their
+`timeout` cap tripped first.
 
 ## Module notes
 

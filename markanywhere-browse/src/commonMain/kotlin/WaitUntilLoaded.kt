@@ -17,16 +17,53 @@
 package com.xemantic.markanywhere.browse
 
 import dev.kdriver.cdp.domain.network
-import dev.kdriver.core.exceptions.TimeoutWaitingForReadyStateException
+import dev.kdriver.core.exceptions.ConnectionClosedException
 import dev.kdriver.core.tab.ReadyState
 import dev.kdriver.core.tab.Tab
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.contentOrNull
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeSource
+
+/**
+ * The outcome of [waitUntilLoaded]: what each of its three signals reported by
+ * the time it returned.
+ *
+ * @property readyState the last `document.readyState` observed, or `null` if it
+ *   could not be read at all within the timeout (e.g. the page kept navigating).
+ * @property networkIdle whether [waitForNetworkIdle] reported quiet.
+ * @property domIdle whether [waitForDomIdle] reported quiet.
+ */
+public data class PageLoad(
+    val readyState: ReadyState?,
+    val networkIdle: Boolean,
+    val domIdle: Boolean,
+) {
+
+    /**
+     * Whether the page genuinely settled: the document completed, and both the
+     * network and the DOM went quiet. `false` means "best effort, proceed
+     * anyway", not "failed" — a never-quiet page is still worth capturing.
+     */
+    val settled: Boolean
+        get() = readyState == ReadyState.COMPLETE && networkIdle && domIdle
+
+    /**
+     * Whether the whole document has been parsed (`interactive` or `complete`).
+     * When `false` the parser is still waiting for the document itself — a
+     * response still streaming, or a parser-blocking `<script src>` never
+     * delivered — so a capture taken now is cut off partway through the body,
+     * unlike an unsettled page that is merely still busy.
+     */
+    val parsed: Boolean
+        get() = readyState == ReadyState.INTERACTIVE || readyState == ReadyState.COMPLETE
+
+}
 
 /**
  * Best-effort "the page has settled" wait for a *structure-agnostic* capture:
@@ -41,33 +78,97 @@ import kotlin.time.Duration.Companion.seconds
  * Steps 2 and 3 run concurrently and BOTH must report quiet — each covers the
  * other's blind spot (network-idle is momentarily true between request-sent
  * and render; DOM-idle is momentarily true while a fetch is in flight but not
- * yet rendered). On a never-quiet page the [timeout] cap inside each waiter
- * trips and capture proceeds anyway.
+ * yet rendered).
  *
- * Unlike the other two, kdriver's [Tab.waitForReadyState] *throws*
- * [TimeoutWaitingForReadyStateException] at its cap, so step 1 catches it and
- * folds it into the result: a page whose document has fully arrived but whose
- * `load` never fires (one sub-resource the server never answers) is still
- * capturable, and throwing after a navigation or click that already happened
- * would make a caller retry an action that went through.
+ * All three steps share the single [timeout] budget: steps 2 and 3 get only
+ * what step 1 left over, so the call returns within [timeout] (plus a CDP
+ * round-trip) however the page behaves.
  *
- * @return `true` if the document completed and both the network and the DOM
- *   went quiet within [timeout], `false` if any of them hit its cap (capture
- *   should still proceed — `false` means "best effort", not "failed").
+ * It never throws on page behaviour. Step 1 polls `document.readyState` itself
+ * rather than calling kdriver's [Tab.waitForReadyState], which throws at its
+ * cap and checks that cap only between evaluations — so a hung evaluation (a
+ * main thread blocked by a long script) was bounded only by kdriver's command
+ * timeout. An evaluation that fails because the page navigated under it (its
+ * JavaScript context destroyed, as right after a click that navigates) is
+ * retried against the new document, in every step. Throwing after a navigation
+ * or click that already happened would make a caller retry an action that went
+ * through. Only a closed browser connection, which no retry can outlive, still
+ * propagates.
+ *
+ * @return what each signal reported — see [PageLoad.settled] and, before
+ *   capturing an unsettled page, [PageLoad.parsed].
  */
 public suspend fun Tab.waitUntilLoaded(
     networkIdleTime: Duration = 500.milliseconds,
     domQuietTime: Duration = 500.milliseconds,
     timeout: Duration = 15.seconds,
-): Boolean = coroutineScope {
-    val complete = try {
-        waitForReadyState(ReadyState.COMPLETE, timeout = timeout.inWholeMilliseconds)
-    } catch (_: TimeoutWaitingForReadyStateException) {
-        false
+): PageLoad = coroutineScope {
+    val start = TimeSource.Monotonic.markNow()
+    val remaining = { timeout - start.elapsedNow() }
+    var readyState: ReadyState? = null
+    withTimeoutOrNull(timeout) {
+        while (readyState != ReadyState.COMPLETE) {
+            readyState = retryingOnPageError(fallback = readyState) { readReadyState() }
+            if (readyState != ReadyState.COMPLETE) delay(POLL_INTERVAL)
+        }
     }
-    val networkIdle = async { waitForNetworkIdle(networkIdleTime, timeout) }
-    val domIdle = async { waitForDomIdle(domQuietTime, timeout) }
-    complete and networkIdle.await() and domIdle.await()
+    val networkIdle = async {
+        withinBudget(remaining) { waitForNetworkIdle(networkIdleTime, it) }
+    }
+    val domIdle = async {
+        withinBudget(remaining) { waitForDomIdle(domQuietTime, it) }
+    }
+    PageLoad(readyState, networkIdle.await(), domIdle.await())
+}
+
+private val POLL_INTERVAL = 100.milliseconds
+
+private suspend fun Tab.readReadyState(): ReadyState? {
+    val value = (rawEvaluate("document.readyState") as? JsonPrimitive)?.contentOrNull
+    return ReadyState.entries.firstOrNull { it.name.equals(value, ignoreCase = true) }
+}
+
+/**
+ * Runs a boolean waiter with whatever is [remaining] of the shared budget,
+ * retrying it after a page error (see [retryingOnPageError]) until the budget
+ * runs out. The waiter is also cut off at the budget, so one that hangs on an
+ * unresponsive page (an in-page timer cannot fire on a blocked main thread)
+ * cannot outlive it.
+ */
+private suspend fun withinBudget(
+    remaining: () -> Duration,
+    waiter: suspend (budget: Duration) -> Boolean,
+): Boolean {
+    while (true) {
+        val budget = remaining()
+        if (!budget.isPositive()) return false
+        withTimeoutOrNull(budget) {
+            retryingOnPageError(fallback = null) { waiter(budget) }
+        }?.let { return it }
+        // a page error (or the budget ran out, which the next pass sees):
+        // pause briefly, then retry against the document now in the tab
+        delay(minOf(POLL_INTERVAL, remaining()))
+    }
+}
+
+/**
+ * Runs [block], answering [fallback] instead when it fails because of the page
+ * — a JavaScript context destroyed by a navigation, a CDP command timing out on
+ * a blocked main thread, an evaluation error — so a caller polling a live page
+ * can simply try again. Cancellation (including an enclosing timeout) and a
+ * closed browser connection still propagate.
+ */
+private suspend fun <T> retryingOnPageError(
+    fallback: T,
+    block: suspend () -> T,
+): T = try {
+    block()
+} catch (e: CancellationException) {
+    throw e
+} catch (e: ConnectionClosedException) {
+    throw e
+} catch (_: Exception) {
+    fallback
 }
 
 /**
