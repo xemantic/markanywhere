@@ -1452,15 +1452,16 @@ class EnsureFrontmatterTitleTest {
     }
 
     @Test
-    fun `should drop the continuation lines of a dropped title entry`() = runTest {
-        // given — left behind, the indented line would continue `foo`
+    fun `should keep a title variant continued on indented lines as content`() = runTest {
+        // given — readers join the continuation lines into the value, which
+        // the YAML subset keeps verbatim, so the variant's title is unknown
         val markdown = "---\nfoo: a\nTitle: x\n  cont\n  more\ntitle: Real\n---\n\nBody."
 
         // when
         val output = flowOf(markdown).parse().ensureFrontmatterTitle().renderMarkdown()
 
         // then
-        output sameAs "---\nfoo: a\ntitle: Real\n---\n\nBody."
+        output sameAs markdown
     }
 
     @Test

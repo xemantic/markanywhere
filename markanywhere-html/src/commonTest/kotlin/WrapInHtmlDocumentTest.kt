@@ -105,10 +105,12 @@ class WrapInHtmlDocumentTest {
 
     @Test
     fun `should trim HTML whitespace around the lang`() = runTest {
-        // given — as simplifyHtml trims it on the way in
+        // given — as simplifyHtml trims it on the way in (text that opens
+        // with indentation and ends with a newline would read as a verbatim
+        // line of unknown value)
         val input = semanticEvents {
             "frontmatter" {
-                "entry"("key" to "lang") { +" en\n" }
+                "entry"("key" to "lang") { +"\n en " }
             }
             "p" { +"Body." }
         }
@@ -431,6 +433,79 @@ class WrapInHtmlDocumentTest {
                 <h1>
                   Heading
                 </h1>
+              </body>
+            </html>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should read no value from an entry continued on indented lines`() = runTest {
+        // given — readers join the continuation lines into the value, which
+        // the YAML subset keeps verbatim, so the first line alone is not it
+        val markdown = """
+            ---
+            title: A long
+              title
+            description: first
+              second
+            author: Alice
+            ---
+            Body.
+        """.trimIndent()
+
+        // when
+        val html = flowOf(markdown)
+            .parse()
+            .wrapInHtmlDocument()
+            .renderHtml()
+
+        // then
+        html sameAsHtml """
+            <html>
+              <head>
+                <meta name="author" content="Alice"/>
+              </head>
+              <body>
+                <p>
+                  Body.
+                </p>
+              </body>
+            </html>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should read no value from indented verbatim lines under a bare key`() = runTest {
+        // given — the lines are outside the YAML subset, kept verbatim with
+        // their indentation, and readers disagree on what they hold
+        val markdown = """
+            ---
+            title:
+              [a:, b]
+            description:
+              first line
+              second
+            author: Alice
+            ---
+            Body.
+        """.trimIndent()
+
+        // when
+        val html = flowOf(markdown)
+            .parse()
+            .wrapInHtmlDocument()
+            .renderHtml()
+
+        // then
+        html sameAsHtml """
+            <html>
+              <head>
+                <meta name="author" content="Alice"/>
+              </head>
+              <body>
+                <p>
+                  Body.
+                </p>
               </body>
             </html>
         """.trimIndent()

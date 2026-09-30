@@ -41,10 +41,12 @@ internal fun SemanticEvent.mayPrecedeFrontmatter(): Boolean = this is Text && te
 // A top-level front matter `entry`: its key as spelled, `type`, text, whether
 // it holds nested marks, and the span of its events among those read — the
 // indented verbatim lines continuing it included, so dropping the span drops
-// them too, rather than leaving them to continue the entry before it. A
-// verbatim line defining a key (one outside the YAML subset, such as a
-// multi-line quoted scalar) is an entry too, [isVerbatim]: its value is
-// unknown, so it is never head metadata, yet it holds the key for readers.
+// them too, rather than leaving them to continue the entry before it. An
+// entry whose value is unknown is [isVerbatim], never head metadata, yet it
+// holds the key for readers: a verbatim line defining a key (one outside the
+// YAML subset, such as a multi-line quoted scalar), an entry continued by
+// indented verbatim lines (readers join them into the value), and one
+// holding indented verbatim lines under a bare `key:`.
 internal class FrontMatterEntry(
     val key: String,
     val type: String?,
@@ -79,6 +81,7 @@ internal class FrontMatterEntryReader(
     private var open: SemanticEvent.Mark? = null
     private var openStart = 0
     private var openHasChildren = false
+    private var openIsVerbatim = false
     private val openText = StringBuilder()
 
     // the last top-level entry read, held until its span is known
@@ -101,6 +104,7 @@ internal class FrontMatterEntryReader(
                     open = if (event.name == "entry" && event["key"] != null) event else null
                     openStart = index
                     openHasChildren = false
+                    openIsVerbatim = false
                     openText.clear()
                 } else if (depth > 2) {
                     openHasChildren = true
@@ -108,7 +112,14 @@ internal class FrontMatterEntryReader(
             }
             is Text -> when (depth) {
                 1 -> readVerbatimLine(event.text)
-                2 -> openText.append(event.text)
+                2 -> {
+                    // the YAML parser strips a scalar's indentation, never
+                    // a verbatim line's, which also keeps its `\n`
+                    if (event.text.startsWithIndentation() && event.text.endsWith('\n')) {
+                        openIsVerbatim = true
+                    }
+                    openText.append(event.text)
+                }
             }
             is Unmark -> {
                 if (--depth == 1) closeEntry()
@@ -135,8 +146,8 @@ internal class FrontMatterEntryReader(
     private fun readVerbatimLine(text: String) {
         if (text.isHtmlBlank()) return
         val entry = pending
-        if (text.first() == ' ' || text.first() == '\t') {
-            if (entry != null) pending = entry.extendedTo(index)
+        if (text.startsWithIndentation()) {
+            if (entry != null) pending = entry.continuedTo(index)
             return
         }
         reportPending()
@@ -161,7 +172,7 @@ internal class FrontMatterEntryReader(
                 type = it["type"],
                 text = openText.toString(),
                 hasChildren = openHasChildren,
-                isVerbatim = false,
+                isVerbatim = openIsVerbatim,
                 start = openStart,
                 end = index
             )
@@ -177,5 +188,9 @@ internal class FrontMatterEntryReader(
 
 }
 
-private fun FrontMatterEntry.extendedTo(end: Int) =
-    FrontMatterEntry(key, type, text, hasChildren, isVerbatim, start, end)
+// The entry continued by the verbatim line ending at [end]: its value is
+// no longer known.
+private fun FrontMatterEntry.continuedTo(end: Int) =
+    FrontMatterEntry(key, type, text, hasChildren, isVerbatim = true, start, end)
+
+private fun String.startsWithIndentation() = startsWith(' ') || startsWith('\t')
