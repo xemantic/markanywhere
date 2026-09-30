@@ -18,6 +18,7 @@
 package com.xemantic.markanywhere.html.spec
 
 import com.xemantic.kotlin.test.assert
+import com.xemantic.kotlin.test.sameAs
 import kotlin.test.Test
 
 class AsciiCaseTest {
@@ -28,7 +29,7 @@ class AsciiCaseTest {
         val lowered = "Og:TITLE-1_x".asciiLowercase()
 
         // then
-        assert(lowered == "og:title-1_x")
+        lowered sameAs "og:title-1_x"
     }
 
     @Test
@@ -39,8 +40,8 @@ class AsciiCaseTest {
         val kelvin = 'K'.asciiLowercase()
 
         // then
-        assert(dotless == "tıtle")
-        assert(umlaut == "Ärger")
+        dotless sameAs "tıtle"
+        umlaut sameAs "Ärger"
         assert(kelvin == 'K')
     }
 
@@ -53,7 +54,7 @@ class AsciiCaseTest {
         val lowered = kelvinKey.asciiLowercase()
 
         // then
-        assert(kelvinKey.lowercase() == "key")
-        assert(lowered == kelvinKey)
+        kelvinKey.lowercase() sameAs "key"
+        lowered sameAs kelvinKey
     }
 }

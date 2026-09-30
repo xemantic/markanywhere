@@ -112,8 +112,10 @@ public fun Flow<SemanticEvent>.wrapInHtmlDocument(): Flow<SemanticEvent> = seman
         val reader = frontmatter
         when {
             reader != null -> if (reader.read(event)) openDocument()
+            // `blanks` only ever holds text that may precede a frontmatter,
+            // so the mark alone decides whether it opens the stream
             !opened -> when {
-                event.opensFrontmatter(blanks) -> {
+                event.isFrontmatterMark() -> {
                     frontmatter = FrontMatterEntryReader(metadata::addFromFrontMatter).also { it.read(event) }
                 }
                 event.mayPrecedeFrontmatter() -> blanks += event

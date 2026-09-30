@@ -21,6 +21,7 @@ import com.xemantic.markanywhere.dump.AccessibilityAnnotations
 import com.xemantic.markanywhere.flow.mergeAdjacentText
 import com.xemantic.markanywhere.html.spec.isHtmlBlank
 import com.xemantic.markanywhere.html.spec.isHtmlWhitespace
+import com.xemantic.markanywhere.html.spec.stripAndCollapseHtmlWhitespace
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 
@@ -109,7 +110,7 @@ public fun Flow<SemanticEvent>.dropHtmlStructuralWhitespace(): Flow<SemanticEven
                     // content, dropped at a block boundary).
                     if (event.text.first().isHtmlWhitespace()) pending = true
                     resolvePending(rightQualifies = true)
-                    emit(SemanticEvent.Text(event.text.collapseWhitespace()))
+                    emit(SemanticEvent.Text(event.text.stripAndCollapseHtmlWhitespace()))
                     leftQualifies = true
                     pending = event.text.last().isHtmlWhitespace()
                 }
@@ -148,24 +149,6 @@ public fun Flow<SemanticEvent>.dropHtmlStructuralWhitespace(): Flow<SemanticEven
     }
     // End-of-stream (a block boundary): any trailing whitespace run is dropped.
 }.mergeAdjacentText()
-
-// Collapses every run of ASCII whitespace to a single space and trims the ends —
-// the caller re-attaches a separating space via the block/inline gate when one
-// is warranted. Non-ASCII spaces (NBSP ` `, narrow NBSP, en/em space, …)
-// are content, not structural whitespace: HTML never collapses them, so they
-// pass through verbatim (e.g. legal citations like `§ 823`).
-private fun String.collapseWhitespace(): String = buildString {
-    var inWhitespace = false
-    for (c in this@collapseWhitespace) {
-        if (c.isHtmlWhitespace()) {
-            inWhitespace = true
-        } else {
-            if (isNotEmpty() && inWhitespace) append(' ')
-            inWhitespace = false
-            append(c)
-        }
-    }
-}
 
 // Opens a whitespace-preserving region, whose watermark covers the whole
 // subtree — so a `code` nested in a `pre` needs no rule of its own.

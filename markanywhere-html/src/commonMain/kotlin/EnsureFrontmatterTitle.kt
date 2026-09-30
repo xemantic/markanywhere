@@ -74,9 +74,16 @@ import kotlinx.coroutines.flow.Flow
  *
  * A frontmatter left empty, by dropping its title entries or as it came, is
  * dropped too (it would render as two thematic breaks), so no empty
- * frontmatter is ever emitted. A frontmatter or `h1` the stream ends inside
- * (a broken upstream contract) is judged all the same, an entry left open
- * included, and emitted closed, so the output stays balanced.
+ * frontmatter is ever emitted. Nor is a title entry dropped from the front
+ * of a frontmatter where that would leave a verbatim line (one outside the
+ * YAML subset) first — front matter detection needs a key there, so the
+ * block would parse back as a thematic break and a paragraph: the title
+ * entry kept moves into the first title entry's place instead, or, none
+ * being kept, the first one stays.
+ *
+ * A frontmatter or `h1` the stream ends inside (a broken upstream contract)
+ * is judged all the same, an entry left open included, and emitted closed,
+ * so the output stays balanced.
  *
  * Buffering is bounded to the frontmatter subtree plus one `h1` subtree —
  * everything after the decision point is forwarded as it arrives.
@@ -117,25 +124,63 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
         blanks.clear()
     }
 
-    // emits the held frontmatter — `prepended` right after its mark, the span
-    // of each slot in `rewrite` (in source order, as `titleSlots` is) replaced
-    // by its events (none drops the entry) — then the blanks held with it.
-    // A frontmatter left empty, by the rewrite or as it came, is dropped: it
-    // would render as a `---` pair, which parses back as two thematic breaks.
+    // the held events of this slot, as they came
+    fun FrontMatterEntry.events(): List<SemanticEvent> = frontmatterEvents!!.subList(start, end + 1)
+
+    // the held frontmatter's body — `prepended` first, the span of each slot
+    // in `rewrite` (in source order, as `titleSlots` is) replaced by its
+    // events (none drops the entry)
+    fun heldBody(
+        rewrite: Map<FrontMatterEntry, List<SemanticEvent>>,
+        prepended: List<SemanticEvent>
+    ): List<SemanticEvent> = buildList {
+        val held = frontmatterEvents!!
+        addAll(prepended)
+        var next = 1
+        for ((slot, events) in rewrite) {
+            addAll(held.subList(next, slot.start))
+            addAll(events)
+            next = slot.end + 1
+        }
+        addAll(held.subList(next, held.size))
+    }
+
+    // `rewrite` keeping the first title slot: the one scalar title entry it
+    // keeps elsewhere moves there, or, keeping none, the slot stays as it
+    // came
+    fun keepingFirstSlot(
+        rewrite: Map<FrontMatterEntry, List<SemanticEvent>>
+    ): Map<FrontMatterEntry, List<SemanticEvent>> {
+        val first = titleSlots.first()
+        val kept = rewrite.entries.firstOrNull { (slot, events) ->
+            slot != first && !slot.hasChildren && events.isNotEmpty()
+        }
+        return rewrite.mapValues { (slot, events) ->
+            when (slot) {
+                first -> kept?.value ?: first.events()
+                kept?.key -> emptyList()
+                else -> events
+            }
+        }
+    }
+
+    // emits the held frontmatter rewritten as [heldBody] does, then the
+    // blanks held with it. Dropping leading title entries must not leave a
+    // verbatim line (one outside the YAML subset) first: front matter
+    // detection needs a key on the line after the `---`, so the block would
+    // parse back as a thematic break and a paragraph — the first title slot
+    // is kept then ([keepingFirstSlot]). A frontmatter left empty, by the
+    // rewrite or as it came, is dropped: it would render as a `---` pair,
+    // which parses back as two thematic breaks.
     suspend fun flushHeld(
         rewrite: Map<FrontMatterEntry, List<SemanticEvent>> = emptyMap(),
         prepended: List<SemanticEvent> = emptyList()
     ) {
         frontmatterEvents?.let { held ->
-            val body = buildList {
-                addAll(prepended)
-                var next = 1
-                for ((slot, events) in rewrite) {
-                    addAll(held.subList(next, slot.start))
-                    addAll(events)
-                    next = slot.end + 1
-                }
-                addAll(held.subList(next, held.size))
+            val body = heldBody(rewrite, prepended).let {
+                if (it.opensWithVerbatimLine() && !held.drop(1).opensWithVerbatimLine()) {
+                    heldBody(keepingFirstSlot(rewrite), prepended)
+                } else it
             }
             val empty = body.none {
                 it is Mark || (it is Text && !it.text.isHtmlBlank())
@@ -159,9 +204,9 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
     // nothing, and another usable one would be a duplicate key
     suspend fun flushWithReadTitleOnly() {
         flushHeld(
-            titleSlots
-                .filterNot { it.hasChildren || it == read }
-                .associateWith { emptyList() }
+            titleSlots.associateWith {
+                if (it.hasChildren || it == read) it.events() else emptyList()
+            }
         )
     }
 
@@ -195,8 +240,7 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
                 PassThrough
             }
             usable != null -> {
-                val events = frontmatterEvents!!.subList(usable.start, usable.end + 1)
-                flushWithSingleTitle(usable, respelled(events))
+                flushWithSingleTitle(usable, respelled(usable.events()))
                 PassThrough
             }
             else -> AwaitingHeading
@@ -285,6 +329,11 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
 // Which text may precede a frontmatter is a different, HTML question
 // ([mayPrecedeFrontmatter]).
 private fun SemanticEvent.showsNothing(): Boolean = this is Text && !isMetadataValue(text)
+
+// Whether a frontmatter body opens with a verbatim line: text, past any of
+// HTML whitespace, ahead of the first entry.
+private fun List<SemanticEvent>.opensWithVerbatimLine(): Boolean =
+    firstOrNull { !(it is Text && it.text.isHtmlBlank()) } is Text
 
 // These events with an unmark appended for every mark left open, innermost
 // first.

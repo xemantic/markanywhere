@@ -50,18 +50,30 @@ import kotlinx.serialization.json.jsonPrimitive
 //   elements joined, not the quotes and commas serialising them — its length
 //   as well as whether it reads as text — so it is judged as the same list
 //   written plainly would be: a long list of words is kept, a long list of
-//   hashes is not, and one whose elements fit under the cap is short. Past
-//   [MAX_PARSED_LENGTH] it is judged as written, like any other shape.
+//   hashes is not, and one whose elements fit under the cap is short.
+// Past [MAX_PARSED_LENGTH] nothing is decoded or parsed: a value is state
+// unless it reads as text, as written, and does not open like encoded state
+// (a JSON object, array or string, a percent escape) — no page writes
+// metadata that long, and a page-controlled value must not cost a tree many
+// times its size.
 internal fun isApplicationStateMeta(content: String): Boolean {
     val written = content.trimInvisible()
     return when {
         written.length <= MAX_META_VALUE_LENGTH -> written.isStructuralState()
-        written.length <= MAX_PARSED_LENGTH && written.isFlatArray() -> written.isLongFlatArrayState()
-        // decoded and parsed only once it reads as text, so a blob —
-        // megabytes of JSON or of escapes, say — is dropped unparsed
-        else -> !written.readsAsText() || written.isStructuralState()
+        written.length <= MAX_PARSED_LENGTH -> when {
+            written.isFlatArray() -> written.isLongFlatArrayState()
+            // decoded and parsed only once it reads as text, so a blob is
+            // dropped unparsed
+            else -> !written.readsAsText() || written.isStructuralState()
+        }
+        // never parsed: opening like encoded state is state enough
+        else -> !written.readsAsText() || written.opensLikeEncodedState()
     }
 }
+
+// Whether this value opens the way a value [isStructuralState] parses does:
+// like a JSON object, array or string, or with a percent escape.
+private fun String.opensLikeEncodedState(): Boolean = firstOrNull()?.let { it in "{[\"%" } == true
 
 // Real metadata is short: `description` / `og:description` rarely exceed 300
 // characters. Past this, a value must read as text to be kept.
@@ -148,8 +160,9 @@ private fun JsonElement.isEncodedState(layers: Int): Boolean {
 // at least one char in sixteen breaks a word — whitespace, a list separator
 // (`,` `;`, so `a,b,c` keywords count), a path separator (`/`, so a list of
 // URLs counts — base64 holds one in 64 chars, too few), or a letter of a
-// script written without spaces (anything past ASCII — base64 and hex never
-// contain one) — sparse enough for a list of long compound words, while the
+// script written without spaces ([isUnspacedScriptLetter] — base64 and hex
+// never contain one; a Latin, Greek or Cyrillic letter, accented or not,
+// breaks no word) — sparse enough for a list of long compound words, while the
 // punctuation of serialised data (quotes, brackets, `=`, `|`, `\`) stays
 // rare.
 // Chars are counted as code points: a surrogate pair — a letter of a
@@ -172,12 +185,30 @@ private fun String.readsAsText(): Boolean {
             continue
         }
         if (c.isLetter() || c.category in COMBINING_MARKS) letters++
-        if (c.isWhitespace() || c == ',' || c == ';' || c == '/' || c.code > 0x7F && c.isLetter()) wordBreaks++
+        if (c.isWhitespace() || c == ',' || c == ';' || c == '/' || c.isUnspacedScriptLetter()) wordBreaks++
         else if (c in DATA_PUNCTUATION) dataPunctuation++
         i++
     }
     return letters * 2 >= chars && wordBreaks * 16 >= chars && dataPunctuation * 20 < chars
 }
+
+// Whether this is a letter of a script written without spaces between words:
+// Thai, Lao, Tibetan, Myanmar, Khmer, Japanese kana, Bopomofo, the CJK
+// ideographs and Yi. (A supplementary-plane letter, which the common stdlib
+// cannot classify, is counted as one by [readsAsText] directly.)
+private fun Char.isUnspacedScriptLetter(): Boolean =
+    isLetter() && UNSPACED_SCRIPT_RANGES.any { code in it }
+
+private val UNSPACED_SCRIPT_RANGES = listOf(
+    0x0E00..0x0FFF, // Thai, Lao, Tibetan
+    0x1000..0x109F, // Myanmar
+    0x1780..0x17FF, // Khmer
+    0x3040..0x31FF, // Hiragana, Katakana, Bopomofo, Katakana extensions
+    0x3400..0x4DBF, // CJK Extension A
+    0x4E00..0xA4CF, // CJK Unified Ideographs, Yi
+    0xF900..0xFAFF, // CJK Compatibility Ideographs
+    0xFF66..0xFF9F, // halfwidth Katakana
+)
 
 private val COMBINING_MARKS = setOf(
     CharCategory.NON_SPACING_MARK,

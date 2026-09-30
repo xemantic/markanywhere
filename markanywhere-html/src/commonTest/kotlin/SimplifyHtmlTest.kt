@@ -1082,6 +1082,39 @@ class SimplifyHtmlTest {
     }
 
     @Test
+    fun `should drop a long unspaced run of letters of a script written with spaces`() = runTest {
+        // given — Latin, Greek and Cyrillic are written with spaces, so a
+        // letter of theirs breaks no word, accented or not; Thai is not, so a
+        // long Thai text without spaces is kept
+        val latin = "àéîõüçñ".repeat(700)
+        val greek = "αβγδεζη".repeat(700)
+        val cyrillic = "абвгдеж".repeat(700)
+        val thai = "ภาษาไทยเขียนติดกันโดยไม่เว้นวรรค".repeat(150)
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    "meta"("name" to "latin", "content" to latin) { }
+                    "meta"("name" to "greek", "content" to greek) { }
+                    "meta"("name" to "cyrillic", "content" to cyrillic) { }
+                    "meta"("name" to "description", "content" to thai) { }
+                }
+                "body" { "p" { +"text" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "description") { +thai }
+            }
+            "p" { +"text" }
+        }
+    }
+
+    @Test
     fun `should keep long text in scripts writing vowels as combining marks`() = runTest {
         // given — Devanagari matras and viramas, and Arabic harakat, are marks
         // (Mn / Mc), not letters: under half of these chars are letters
@@ -1347,6 +1380,36 @@ class SimplifyHtmlTest {
         val input = semanticEvents(tagged = true) {
             "html" {
                 "head" {
+                    "meta"("name" to "state", "content" to "{\"text\": \"$prose\"}") { }
+                    "meta"("name" to "description", "content" to prose) { }
+                }
+                "body" { "p" { +"text" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "description") { +prose }
+            }
+            "p" { +"text" }
+        }
+    }
+
+    @Test
+    fun `should drop a value too long to parse opening like JSON without parsing it`() = runTest {
+        // given — far past anything metadata holds, a value opening like a
+        // JSON object, array or string, or a percent escape is judged by
+        // that alone, so no page-controlled value is parsed whatever its size;
+        // plain prose that long is still kept
+        val prose = "A study of how language models behave in long dialogues. ".repeat(1200)
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    "meta"("name" to "quoted", "content" to "\"$prose\"") { }
                     "meta"("name" to "state", "content" to "{\"text\": \"$prose\"}") { }
                     "meta"("name" to "description", "content" to prose) { }
                 }
@@ -1928,6 +1991,33 @@ class SimplifyHtmlTest {
                     "title" { +"\u200B" }
                     "meta"("name" to "title", "content" to "Real Page") { }
                     "meta"("name" to "description", "content" to "\uFEFF\u200B") { }
+                }
+                "body" { "p" { +"x" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"Real Page" }
+            }
+            "p" { +"x" }
+        }
+    }
+
+    @Test
+    fun `should skip a title of blank-rendering letters only`() = runTest {
+        // given — a Hangul filler or a blank Braille pattern is a letter or a
+        // symbol, yet shows nothing: the common trick for a blank name
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    "title" { +"\u3164" }
+                    "meta"("name" to "title", "content" to "Real Page") { }
+                    "meta"("name" to "description", "content" to "\u115F\u1160\uFFA0\u2800") { }
                 }
                 "body" { "p" { +"x" } }
             }

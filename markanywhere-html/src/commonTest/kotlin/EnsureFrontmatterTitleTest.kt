@@ -1205,6 +1205,28 @@ class EnsureFrontmatterTitleTest {
     }
 
     @Test
+    fun `should treat a title entry of blank-rendering letters as blank`() = runTest {
+        // given — a Hangul filler is a letter, yet shows nothing
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"\u3164" }
+            }
+            "h1" { +"Heading" }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"Heading" }
+            }
+            "h1" { +"Heading" }
+        }
+    }
+
+    @Test
     fun `should keep a non-breaking space before the frontmatter as content`() = runTest {
         // given — NBSP is content in HTML, so the frontmatter does not open
         // the stream
@@ -1376,6 +1398,44 @@ class EnsureFrontmatterTitleTest {
 
         // then
         output sameAs "Body."
+    }
+
+    @Test
+    fun `should keep a leading empty title entry that a verbatim line follows`() = runTest {
+        // given — dropping the entry would make the verbatim line the first
+        // one, which front matter detection rejects: the block would parse
+        // back as a thematic break and a paragraph
+        val markdown = "---\ntitle:\nfoo bar baz\nx: y\n---\n\nBody."
+
+        // when
+        val output = flowOf(markdown).parse().ensureFrontmatterTitle().renderMarkdown()
+
+        // then
+        output sameAs markdown
+    }
+
+    @Test
+    fun `should move a usable title variant ahead of a verbatim line following a dropped empty title`() = runTest {
+        // given
+        val markdown = "---\ntitle:\nfoo bar baz\nTitle: Real\n---\n\nBody."
+
+        // when
+        val output = flowOf(markdown).parse().ensureFrontmatterTitle().renderMarkdown()
+
+        // then
+        output sameAs "---\ntitle: Real\nfoo bar baz\n---\n\nBody."
+    }
+
+    @Test
+    fun `should keep a frontmatter led by empty title entries and a verbatim line a front matter on re-parse`() = runTest {
+        // given
+        val markdown = "---\ntitle: \"\"\nTitle:\n? complex\nx: y\n---\n\nBody."
+
+        // when
+        val output = flowOf(markdown).parse().ensureFrontmatterTitle().renderMarkdown()
+
+        // then
+        output sameAs "---\ntitle: \"\"\n? complex\nx: y\n---\n\nBody."
     }
 
     @Test

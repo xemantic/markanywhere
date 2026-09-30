@@ -17,6 +17,7 @@
 package com.xemantic.markanywhere.html.spec
 
 import com.xemantic.kotlin.test.assert
+import com.xemantic.kotlin.test.sameAs
 import kotlin.test.Test
 
 class HtmlWhitespaceTest {
@@ -76,7 +77,7 @@ class HtmlWhitespaceTest {
         val result = "\n  Foo\t\r\n  Bar \u000C".stripAndCollapseHtmlWhitespace()
 
         // then
-        assert(result == "Foo Bar")
+        result sameAs "Foo Bar"
     }
 
     @Test
@@ -85,7 +86,7 @@ class HtmlWhitespaceTest {
         val result = "\u00A0 a  \u00A0b ".stripAndCollapseHtmlWhitespace()
 
         // then
-        assert(result == "\u00A0 a \u00A0b")
+        result sameAs "\u00A0 a \u00A0b"
     }
 
     @Test
@@ -94,7 +95,7 @@ class HtmlWhitespaceTest {
         val result = " \t\n".stripAndCollapseHtmlWhitespace()
 
         // then
-        assert(result == "")
+        result sameAs ""
     }
 
 }

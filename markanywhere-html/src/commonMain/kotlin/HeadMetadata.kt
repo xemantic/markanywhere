@@ -38,9 +38,16 @@ internal fun isScalarEntryType(type: String?): Boolean =
 internal fun isMetadataValue(value: String): Boolean = value.any { !it.isInvisible() }
 
 // Whitespace (NBSP included), a control char (a next line char, a C0
-// control), or an invisible format char such as a zero-width space or a byte
-// order mark.
-private fun Char.isInvisible(): Boolean = isWhitespace() || category == CONTROL || category == FORMAT
+// control), an invisible format char such as a zero-width space or a byte
+// order mark, or a letter or symbol that renders blank ([BLANK_GLYPHS]).
+private fun Char.isInvisible(): Boolean =
+    isWhitespace() || category == CONTROL || category == FORMAT || this in BLANK_GLYPHS
+
+// Letters and symbols with no visible glyph — the Hangul fillers (choseong,
+// jungseong, compatibility, halfwidth) and the blank Braille pattern: being no
+// whitespace or format char, they are the common trick for a name that shows
+// nothing.
+private const val BLANK_GLYPHS = "\u115F\u1160\u3164\uFFA0\u2800"
 
 // This value with the chars [isMetadataValue] finds invisible trimmed from
 // its edges.

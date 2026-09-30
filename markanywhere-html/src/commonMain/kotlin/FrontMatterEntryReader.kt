@@ -26,7 +26,12 @@ import com.xemantic.markanywhere.html.spec.isHtmlBlank
 // ensureFrontmatterTitle judges the title by — anywhere else a frontmatter
 // is content.
 internal fun SemanticEvent.opensFrontmatter(preceding: List<SemanticEvent>): Boolean =
-    this is Mark && !isTagged && name == "frontmatter" && preceding.all { it.mayPrecedeFrontmatter() }
+    isFrontmatterMark() && preceding.all { it.mayPrecedeFrontmatter() }
+
+// Whether this is the mark of a frontmatter that is metadata wherever it
+// stands first: an untagged `frontmatter` mark (a tagged one is content).
+internal fun SemanticEvent.isFrontmatterMark(): Boolean =
+    this is Mark && !isTagged && name == "frontmatter"
 
 // Whether this event may come ahead of the frontmatter without keeping it
 // from opening the stream: text of HTML whitespace (an NBSP is content).
