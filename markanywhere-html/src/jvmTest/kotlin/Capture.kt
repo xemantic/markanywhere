@@ -43,7 +43,8 @@ import kotlin.time.Duration.Companion.seconds
  *   font- and viewport-sensitive and should match what a real user sees
  * - `--wait=<seconds>` hard cap for the post-navigation settle wait
  *   ([waitUntilLoaded]); capture proceeds once the network and DOM go quiet,
- *   or this backstop elapses on a never-quiet page (default 15)
+ *   or this backstop elapses on a never-quiet page (default 15) — with a
+ *   warning if the document itself never finished parsing
  * - `--viewport=<w>x<h>` window size, default `1920x1080` (Full HD). Fixtures
  *   must be captured at a stable **desktop** width: a headless browser's small
  *   default viewport drops below responsive breakpoints, so a CSS navbar
@@ -84,7 +85,13 @@ fun main(args: Array<String>) {
         )
         try {
             val tab = browser.get(url)
-            tab.waitUntilLoaded(timeout = wait.seconds)
+            val load = tab.waitUntilLoaded(timeout = wait.seconds)
+            if (!load.parsed) {
+                System.err.println(
+                    "warning: the document never finished parsing " +
+                        "(readyState ${load.readyState}), the capture is likely truncated"
+                )
+            }
             val dump = PageSession(tab).dump()
             output.writeText(markanywhereJson.encodeToString(dump))
         } finally {
