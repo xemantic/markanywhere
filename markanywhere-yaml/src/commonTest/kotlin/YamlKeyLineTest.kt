@@ -17,6 +17,7 @@
 package com.xemantic.markanywhere.yaml
 
 import com.xemantic.kotlin.test.assert
+import com.xemantic.kotlin.test.sameAs
 import kotlin.test.Test
 
 /**
@@ -50,5 +51,20 @@ class YamlKeyLineTest {
 
         // then
         for (line in lines) assert(!isYamlKeyLine(line))
+    }
+
+    @Test
+    fun `should read the key of a mapping key line`() {
+        // when
+        val plain = yamlKeyLineKeyOrNull("title: \"A long")
+        val doubleQuoted = yamlKeyLineKeyOrNull("\"og:\\u0074itle\" : x")
+        val singleQuoted = yamlKeyLineKeyOrNull("'it''s':")
+        val none = yamlKeyLineKeyOrNull("title:x")
+
+        // then
+        plain sameAs "title"
+        doubleQuoted sameAs "og:title"
+        singleQuoted sameAs "it's"
+        assert(none == null)
     }
 }

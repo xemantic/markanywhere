@@ -18,6 +18,7 @@ package com.xemantic.markanywhere.html
 
 import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.html.spec.isHtmlBlank
+import com.xemantic.markanywhere.yaml.yamlKeyLineKeyOrNull
 
 // Whether this event opens the frontmatter that is the page's metadata, the
 // `preceding` events being all the stream held before it: an untagged
@@ -38,26 +39,36 @@ internal fun SemanticEvent.isFrontmatterMark(): Boolean =
 internal fun SemanticEvent.mayPrecedeFrontmatter(): Boolean = this is Text && text.isHtmlBlank()
 
 // A top-level front matter `entry`: its key as spelled, `type`, text, whether
-// it holds nested marks, and the span of its events among those read.
+// it holds nested marks, and the span of its events among those read — the
+// indented verbatim lines continuing it included, so dropping the span drops
+// them too, rather than leaving them to continue the entry before it. A
+// verbatim line defining a key (one outside the YAML subset, such as a
+// multi-line quoted scalar) is an entry too, [isVerbatim]: its value is
+// unknown, so it is never head metadata, yet it holds the key for readers.
 internal class FrontMatterEntry(
     val key: String,
     val type: String?,
     val text: String,
     val hasChildren: Boolean,
+    val isVerbatim: Boolean,
     val start: Int,
     val end: Int
 ) {
 
     // Whether it holds head metadata: scalar text with visible content —
-    // not a nested structure, an empty collection, `null` or blank text.
-    val isHeadMetadata: Boolean = !hasChildren && isScalarEntryType(type) && isMetadataValue(text)
+    // not a nested structure, an empty collection, `null`, blank text or a
+    // verbatim line.
+    val isHeadMetadata: Boolean =
+        !hasChildren && !isVerbatim && isScalarEntryType(type) && isMetadataValue(text)
 
 }
 
 // Reads the top-level entries of a `frontmatter` subtree, reporting each to
-// `onEntry` as it closes. The one reader of front matter as head metadata —
-// wrapInHtmlDocument turns the entries into `<head>`, ensureFrontmatterTitle
-// judges the title entries among them, and the two must agree on both.
+// `onEntry` once its span is known: when the next top-level entry or verbatim
+// line opens, or the frontmatter closes. The one reader of front matter as
+// head metadata — wrapInHtmlDocument turns the entries into `<head>`,
+// ensureFrontmatterTitle judges the title entries among them, and the two
+// must agree on both.
 internal class FrontMatterEntryReader(
     private val onEntry: (FrontMatterEntry) -> Unit
 ) {
@@ -69,6 +80,9 @@ internal class FrontMatterEntryReader(
     private var openStart = 0
     private var openHasChildren = false
     private val openText = StringBuilder()
+
+    // the last top-level entry read, held until its span is known
+    private var pending: FrontMatterEntry? = null
 
     // Whether the root is a sequence: a top-level `item` was read.
     var isSequence: Boolean = false
@@ -82,6 +96,7 @@ internal class FrontMatterEntryReader(
             is Mark -> {
                 depth++
                 if (depth == 2) {
+                    reportPending()
                     if (event.name == "item") isSequence = true
                     open = if (event.name == "entry" && event["key"] != null) event else null
                     openStart = index
@@ -91,10 +106,16 @@ internal class FrontMatterEntryReader(
                     openHasChildren = true
                 }
             }
-            is Text -> if (depth == 2) openText.append(event.text)
+            is Text -> when (depth) {
+                1 -> readVerbatimLine(event.text)
+                2 -> openText.append(event.text)
+            }
             is Unmark -> {
                 if (--depth == 1) closeEntry()
-                return depth == 0
+                if (depth == 0) {
+                    reportPending()
+                    return true
+                }
             }
         }
         return false
@@ -104,22 +125,57 @@ internal class FrontMatterEntryReader(
     // upstream contract) — its text is complete by then.
     fun finish() {
         closeEntry()
+        reportPending()
+    }
+
+    // A verbatim line (text outside any entry, as the YAML parser emits a
+    // line outside its subset): an indented one continues the entry before
+    // it, one at the margin ends it, and defines an entry itself when it
+    // opens with a key. A blank line decides nothing.
+    private fun readVerbatimLine(text: String) {
+        if (text.isHtmlBlank()) return
+        val entry = pending
+        if (text.first() == ' ' || text.first() == '\t') {
+            if (entry != null) pending = entry.extendedTo(index)
+            return
+        }
+        reportPending()
+        pending = yamlKeyLineKeyOrNull(text.substringBefore('\n'))?.let { key ->
+            FrontMatterEntry(
+                key = key,
+                type = null,
+                text = "",
+                hasChildren = false,
+                isVerbatim = true,
+                start = index,
+                end = index
+            )
+        }
     }
 
     private fun closeEntry() {
         open?.let {
             open = null
-            onEntry(
-                FrontMatterEntry(
-                    key = it["key"]!!,
-                    type = it["type"],
-                    text = openText.toString(),
-                    hasChildren = openHasChildren,
-                    start = openStart,
-                    end = index
-                )
+            pending = FrontMatterEntry(
+                key = it["key"]!!,
+                type = it["type"],
+                text = openText.toString(),
+                hasChildren = openHasChildren,
+                isVerbatim = false,
+                start = openStart,
+                end = index
             )
         }
     }
 
+    private fun reportPending() {
+        pending?.let {
+            pending = null
+            onEntry(it)
+        }
+    }
+
 }
+
+private fun FrontMatterEntry.extendedTo(end: Int) =
+    FrontMatterEntry(key, type, text, hasChildren, isVerbatim, start, end)

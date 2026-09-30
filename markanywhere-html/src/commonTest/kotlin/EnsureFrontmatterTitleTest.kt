@@ -1439,6 +1439,44 @@ class EnsureFrontmatterTitleTest {
     }
 
     @Test
+    fun `should derive no title beside a title line outside the YAML subset`() = runTest {
+        // given — the multi-line quoted title comes through as verbatim lines,
+        // yet readers read it: deriving one would make a duplicate key
+        val markdown = "---\ntitle: \"A long\n  title\"\nx: y\n---\n\n# Heading"
+
+        // when
+        val output = flowOf(markdown).parse().ensureFrontmatterTitle().renderMarkdown()
+
+        // then
+        output sameAs markdown
+    }
+
+    @Test
+    fun `should drop the continuation lines of a dropped title entry`() = runTest {
+        // given — left behind, the indented line would continue `foo`
+        val markdown = "---\nfoo: a\nTitle: x\n  cont\n  more\ntitle: Real\n---\n\nBody."
+
+        // when
+        val output = flowOf(markdown).parse().ensureFrontmatterTitle().renderMarkdown()
+
+        // then
+        output sameAs "---\nfoo: a\ntitle: Real\n---\n\nBody."
+    }
+
+    @Test
+    fun `should keep the continuation lines of a verbatim line after a title entry`() = runTest {
+        // given — the indented line continues the verbatim line, not the
+        // title entry dropped before it
+        val markdown = "---\nfoo: a\nTitle:\nbar: [a:, b]\n  x\n---\n\nBody."
+
+        // when
+        val output = flowOf(markdown).parse().ensureFrontmatterTitle().renderMarkdown()
+
+        // then
+        output sameAs "---\nfoo: a\nbar: [a:, b]\n  x\n---\n\nBody."
+    }
+
+    @Test
     fun `should treat a title entry of control chars as blank`() = runTest {
         // given — a next line char or a C0 control shows nothing, and the
         // title read back from `<title>` would be empty

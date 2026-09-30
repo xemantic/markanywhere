@@ -1430,6 +1430,66 @@ class SimplifyHtmlTest {
     }
 
     @Test
+    fun `should keep bracketed human text holding a nested bracket`() = runTest {
+        // given — a bare word is no JSON value, so these are no nested JSON
+        // arrays however leniently a parser reads them
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    "meta"("name" to "keywords", "content" to "[foo, [bar]]") { }
+                    "meta"("name" to "description", "content" to "[[Wiki]]") { }
+                    "meta"("name" to "state", "content" to "[[\"a\", 1, true, null, -2.5e3]]") { }
+                }
+                "body" { "p" { +"text" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "keywords") { +"[foo, [bar]]" }
+                "entry"("key" to "description") { +"[[Wiki]]" }
+            }
+            "p" { +"text" }
+        }
+    }
+
+    @Test
+    fun `should drop a long value made of emoji`() = runTest {
+        // given — an emoji is no letter, so a blob encoded as emoji does not
+        // read as text, while styled letters of the supplementary planes and
+        // CJK Extension B ideographs do
+        val emoji = "\uD83D\uDE00\uD83D\uDC4D\uD83C\uDF89 ".repeat(1500)
+        val styled = "\uD835\uDC07\uD835\uDC1E\uD835\uDC25\uD835\uDC25\uD835\uDC28 ".repeat(1000)
+        val cjk = "\uD840\uDC00\uD840\uDC01\uD840\uDC02".repeat(1500)
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    "meta"("name" to "state", "content" to emoji) { }
+                    "meta"("name" to "description", "content" to styled) { }
+                    "meta"("name" to "abstract", "content" to cjk) { }
+                }
+                "body" { "p" { +"text" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "description") { +styled }
+                "entry"("key" to "abstract") { +cjk }
+            }
+            "p" { +"text" }
+        }
+    }
+
+    @Test
     fun `should not decode a percent escape made of non-ASCII digits`() = runTest {
         // given — an Arabic-Indic seven is no hex digit, so this is not a
         // percent-encoded JSON object but text
@@ -1818,6 +1878,34 @@ class SimplifyHtmlTest {
             "frontmatter" {
                 "entry"("key" to "author") { +"Alice" }
                 "entry"("key" to "title") { +"First" }
+            }
+            "p" { +"x" }
+        }
+    }
+
+    @Test
+    fun `should keep the bidi marks at the edges of a title`() = runTest {
+        // given — a right-to-left title ends in a right-to-left mark on
+        // purpose, keeping its punctuation on the right side; an isolate
+        // likewise opens the title of an embedded direction
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    "title" { +" \uFEFF\u05E9\u05DC\u05D5\u05DD!\u200F " }
+                    "meta"("name" to "og:title", "content" to "\u2067\u05E9\u05DC\u05D5\u05DD\u2069") { }
+                }
+                "body" { "p" { +"x" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"\u05E9\u05DC\u05D5\u05DD!\u200F" }
+                "entry"("key" to "og:title") { +"\u2067\u05E9\u05DC\u05D5\u05DD\u2069" }
             }
             "p" { +"x" }
         }

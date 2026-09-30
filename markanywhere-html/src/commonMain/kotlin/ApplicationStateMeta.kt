@@ -19,6 +19,7 @@ package com.xemantic.markanywhere.html
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonPrimitive
@@ -34,7 +35,9 @@ import kotlinx.serialization.json.jsonPrimitive
 // order mark, NBSP) at its edges or those of a JSON string within:
 // - a value that parses as a JSON object. Parsing, not a look at the first
 //   and last char, is what keeps human text that merely starts with a
-//   bracket (`[Solved] …`, `{Draft} …`, `[2024] Annual report [PDF]`);
+//   bracket (`[Solved] …`, `{Draft} …`, `[2024] Annual report [PDF]`) —
+//   parsing as strict JSON, since the parser takes a bare word for a value
+//   and would read `[[Wiki]]` as a nested array;
 // - a JSON array holding an object or a nested array. A flat list of
 //   scalars — an empty one included — is metadata a person writes
 //   (`keywords`, `article:tag`, `citation_volume`), whether a bare word in it
@@ -130,11 +133,38 @@ private fun String.hasNestedElement(): Boolean {
 // a pass over itself per layer.
 private const val MAX_DECODING_DEPTH = 8
 
-// Only a value opening like a JSON object, array or string is parsed.
+// Only a value opening like a JSON object, array or string is parsed, and
+// only strict JSON counts ([isStrictJson]).
 private fun String.parseJsonCandidateOrNull(): JsonElement? {
     val first = firstOrNull()
-    return if (first == '{' || first == '[' || first == '"') parseJsonOrNull() else null
+    return if (first == '{' || first == '[' || first == '"') {
+        parseJsonOrNull()?.takeIf { it.isStrictJson() }
+    } else null
 }
+
+// Whether every scalar in this tree is a JSON value — a string, a number,
+// `true`, `false` or `null` — and not a bare word, which the parser accepts
+// even when not lenient (keys it does require quoted). Walked with a stack
+// of its own, as a crafted value nests deeper than the call stack reaches.
+private fun JsonElement.isStrictJson(): Boolean {
+    val pending = ArrayDeque<JsonElement>()
+    pending.addLast(this)
+    while (pending.isNotEmpty()) {
+        when (val element = pending.removeLast()) {
+            is JsonObject -> pending.addAll(element.values)
+            is JsonArray -> pending.addAll(element)
+            is JsonPrimitive -> if (!element.isString
+                && element.content != "true"
+                && element.content != "false"
+                && element !is JsonNull
+                && !JSON_NUMBER.matches(element.content)
+            ) return false
+        }
+    }
+    return true
+}
+
+private val JSON_NUMBER = Regex("^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][-+]?[0-9]+)?$")
 
 // Recursion unwraps one JSON string per level, `layers` bounding the
 // layers of encoding still to be undone ([MAX_DECODING_DEPTH]).
@@ -165,10 +195,8 @@ private fun JsonElement.isEncodedState(layers: Int): Boolean {
 // breaks no word) — sparse enough for a list of long compound words, while the
 // punctuation of serialised data (quotes, brackets, `=`, `|`, `\`) stays
 // rare.
-// Chars are counted as code points: a surrogate pair — a letter of a
-// supplementary-plane script (CJK Extension B, historic scripts) or an emoji,
-// which the common stdlib cannot classify — counts once, as a letter of a
-// script without spaces; serialised data never holds one.
+// Chars are counted as code points: a surrogate pair, which the common stdlib
+// cannot classify, counts once, judged by its plane.
 private fun String.readsAsText(): Boolean {
     var chars = 0
     var letters = 0
@@ -178,9 +206,19 @@ private fun String.readsAsText(): Boolean {
     while (i < length) {
         val c = this[i]
         chars++
-        if (c.isHighSurrogate() && getOrNull(i + 1)?.isLowSurrogate() == true) {
-            letters++
-            wordBreaks++
+        val low = getOrNull(i + 1)
+        if (c.isHighSurrogate() && low != null && low.isLowSurrogate()) {
+            when (supplementaryCodePoint(c, low)) {
+                // the CJK ideograph extensions: letters of a script written
+                // without spaces
+                in 0x20000..0x3FFFF -> { letters++; wordBreaks++ }
+                // historic scripts and styled mathematical letters, written
+                // with spaces
+                in 0x10000..0x1DFFF -> letters++
+                // emoji, other symbols, private use: no letter, so a blob
+                // encoded as emoji does not read as text
+                else -> {}
+            }
             i += 2
             continue
         }
@@ -192,10 +230,14 @@ private fun String.readsAsText(): Boolean {
     return letters * 2 >= chars && wordBreaks * 16 >= chars && dataPunctuation * 20 < chars
 }
 
+// The code point a surrogate pair encodes.
+private fun supplementaryCodePoint(high: Char, low: Char): Int =
+    0x10000 + ((high.code - 0xD800) shl 10) + (low.code - 0xDC00)
+
 // Whether this is a letter of a script written without spaces between words:
 // Thai, Lao, Tibetan, Myanmar, Khmer, Japanese kana, Bopomofo, the CJK
-// ideographs and Yi. (A supplementary-plane letter, which the common stdlib
-// cannot classify, is counted as one by [readsAsText] directly.)
+// ideographs and Yi. (A supplementary-plane char, which the common stdlib
+// cannot classify, is judged by its plane in [readsAsText] directly.)
 private fun Char.isUnspacedScriptLetter(): Boolean =
     isLetter() && UNSPACED_SCRIPT_RANGES.any { code in it }
 

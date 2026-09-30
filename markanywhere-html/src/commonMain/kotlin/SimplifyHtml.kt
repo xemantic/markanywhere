@@ -303,15 +303,11 @@ public fun Flow<SemanticEvent>.simplifyHtml(
     match("meta") { event ->
         val name = event["name"]
         val content = event["content"]
-        // blank by the rule addFromHtml applies; cheapest checks first, so
-        // the JSON parse runs only for a name that would otherwise be kept
-        // (an already present one loses, the first of duplicates winning)
-        if (name != null && content != null && isMetadataValue(content)) {
+        // cheapest checks first, so the JSON parse runs only for a meta
+        // that would otherwise be added
+        if (name != null && content != null && metadata.acceptsFromHtml(name, content)) {
             val normalizedName = name.asciiLowercase()
-            if (normalizedName !in metadata
-                && !isNoiseMetaName(normalizedName)
-                && !isApplicationStateMeta(content)
-            ) {
+            if (!isNoiseMetaName(normalizedName) && !isApplicationStateMeta(content)) {
                 val value = when (normalizedName) {
                     // as a <title> element's text reads
                     "title" -> content.normalizeTitle()

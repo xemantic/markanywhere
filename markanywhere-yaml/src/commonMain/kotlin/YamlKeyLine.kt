@@ -32,19 +32,32 @@ package com.xemantic.markanywhere.yaml
  * A manual scan rather than a regex: `\p{L}` classes are not portable
  * across the Kotlin/JS and Kotlin/Native regex engines.
  */
-public fun isYamlKeyLine(line: String): Boolean {
-    if (line.isEmpty()) return false
+public fun isYamlKeyLine(line: String): Boolean = yamlKeyLineKeyOrNull(line) != null
+
+/**
+ * The key of [line] when it is a YAML block mapping key line by the rule of
+ * [isYamlKeyLine] — a quoted key decoded — or null when it is not one.
+ *
+ * Lets a consumer of a front matter line kept verbatim (one outside the
+ * subset `YamlParser` parses) still tell which key it defines.
+ */
+public fun yamlKeyLineKeyOrNull(line: String): String? {
+    if (line.isEmpty()) return null
     val first = line[0]
-    var i = if (first == '"' || first == '\'') {
-        scanQuoted(line)?.second ?: return false
+    val key: String
+    var i: Int
+    if (first == '"' || first == '\'') {
+        val (content, end) = scanQuoted(line) ?: return null
+        key = content
+        i = end
     } else {
-        if (!isIdentifierKeyStart(first)) return false
-        var j = 1
-        while (j < line.length && isIdentifierKeyChar(line[j])) j++
-        j
+        if (!isIdentifierKeyStart(first)) return null
+        i = 1
+        while (i < line.length && isIdentifierKeyChar(line[i])) i++
+        key = line.substring(0, i)
     }
     while (i < line.length && line[i] == ' ') i++
-    return i < line.length && line.isMappingColonAt(i)
+    return if (i < line.length && line.isMappingColonAt(i)) key else null
 }
 
 // A key [YamlWriter] may write plain: identifier-shaped, so it passes

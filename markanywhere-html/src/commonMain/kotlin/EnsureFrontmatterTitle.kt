@@ -34,6 +34,11 @@ import kotlinx.coroutines.flow.Flow
  * `entry` marks with `key="title"` in any ASCII letter case, and one holding
  * scalar text with visible content is usable — entries holding a nested
  * structure, an empty collection, `null` or blank text are not, as there.
+ * A verbatim line defining a title key (a YAML shape outside the parsed
+ * subset, such as a multi-line quoted scalar) is a title entry too, one whose
+ * value only the front matter readers know. Each title entry spans the
+ * indented verbatim lines continuing it, so dropping one drops them too,
+ * rather than leaving them to continue the entry before it.
  *
  * Whenever a title comes out, the frontmatter holds exactly one title entry,
  * spelled `title`: every front matter reader then reads the same title —
@@ -58,9 +63,9 @@ import kotlinx.coroutines.flow.Flow
  *
  * Two shapes are left without a title:
  *
- * - A title entry holding a nested structure (localized titles, say) is no
- *   title for [wrapInHtmlDocument], but it is content: no title is derived
- *   and no title entry respelled. Of the other title entries only the usable
+ * - A title entry holding a nested structure (localized titles, say) or kept
+ *   as a verbatim line is no title for [wrapInHtmlDocument], but it is
+ *   content: no title is derived and no title entry respelled. Of the other title entries only the usable
  *   one [wrapInHtmlDocument] picks is kept, as spelled, so readers may
  *   disagree on the title as they did on the input; the empty ones (`null`,
  *   blank, an empty collection) carry nothing, and another usable one would
@@ -145,6 +150,32 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
         addAll(held.subList(next, held.size))
     }
 
+    // Whether the held frontmatter's body, rewritten as [heldBody] would,
+    // opens with a verbatim line: text, past any of HTML whitespace, ahead of
+    // the first entry — found without building the body.
+    fun opensWithVerbatimLine(
+        rewrite: Map<FrontMatterEntry, List<SemanticEvent>>,
+        prepended: List<SemanticEvent>
+    ): Boolean {
+        if (prepended.isNotEmpty()) return false
+        val held = frontmatterEvents!!
+        val slots = rewrite.keys.associateBy { it.start }
+        var i = 1
+        while (i < held.size) {
+            val slot = slots[i]
+            if (slot != null) {
+                val events = rewrite.getValue(slot)
+                if (events.isNotEmpty()) return events.first() is Text
+                i = slot.end + 1
+                continue
+            }
+            val event = held[i]
+            if (!(event is Text && event.text.isHtmlBlank())) return event is Text
+            i++
+        }
+        return false
+    }
+
     // `rewrite` keeping the first title slot: the one scalar title entry it
     // keeps elsewhere moves there, or, keeping none, the slot stays as it
     // came
@@ -153,7 +184,7 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
     ): Map<FrontMatterEntry, List<SemanticEvent>> {
         val first = titleSlots.first()
         val kept = rewrite.entries.firstOrNull { (slot, events) ->
-            slot != first && !slot.hasChildren && events.isNotEmpty()
+            slot != first && !slot.isUnreadable && events.isNotEmpty()
         }
         return rewrite.mapValues { (slot, events) ->
             when (slot) {
@@ -177,11 +208,9 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
         prepended: List<SemanticEvent> = emptyList()
     ) {
         frontmatterEvents?.let { held ->
-            val body = heldBody(rewrite, prepended).let {
-                if (it.opensWithVerbatimLine() && !held.drop(1).opensWithVerbatimLine()) {
-                    heldBody(keepingFirstSlot(rewrite), prepended)
-                } else it
-            }
+            val leavesVerbatimLineFirst = opensWithVerbatimLine(rewrite, prepended)
+                && !opensWithVerbatimLine(emptyMap(), emptyList())
+            val body = heldBody(if (leavesVerbatimLineFirst) keepingFirstSlot(rewrite) else rewrite, prepended)
             val empty = body.none {
                 it is Mark || (it is Text && !it.text.isHtmlBlank())
             }
@@ -200,12 +229,12 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
     }
 
     // emits the held frontmatter keeping, of its title entries, only the
-    // nested ones and the one wrapInHtmlDocument reads: the empty ones carry
-    // nothing, and another usable one would be a duplicate key
+    // unreadable ones and the one wrapInHtmlDocument reads: the empty ones
+    // carry nothing, and another usable one would be a duplicate key
     suspend fun flushWithReadTitleOnly() {
         flushHeld(
             titleSlots.associateWith {
-                if (it.hasChildren || it == read) it.events() else emptyList()
+                if (it.isUnreadable || it == read) it.events() else emptyList()
             }
         )
     }
@@ -233,9 +262,9 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
     suspend fun judgeFrontmatter() {
         val usable = read
         state = when {
-            // a nested title is content, not ours to replace or drop; a
-            // sequence has no place for a title entry
-            titleSlots.any { it.hasChildren } || reader.isSequence -> {
+            // a nested or verbatim title is content, not ours to replace or
+            // drop; a sequence has no place for a title entry
+            titleSlots.any { it.isUnreadable } || reader.isSequence -> {
                 flushWithReadTitleOnly()
                 PassThrough
             }
@@ -330,10 +359,9 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
 // ([mayPrecedeFrontmatter]).
 private fun SemanticEvent.showsNothing(): Boolean = this is Text && !isMetadataValue(text)
 
-// Whether a frontmatter body opens with a verbatim line: text, past any of
-// HTML whitespace, ahead of the first entry.
-private fun List<SemanticEvent>.opensWithVerbatimLine(): Boolean =
-    firstOrNull { !(it is Text && it.text.isHtmlBlank()) } is Text
+// Whether this title entry holds a title [wrapInHtmlDocument] cannot read,
+// though front matter readers do: a nested structure or a verbatim line.
+private val FrontMatterEntry.isUnreadable: Boolean get() = hasChildren || isVerbatim
 
 // These events with an unmark appended for every mark left open, innermost
 // first.

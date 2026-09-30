@@ -57,6 +57,8 @@ internal fun String.trimInvisible(): String = trim { it.isInvisible() }
 // and collapsed — with any other invisible char at its edges (the NBSP
 // padding an icon often leaves, a byte order mark) trimmed too: inside, NBSP
 // is content and stays, at an edge it only forces the title into quotes.
+// A bidi control ([BIDI_CONTROLS]) is kept at an edge as well: invisible, yet
+// it is what keeps the punctuation of a right-to-left title on its side.
 // Whitespace that breaks a line (a vertical tab, a line or paragraph
 // separator, a next line char) collapses like HTML whitespace, as a title is
 // one line.
@@ -64,9 +66,15 @@ internal fun String.normalizeTitle(): String =
     CharArray(length) { if (this[it] in LINE_BREAKING_WHITESPACE) ' ' else this[it] }
         .concatToString()
         .stripAndCollapseHtmlWhitespace()
-        .trimInvisible()
+        .trim { it.isInvisible() && it !in BIDI_CONTROLS }
 
 private const val LINE_BREAKING_WHITESPACE = "\u000B\u0085\u2028\u2029"
+
+// The bidi marks, embeddings, overrides and isolates: the Arabic letter mark,
+// the left-to-right and right-to-left marks, U+202A..U+202E and
+// U+2066..U+2069.
+private const val BIDI_CONTROLS =
+    "\u061C\u200E\u200F\u202A\u202B\u202C\u202D\u202E\u2066\u2067\u2068\u2069"
 
 // A language tag as `<html lang>` carries it: HTML strips its whitespace, and
 // any other invisible char at its edges (a byte order mark, a zero-width
@@ -114,13 +122,17 @@ internal class HeadMetadata {
 
     operator fun get(name: String): MetadataEntry? = entries[name.asciiLowercase()]
 
-    // Adds a `<meta>` read from HTML, where the first of duplicate elements
-    // is the one a query finds: the first occurrence of a name, in any letter
-    // case, wins — spelling and value.
+    // Whether [addFromHtml] would add this `<meta>`: it carries something
+    // for a reader and, the first of duplicate elements being the one a
+    // query finds, no earlier one of its name, in any letter case, was added.
+    // Lets a caller skip judging a value that would not be added anyway.
+    fun acceptsFromHtml(key: String, value: String): Boolean =
+        key !in this && isMetadataValue(value)
+
+    // Adds a `<meta>` read from HTML when it [acceptsFromHtml] — the first
+    // occurrence of a name wins, spelling and value.
     fun addFromHtml(key: String, value: String) {
-        if (!isMetadataValue(value)) return
-        @OptIn(ExperimentalStdlibApi::class)
-        entries.getOrPutIfMissing(key.asciiLowercase()) { MetadataEntry(key, value) }
+        if (acceptsFromHtml(key, value)) entries[key.asciiLowercase()] = MetadataEntry(key, value)
     }
 
     // Adds a front matter entry the way its readers resolve a duplicate key
