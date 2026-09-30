@@ -97,13 +97,4 @@ class HtmlWhitespaceTest {
         assert(result == "")
     }
 
-    @Test
-    fun `should strip leading and trailing HTML whitespace keeping inner runs and NBSP`() {
-        // when
-        val result = "\n\t\u00A0a  b\u00A0 \u000C\r".stripHtmlWhitespace()
-
-        // then
-        assert(result == "\u00A0a  b\u00A0")
-    }
-
 }

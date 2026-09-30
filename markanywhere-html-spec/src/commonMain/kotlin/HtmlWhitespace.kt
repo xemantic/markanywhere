@@ -44,14 +44,6 @@ public fun String.isHtmlBlank(): Boolean = all { it.isHtmlWhitespace() }
 
 /**
  * This string with leading and trailing [HTML whitespace][isHtmlWhitespace]
- * removed — the WHATWG Infra "strip leading and trailing ASCII whitespace",
- * which HTML applies to attribute values such as `lang`. NBSP is content and
- * stays.
- */
-public fun String.stripHtmlWhitespace(): String = trim { it.isHtmlWhitespace() }
-
-/**
- * This string with leading and trailing [HTML whitespace][isHtmlWhitespace]
  * removed and every inner run of it replaced by a single space — the WHATWG
  * Infra "strip and collapse ASCII whitespace", the normalisation behind
  * `document.title`. NBSP is content and stays.

@@ -145,11 +145,13 @@ private fun JsonElement.isEncodedState(layers: Int): Boolean {
 // Text is made of words: at least half the chars are letters (hex and
 // number lists are mostly digits), a combining mark counting as one, since
 // scripts like Devanagari and vowel-marked Arabic write vowels as marks; and
-// at least one char in sixteen breaks a word — whitespace, a list separator (`,` `;`, so `a,b,c` keywords count),
-// or a letter of a script written without spaces (anything past ASCII —
-// base64 and hex never contain one) — sparse enough for a list of long
-// compound words, while the punctuation of serialised data (quotes,
-// brackets, `=`, `|`, `\`) stays rare.
+// at least one char in sixteen breaks a word — whitespace, a list separator
+// (`,` `;`, so `a,b,c` keywords count), a path separator (`/`, so a list of
+// URLs counts — base64 holds one in 64 chars, too few), or a letter of a
+// script written without spaces (anything past ASCII — base64 and hex never
+// contain one) — sparse enough for a list of long compound words, while the
+// punctuation of serialised data (quotes, brackets, `=`, `|`, `\`) stays
+// rare.
 // Chars are counted as code points: a surrogate pair — a letter of a
 // supplementary-plane script (CJK Extension B, historic scripts) or an emoji,
 // which the common stdlib cannot classify — counts once, as a letter of a
@@ -170,7 +172,7 @@ private fun String.readsAsText(): Boolean {
             continue
         }
         if (c.isLetter() || c.category in COMBINING_MARKS) letters++
-        if (c.isWhitespace() || c == ',' || c == ';' || c.code > 0x7F && c.isLetter()) wordBreaks++
+        if (c.isWhitespace() || c == ',' || c == ';' || c == '/' || c.code > 0x7F && c.isLetter()) wordBreaks++
         else if (c in DATA_PUNCTUATION) dataPunctuation++
         i++
     }

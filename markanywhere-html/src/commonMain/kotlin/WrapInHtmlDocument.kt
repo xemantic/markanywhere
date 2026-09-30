@@ -29,7 +29,8 @@ import kotlinx.coroutines.flow.Flow
  * YAML `---` front matter, holding `entry` marks) feeds the `head` — the
  * inverse of [simplifyHtml]'s head-to-frontmatter extraction:
  *
- * - the `title` entry becomes `<title>`
+ * - the `title` entry, normalized as [simplifyHtml] reads a `<title>`,
+ *   becomes `<title>`
  * - the `lang` entry, its HTML whitespace and any other invisible char at
  *   its edges stripped, becomes the `lang` attribute on `<html>`
  * - every other top-level scalar entry becomes a void `<meta name content>`
@@ -49,20 +50,24 @@ import kotlinx.coroutines.flow.Flow
  * (above) and values [simplifyHtml] drops (noise names such as `viewport`,
  * application state such as a JSON object or an opaque over-long blob) are
  * gone, case-variant duplicates are merged, the `title` and `lang` keys come
- * back spelled in lowercase, the title with its whitespace stripped and
- * collapsed (as `document.title` reads it) and `lang` trimmed, and a typed
- * scalar comes back as a string.
+ * back spelled in lowercase, the title and `lang` normalized as above, and a
+ * typed scalar comes back as a string.
+ *
  * Text of HTML whitespace ahead of the frontmatter is insignificant — it is
  * moved to the start of `body` (a non-breaking space is content, as
- * everywhere in HTML, and opens the body instead), as [ensureFrontmatterTitle] moves it after the
- * frontmatter. A `frontmatter` mark appearing past any other event is
- * ordinary content and flows into `body` verbatim.
+ * everywhere in HTML, and opens the body instead), as
+ * [ensureFrontmatterTitle] moves it after the frontmatter. A `frontmatter`
+ * mark appearing past any other event is ordinary content and flows into
+ * `body` verbatim.
  *
  * Only leading whitespace text and the frontmatter subtree are read ahead
- * (bounded); without a frontmatter the document opening is emitted on the
- * first other event and body content streams through untouched. All
- * synthetic marks are untagged, consistent with the parser's `frontmatter` mark and [simplifyHtml] output. An empty input
- * stream still yields the full document skeleton.
+ * (bounded); body content streams through untouched. Holding the leading
+ * whitespace delays nothing a reader would see — it renders as nothing, and
+ * so does the skeleton opened ahead of it — while opening the document on it
+ * would push a frontmatter following it into `body`. All synthetic marks are
+ * untagged, consistent with the parser's `frontmatter` mark and
+ * [simplifyHtml] output. An empty input stream still yields the full
+ * document skeleton.
  */
 public fun Flow<SemanticEvent>.wrapInHtmlDocument(): Flow<SemanticEvent> = semanticEvents {
 
@@ -89,7 +94,8 @@ public fun Flow<SemanticEvent>.wrapInHtmlDocument(): Flow<SemanticEvent> = seman
         "head" {
             metadata["title"]?.let {
                 "title" {
-                    +it.value
+                    // as simplifyHtml reads a <title>
+                    +it.value.normalizeTitle()
                 }
             }
             for ((key, value) in metadata.values) {

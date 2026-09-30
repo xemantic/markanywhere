@@ -12,7 +12,6 @@ public final class com/xemantic/markanywhere/html/spec/HtmlWhitespaceKt {
 	public static final fun isHtmlBlank (Ljava/lang/String;)Z
 	public static final fun isHtmlWhitespace (C)Z
 	public static final fun stripAndCollapseHtmlWhitespace (Ljava/lang/String;)Ljava/lang/String;
-	public static final fun stripHtmlWhitespace (Ljava/lang/String;)Ljava/lang/String;
 }
 
 public final class com/xemantic/markanywhere/html/spec/MarkClassListKt {

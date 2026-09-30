@@ -1171,6 +1171,34 @@ class SimplifyHtmlTest {
     }
 
     @Test
+    fun `should keep a long list of URLs`() = runTest {
+        // given — path separators break a URL into words; base64, which
+        // holds a slash only now and then, stays dropped
+        val urls = (1..150).joinToString(" ") { "https://www.example.org/reference/article-$it" }
+        val base64 = "QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo/abc+".repeat(120)
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    "meta"("name" to "citation_references", "content" to urls) { }
+                    "meta"("name" to "blob", "content" to base64) { }
+                }
+                "body" { "p" { +"text" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "citation_references") { +urls }
+            }
+            "p" { +"text" }
+        }
+    }
+
+    @Test
     fun `should judge a long flat JSON array by its words and not its quotes and commas`() = runTest {
         // given — both past the cap; the quotes and commas serialising the
         // words are not the punctuation of state, a list of hashes still is

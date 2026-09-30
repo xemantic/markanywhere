@@ -35,47 +35,48 @@ import kotlinx.coroutines.flow.Flow
  * scalar text with visible content is usable — entries holding a nested
  * structure, an empty collection, `null` or blank text are not, as there.
  *
- * A title entry holding a nested structure (localized titles, say) is no
- * title for [wrapInHtmlDocument], but it is content: no title is derived,
- * no other title entry respelled, and the frontmatter passes through with
- * its other title entries dropped — the empty ones (`null`, blank, an empty
- * collection) carry nothing, and a duplicate key makes js-yaml reject the
- * whole front matter — but for the usable one [wrapInHtmlDocument] picks,
- * kept as spelled, so readers may disagree on the title as they did on the
- * input. A
- * frontmatter whose root is a sequence (top-level `item` marks) has no place
- * for a title entry and passes through unchanged.
- *
- * Otherwise, whenever a title comes out, the frontmatter holds exactly one title entry,
+ * Whenever a title comes out, the frontmatter holds exactly one title entry,
  * spelled `title`: every front matter reader then reads the same title —
  * whether it matches keys case-sensitively (Jekyll) or not, keeps the later
  * of duplicate keys (Psych, PyYAML) or rejects them (js-yaml) — and it is the
- * one [wrapInHtmlDocument] reads. With a usable title entry that is the one
- * [wrapInHtmlDocument] picks, respelled `title` in place; every other title
- * entry is dropped.
+ * one [wrapInHtmlDocument] reads. It comes out in one of two ways:
  *
- * Otherwise the frontmatter is held back and the title is derived from the
- * very first `h1` following it (only blank text may intervene — an NBSP
- * included, which keeps a frontmatter *following* it from opening the
- * stream, but not a synthesized one from going first): the
- * `h1` subtree's flattened text — its text events plus the `alt` of every
- * `img` mark, in document order, the way an accessible name is computed from
- * content — normalized as [normalizeTitle] reads a `<title>` — becomes the
- * `title`, and only then the frontmatter and the
- * buffered `h1` are emitted, in source order. The derived entry takes the
- * place of the first title entry, every other one dropped, or is injected as
- * the first `entry` of a frontmatter without any. When no frontmatter exists
- * at all, one carrying just the derived `title` is synthesized as the
- * **first** event — ahead of any whitespace text that preceded the `h1`.
+ * - **A usable title entry exists**: the one [wrapInHtmlDocument] picks is
+ *   respelled `title` in place, and every other title entry is dropped.
+ * - **None exists**: the frontmatter is held back and the title is derived
+ *   from the very first `h1` following it, only text showing nothing
+ *   (whitespace, an NBSP, a zero-width char) intervening. The `h1` subtree's
+ *   flattened text — its text events plus the `alt` of every `img` mark, in
+ *   document order, the way an accessible name is computed from content —
+ *   normalized as [normalizeTitle] reads a `<title>` becomes the `title`, and
+ *   only then are the frontmatter and the buffered `h1` emitted, in source
+ *   order. The derived entry takes the place of the first title entry, every
+ *   other one dropped, or is injected as the first `entry` of a frontmatter
+ *   without any. When no frontmatter exists at all, one carrying just the
+ *   derived `title` is synthesized as the **first** event, ahead of any text
+ *   that preceded the `h1`.
  *
- * When no title can be derived — the first non-blank event after the
- * frontmatter is not an `h1`, the `h1` yields no text, or the stream ends —
- * everything held is flushed unchanged but for the empty title entries of
- * the frontmatter, dropped as above — the frontmatter too, when it is left
- * empty or came so: a stream without a leading `h1` passes through
- * untouched but for that, and no empty frontmatter is fabricated. A frontmatter the stream ends inside (a
- * broken upstream contract) is judged all the same, an entry left open
- * included.
+ * Two shapes are left without a title:
+ *
+ * - A title entry holding a nested structure (localized titles, say) is no
+ *   title for [wrapInHtmlDocument], but it is content: no title is derived
+ *   and no title entry respelled. Of the other title entries only the usable
+ *   one [wrapInHtmlDocument] picks is kept, as spelled, so readers may
+ *   disagree on the title as they did on the input; the empty ones (`null`,
+ *   blank, an empty collection) carry nothing, and another usable one would
+ *   be a duplicate key, which makes js-yaml reject the whole front matter.
+ *   A frontmatter whose root is a sequence (top-level `item` marks) has no
+ *   place for a title entry and passes through unchanged.
+ * - When no title can be derived — the first event after the frontmatter
+ *   that shows something is not an `h1`, the `h1` yields no text, or the
+ *   stream ends — everything held is flushed unchanged but for the title
+ *   entries dropped as above.
+ *
+ * A frontmatter left empty, by dropping its title entries or as it came, is
+ * dropped too (it would render as two thematic breaks), so no empty
+ * frontmatter is ever emitted. A frontmatter or `h1` the stream ends inside
+ * (a broken upstream contract) is judged all the same, an entry left open
+ * included, and emitted closed, so the output stays balanced.
  *
  * Buffering is bounded to the frontmatter subtree plus one `h1` subtree —
  * everything after the decision point is forwarded as it arrives.
@@ -91,17 +92,18 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
     // the top-level title entries (in any letter case) within
     // `frontmatterEvents`, in source order, their spans indexing it
     val titleSlots = mutableListOf<FrontMatterEntry>()
-    // the title as wrapInHtmlDocument reads it, which of them it is read from
-    val titles = HeadMetadata()
+    // the one of them wrapInHtmlDocument reads the title from, if any
+    var read: FrontMatterEntry? = null
     val reader = FrontMatterEntryReader { entry ->
         if (entry.key.asciiLowercase() == "title") {
             titleSlots += entry
-            titles.addFromFrontMatter(entry)
+            if (entry.readOver(read?.key)) read = entry
         }
     }
 
-    // blank text held before the first h1 (ahead of the frontmatter, or
-    // between it and the h1), replayed in source order on commit
+    // text showing nothing held before the first h1 (ahead of the
+    // frontmatter, or between it and the h1), replayed in source order on
+    // commit
     val blanks = mutableListOf<SemanticEvent>()
 
     // the h1 subtree, buffered between its mark and balanced unmark so the
@@ -139,8 +141,7 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
                 it is Mark || (it is Text && !it.text.isHtmlBlank())
             }
             if (!empty) {
-                emit(held.first())
-                emit(body)
+                emit((listOf(held.first()) + body).closed())
             }
         }
         frontmatterEvents = null
@@ -157,7 +158,6 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
     // nested ones and the one wrapInHtmlDocument reads: the empty ones carry
     // nothing, and another usable one would be a duplicate key
     suspend fun flushWithReadTitleOnly() {
-        val read = titles["title"]?.source
         flushHeld(
             titleSlots
                 .filterNot { it.hasChildren || it == read }
@@ -179,15 +179,14 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
             slot == null -> flushHeld(prepended = titleEntry(title))
             else -> flushWithSingleTitle(slot, titleEntry(title))
         }
-        emit(headingEvents)
+        emit(headingEvents.closed())
         headingEvents.clear()
         state = PassThrough
     }
 
     // decides, once the frontmatter closes, whether it holds a usable title
     suspend fun judgeFrontmatter() {
-        // the entry wrapInHtmlDocument reads
-        val usable = titles["title"]?.source
+        val usable = read
         state = when {
             // a nested title is content, not ours to replace or drop; a
             // sequence has no place for a title entry
@@ -222,7 +221,7 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
                     state = InFrontmatter
                 }
                 event is Mark && event.name == "h1" -> startHeading(event)
-                event is Text && event.text.isBlank() -> blanks += event
+                event.showsNothing() -> blanks += event
                 else -> {
                     flushBlanks()
                     emit(event)
@@ -234,7 +233,7 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
                 if (reader.read(event)) judgeFrontmatter()
             }
             AwaitingHeading -> when (event) {
-                is Text if event.text.isBlank() -> blanks += event
+                is Text if event.showsNothing() -> blanks += event
                 is Mark if event.name == "h1" -> startHeading(event)
                 else -> {
                     flushWithReadTitleOnly()
@@ -279,6 +278,25 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
         AwaitingHeading -> flushWithReadTitleOnly()
         else -> flushHeld()
     }
+}
+
+// Whether this event is text a reader sees nothing of — the one test of
+// blankness around the h1, the one a title is judged by ([isMetadataValue]).
+// Which text may precede a frontmatter is a different, HTML question
+// ([mayPrecedeFrontmatter]).
+private fun SemanticEvent.showsNothing(): Boolean = this is Text && !isMetadataValue(text)
+
+// These events with an unmark appended for every mark left open, innermost
+// first.
+private fun List<SemanticEvent>.closed(): List<SemanticEvent> {
+    val open = ArrayDeque<SemanticEvent.Mark>()
+    for (event in this) when (event) {
+        is Mark -> open.addLast(event)
+        is Unmark -> open.removeLastOrNull()
+        else -> {}
+    }
+    return if (open.isEmpty()) this
+    else this + open.reversed().map { SemanticEvent.Unmark(it.name, it.isTagged) }
 }
 
 private enum class State {

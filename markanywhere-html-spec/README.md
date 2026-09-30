@@ -11,7 +11,6 @@ so code that reads a semantic event stream carrying HTML attributes can use it w
 |---------------------------------------------------|------------------------------------------------------------------------------------------------|
 | `HTML_WHITESPACE_CHARS`, `Char.isHtmlWhitespace()` | HTML "ASCII whitespace": TAB, LF, FF, CR, SPACE — not NBSP, which HTML treats as content      |
 | `String.isHtmlBlank()`                            | Empty or HTML whitespace only                                                                  |
-| `String.stripHtmlWhitespace()`                    | Trimmed of HTML whitespace at both ends, NBSP kept                                             |
 | `String.stripAndCollapseHtmlWhitespace()`         | Trimmed of HTML whitespace, inner runs collapsed to one space, as `document.title` reads it     |
 | `Char.asciiLowercase()`, `String.asciiLowercase()` | ASCII lowercase: only `A`–`Z` fold, as HTML compares names "ASCII case-insensitively"          |
 | `HTML_VOID_ELEMENTS`                              | Elements with no content and no closing tag, including the obsolete `keygen` and `param`       |

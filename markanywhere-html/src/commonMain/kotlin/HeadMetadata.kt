@@ -76,13 +76,16 @@ internal fun frontMatterKeySupersedes(existing: String, candidate: String): Bool
     return candidate == name || existing != name
 }
 
-// A metadata entry: its name, spelled as where its value was read, the
-// value, and the front matter entry it was read from, if any.
-internal data class MetadataEntry(
-    val key: String,
-    val value: String,
-    val source: FrontMatterEntry? = null
-)
+// Whether a front matter reader reads this entry's value over that of an
+// earlier entry of the same name spelled `existingKey`, if any: it must be
+// head metadata ([FrontMatterEntry.isHeadMetadata]), and must then
+// [supersede][frontMatterKeySupersedes] the earlier one.
+internal fun FrontMatterEntry.readOver(existingKey: String?): Boolean =
+    isHeadMetadata && (existingKey == null || frontMatterKeySupersedes(existingKey, key))
+
+// A metadata entry: its name, spelled as where its value was read, and the
+// value.
+internal data class MetadataEntry(val key: String, val value: String)
 
 // The `<head>` metadata a front matter holds, in insertion order and keyed
 // the way HTML reads `<meta>` names: ASCII case-insensitively (HTML §4.2.5).
@@ -114,17 +117,12 @@ internal class HeadMetadata {
     }
 
     // Adds a front matter entry the way its readers resolve a duplicate key
-    // ([frontMatterKeySupersedes]), unless it is no head metadata
-    // ([FrontMatterEntry.isHeadMetadata], the rule ensureFrontmatterTitle
-    // judges title entries by). The name keeps the position of its first
-    // occurrence.
+    // ([readOver], the rule ensureFrontmatterTitle picks the title entry by).
+    // The name keeps the position of its first occurrence.
     fun addFromFrontMatter(entry: FrontMatterEntry) {
-        if (!entry.isHeadMetadata) return
-        val key = entry.key
-        val name = key.asciiLowercase()
-        val existing = entries[name]
-        if (existing == null || frontMatterKeySupersedes(existing.key, key)) {
-            entries[name] = MetadataEntry(key, entry.text, source = entry)
+        val name = entry.key.asciiLowercase()
+        if (entry.readOver(entries[name]?.key)) {
+            entries[name] = MetadataEntry(entry.key, entry.text)
         }
     }
 

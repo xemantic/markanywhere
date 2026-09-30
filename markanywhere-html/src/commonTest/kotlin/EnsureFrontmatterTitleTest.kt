@@ -1418,12 +1418,60 @@ class EnsureFrontmatterTitleTest {
         // when
         val output = input.ensureFrontmatterTitle()
 
-        // then
-        output sameAs flowOf(
-            SemanticEvent.Mark(name = "frontmatter", isTagged = false),
-            SemanticEvent.Mark(name = "entry", isTagged = false, attributes = mapOf("key" to "title")),
+        // then — closed, so the stream stays balanced
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"Hello" }
+            }
+        }
+    }
+
+    @Test
+    fun `should close an h1 the stream ends inside`() = runTest {
+        // given — a broken upstream contract; built from raw events on
+        // purpose, as the balanced builders cannot express an unclosed mark
+        val input = flowOf(
+            SemanticEvent.Mark(name = "h1", isTagged = false),
+            SemanticEvent.Mark(name = "em", isTagged = false),
             SemanticEvent.Text("Hello"),
         )
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"Hello" }
+            }
+            "h1" {
+                "em" { +"Hello" }
+            }
+        }
+    }
+
+    @Test
+    fun `should derive a title past invisible format chars before the h1`() = runTest {
+        // given — a byte order mark or a zero-width space shows nothing, as
+        // in a title
+        val input = semanticEvents {
+            +"\uFEFF"
+            +"\u200B"
+            "h1" { +"Hello" }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"Hello" }
+            }
+            +"\uFEFF"
+            +"\u200B"
+            "h1" { +"Hello" }
+        }
     }
 
     @Test

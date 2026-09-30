@@ -127,7 +127,6 @@ class WrapInHtmlDocumentTest {
         }
     }
 
-
     @Test
     fun `should trim invisible chars around the lang`() = runTest {
         // given — a byte order mark or a zero-width space makes no valid
@@ -154,12 +153,39 @@ class WrapInHtmlDocumentTest {
     }
 
     @Test
-    fun `should use scalar text verbatim including decoded quoting`() = runTest {
-        // given — the parser has already decoded the YAML; the value carries a
-        // colon, quotes and a newline as plain text
+    fun `should normalize the title as simplifyHtml reads it`() = runTest {
+        // given — invisible chars at the edges, a line separator inside
         val input = semanticEvents {
             "frontmatter" {
-                "entry"("key" to "title") { +"He said: \"hi\"\nBye" }
+                "entry"("key" to "title") { +"\uFEFF Foo\u2028Bar  baz " }
+            }
+            "p" { +"Body." }
+        }
+
+        // when
+        val output = input.wrapInHtmlDocument()
+
+        // then
+        output sameAs semanticEvents {
+            "html" {
+                "head" {
+                    "title" { +"Foo Bar baz" }
+                }
+                "body" {
+                    "p" { +"Body." }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should use scalar text verbatim including decoded quoting`() = runTest {
+        // given — the parser has already decoded the YAML; the values carry a
+        // colon, quotes and a newline as plain text (a title is one line)
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"He said: \"hi\"" }
+                "entry"("key" to "description") { +"Hello\nBye" }
                 "entry"("key" to "og:image") { +"https://example.com/img.png" }
             }
         }
@@ -171,7 +197,8 @@ class WrapInHtmlDocumentTest {
         output sameAs semanticEvents {
             "html" {
                 "head" {
-                    "title" { +"He said: \"hi\"\nBye" }
+                    "title" { +"He said: \"hi\"" }
+                    "meta"("name" to "description", "content" to "Hello\nBye") { }
                     "meta"("name" to "og:image", "content" to "https://example.com/img.png") { }
                 }
                 "body" { }
