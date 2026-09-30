@@ -37,9 +37,10 @@ internal fun isScalarEntryType(type: String?): Boolean =
 // Whether a value carries anything for a reader: a char that shows.
 internal fun isMetadataValue(value: String): Boolean = value.any { !it.isInvisible() }
 
-// Whitespace (NBSP included) or an invisible format char such as a
-// zero-width space or a byte order mark.
-private fun Char.isInvisible(): Boolean = isWhitespace() || category == FORMAT
+// Whitespace (NBSP included), a control char (a next line char, a C0
+// control), or an invisible format char such as a zero-width space or a byte
+// order mark.
+private fun Char.isInvisible(): Boolean = isWhitespace() || category == CONTROL || category == FORMAT
 
 // This value with the chars [isMetadataValue] finds invisible trimmed from
 // its edges.

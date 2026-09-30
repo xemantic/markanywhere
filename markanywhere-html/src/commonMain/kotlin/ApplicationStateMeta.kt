@@ -59,8 +59,8 @@ internal fun isApplicationStateMeta(content: String): Boolean {
     // parses or decodes as, so a blob — megabytes of JSON or of escapes,
     // say — is dropped unparsed and undecoded. Only a raw array must be
     // parsed first, to be read by its words — unless an element of it is an
-    // object or an array: then it is state if it parses and a blob if it
-    // does not, dropped either way.
+    // object or an array: then it is state if it parses, and otherwise
+    // dropped unparsed unless it reads as text, as any over-long value.
     val readByWords = written.firstOrNull() == '['
     if (long && (!readByWords || written.hasNestedElement()) && !writtenReadsAsText) return true
     val decoded = written.percentDecodedOrNull(MAX_DECODING_DEPTH)

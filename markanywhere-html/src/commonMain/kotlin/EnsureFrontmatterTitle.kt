@@ -70,8 +70,11 @@ import kotlinx.coroutines.flow.Flow
  * When no title can be derived — the first non-blank event after the
  * frontmatter is not an `h1`, the `h1` yields no text, or the stream ends —
  * everything held is flushed unchanged but for the empty title entries of
- * the frontmatter, dropped as above: a stream without a leading `h1` passes
- * through untouched and no empty frontmatter is fabricated.
+ * the frontmatter, dropped as above — the frontmatter too, when they were
+ * all it held: a stream without a leading `h1` passes through untouched and
+ * no empty frontmatter is fabricated. A frontmatter the stream ends inside (a
+ * broken upstream contract) is judged all the same, an entry left open
+ * included.
  *
  * Buffering is bounded to the frontmatter subtree plus one `h1` subtree —
  * everything after the decision point is forwarded as it arrives.
@@ -116,21 +119,31 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
 
     // emits the held frontmatter — `prepended` right after its mark, the span
     // of each slot in `rewrite` (in source order, as `titleSlots` is) replaced
-    // by its events (none drops the entry) — then the blanks held with it
+    // by its events (none drops the entry) — then the blanks held with it.
+    // A frontmatter the rewrite leaves empty is dropped: it would render as a
+    // `---` pair, which parses back as two thematic breaks.
     suspend fun flushHeld(
         rewrite: Map<FrontMatterEntry, List<SemanticEvent>> = emptyMap(),
         prepended: List<SemanticEvent> = emptyList()
     ) {
         frontmatterEvents?.let { held ->
-            emit(held.first())
-            emit(prepended)
-            var next = 1
-            for ((slot, events) in rewrite) {
-                emit(held.subList(next, slot.start))
-                emit(events)
-                next = slot.end + 1
+            val body = buildList {
+                addAll(prepended)
+                var next = 1
+                for ((slot, events) in rewrite) {
+                    addAll(held.subList(next, slot.start))
+                    addAll(events)
+                    next = slot.end + 1
+                }
+                addAll(held.subList(next, held.size))
             }
-            emit(held.subList(next, held.size))
+            val emptied = rewrite.isNotEmpty() && body.none {
+                it is Mark || (it is Text && !it.text.isHtmlBlank())
+            }
+            if (!emptied) {
+                emit(held.first())
+                emit(body)
+            }
         }
         frontmatterEvents = null
         flushBlanks()
@@ -253,9 +266,17 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
         }
     }
 
-    // an unclosed h1 (broken upstream contract) still commits so no buffered
-    // events are lost; otherwise flush whatever is still held
+    // an unclosed frontmatter or h1 (broken upstream contract) is still
+    // committed so no buffered events are lost; otherwise flush whatever is
+    // still held
     when (state) {
+        // judged like a closed one, an entry left open included, as
+        // wrapInHtmlDocument reads it
+        InFrontmatter -> {
+            reader.finish()
+            judgeFrontmatter()
+            if (state == AwaitingHeading) flushWithoutEmptyTitles()
+        }
         InHeading -> commitHeading()
         AwaitingHeading -> flushWithoutEmptyTitles()
         else -> flushHeld()

@@ -17,6 +17,7 @@
 package com.xemantic.markanywhere.html
 
 import com.xemantic.kotlin.test.sameAs
+import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.parse.parse
 import com.xemantic.markanywhere.render.renderMarkdown
@@ -1290,6 +1291,87 @@ class EnsureFrontmatterTitleTest {
             }
             "p" { +"Body." }
         }
+    }
+
+    @Test
+    fun `should drop a frontmatter left empty by dropping its empty title entries`() = runTest {
+        // given — an empty frontmatter renders as `---` twice, which parses
+        // back as two thematic breaks
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title", "type" to "null") { }
+                "entry"("key" to "Title") { }
+            }
+            "p" { +"Body." }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then
+        output sameAs semanticEvents {
+            "p" { +"Body." }
+        }
+    }
+
+    @Test
+    fun `should round-trip Markdown whose front matter holds only a null title`() = runTest {
+        // given
+        val markdown = "---\ntitle:\n---\n\nBody."
+
+        // when
+        val output = flowOf(markdown).parse().ensureFrontmatterTitle().renderMarkdown()
+
+        // then
+        output sameAs "Body."
+    }
+
+    @Test
+    fun `should treat a title entry of control chars as blank`() = runTest {
+        // given — a next line char or a C0 control shows nothing, and the
+        // title read back from `<title>` would be empty
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"\u0085\u0001" }
+            }
+            "h1" { +"Heading" }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"Heading" }
+            }
+            "h1" { +"Heading" }
+        }
+    }
+
+    @Test
+    fun `should judge the title entries of a frontmatter the stream ends inside`() = runTest {
+        // given — a broken upstream contract: neither the last entry nor the
+        // frontmatter is closed, yet wrapInHtmlDocument reads the open entry.
+        // Built from raw events on purpose: the balanced builders cannot
+        // express an unclosed mark.
+        val input = flowOf(
+            SemanticEvent.Mark(name = "frontmatter", isTagged = false),
+            SemanticEvent.Mark(name = "entry", isTagged = false, attributes = mapOf("key" to "title", "type" to "null")),
+            SemanticEvent.Unmark(name = "entry", isTagged = false),
+            SemanticEvent.Mark(name = "entry", isTagged = false, attributes = mapOf("key" to "Title")),
+            SemanticEvent.Text("Hello"),
+        )
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then
+        output sameAs flowOf(
+            SemanticEvent.Mark(name = "frontmatter", isTagged = false),
+            SemanticEvent.Mark(name = "entry", isTagged = false, attributes = mapOf("key" to "title")),
+            SemanticEvent.Text("Hello"),
+        )
     }
 
     @Test
