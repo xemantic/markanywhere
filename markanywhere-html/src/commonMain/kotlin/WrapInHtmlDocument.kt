@@ -19,8 +19,6 @@ package com.xemantic.markanywhere.html
 import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.html.spec.asciiLowercase
-import com.xemantic.markanywhere.html.spec.isHtmlBlank
-import com.xemantic.markanywhere.html.spec.stripHtmlWhitespace
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -32,8 +30,8 @@ import kotlinx.coroutines.flow.Flow
  * inverse of [simplifyHtml]'s head-to-frontmatter extraction:
  *
  * - the `title` entry becomes `<title>`
- * - the `lang` entry, its HTML whitespace stripped, becomes the `lang`
- *   attribute on `<html>`
+ * - the `lang` entry, its HTML whitespace and any other invisible char at
+ *   its edges stripped, becomes the `lang` attribute on `<html>`
  * - every other top-level scalar entry becomes a void `<meta name content>`
  *
  * Only top-level scalar entries are interpreted — exactly the shape
@@ -85,7 +83,7 @@ public fun Flow<SemanticEvent>.wrapInHtmlDocument(): Flow<SemanticEvent> = seman
             "html",
             attributes = metadata["lang"]
                 // trimmed, as simplifyHtml reads it
-                ?.let { mapOf("lang" to it.value.stripHtmlWhitespace()) }
+                ?.let { mapOf("lang" to it.value.normalizeLang()) }
                 ?: emptyMap()
         )
         "head" {
@@ -109,10 +107,10 @@ public fun Flow<SemanticEvent>.wrapInHtmlDocument(): Flow<SemanticEvent> = seman
         when {
             reader != null -> if (reader.read(event)) openDocument()
             !opened -> when {
-                event is Mark && !event.isTagged && event.name == "frontmatter" -> {
+                event.opensFrontmatter(blanks) -> {
                     frontmatter = FrontMatterEntryReader(metadata::addFromFrontMatter).also { it.read(event) }
                 }
-                event is Text && event.text.isHtmlBlank() -> blanks += event
+                event.mayPrecedeFrontmatter() -> blanks += event
                 else -> {
                     openDocument()
                     emit(event)

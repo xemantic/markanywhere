@@ -61,6 +61,11 @@ internal fun String.normalizeTitle(): String =
 
 private const val LINE_BREAKING_WHITESPACE = "\u000B\u0085\u2028\u2029"
 
+// A language tag as `<html lang>` carries it: HTML strips its whitespace, and
+// any other invisible char at its edges (a byte order mark, a zero-width
+// space) is trimmed too — no valid BCP 47 tag holds one.
+internal fun String.normalizeLang(): String = trimInvisible()
+
 // Whether a front matter entry spelled `candidate` supersedes an earlier one
 // of the same name spelled `existing`, as front matter readers resolve a
 // duplicate key: the later one wins (Psych — Jekyll's — and PyYAML), except
@@ -71,9 +76,13 @@ internal fun frontMatterKeySupersedes(existing: String, candidate: String): Bool
     return candidate == name || existing != name
 }
 
-// A metadata entry: its name, spelled as where its value was read, and the
-// value.
-internal data class MetadataEntry(val key: String, val value: String)
+// A metadata entry: its name, spelled as where its value was read, the
+// value, and the front matter entry it was read from, if any.
+internal data class MetadataEntry(
+    val key: String,
+    val value: String,
+    val source: FrontMatterEntry? = null
+)
 
 // The `<head>` metadata a front matter holds, in insertion order and keyed
 // the way HTML reads `<meta>` names: ASCII case-insensitively (HTML §4.2.5).
@@ -115,7 +124,7 @@ internal class HeadMetadata {
         val name = key.asciiLowercase()
         val existing = entries[name]
         if (existing == null || frontMatterKeySupersedes(existing.key, key)) {
-            entries[name] = MetadataEntry(key, entry.text)
+            entries[name] = MetadataEntry(key, entry.text, source = entry)
         }
     }
 

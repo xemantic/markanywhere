@@ -1227,6 +1227,30 @@ class SimplifyHtmlTest {
         }
     }
 
+
+    @Test
+    fun `should judge a flat JSON array too long to parse as written`() = runTest {
+        // given — words, but far past anything metadata holds: parsing it
+        // would cost many times its size, so its quotes and commas count
+        val words = (1..10000).joinToString(",", "[", "]") { "\"lorem\"" }
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    "meta"("name" to "keywords", "content" to words) { }
+                }
+                "body" { "p" { +"text" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "p" { +"text" }
+        }
+    }
+
     @Test
     fun `should drop a long array holding a nested element unless it reads as text`() = runTest {
         // given — state if it parses, a blob if it does not; neither is text
@@ -1431,6 +1455,53 @@ class SimplifyHtmlTest {
                 "entry"("key" to "lang") { +"de" }
             }
             "p" { +"x" }
+        }
+    }
+
+
+    @Test
+    fun `should trim invisible chars around the html lang`() = runTest {
+        // given
+        val input = semanticEvents(tagged = true) {
+            "html"("lang" to "\uFEFFen\u200B") {
+                "head" { }
+                "body" { "p" { +"text" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "lang") { +"en" }
+            }
+            "p" { +"text" }
+        }
+    }
+
+    @Test
+    fun `should trim invisible chars around a lang meta`() = runTest {
+        // given
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" {
+                    "meta"("name" to "lang", "content" to "\u200Bde\uFEFF") { }
+                }
+                "body" { "p" { +"text" } }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "lang") { +"de" }
+            }
+            "p" { +"text" }
         }
     }
 

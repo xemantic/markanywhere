@@ -19,7 +19,6 @@ package com.xemantic.markanywhere.html
 import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.dump.AccessibilityAnnotations
 import com.xemantic.markanywhere.html.spec.asciiLowercase
-import com.xemantic.markanywhere.html.spec.stripHtmlWhitespace
 import com.xemantic.markanywhere.transform.MatcherScope
 import com.xemantic.markanywhere.transform.transform
 import kotlinx.coroutines.flow.Flow
@@ -266,7 +265,7 @@ public fun Flow<SemanticEvent>.simplifyHtml(
     // --- metadata extraction (explicit per-tag) -------------------------
 
     match("html") { event ->
-        event["lang"]?.let { metadata.addFromHtml("lang", it.stripHtmlWhitespace()) }
+        event["lang"]?.let { metadata.addFromHtml("lang", it.normalizeLang()) }
         children()
     }
 
@@ -317,7 +316,7 @@ public fun Flow<SemanticEvent>.simplifyHtml(
                     // as a <title> element's text reads
                     "title" -> content.normalizeTitle()
                     // as <html lang> is read above
-                    "lang" -> content.stripHtmlWhitespace()
+                    "lang" -> content.normalizeLang()
                     else -> content
                 }
                 // the keys wrapInHtmlDocument turns back into <title> and

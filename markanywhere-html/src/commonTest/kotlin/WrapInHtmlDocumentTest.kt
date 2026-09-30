@@ -127,6 +127,32 @@ class WrapInHtmlDocumentTest {
         }
     }
 
+
+    @Test
+    fun `should trim invisible chars around the lang`() = runTest {
+        // given — a byte order mark or a zero-width space makes no valid
+        // language tag, as they are trimmed from a title
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "lang") { +"\uFEFFen\u200B" }
+            }
+            "p" { +"Body." }
+        }
+
+        // when
+        val output = input.wrapInHtmlDocument()
+
+        // then
+        output sameAs semanticEvents {
+            "html"("lang" to "en") {
+                "head" { }
+                "body" {
+                    "p" { +"Body." }
+                }
+            }
+        }
+    }
+
     @Test
     fun `should use scalar text verbatim including decoded quoting`() = runTest {
         // given — the parser has already decoded the YAML; the value carries a

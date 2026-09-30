@@ -728,6 +728,37 @@ class EnsureFrontmatterTitleTest {
         }
     }
 
+
+    @Test
+    fun `should keep only the title variant wrapInHtmlDocument reads beside a nested title entry`() = runTest {
+        // given — two variants spelled alike are a duplicate key, which makes
+        // js-yaml reject the whole front matter
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "Title") {
+                    "entry"("key" to "en") { +"Hello" }
+                }
+                "entry"("key" to "title") { +"First" }
+                "entry"("key" to "title") { +"Second" }
+            }
+            "h1" { +"Heading" }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "Title") {
+                    "entry"("key" to "en") { +"Hello" }
+                }
+                "entry"("key" to "title") { +"Second" }
+            }
+            "h1" { +"Heading" }
+        }
+    }
+
     @Test
     fun `should not add a title entry to a frontmatter whose root is a sequence`() = runTest {
         // given — a title entry beside the items would make the root neither
@@ -1301,6 +1332,27 @@ class EnsureFrontmatterTitleTest {
             "frontmatter" {
                 "entry"("key" to "title", "type" to "null") { }
                 "entry"("key" to "Title") { }
+            }
+            "p" { +"Body." }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then
+        output sameAs semanticEvents {
+            "p" { +"Body." }
+        }
+    }
+
+
+    @Test
+    fun `should drop a frontmatter arriving empty when no title can be derived`() = runTest {
+        // given — it renders as `---` twice all the same, which parses back
+        // as two thematic breaks
+        val input = semanticEvents {
+            "frontmatter" {
+                +"\n"
             }
             "p" { +"Body." }
         }

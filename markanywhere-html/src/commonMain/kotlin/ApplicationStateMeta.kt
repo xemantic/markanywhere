@@ -50,33 +50,46 @@ import kotlinx.serialization.json.jsonPrimitive
 //   elements joined, not the quotes and commas serialising them — its length
 //   as well as whether it reads as text — so it is judged as the same list
 //   written plainly would be: a long list of words is kept, a long list of
-//   hashes is not, and one whose elements fit under the cap is short.
+//   hashes is not, and one whose elements fit under the cap is short. Past
+//   [MAX_PARSED_LENGTH] it is judged as written, like any other shape.
 internal fun isApplicationStateMeta(content: String): Boolean {
     val written = content.trimInvisible()
-    val long = written.length > MAX_META_VALUE_LENGTH
-    val writtenReadsAsText by lazy { written.readsAsText() }
-    // An over-long value is kept only if it reads as text, whatever it
-    // parses or decodes as, so a blob — megabytes of JSON or of escapes,
-    // say — is dropped unparsed and undecoded. Only a raw array must be
-    // parsed first, to be read by its words — unless an element of it is an
-    // object or an array: then it is state if it parses, and otherwise
-    // dropped unparsed unless it reads as text, as any over-long value.
-    val readByWords = written.firstOrNull() == '['
-    if (long && (!readByWords || written.hasNestedElement()) && !writtenReadsAsText) return true
-    val decoded = written.percentDecodedOrNull(MAX_DECODING_DEPTH)
-    val json = (decoded?.value ?: written).parseJsonCandidateOrNull()
-    if (json?.isState(decoded?.layersLeft ?: MAX_DECODING_DEPTH) == true) return true
-    if (!long || !readByWords) return false
-    if (json !is JsonArray) return !writtenReadsAsText
-    // a flat array is measured by its elements joined, in length as in text,
-    // as the same elements written as a plain list would be
-    val text = json.joinToString(" ") { it.jsonPrimitive.content }
-    return text.length > MAX_META_VALUE_LENGTH && !text.readsAsText()
+    return when {
+        written.length <= MAX_META_VALUE_LENGTH -> written.isStructuralState()
+        written.length <= MAX_PARSED_LENGTH && written.isFlatArray() -> written.isLongFlatArrayState()
+        // decoded and parsed only once it reads as text, so a blob —
+        // megabytes of JSON or of escapes, say — is dropped unparsed
+        else -> !written.readsAsText() || written.isStructuralState()
+    }
 }
 
 // Real metadata is short: `description` / `og:description` rarely exceed 300
 // characters. Past this, a value must read as text to be kept.
 private const val MAX_META_VALUE_LENGTH = 4096
+
+// Past this, even a flat array is not parsed to be read by its words: its
+// tree would cost many times the value's size, for a list no page writes.
+private const val MAX_PARSED_LENGTH = 16 * MAX_META_VALUE_LENGTH
+
+// Whether this value, percent-decoded when it is encoded, parses as state.
+private fun String.isStructuralState(): Boolean {
+    val decoded = percentDecodedOrNull(MAX_DECODING_DEPTH)
+    val json = (decoded?.value ?: this).parseJsonCandidateOrNull() ?: return false
+    return json.isState(decoded?.layersLeft ?: MAX_DECODING_DEPTH)
+}
+
+// A raw array none of whose elements is an object or an array.
+private fun String.isFlatArray(): Boolean = firstOrNull() == '[' && !hasNestedElement()
+
+// An over-long flat array: state if it parses as state, a blob if it does not
+// parse and does not read as text, and otherwise judged by its elements
+// joined, as the same list written plainly would be.
+private fun String.isLongFlatArrayState(): Boolean {
+    val json = parseJsonOrNull() as? JsonArray ?: return !readsAsText()
+    if (json.isState(MAX_DECODING_DEPTH)) return true
+    val text = json.joinToString(" ") { it.jsonPrimitive.content }
+    return text.length > MAX_META_VALUE_LENGTH && !text.readsAsText()
+}
 
 // Whether this (raw, possibly malformed) array holds an object or an array
 // — a bracket past the opening one outside a JSON string — found by a scan,
@@ -130,9 +143,9 @@ private fun JsonElement.isEncodedState(layers: Int): Boolean {
 }
 
 // Text is made of words: at least half the chars are letters (hex and
-// number lists are mostly digits) — a combining mark counting as one, since
-// scripts like Devanagari and vowel-marked Arabic write vowels as marks —, and at least one char in sixteen breaks a
-// word — whitespace, a list separator (`,` `;`, so `a,b,c` keywords count),
+// number lists are mostly digits), a combining mark counting as one, since
+// scripts like Devanagari and vowel-marked Arabic write vowels as marks; and
+// at least one char in sixteen breaks a word — whitespace, a list separator (`,` `;`, so `a,b,c` keywords count),
 // or a letter of a script written without spaces (anything past ASCII —
 // base64 and hex never contain one) — sparse enough for a list of long
 // compound words, while the punctuation of serialised data (quotes,

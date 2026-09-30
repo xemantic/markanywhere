@@ -17,6 +17,20 @@
 package com.xemantic.markanywhere.html
 
 import com.xemantic.markanywhere.SemanticEvent
+import com.xemantic.markanywhere.html.spec.isHtmlBlank
+
+// Whether this event opens the frontmatter that is the page's metadata, the
+// `preceding` events being all the stream held before it: an untagged
+// `frontmatter` mark, nothing but [insignificant][mayPrecedeFrontmatter]
+// text ahead of it. The one rule wrapInHtmlDocument reads the head by and
+// ensureFrontmatterTitle judges the title by — anywhere else a frontmatter
+// is content.
+internal fun SemanticEvent.opensFrontmatter(preceding: List<SemanticEvent>): Boolean =
+    this is Mark && !isTagged && name == "frontmatter" && preceding.all { it.mayPrecedeFrontmatter() }
+
+// Whether this event may come ahead of the frontmatter without keeping it
+// from opening the stream: text of HTML whitespace (an NBSP is content).
+internal fun SemanticEvent.mayPrecedeFrontmatter(): Boolean = this is Text && text.isHtmlBlank()
 
 // A top-level front matter `entry`: its key as spelled, `type`, text, whether
 // it holds nested marks, and the span of its events among those read.
@@ -31,8 +45,7 @@ internal class FrontMatterEntry(
 
     // Whether it holds head metadata: scalar text with visible content —
     // not a nested structure, an empty collection, `null` or blank text.
-    val isHeadMetadata: Boolean
-        get() = !hasChildren && isScalarEntryType(type) && isMetadataValue(text)
+    val isHeadMetadata: Boolean = !hasChildren && isScalarEntryType(type) && isMetadataValue(text)
 
 }
 
