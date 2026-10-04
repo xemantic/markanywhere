@@ -16,7 +16,10 @@
 
 package com.xemantic.markanywhere.html
 
+import com.xemantic.kotlin.test.assert
 import com.xemantic.kotlin.test.sameAs
+import com.xemantic.markanywhere.dump.AccessibilityAnnotations
+import com.xemantic.markanywhere.flow.SemanticEventScope
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.parse.parse
 import com.xemantic.markanywhere.render.renderMarkdown
@@ -721,5 +724,164 @@ class EmphasisDelimiterRoundTripTest {
         // then
         markdown sameAs "**[a\\`b](u)**"
         assertMarkdownFixpoint(markdown)
+    }
+
+    // --- HTML <b>/<i>/<s> simplified to native emphasis (issue #92) ---------
+
+    private suspend fun htmlToMarkdown(
+        block: suspend SemanticEventScope.() -> Unit
+    ): String = semanticEvents(tagged = true) { "body" { block() } }
+        .transformHtmlToMarkdown()
+        .renderMarkdown()
+
+    @Test
+    fun `should round-trip a b element whose content contains a literal asterisk`() = runTest {
+        // when
+        val markdown = htmlToMarkdown { "p" { "b" { +"a*b" } } }
+        // then
+        markdown sameAs "**a\\*b**"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip an i element whose content contains a literal asterisk`() = runTest {
+        // when
+        val markdown = htmlToMarkdown { "p" { "i" { +"a*b" } } }
+        // then
+        markdown sameAs "*a\\*b*"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip an s element whose content contains a literal tilde`() = runTest {
+        // when
+        val markdown = htmlToMarkdown { "p" { "s" { +"a~b" } } }
+        // then
+        markdown sameAs "~~a\\~b~~"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip a strong nested in a b element`() = runTest {
+        // when
+        val markdown = htmlToMarkdown { "p" { "b" { "strong" { +"x" } } } }
+        // then
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip adjacent b elements`() = runTest {
+        // when
+        val markdown = htmlToMarkdown { "p" { "b" { +"a" }; "b" { +"b" } } }
+        // then
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip an i element nested in an em`() = runTest {
+        // when
+        val markdown = htmlToMarkdown { "p" { "em" { +"a "; "i" { +"b" }; +" c" } } }
+        // then
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip a b element in the middle of a word`() = runTest {
+        // when
+        val markdown = htmlToMarkdown { "p" { +"foo"; "b" { +"bar" }; +"baz" } }
+        // then
+        markdown sameAs "foo**bar**baz"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip a b element ending in punctuation before a digit`() = runTest {
+        // when
+        val markdown = htmlToMarkdown { "p" { "b" { +"Price:" }; +"5" } }
+        // then
+        markdown sameAs "**Price:**&#53;"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip a b element whose trailing space separates it from the next word`() = runTest {
+        // when
+        val markdown = htmlToMarkdown { "p" { "b" { +"Note: " }; +"text" } }
+        // then
+        markdown sameAs "**Note:** text"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip a b element wrapping a list`() = runTest {
+        // when
+        val markdown = htmlToMarkdown { "b" { "ul" { "li" { +"x "; "b" { +"y" } } } } }
+        // then
+        assert("**y**" in markdown)
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip a b element wrapping a paragraph`() = runTest {
+        // when
+        val markdown = htmlToMarkdown { "b" { "p" { +"x "; "b" { +"y" } } } }
+        // then
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip a b element followed by an i element wrapping a b element`() = runTest {
+        // when
+        val markdown = htmlToMarkdown { "p" { "b" { +"a" }; "i" { "b" { +"b" } } } }
+        // then
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip strong spans abutting em spans`() = runTest {
+        // when
+        val markdown = htmlToMarkdown {
+            "p" { "em" { +"a" }; "strong" { +"b" }; "em" { +"c" } }
+        }
+        // then
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip a b element followed by a space and an i element`() = runTest {
+        // when
+        val markdown = htmlToMarkdown { "p" { "b" { +"Note:" }; +" "; "i" { +"see" }; +" this" } }
+        // then
+        markdown sameAs "**Note:** *see* this"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip b elements separated by a line break`() = runTest {
+        // when
+        val markdown = htmlToMarkdown { "p" { "b" { +"a" }; "br" {}; "b" { +"b" } } }
+        // then
+        markdown sameAs "**a**  \n**b**"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should keep the actionable ref of a b element`() = runTest {
+        // when
+        val markdown = htmlToMarkdown {
+            "p" { "b"(AccessibilityAnnotations.REF to "12") { +"Expand" } }
+        }
+        // then
+        markdown sameAs "<b ref=\"12\">Expand</b>"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should keep a b element inside preformatted code as a tag`() = runTest {
+        // when
+        val markdown = htmlToMarkdown { "pre" { "code" { +"\$ "; "b" { +"ls" } } } }
+        // then
+        assert("**" !in markdown)
+        assert("<b>ls</b>" in markdown)
     }
 }

@@ -34,8 +34,10 @@ import kotlinx.coroutines.flow.Flow
  *   `h1`–`h6`, `ul`, `ol`, `li`, `em`, `strong`, `a`, `img`, the table family,
  *   …) is emitted **untagged**, so it renders as Markdown — `*…*`, `- `, `## `;
  * - every other preserved element (`section`, `nav`, `dialog`, `form`,
- *   `button`, `dl`/`dt`/`dd`, `ruby`, `b`/`i`/`u`/`cite`, …) is emitted
- *   **tagged**, so it renders as the literal XML wrapper it is.
+ *   `button`, `dl`/`dt`/`dd`, `ruby`, `u`/`cite`, …) is emitted
+ *   **tagged**, so it renders as the literal XML wrapper it is — and so is
+ *   emphasis Markdown cannot express where it stands (wrapping blocks,
+ *   carrying a kept attribute; see [expressEmphasisInMarkdown]).
  *
  * The output is therefore self-describing: a consumer reads `isTagged` instead
  * of replicating the renderer's name map. `renderMarkdown()` keeps a fallback
@@ -79,10 +81,13 @@ import kotlinx.coroutines.flow.Flow
  *     `ul`, `li`, `dl`, `dt`, `dd`, table family (`table`, `thead`,
  *     `tbody`, `tfoot`, `tr`, `caption`)
  * - **Preserve, drop all attributes**: inline emphasis — `em`, `strong`,
- *   `del`, `mark`, `sub`, `sup`, `u`, `s`, `i`, `b`, `small`, `cite`,
- *   `abbr`, `kbd`, `samp`, `var`, `time`, `q`, `dfn`, `ins` — and the ruby
+ *   `del`, `mark`, `sub`, `sup`, `u`, `small`, `cite`, `abbr`, `kbd`,
+ *   `samp`, `var`, `time`, `q`, `dfn`, `ins` — and the ruby
  *   annotation group ([RUBY_TAGS]), whose annotation is parallel to its base
  *   text and so cannot be flattened into it
+ * - **Rename to Markdown emphasis**: `b` → `strong`, `i` → `em`, `s` and
+ *   `strike` → `del` — unless Markdown cannot express the element there (see
+ *   [expressEmphasisInMarkdown])
  * - **Preserve with attribute whitelist**:
  *   - `a` — `href`, `title`, `id`
  *   - `img` — `src`, `alt`, `title`, `id`
@@ -179,6 +184,12 @@ import kotlinx.coroutines.flow.Flow
 public fun Flow<SemanticEvent>.simplifyHtml(
     keepAttributes: Set<String> = emptySet(),
     svgMode: SvgMode = SvgMode.RESOLVE,
+): Flow<SemanticEvent> = simplifyHtmlElements(keepAttributes, svgMode)
+    .expressEmphasisInMarkdown()
+
+private fun Flow<SemanticEvent>.simplifyHtmlElements(
+    keepAttributes: Set<String>,
+    svgMode: SvgMode,
 ): Flow<SemanticEvent> = transform {
 
     // A value that tells a reader nothing is never added — judged by
@@ -452,6 +463,8 @@ public fun Flow<SemanticEvent>.simplifyHtml(
         preserve(event.name, preserveAttrs(event, "id")) { children() }
     }
 
+    // `b` / `i` / `s` / `strike` leave here tagged; expressEmphasisInMarkdown
+    // renames them to Markdown emphasis wherever Markdown can express it.
     match({ name in INLINE_FORMATTING_TAGS }) { event ->
         preserve(event.name, extraKept(event)) { children() }
     }

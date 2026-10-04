@@ -49,6 +49,40 @@ class HtmlWhitespaceNormalizationTest {
     }
 
     @Test
+    fun `should carry a trailing space past an inline close`() = runTest {
+        // given — `<b>Note: </b>text` reads "Note: text" in a browser
+        val input = semanticEvents(tagged = true) {
+            "p" { "b" { +"Note: " }; +"text" }
+        }
+
+        // when
+        val output = input.dropHtmlStructuralWhitespace()
+
+        // then — the space lands after the close
+        output sameAs semanticEvents(tagged = true) {
+            "p" { "b" { +"Note:" }; +" text" }
+        }
+    }
+
+    @Test
+    fun `should drop a space carried past an inline close at a block boundary`() = runTest {
+        // given
+        val input = semanticEvents(tagged = true) {
+            "p" { "b" { +" " }; +"text" }
+            "p" { +"a"; "b" { +"b " } }
+        }
+
+        // when
+        val output = input.dropHtmlStructuralWhitespace()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "p" { "b" { }; +"text" }
+            "p" { +"a"; "b" { +"b" } }
+        }
+    }
+
+    @Test
     fun `should preserve whitespace inside tagged pre`() = runTest {
         // given
         val input = semanticEvents(tagged = true) {

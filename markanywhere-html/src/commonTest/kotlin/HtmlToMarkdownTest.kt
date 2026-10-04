@@ -60,6 +60,30 @@ class HtmlToMarkdownTest {
     }
 
     @Test
+    fun `should drop empty b i and s elements instead of rendering bare delimiters`() = runTest {
+        // given — an icon element no resolver recognises, and blank formatting
+        // wrappers: now simplified to strong / em / del, they must still vanish
+        // rather than render as a stray `*` / `**` / `~~`
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "p" {
+                    "i"("class" to "custom-icon custom-icon-sun") { }
+                    +"Sunny "
+                    "b" { +" " }
+                    "s" { }
+                    +"today"
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then
+        markdown sameAs "Sunny today"
+    }
+
+    @Test
     fun `should strip actionable refs in STRIP mode`() = runTest {
         // given — both ref surfaces in one hand-built input: a ref-bearing
         // inline link (folds into the `ref:` destination) and a ref-bearing

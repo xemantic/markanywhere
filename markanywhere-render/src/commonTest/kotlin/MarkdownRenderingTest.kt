@@ -239,6 +239,224 @@ class MarkdownRenderingTest {
     }
 
     @Test
+    fun `should collapse strong nested in strong into one span`() = runTest {
+        // given — `<b><strong>x</strong></b>` once simplified: `****x****` would
+        // not re-parse as nested strong, and the inner span adds nothing visible
+        val flow = semanticEvents {
+            "p" { "strong" { +"a "; "strong" { +"x" }; +" b" } }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "**a x b**"
+    }
+
+    @Test
+    fun `should collapse emphasis nested in emphasis across another span`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "p" { "em" { +"a "; "strong" { +"b "; "em" { +"c" } }; +" d" } }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "*a **b c** d*"
+    }
+
+    @Test
+    fun `should merge adjacent strong spans`() = runTest {
+        // given — `<b>a</b><b>b</b>`: `**a****b**` would not re-parse as two spans
+        val flow = semanticEvents {
+            "p" { "strong" { +"a" }; "strong" { +"b" }; +" c" }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "**ab** c"
+    }
+
+    @Test
+    fun `should merge adjacent emphasis spans at the end of a paragraph`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "p" { "em" { +"a" }; "em" { +"b" } }
+            "p" { +"next" }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            *ab*
+            
+            next
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should not merge adjacent spans of different kinds`() = runTest {
+        // when
+        val markdown = semanticEvents {
+            "p" { "del" { +"a" }; "mark" { +"b" } }
+        }.renderMarkdown()
+
+        // then
+        markdown sameAs "~~a~~==b=="
+    }
+
+    @Test
+    fun `should keep adjacent superscripts separate`() = runTest {
+        // given — a run of citations: abutting `^` runs re-parse unambiguously
+        val flow = semanticEvents {
+            "p" { +"claim"; "sup" { +"1" }; "sup" { +"2" } }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "claim^1^^2^"
+    }
+
+    @Test
+    fun `should close a trailing emphasis span at the end of the stream`() = runTest {
+        // when
+        val markdown = semanticEvents {
+            "strong" { +"a" }
+        }.renderMarkdown()
+
+        // then
+        markdown sameAs "**a**"
+    }
+
+    @Test
+    fun `should not collapse a span nested in the same span across a block`() = runTest {
+        // given — the outer `**` belongs to another block, so the inner span is
+        // the only one around `y` in its paragraph
+        val flow = semanticEvents {
+            "strong" { "p" { +"x "; "strong" { +"y" } } }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        assert("x **y**" in markdown)
+    }
+
+    @Test
+    fun `should write a held closer before the spaces deferred inside the span`() = runTest {
+        // given — `**a **c` would not re-parse: the closer follows a space
+        val flow = semanticEvents {
+            "p" { "strong" { +"a " }; +"c" }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "**a** c"
+    }
+
+    @Test
+    fun `should encode the first char after a closer that ends in punctuation`() = runTest {
+        // given — in `**Price:**5` the closer sits between punctuation and a
+        // digit, so it is not right-flanking and does not re-parse as a closer;
+        // a character reference keeps the closer followed by punctuation (`&`)
+        val flow = semanticEvents {
+            "p" { "strong" { +"Price:" }; +"5 EUR" }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "**Price:**&#53; EUR"
+    }
+
+    @Test
+    fun `should not encode the char after a closer that ends in a word char`() = runTest {
+        // when
+        val markdown = semanticEvents {
+            "p" { "strong" { +"Price" }; +":5" }
+        }.renderMarkdown()
+
+        // then
+        markdown sameAs "**Price**:5"
+    }
+
+    @Test
+    fun `should open a span right after a closer of the same delimiter as a tag`() = runTest {
+        // given — `**a*****b***` would not re-parse: the closer of the first
+        // strong and the openers of em + strong form one five-asterisk run
+        val flow = semanticEvents {
+            "p" { "strong" { +"a" }; "em" { "strong" { +"b" } } }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "**a**<em>**b**</em>"
+    }
+
+    @Test
+    fun `should open a span after a closer and a space as Markdown`() = runTest {
+        // given — the space keeps the closer and the opener in separate runs
+        val flow = semanticEvents {
+            "p" { "strong" { +"a" }; +" "; "em" { +"b" } }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "**a** *b*"
+    }
+
+    @Test
+    fun `should open a span after a closer and a hard break as Markdown`() = runTest {
+        // given — the hard break keeps the closer and the opener on separate lines
+        val flow = semanticEvents {
+            "p" { "strong" { +"a" }; "br" {}; "strong" { +"b" } }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "**a**  \n**b**"
+    }
+
+    @Test
+    fun `should separate the blocks inside an inline tag from the tag`() = runTest {
+        // given — emphasis wrapping blocks stays a raw tag; without a blank line
+        // after `<b>` the list would re-parse as the HTML block's raw text
+        val flow = semanticEvents {
+            tag("b") { "ul" { "li" { +"x" } } }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            <b>
+
+            - x
+
+            </b>
+        """.trimIndent()
+    }
+
+    @Test
     fun `should render emphasis`() = runTest {
         // given
         val flow = semanticEvents {

@@ -43,13 +43,14 @@ import kotlinx.coroutines.flow.flow
  * are left untouched (an empty `<a href>` or a `<span golemId>` may still carry
  * meaning the caller asked to keep). Matching is by tag name regardless of
  * `isTagged`: [simplifyHtml] emits the Markdown-native emphasis untagged
- * (`em`, `strong`, `del`, `mark`, `sup`) but the rest tagged (`b`, `i`, `u`,
- * `cite`, …), and a blank wrapper is equally meaningless either way. Place this
- * operator *after* `simplifyHtml`.
+ * (`em`, `strong`, `del`, `mark`, `sup` — and `b` / `i` / `s` / `strike`,
+ * renamed to those) but the rest tagged (`u`, `cite`, …, and emphasis
+ * Markdown cannot express), and a blank wrapper is equally meaningless either
+ * way. Place this operator *after* `simplifyHtml`.
  *
- * Note: attributes on inline emphasis are already dropped at Markdown render
- * time (Markdown syntax can't carry them), so removing an empty `<em golemId>`
- * loses nothing the Markdown output could have shown anyway.
+ * Note: a blank emphasis element carrying a kept attribute (an empty
+ * `<em golemId>`, a raw tag after `simplifyHtml`) is dropped too — it wraps
+ * nothing a reader could see or act on.
  */
 public fun Flow<SemanticEvent>.dropBlankInlineFormatting(): Flow<SemanticEvent> = flow {
 

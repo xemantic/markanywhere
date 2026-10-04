@@ -44,9 +44,7 @@ class HackerNewsTest {
             title: Hacker News
             ---
             
-            [![](y18.svg)](ref:1:https://news.ycombinator.com) <b>[Hacker News](ref:2:news)</b>
-            
-            [new](ref:3:newest) | [past](ref:4:front) | [comments](ref:5:newcomments) | [ask](ref:6:ask) | [show](ref:7:show) | [jobs](ref:8:jobs) | [submit](ref:9:submit) [login](ref:10:login?goto=news)
+            [![](y18.svg)](ref:1:https://news.ycombinator.com) **[Hacker News](ref:2:news)** [new](ref:3:newest) | [past](ref:4:front) | [comments](ref:5:newcomments) | [ask](ref:6:ask) | [show](ref:7:show) | [jobs](ref:8:jobs) | [submit](ref:9:submit) [login](ref:10:login?goto=news)
             
             |  |  |  |
             | --- | --- | --- |
