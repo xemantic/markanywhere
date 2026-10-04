@@ -1097,4 +1097,28 @@ class ElementToSemanticEventsTest {
         }
     }
 
+    @Test
+    fun `should redact which option a secret select has chosen`() = runTest {
+        // given - a card expiry month picked from a select
+        document.body!!.innerHTML = """
+            <select id="month" autocomplete="cc-exp-month"><option value="" selected>Month</option><optgroup label="Summer"><option value="08">08</option></optgroup></select>
+        """.trimIndent()
+        document.getElementById("month").asDynamic().value = "08"
+
+        // when
+        val events = document.body!!.toSemanticEvents()
+
+        // then
+        events sameAs semanticEvents(tagged = true) {
+            "body" {
+                "select"("id" to "month", "autocomplete" to "cc-exp-month", REDACTED to "filled") {
+                    "option"("value" to "") { +"Month" }
+                    "optgroup"("label" to "Summer") {
+                        "option"("value" to "08") { +"08" }
+                    }
+                }
+            }
+        }
+    }
+
 }

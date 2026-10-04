@@ -356,13 +356,51 @@ internal class SnapshotDom(
      * The live state of a form control (see [FormControlState]), or `null` for
      * an element that has none.
      */
-    fun formState(index: Int): FormControlState? =
-        if (hasLiveFormState(name(index))) FormControlState(
+    fun formState(index: Int): FormControlState? = when (val name = name(index)) {
+        "select" -> FormControlState(value = selectedValue(index))
+        "option" -> FormControlState(
+            selected = index in selectedOptions,
+            select = enclosingSelect(index)?.let { attributeMap(it) },
+        )
+
+        else -> if (hasLiveFormState(name)) FormControlState(
             value = inputValues[index] ?: textValues[index],
             checked = index in checkedInputs,
-            selected = index in selectedOptions,
             masked = textSecurity[index].let { it != null && it != "none" },
         ) else null
+    }
+
+    /**
+     * The value of the option a `<select>` has selected — its `value`
+     * attribute, else its text, as the form would submit it — or `null` when
+     * none is.
+     */
+    private fun selectedValue(select: Int): String? =
+        descendants(select).firstOrNull { it in selectedOptions && name(it) == "option" }
+            ?.let { option ->
+                attributeMap(option)["value"]
+                    ?: descendants(option).filter { isText(it) }.joinToString("") { text(it) }.trim()
+            }
+
+    /** The `<select>` an `<option>` belongs to, through an `<optgroup>`, if any. */
+    private fun enclosingSelect(option: Int): Int? {
+        val parents = parentIndex ?: return null
+        var index = parents.getOrNull(option) ?: return null
+        while (index >= 0) {
+            when (name(index)) {
+                "select" -> return index
+                "datalist" -> return null
+            }
+            index = parents.getOrNull(index) ?: return null
+        }
+        return null
+    }
+
+    private fun descendants(index: Int): Sequence<Int> = children[index].asSequence().flatMap {
+        sequenceOf(it) + descendants(it)
+    }
+
+    private val parentIndex = nodes.parentIndex
 
     /**
      * The element's attributes as captured: the markup's, with a form

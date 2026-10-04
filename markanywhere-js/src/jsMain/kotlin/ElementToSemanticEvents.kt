@@ -51,9 +51,7 @@ private suspend fun SemanticEventScope.flowElement(
 
     val tagName = element.localName
 
-    val markupAttributes = element.attributes.asList().associate {
-        it.name to it.value
-    }
+    val markupAttributes = element.attributeMap()
 
     val state = if (hasLiveFormState(tagName)) element.formControlState() else null
     val attributes = state?.let {
@@ -135,8 +133,16 @@ private fun Element.formControlState(): FormControlState {
         checked = control.checked == true,
         selected = control.selected == true,
         masked = isMasked(),
+        select = if (localName == "option") enclosingSelect()?.attributeMap() else null,
     )
 }
+
+/** The `<select>` this `<option>` belongs to, through an `<optgroup>`, if any. */
+private fun Element.enclosingSelect(): Element? =
+    closest("select, datalist")?.takeIf { it.localName == "select" }
+
+private fun Element.attributeMap(): Map<String, String> =
+    attributes.asList().associate { it.name to it.value }
 
 /**
  * Whether this element renders its text masked: a computed

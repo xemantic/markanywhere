@@ -23,6 +23,7 @@ import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.dump.AccessibilityAnnotations.REDACTED
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.test.sameAs
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -484,30 +485,44 @@ class PageSessionTest {
             tab.select("#news").click()
             tab.select("#secret").sendKeys("typed")
             tab.select("#card").sendKeys("4111111111111111")
+            tab.rawEvaluate("document.getElementById('exp').value = '08'")
             session.dump()
         }
 
         // then - each control as it is now, the secrets revealing only
         // whether they are filled
-        val controls = dump.events.formControls()
-        assert(
-            controls == listOf(
-                "<input type=text id=name name=name value=Alice>",
-                "<input type=text id=untouched name=untouched value=kept>",
-                "<textarea id=bio name=bio>",
-                "new bio\nline two",
-                "</textarea>",
-                "<select id=color name=color>",
-                "<option value=r>",
-                "<option value=g selected=>",
-                "</select>",
-                "<input type=checkbox id=agree name=agree checked=>",
-                "<input type=checkbox id=news name=news>",
-                "<input type=password id=secret name=secret $REDACTED=filled>",
-                "<input type=text id=card name=card autocomplete=cc-number $REDACTED=filled>",
-                "<input type=text id=pin name=pin style=-webkit-text-security: disc $REDACTED=empty>",
-            )
-        )
+        dump.events.form() sameAs semanticEvents(tagged = true) {
+            "form" {
+                "input"("type" to "text", "id" to "name", "name" to "name", "value" to "Alice") { }
+                "input"("type" to "text", "id" to "untouched", "name" to "untouched", "value" to "kept") { }
+                "textarea"("id" to "bio", "name" to "bio") { +"new bio\nline two" }
+                "select"("id" to "color", "name" to "color") {
+                    "option"("value" to "r") { +"Red" }
+                    "option"("value" to "g", "selected" to "") { +"Green" }
+                }
+                "input"("type" to "checkbox", "id" to "agree", "name" to "agree", "checked" to "") { }
+                "input"("type" to "checkbox", "id" to "news", "name" to "news") { }
+                "input"("type" to "password", "id" to "secret", "name" to "secret", REDACTED to "filled") { }
+                "input"(
+                    "type" to "text",
+                    "id" to "card",
+                    "name" to "card",
+                    "autocomplete" to "cc-number",
+                    REDACTED to "filled"
+                ) { }
+                "input"(
+                    "type" to "text",
+                    "id" to "pin",
+                    "name" to "pin",
+                    "style" to "-webkit-text-security: disc",
+                    REDACTED to "empty"
+                ) { }
+                "select"("id" to "exp", "name" to "exp", "autocomplete" to "cc-exp-month", REDACTED to "filled") {
+                    "option"("value" to "") { +"Month" }
+                    "option"("value" to "08") { +"08" }
+                }
+            }
+        }
     }
 
     @Test
@@ -521,41 +536,61 @@ class PageSessionTest {
             PageSession(tab).dump()
         }
 
-        // then
-        val controls = dump.events.formControls()
-        assert("<option value=r selected=>" in controls)
-        assert("<option value=g>" in controls)
-        assert("old bio" in controls)
-        assert("<input type=checkbox id=news name=news checked=>" in controls)
+        // then - the markup's defaults, the secrets still redacted
+        dump.events.form() sameAs semanticEvents(tagged = true) {
+            "form" {
+                "input"("type" to "text", "id" to "name", "name" to "name", "value" to "preset") { }
+                "input"("type" to "text", "id" to "untouched", "name" to "untouched", "value" to "kept") { }
+                "textarea"("id" to "bio", "name" to "bio") { +"old bio" }
+                "select"("id" to "color", "name" to "color") {
+                    "option"("value" to "r", "selected" to "") { +"Red" }
+                    "option"("value" to "g") { +"Green" }
+                }
+                "input"("type" to "checkbox", "id" to "agree", "name" to "agree") { }
+                "input"("type" to "checkbox", "id" to "news", "name" to "news", "checked" to "") { }
+                "input"("type" to "password", "id" to "secret", "name" to "secret", REDACTED to "filled") { }
+                "input"(
+                    "type" to "text",
+                    "id" to "card",
+                    "name" to "card",
+                    "autocomplete" to "cc-number",
+                    REDACTED to "empty"
+                ) { }
+                "input"(
+                    "type" to "text",
+                    "id" to "pin",
+                    "name" to "pin",
+                    "style" to "-webkit-text-security: disc",
+                    REDACTED to "empty"
+                ) { }
+                "select"("id" to "exp", "name" to "exp", "autocomplete" to "cc-exp-month", REDACTED to "empty") {
+                    "option"("value" to "") { +"Month" }
+                    "option"("value" to "08") { +"08" }
+                }
+            }
+        }
     }
 
     /**
-     * The form controls of a capture as one line per event, attributes in
-     * document order without the capture's own annotations and refs — except
-     * the redaction marker, which is what the form tests are about.
+     * The `<form>` subtree of a capture, without the capture's own annotations
+     * and refs (except the redaction marker the form tests are about) and
+     * without the whitespace between the controls.
      */
-    private fun List<SemanticEvent>.formControls(): List<String> {
-        val controlTags = setOf("input", "textarea", "select", "option")
-        var inTextarea = false
-        return mapNotNull { event ->
+    private fun List<SemanticEvent>.form(): Flow<SemanticEvent> {
+        val start = indexOfFirst { it is Mark && it.name == "form" }
+        val end = indexOfFirst { it is Unmark && it.name == "form" }
+        return subList(start, end + 1).mapNotNull { event ->
             when (event) {
-                is Mark if event.name in controlTags -> {
-                    inTextarea = event.name == "textarea"
-                    val attributes = event.attributes
-                        .filterKeys { it == REDACTED || !it.startsWith("data-markanywhere-") }
-                        .entries.joinToString("") { " ${it.key}=${it.value}" }
-                    "<${event.name}$attributes>"
-                }
+                is Mark -> event.copy(
+                    attributes = event.attributes.filterKeys {
+                        it == REDACTED || !it.startsWith("data-markanywhere-")
+                    }
+                )
 
-                is Unmark if event.name in setOf("textarea", "select") -> {
-                    inTextarea = false
-                    "</${event.name}>"
-                }
-
-                is Text if inTextarea -> event.text
-                else -> null
+                is Text if event.text.isBlank() -> null
+                else -> event
             }
-        }
+        }.asFlow()
     }
 
 }

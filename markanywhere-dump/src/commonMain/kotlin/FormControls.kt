@@ -29,10 +29,12 @@ package com.xemantic.markanywhere.dump
  *
  * Only the fields relevant to the element are consulted (see
  * [hasLiveFormState]): [value] and [masked] for an `<input>` / `<textarea>`,
- * [checked] for a checkbox or radio, [selected] for an `<option>`.
+ * [value] for a `<select>`, [checked] for a checkbox or radio, [selected] and
+ * [select] for an `<option>`.
  *
  * @property value the control's current `value`, or `null` when the capture
- *   could not read it (the markup is then kept as it is).
+ *   could not read it (the markup is then kept as it is). For a `<select>`,
+ *   the value of the option it has selected.
  * @property checked whether a checkbox or radio is ticked now.
  * @property selected whether an `<option>` is selected now, including the
  *   first option a single `<select>` selects implicitly — that is the one the
@@ -40,12 +42,16 @@ package com.xemantic.markanywhere.dump
  * @property masked whether the control renders its text masked, i.e. its
  *   computed `-webkit-text-security` is anything but `none` — how some pages
  *   hide a secret typed into a plain text input.
+ * @property select for an `<option>`, the attributes of the `<select>` it
+ *   belongs to, or `null` when it belongs to none (a `<datalist>` option): which
+ *   option is chosen is as secret as the select it is chosen in.
  */
 public class FormControlState(
     public val value: String? = null,
     public val checked: Boolean = false,
     public val selected: Boolean = false,
     public val masked: Boolean = false,
+    public val select: Map<String, String>? = null,
 )
 
 /**
@@ -70,7 +76,11 @@ public fun hasLiveFormState(name: String): Boolean = name in LIVE_STATE_ELEMENTS
  * A **secret** control — see [isSecretControl] — has its value dropped, markup
  * and live alike, and carries [AccessibilityAnnotations.REDACTED] instead,
  * saying only whether it is filled, so a capture shows that the typing landed
- * without showing what was typed.
+ * without showing what was typed. For a secret `<select>` (a card expiry
+ * month, say) the secret is *which* option is chosen: every one of its
+ * options loses `selected`, and the select itself carries the marker —
+ * `filled` once the chosen option has a non-empty value, so a `Month`
+ * placeholder option with `value=""` still reads as `empty`.
  */
 public fun formControlAttributes(
     name: String,
@@ -98,7 +108,18 @@ public fun formControlAttributes(
             attributes.redacted(filled = !state.value.isNullOrEmpty())
         } else attributes
 
-    "option" -> attributes.withFlag("selected", state.selected)
+    "select" ->
+        if (isSecretControl(name, attributes, masked = false)) {
+            attributes.redacted(filled = !state.value.isNullOrEmpty())
+        } else attributes
+
+    "option" -> when {
+        state.select != null && isSecretControl("select", state.select, masked = false) ->
+            attributes - "selected"
+
+        else -> attributes.withFlag("selected", state.selected)
+    }
+
     else -> attributes
 }
 
@@ -122,7 +143,7 @@ public fun formControlText(
 }
 
 /**
- * Whether a text-entry control holds a secret: a `type=password` input, a
+ * Whether a control holds a secret: a `type=password` input, a
  * control whose `autocomplete` names a secret ([SECRET_AUTOCOMPLETE_TOKENS] —
  * the standard signal password managers and browsers read, which a page
  * usually keeps when a "show password" toggle flips `type` to `text`), or one
@@ -139,6 +160,7 @@ internal fun isSecretControl(
 ): Boolean = when (name) {
     "input" -> attributes.inputType == "password" || masked || attributes.hasSecretAutocomplete
     "textarea" -> masked || attributes.hasSecretAutocomplete
+    "select" -> attributes.hasSecretAutocomplete
     else -> false
 }
 
@@ -158,7 +180,7 @@ internal val SECRET_AUTOCOMPLETE_TOKENS: Set<String> = setOf(
     "cc-exp-year",
 )
 
-private val LIVE_STATE_ELEMENTS = setOf("input", "textarea", "option")
+private val LIVE_STATE_ELEMENTS = setOf("input", "textarea", "select", "option")
 
 private val MARKUP_VALUE_TYPES = setOf(
     "file", "submit", "reset", "button", "image", "hidden"

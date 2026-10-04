@@ -18,8 +18,12 @@ package com.xemantic.markanywhere.browse
 
 import com.xemantic.kotlin.test.assert
 import com.xemantic.markanywhere.SemanticEvent
-import com.xemantic.markanywhere.dump.AccessibilityAnnotations
+import com.xemantic.markanywhere.dump.AccessibilityAnnotations.REDACTED
+import com.xemantic.markanywhere.flow.semanticEvents
+import com.xemantic.markanywhere.test.sameAs
 import dev.kdriver.cdp.domain.DOMSnapshot
+import kotlinx.coroutines.flow.asFlow
+import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 
 class CapturePageTest {
@@ -81,7 +85,7 @@ class CapturePageTest {
      * renders masked (its computed `-webkit-text-security`) among them.
      */
     @Test
-    fun `should capture form controls with their live state`() {
+    fun `should capture form controls with their live state`() = runTest {
         // given
         val strings = mutableListOf<String>()
         fun string(value: String): Int =
@@ -144,34 +148,85 @@ class CapturePageTest {
         ).events
 
         // then
-        val redacted = AccessibilityAnnotations.REDACTED
-        assert(
-            events.outline() == listOf(
-                "<html>", "<body>",
-                "<input type=text value=Alice>", "</input>",
-                "<input type=password $redacted=filled>", "</input>",
-                "<input type=text $redacted=filled>", "</input>",
-                "<textarea>", "new bio", "</textarea>",
-                "<select>",
-                "<option value=r>", "</option>",
-                "<option value=g selected=>", "</option>",
-                "</select>",
-                "<input type=checkbox checked=>", "</input>",
-                "<input type=submit value=Send>", "</input>",
-                "</body>", "</html>"
-            )
-        )
+        events.asFlow() sameAs semanticEvents(tagged = true) {
+            "html" {
+                "body" {
+                    "input"("type" to "text", "value" to "Alice") { }
+                    "input"("type" to "password", REDACTED to "filled") { }
+                    "input"("type" to "text", REDACTED to "filled") { }
+                    "textarea" { +"new bio" }
+                    "select" {
+                        "option"("value" to "r") { }
+                        "option"("value" to "g", "selected" to "") { }
+                    }
+                    "input"("type" to "checkbox", "checked" to "") { }
+                    "input"("type" to "submit", "value" to "Send") { }
+                }
+            }
+        }
     }
 
-    /** Each event as one line, attributes in order, without display annotations. */
-    private fun List<SemanticEvent>.outline(): List<String> = map { event ->
-        when (event) {
-            is Mark -> "<${event.name}" + event.attributes
-                .filterKeys { it != AccessibilityAnnotations.DISPLAY }
-                .entries.joinToString("") { " ${it.key}=${it.value}" } + ">"
+    /**
+     * Which option a secret select (a card expiry) has chosen is the secret:
+     * no option keeps `selected`, markup or live, and the select says only
+     * whether a real value is chosen — through an `<optgroup>` too.
+     */
+    @Test
+    fun `should redact which option a secret select has chosen`() = runTest {
+        // given
+        val strings = mutableListOf<String>()
+        fun string(value: String): Int =
+            strings.indexOf(value).takeIf { it >= 0 } ?: strings.size.also { strings += value }
+        fun attributes(vararg pairs: Pair<String, String>): List<Int> =
+            pairs.flatMap { (name, value) -> listOf(string(name), string(value)) }
 
-            is Unmark -> "</${event.name}>"
-            is Text -> event.text
+        val names = listOf("HTML", "BODY", "SELECT", "OPTION", "OPTGROUP", "OPTION")
+        val snapshot = DOMSnapshot.CaptureSnapshotReturn(
+            documents = listOf(
+                document(
+                    nodeType = names.map { 1 },
+                    nodeName = names.map(::string),
+                    parentIndex = listOf(-1, 0, 1, 2, 2, 4),
+                    backendNodeId = names.indices.map { it + 1 },
+                    attributes = listOf(
+                        emptyList(),
+                        emptyList(),
+                        attributes("autocomplete" to "cc-exp-month"),
+                        attributes("value" to "", "selected" to ""),
+                        attributes("label" to "Summer"),
+                        attributes("value" to "08"),
+                    ),
+                    optionSelected = DOMSnapshot.RareBooleanData(index = listOf(5)),
+                    // every element laid out as a block, so none is annotated
+                    layoutNodeIndex = names.indices.toList(),
+                    layoutStyles = names.map {
+                        listOf("block", "visible", "none").map(::string)
+                    },
+                ),
+            ),
+            strings = strings,
+        )
+
+        // when
+        val events = captureEvents(
+            snapshot = snapshot,
+            axNodes = emptyList(),
+            refAttribute = null,
+            isActionable = { false },
+        ).events
+
+        // then
+        events.asFlow() sameAs semanticEvents(tagged = true) {
+            "html" {
+                "body" {
+                    "select"("autocomplete" to "cc-exp-month", REDACTED to "filled") {
+                        "option"("value" to "") { }
+                        "optgroup"("label" to "Summer") {
+                            "option"("value" to "08") { }
+                        }
+                    }
+                }
+            }
         }
     }
 

@@ -255,4 +255,56 @@ class FormControlsTest {
         assert(text == "")
     }
 
+    @Test
+    fun `should redact which option a secret select has chosen`() {
+        listOf("cc-exp-month", "cc-exp-year", "cc-exp").forEach { token ->
+            // given - a card expiry picked from a select
+            val select = mapOf("autocomplete" to token)
+
+            // when
+            val selectAttributes = formControlAttributes("select", select, FormControlState(value = "08"))
+            val chosen = formControlAttributes(
+                "option", mapOf("value" to "08"), FormControlState(selected = true, select = select)
+            )
+            val markupChosen = formControlAttributes(
+                "option",
+                mapOf("value" to "01", "selected" to ""),
+                FormControlState(selected = false, select = select)
+            )
+
+            // then
+            assert(selectAttributes == select + (redacted to "filled"))
+            assert(chosen == mapOf("value" to "08"))
+            assert(markupChosen == mapOf("value" to "01"))
+        }
+    }
+
+    @Test
+    fun `should mark a secret select left on its placeholder option as empty`() {
+        // when
+        val live = formControlAttributes(
+            "select", mapOf("autocomplete" to "cc-exp-month"), FormControlState(value = "")
+        )
+
+        // then
+        assert(live == mapOf("autocomplete" to "cc-exp-month", redacted to "empty"))
+    }
+
+    @Test
+    fun `should keep the chosen option of a select that holds no secret`() {
+        // given
+        val select = mapOf("autocomplete" to "country")
+
+        // when
+        val selectAttributes = formControlAttributes("select", select, FormControlState(value = "PL"))
+        val chosen = formControlAttributes(
+            "option", mapOf("value" to "PL"), FormControlState(selected = true, select = select)
+        )
+
+        // then
+        assert(selectAttributes == select)
+        assert(chosen == mapOf("value" to "PL", "selected" to ""))
+        assert(hasLiveFormState("select"))
+    }
+
 }
