@@ -16,7 +16,9 @@
 
 package com.xemantic.markanywhere.html
 
+import com.xemantic.kotlin.test.assert
 import com.xemantic.kotlin.test.sameAs
+import com.xemantic.markanywhere.dump.AccessibilityAnnotations
 import com.xemantic.markanywhere.flow.SemanticEventScope
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.parse.parse
@@ -790,5 +792,78 @@ class EmphasisDelimiterRoundTripTest {
         // then
         markdown sameAs "foo**bar**baz"
         assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip a b element ending in punctuation before a digit`() = runTest {
+        // when
+        val markdown = htmlToMarkdown { "p" { "b" { +"Price:" }; +"5" } }
+        // then
+        markdown sameAs "**Price:**&#53;"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip a b element whose trailing space separates it from the next word`() = runTest {
+        // when
+        val markdown = htmlToMarkdown { "p" { "b" { +"Note: " }; +"text" } }
+        // then
+        markdown sameAs "**Note:** text"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip a b element wrapping a list`() = runTest {
+        // when
+        val markdown = htmlToMarkdown { "b" { "ul" { "li" { +"x "; "b" { +"y" } } } } }
+        // then
+        assert("**y**" in markdown)
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip a b element wrapping a paragraph`() = runTest {
+        // when
+        val markdown = htmlToMarkdown { "b" { "p" { +"x "; "b" { +"y" } } } }
+        // then
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip a b element followed by an i element wrapping a b element`() = runTest {
+        // when
+        val markdown = htmlToMarkdown { "p" { "b" { +"a" }; "i" { "b" { +"b" } } } }
+        // then
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip strong spans abutting em spans`() = runTest {
+        // when
+        val markdown = htmlToMarkdown {
+            "p" { "em" { +"a" }; "strong" { +"b" }; "em" { +"c" } }
+        }
+        // then
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should keep the actionable ref of a b element`() = runTest {
+        // when
+        val markdown = htmlToMarkdown {
+            "p" { "b"(AccessibilityAnnotations.REF to "12") { +"Expand" } }
+        }
+        // then
+        markdown sameAs "<b ref=\"12\">Expand</b>"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should keep a b element inside preformatted code as a tag`() = runTest {
+        // when
+        val markdown = htmlToMarkdown { "pre" { "code" { +"\$ "; "b" { +"ls" } } } }
+        // then
+        assert("**" !in markdown)
+        assert("<b>ls</b>" in markdown)
     }
 }

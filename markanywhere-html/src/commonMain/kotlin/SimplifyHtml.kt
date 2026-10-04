@@ -35,7 +35,9 @@ import kotlinx.coroutines.flow.Flow
  *   …) is emitted **untagged**, so it renders as Markdown — `*…*`, `- `, `## `;
  * - every other preserved element (`section`, `nav`, `dialog`, `form`,
  *   `button`, `dl`/`dt`/`dd`, `ruby`, `u`/`cite`, …) is emitted
- *   **tagged**, so it renders as the literal XML wrapper it is.
+ *   **tagged**, so it renders as the literal XML wrapper it is — and so is
+ *   emphasis Markdown cannot express where it stands (wrapping blocks,
+ *   carrying a kept attribute; see [expressEmphasisInMarkdown]).
  *
  * The output is therefore self-describing: a consumer reads `isTagged` instead
  * of replicating the renderer's name map. `renderMarkdown()` keeps a fallback
@@ -84,7 +86,8 @@ import kotlinx.coroutines.flow.Flow
  *   annotation group ([RUBY_TAGS]), whose annotation is parallel to its base
  *   text and so cannot be flattened into it
  * - **Rename to Markdown emphasis**: `b` → `strong`, `i` → `em`, `s` and
- *   `strike` → `del` (see [MARKDOWN_EMPHASIS_EQUIVALENTS])
+ *   `strike` → `del` — unless Markdown cannot express the element there (see
+ *   [expressEmphasisInMarkdown])
  * - **Preserve with attribute whitelist**:
  *   - `a` — `href`, `title`, `id`
  *   - `img` — `src`, `alt`, `title`, `id`
@@ -181,6 +184,12 @@ import kotlinx.coroutines.flow.Flow
 public fun Flow<SemanticEvent>.simplifyHtml(
     keepAttributes: Set<String> = emptySet(),
     svgMode: SvgMode = SvgMode.RESOLVE,
+): Flow<SemanticEvent> = simplifyHtmlElements(keepAttributes, svgMode)
+    .expressEmphasisInMarkdown()
+
+private fun Flow<SemanticEvent>.simplifyHtmlElements(
+    keepAttributes: Set<String>,
+    svgMode: SvgMode,
 ): Flow<SemanticEvent> = transform {
 
     // A value that tells a reader nothing is never added — judged by
@@ -454,9 +463,10 @@ public fun Flow<SemanticEvent>.simplifyHtml(
         preserve(event.name, preserveAttrs(event, "id")) { children() }
     }
 
+    // `b` / `i` / `s` / `strike` leave here tagged; expressEmphasisInMarkdown
+    // renames them to Markdown emphasis wherever Markdown can express it.
     match({ name in INLINE_FORMATTING_TAGS }) { event ->
-        val name = MARKDOWN_EMPHASIS_EQUIVALENTS[event.name] ?: event.name
-        preserve(name, extraKept(event)) { children() }
+        preserve(event.name, extraKept(event)) { children() }
     }
 
     // Ruby annotations are preserved as inline raw HTML rather than unwrapped:
@@ -567,20 +577,6 @@ internal val MARKDOWN_NATIVE_TAGS: Set<String> = setOf(
     "strong", "em", "del", "mark", "sup",
     "a", "img",
     "table", "thead", "tbody", "tr", "th", "td", "caption",
-)
-
-// Presentational formatting renamed to the Markdown-native emphasis it looks
-// like. HTML5 gives `b` / `i` / `s` meanings of their own (attention, another
-// voice, no longer accurate), but the web keeps using them as plain bold /
-// italic / strikethrough, and a reader of the Markdown — model or human — can
-// neither see nor act on the distinction, while a raw tag costs tokens and
-// leaves stray HTML in ordinary text. `u` has no Markdown equivalent and stays
-// a raw tag.
-private val MARKDOWN_EMPHASIS_EQUIVALENTS = mapOf(
-    "b" to "strong",
-    "i" to "em",
-    "s" to "del",
-    "strike" to "del",
 )
 
 // Elements dropped together with their whole subtree. Everything not listed

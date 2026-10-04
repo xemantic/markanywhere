@@ -55,7 +55,11 @@ import kotlinx.coroutines.flow.flow
  *   stray space between the header's `<a><button>Register</button></a>` items).
  *
  * Adjacent **inline** elements (`<b>bold</b><i>italic</i>`) cross no separated
- * box, so they are never split. Whitespace-only text passes through untouched —
+ * box, so they are never split — with one exception: two **adjacent links**
+ * (`<b><a>Hacker News</a></b><a>new</a>`, the gap a CSS margin) get a separator
+ * *before* the second `<a>`, outside its label. Links are distinct controls, and
+ * nothing renders two of them flush against each other on purpose — they would
+ * read as one. Whitespace-only text passes through untouched —
  * the downstream collapser already turns it into the separator, and any doubling
  * with an injected space collapses there.
  *
@@ -73,6 +77,11 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
     var crossedSurvivingBlock = false
     var seenInlineToken = false // suppresses a leading separator at stream start
     var previousEndedWithSpace = false // last token already ended in whitespace
+    // The open `<a>` elements, innermost last, each by a serial number, and the
+    // link (0 = none) holding the last inline content token.
+    val openLinks = ArrayDeque<Int>()
+    var linkSerial = 0
+    var previousTokenLink = 0
 
     fun cross(boundary: BlockBoundary) {
         when (boundary) {
@@ -98,6 +107,18 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
         crossedSurvivingBlock = false
         seenInlineToken = true
         previousEndedWithSpace = text?.lastOrNull()?.isWhitespace() == true
+        previousTokenLink = openLinks.lastOrNull() ?: 0
+    }
+
+    // Separates a link opening right after the content of another, closed one.
+    suspend fun separateAdjacentLink() {
+        if (previousTokenLink != 0 && previousTokenLink !in openLinks &&
+            !crossedSurvivingBlock && !previousEndedWithSpace
+        ) {
+            emit(SemanticEvent.Text(" "))
+            previousEndedWithSpace = true
+            crossedSeparatedBox = false
+        }
     }
 
     collect { event ->
@@ -107,8 +128,10 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
                 val boundary = event.blockBoundary(parentIsFlexGrid)
                 if (preserveDepth == 0) {
                     cross(boundary)
+                    if (event.name == "a") separateAdjacentLink()
                     if (event.name == "img") emitInlineToken(event) else emit(event)
                 } else emit(event)
+                if (event.name == "a") openLinks.addLast(++linkSerial)
                 val opensPreserve = event.isPreserveRegion()
                 stack.addLast(
                     BlockBoundaryFrame(boundary, opensPreserve, event.isFlexGridContainer())
@@ -118,6 +141,7 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
             is Unmark -> {
                 val frame = stack.removeLastOrNull()
                 if (frame?.opensPreserve == true) preserveDepth--
+                if (event.name == "a") openLinks.removeLastOrNull()
                 if (preserveDepth == 0) cross(frame?.boundary ?: BlockBoundary.INLINE)
                 emit(event)
             }

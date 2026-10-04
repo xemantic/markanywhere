@@ -161,4 +161,53 @@ class SeparateUnwrappedBlocksTest {
             }
         }
     }
+
+    @Test
+    fun `should separate adjacent links that share no source whitespace`() = runTest {
+        // given — the Hacker News masthead: the gap after the bold site name is
+        // a CSS margin, so the next link follows with no whitespace text
+        val input = semanticEvents(tagged = true) {
+            "span"(AccessibilityAnnotations.DISPLAY to "inline") {
+                "b"(AccessibilityAnnotations.DISPLAY to "inline") {
+                    "a"("href" to "news", AccessibilityAnnotations.DISPLAY to "inline") { +"Hacker News" }
+                }
+                "a"("href" to "newest", AccessibilityAnnotations.DISPLAY to "inline") { +"new" }
+                +" | "
+                "a"("href" to "front", AccessibilityAnnotations.DISPLAY to "inline") { +"past" }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then — the space lands between the links, not inside a link label
+        output sameAs semanticEvents(tagged = true) {
+            "span"(AccessibilityAnnotations.DISPLAY to "inline") {
+                "b"(AccessibilityAnnotations.DISPLAY to "inline") {
+                    "a"("href" to "news", AccessibilityAnnotations.DISPLAY to "inline") { +"Hacker News" }
+                }
+                +" "
+                "a"("href" to "newest", AccessibilityAnnotations.DISPLAY to "inline") { +"new" }
+                +" | "
+                "a"("href" to "front", AccessibilityAnnotations.DISPLAY to "inline") { +"past" }
+            }
+        }
+    }
+
+    @Test
+    fun `should not separate a link from adjacent plain text`() = runTest {
+        // given
+        val input = semanticEvents(tagged = true) {
+            "p" {
+                "a"("href" to "u") { +"link" }
+                +"s"
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs input
+    }
 }

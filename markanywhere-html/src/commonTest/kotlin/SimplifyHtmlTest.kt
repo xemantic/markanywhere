@@ -294,6 +294,64 @@ class SimplifyHtmlTest {
         }
     }
 
+    @Test
+    fun `should keep emphasis wrapping block content as a tag`() = runTest {
+        // given — Markdown emphasis cannot span blocks, while a raw tag can wrap them
+        val input = semanticEvents(tagged = true) {
+            "b" { "ul" { "li" { +"x "; "b" { +"y" } } } }
+            "strong" { "p" { +"z" } }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then — the inner `b` sits inside a block, so it is emphasis again
+        output sameAs semanticEvents {
+            tag("b") { "ul" { "li" { +"x "; "strong" { +"y" } } } }
+            tag("strong") { "p" { +"z" } }
+        }
+    }
+
+    @Test
+    fun `should keep emphasis carrying a kept attribute as a tag`() = runTest {
+        // given — Markdown emphasis has no syntax for attributes, a raw tag does
+        val input = semanticEvents(tagged = true) {
+            "p" {
+                "b"("data-ref" to "1") { +"a" }
+                "em"("data-ref" to "2") { +"b" }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml(keepAttributes = setOf("data-ref"))
+
+        // then
+        output sameAs semanticEvents {
+            "p" {
+                tag("b", "data-ref" to "1") { +"a" }
+                tag("em", "data-ref" to "2") { +"b" }
+            }
+        }
+    }
+
+    @Test
+    fun `should not rename b i and s inside code`() = runTest {
+        // given — inside code a delimiter would read as part of the code
+        val input = semanticEvents(tagged = true) {
+            "pre" { "code" { +"\$ "; "b" { +"ls" } } }
+            "p" { "code" { "i" { +"x" } } }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "pre" { "code" { +"\$ "; tag("b") { +"ls" } } }
+            "p" { "code" { tag("i") { +"x" } } }
+        }
+    }
+
     // --- custom attribute whitelists ---------------------------------------
 
     @Test
@@ -2402,11 +2460,12 @@ class SimplifyHtmlTest {
             keepAttributes = setOf("golemId")
         )
 
-        // then — golemId survives alongside each element's own whitelist
+        // then — golemId survives alongside each element's own whitelist; the
+        // `em` becomes a tag, since Markdown emphasis has no syntax to carry it
         output sameAs semanticEvents {
             "a"("href" to "/x", "golemId" to "1") { +"link" }
             "img"("src" to "/i.png", "alt" to "pic", "golemId" to "2") { }
-            "em"("golemId" to "3") { +"italic" }
+            tag("em", "golemId" to "3") { +"italic" }
         }
     }
 

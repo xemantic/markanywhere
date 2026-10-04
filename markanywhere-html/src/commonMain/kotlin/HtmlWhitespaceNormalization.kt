@@ -46,7 +46,9 @@ import kotlinx.coroutines.flow.flow
  *   element's boundary — it is **collapsed to a single space** and kept, so a
  *   space that separates adjacent inline elements survives:
  *   `</a> <a>` → `</a>` `" "` `<a>` rather than the two links running together,
- *   and the interior runs of `A\n\t\tB` collapse to `A B`.
+ *   and the interior runs of `A\n\t\tB` collapse to `A B`. A run right before
+ *   an inline *closing* tag is carried past it (`<b>Note: </b>text` →
+ *   `<b>Note:</b>` `" text"`), where a Markdown closing delimiter needs it.
  *
  * The asymmetry mirrors HTML: a closing inline tag or non-whitespace text can
  * be the *left* side of a kept space (content just ended), and an opening inline
@@ -137,13 +139,23 @@ public fun Flow<SemanticEvent>.dropHtmlStructuralWhitespace(): Flow<SemanticEven
             }
 
             is Unmark -> {
-                resolvePending(rightQualifies = false) // a closing tag is not the start of content
                 if (depth == preserveFrom) preserveFrom = -1
                 depth--
-                emit(event)
                 // The closing tag reads back its open-tag inline verdict.
-                leftQualifies = inlineStack.removeLastOrNull()
+                val inline = inlineStack.removeLastOrNull()
                     ?: (event.name in INLINE_HTML_ELEMENTS)
+                if (inline && pending) {
+                    // An inline close is no boundary for whitespace: the run
+                    // before it (`<b>Note: </b>text`) still separates the
+                    // content on both sides, so it is carried past the close
+                    // and resolved by what follows — landing outside the
+                    // element, where a Markdown closing delimiter needs it.
+                    emit(event)
+                } else {
+                    resolvePending(rightQualifies = false) // a closing tag is not the start of content
+                    emit(event)
+                    leftQualifies = inline
+                }
             }
         }
     }

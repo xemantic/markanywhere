@@ -337,6 +337,98 @@ class MarkdownRenderingTest {
     }
 
     @Test
+    fun `should not collapse a span nested in the same span across a block`() = runTest {
+        // given — the outer `**` belongs to another block, so the inner span is
+        // the only one around `y` in its paragraph
+        val flow = semanticEvents {
+            "strong" { "p" { +"x "; "strong" { +"y" } } }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        assert("x **y**" in markdown)
+    }
+
+    @Test
+    fun `should write a held closer before the spaces deferred inside the span`() = runTest {
+        // given — `**a **c` would not re-parse: the closer follows a space
+        val flow = semanticEvents {
+            "p" { "strong" { +"a " }; +"c" }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "**a** c"
+    }
+
+    @Test
+    fun `should encode the first char after a closer that ends in punctuation`() = runTest {
+        // given — in `**Price:**5` the closer sits between punctuation and a
+        // digit, so it is not right-flanking and does not re-parse as a closer;
+        // a character reference keeps the closer followed by punctuation (`&`)
+        val flow = semanticEvents {
+            "p" { "strong" { +"Price:" }; +"5 EUR" }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "**Price:**&#53; EUR"
+    }
+
+    @Test
+    fun `should not encode the char after a closer that ends in a word char`() = runTest {
+        // when
+        val markdown = semanticEvents {
+            "p" { "strong" { +"Price" }; +":5" }
+        }.renderMarkdown()
+
+        // then
+        markdown sameAs "**Price**:5"
+    }
+
+    @Test
+    fun `should open a span right after a closer of the same delimiter as a tag`() = runTest {
+        // given — `**a*****b***` would not re-parse: the closer of the first
+        // strong and the openers of em + strong form one five-asterisk run
+        val flow = semanticEvents {
+            "p" { "strong" { +"a" }; "em" { "strong" { +"b" } } }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "**a**<em>**b**</em>"
+    }
+
+    @Test
+    fun `should separate the blocks inside an inline tag from the tag`() = runTest {
+        // given — emphasis wrapping blocks stays a raw tag; without a blank line
+        // after `<b>` the list would re-parse as the HTML block's raw text
+        val flow = semanticEvents {
+            tag("b") { "ul" { "li" { +"x" } } }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            <b>
+
+            - x
+
+            </b>
+        """.trimIndent()
+    }
+
+    @Test
     fun `should render emphasis`() = runTest {
         // given
         val flow = semanticEvents {

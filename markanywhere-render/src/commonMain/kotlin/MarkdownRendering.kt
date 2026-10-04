@@ -112,7 +112,13 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
     // An emphasis span whose closing delimiter is held for one event: if the
     // very next event reopens the same span, the two merge instead of abutting
     // (`**a****b**` re-parses as neither two spans nor one).
-    var pendingInlineClose: Pair<String, BlockFrame.Inline>? = null
+    var pendingInlineClose: BlockFrame.Inline? = null
+    // The last char written to any sink, and the delimiter char of a closer
+    // that is the very last thing written (null once anything follows it) —
+    // what decides whether the next opener or text would make the closer stop
+    // re-parsing as one (see closePendingInline and openInline).
+    var lastChar = '\n'
+    var closerChar: Char? = null
 
     val eventBuffer = StringBuilder()
     var hasPendingNewline = false
@@ -121,7 +127,12 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
     // empty header (column count is known only once the first row closes).
     var rowCapture: StringBuilder? = null
 
-    fun out(s: String) { (rowCapture ?: eventBuffer).append(s) }
+    fun out(s: String) {
+        if (s.isEmpty()) return
+        (rowCapture ?: eventBuffer).append(s)
+        lastChar = s.last()
+        closerChar = null
+    }
 
     // Emit any deferred trailing spaces — called right before real content is
     // written on the current line, so a space between inline tokens survives
@@ -178,7 +189,12 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         return sb.toString()
     }
 
-    fun appendLabel(text: String) { labelBuffers.last().append(text) }
+    fun appendLabel(text: String) {
+        if (text.isEmpty()) return
+        labelBuffers.last().append(text)
+        lastChar = text.last()
+        closerChar = null
+    }
     fun inLabel(): Boolean = labelBuffers.isNotEmpty()
 
     // Serialize one event of a nested table as raw HTML into the enclosing
@@ -433,29 +449,70 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         activeDelimiterMask = mask
     }
 
-    // Writes the closing delimiter held back by an emphasis unmark.
-    fun closePendingInline() {
-        val (_, frame) = pendingInlineClose ?: return
-        pendingInlineClose = null
-        writeRaw(frame.delimiter)
+    // Writes an emphasis closing delimiter. Spaces deferred inside the span
+    // stay deferred past it: a closer after a space is not right-flanking
+    // (`**a **c`), while one before the space is (`**a** c`).
+    fun writeCloser(delimiter: String) {
+        val spaces = pendingSpaces
+        pendingSpaces = 0
+        writeRaw(delimiter)
+        pendingSpaces = spaces
         refreshActiveDelimiters()
+    }
+
+    // Writes the closing delimiter held back by an emphasis unmark, given the
+    // event that follows it. A closer after punctuation is right-flanking only
+    // when whitespace or punctuation follows (CommonMark §6.2), so a word char
+    // right after it (`**Price:**5`) is written as a character reference: the
+    // closer is then followed by `&`, and the text reads the same.
+    // Returns the text still to be written for [next], or null when none of
+    // it was.
+    fun closePendingInline(next: SemanticEvent?): String? {
+        val frame = pendingInlineClose ?: return null
+        pendingInlineClose = null
+        val contentEnd = lastChar
+        writeCloser(frame.delimiter)
+        closerChar = frame.delimiter[0]
+        val text = (next as? Text)?.text ?: return null
+        if (pendingSpaces > 0 || !contentEnd.isMarkdownPunctuation()) return null
+        val first = text.firstOrNull() ?: return null
+        if (first.isWhitespace() || first.isMarkdownPunctuation()) return null
+        val pair = first.isHighSurrogate() && text.length > 1 && text[1].isLowSurrogate()
+        val codePoint = if (pair) {
+            0x10000 + ((first.code - 0xD800) shl 10) + (text[1].code - 0xDC00)
+        } else first.code
+        writeRaw("&#$codePoint;")
+        return text.substring(if (pair) 2 else 1)
     }
 
     // Opens an emphasis span — or, when a span with the same delimiter is
     // already open, a transparent one: the inner span adds nothing visible, and
     // its delimiters would abut the outer ones (`****x****`) in a run that does
-    // not re-parse as nesting. The search stops at a link label, whose content
-    // is delimiter-scoped on re-parse.
-    fun openInline(delimiter: String) {
-        val nested = blockStack.asReversed()
-            .takeWhile { it !is Link }
-            .any { it is Inline && it.delimiter == delimiter }
-        if (nested) {
-            blockStack.addLast(BlockFrame.Inline(""))
-        } else {
-            writeRaw(delimiter)
-            blockStack.addLast(BlockFrame.Inline(delimiter))
-            activeDelimiterMask = activeDelimiterMask or delimiterBit(delimiter[0])
+    // not re-parse as nesting. The search covers only the spans enclosing the
+    // current text — it stops at the first block or link frame, beyond which a
+    // span's delimiters are in another block or are scoped to a link label on
+    // re-parse. An opener that would directly follow a closer of the same
+    // delimiter char (`**a**` + `*` + `**b***`) joins it into one run that no
+    // longer re-parses as a closer and openers, so it is written as a tag.
+    fun openInline(name: String, delimiter: String) {
+        var nested = false
+        for (i in blockStack.indices.reversed()) {
+            val frame = blockStack[i]
+            if (frame is Inline) {
+                if (frame.delimiter == delimiter) { nested = true; break }
+            } else if (frame !is TaggedInline) break
+        }
+        when {
+            nested -> blockStack.addLast(BlockFrame.Inline(""))
+            closerChar == delimiter[0] -> {
+                writeRaw("<$name>")
+                blockStack.addLast(TaggedInline)
+            }
+            else -> {
+                writeRaw(delimiter)
+                blockStack.addLast(BlockFrame.Inline(delimiter))
+                activeDelimiterMask = activeDelimiterMask or delimiterBit(delimiter[0])
+            }
         }
     }
 
@@ -657,7 +714,8 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         atLineStart = true
     }
 
-    collect { event ->
+    collect { incoming ->
+        var event = incoming
 
         // Inside a front matter block the events are YAML metadata, not
         // Markdown content: the writer consumes them, and only the closing
@@ -677,12 +735,13 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         // it: drop the held closer and put the frame back, writing nothing.
         val pendingClose = pendingInlineClose
         if (pendingClose != null) {
-            if (event is Mark && !event.isTagged && event.name == pendingClose.first) {
+            if (event is Mark && !event.isTagged && emphasisDelimiter(event.name) == pendingClose.delimiter) {
                 pendingInlineClose = null
-                blockStack.addLast(pendingClose.second)
+                blockStack.addLast(pendingClose)
                 return@collect
             }
-            closePendingInline()
+            val remainder = closePendingInline(event)
+            if (remainder != null) event = SemanticEvent.Text(remainder)
         }
 
         // A list synthesized for an orphan `li` stays open across its
@@ -716,6 +775,19 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
             && blockStack.any { it is BlockFrame.Link && !it.rawMode }
         ) {
             spillActiveLinks()
+        }
+
+        // A Markdown block directly inside an inline raw tag (a `<b>` wrapping
+        // a list, kept a tag because emphasis cannot span blocks) turns that
+        // tag into a block-level one: it must end its line and be followed by
+        // a blank line, or the block re-parses as the HTML block's raw text. (A
+        // block-level raw tag separates itself — see separateBeforeBlockTag.)
+        if (event is Mark && !event.isTagged && !inLabel()
+            && event.name in BLOCK_LEVEL_MARK_NAMES
+            && blockStack.lastOrNull() is TaggedInline
+        ) {
+            ensureLineStart()
+            lastBlock = BLOCK_TAG
         }
 
         // Tagged events (HTML-derived) pass through as raw HTML. At a block
@@ -932,11 +1004,8 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                 // full refreshActiveDelimiters() recompute is needed only on *close*,
                 // where em and strong share the `*` bit (clearing it on strong-close
                 // would wrongly drop emphasis while an em is still open).
-                "strong" -> openInline("**")
-                "em" -> openInline("*")
-                "del" -> openInline("~~")
-                "mark" -> openInline("==")
-                "sup" -> openInline("^")
+                "strong", "em", "del", "mark", "sup" ->
+                    openInline(event.name, emphasisDelimiter(event.name)!!)
 
                 "a" -> {
                     labelBuffers.addLast(StringBuilder())
@@ -1068,17 +1137,18 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                         }
                     }
 
-                    "strong", "em", "del", "mark", "sup" -> {
-                        frame as BlockFrame.Inline
-                        when (frame.delimiter) {
-                            // A transparent (nested) span wrote no delimiter.
-                            "" -> {}
-                            // `^a^^b^` re-parses as the two spans it is (a `^`
-                            // toggles), so adjacent superscripts — a run of
-                            // citations — stay separate.
-                            "^" -> { writeRaw("^"); refreshActiveDelimiters() }
-                            else -> pendingInlineClose = event.name to frame
-                        }
+                    "strong", "em", "del", "mark", "sup" -> when {
+                        // Opened as a tag, where a delimiter would have joined
+                        // the closer before it (see openInline).
+                        frame is TaggedInline -> writeRaw("</${event.name}>")
+                        frame !is BlockFrame.Inline -> error("<${event.name}> closed over $frame")
+                        // A transparent (nested) span wrote no delimiter.
+                        frame.delimiter.isEmpty() -> {}
+                        // `^a^^b^` re-parses as the two spans it is (a `^`
+                        // toggles), so adjacent superscripts — a run of
+                        // citations — stay separate.
+                        frame.delimiter == "^" -> writeCloser("^")
+                        else -> pendingInlineClose = frame
                     }
 
                     "a" -> {
@@ -1153,7 +1223,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
     }
 
     // A stream ending on an emphasis close (no enclosing block) still owes it.
-    closePendingInline()
+    closePendingInline(next = null)
     flush()
 }
 
@@ -1427,6 +1497,28 @@ private fun String.escapeHtmlText(): String = buildString {
         '>' -> +"&gt;"
         else -> +c
     }
+}
+
+// The Markdown delimiter of an inline emphasis mark, null for any other mark.
+private fun emphasisDelimiter(name: String): String? = when (name) {
+    "strong" -> "**"
+    "em" -> "*"
+    "del" -> "~~"
+    "mark" -> "=="
+    "sup" -> "^"
+    else -> null
+}
+
+// CommonMark's "Unicode punctuation character" (§2.1): general category P or S.
+// Delimiter flanking is decided by it, not by ASCII punctuation alone.
+private fun Char.isMarkdownPunctuation(): Boolean = when (category) {
+    CharCategory.CONNECTOR_PUNCTUATION, CharCategory.DASH_PUNCTUATION,
+    CharCategory.START_PUNCTUATION, CharCategory.END_PUNCTUATION,
+    CharCategory.INITIAL_QUOTE_PUNCTUATION, CharCategory.FINAL_QUOTE_PUNCTUATION,
+    CharCategory.OTHER_PUNCTUATION, CharCategory.MATH_SYMBOL,
+    CharCategory.CURRENCY_SYMBOL, CharCategory.MODIFIER_SYMBOL,
+    CharCategory.OTHER_SYMBOL -> true
+    else -> false
 }
 
 // The distinct delimiter base char of every inline emphasis frame, as a bit:
