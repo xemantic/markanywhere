@@ -512,7 +512,10 @@ private fun Flow<SemanticEvent>.simplifyHtmlElements(
 
     match({ name in FORM_ELEMENT_ATTRS }) { event ->
         val allowed = FORM_ELEMENT_ATTRS.getValue(event.name)
-        preserve(event.name, preserveAttrs(event, *allowed)) { children() }
+        // a secret the capture left out still says whether it is filled
+        val redacted = event[AccessibilityAnnotations.REDACTED]
+            ?.let { mapOf(REDACTED_ATTRIBUTE to it) }.orEmpty()
+        preserve(event.name, preserveAttrs(event, *allowed) + redacted) { children() }
     }
 
     match("icon") {
@@ -684,7 +687,12 @@ private val FRAME_TAGS = setOf("iframe", "frame", "object")
 // a preserved svg element unless the caller asked for one through
 // `keepAttributes`, the way every other preserved element only keeps them
 // through `preserveAttrs`.
-private val CAPTURE_ANNOTATIONS = AccessibilityAnnotations.ALL + AccessibilityAnnotations.REF
+private val CAPTURE_ANNOTATIONS = AccessibilityAnnotations.ALL +
+        AccessibilityAnnotations.REF + AccessibilityAnnotations.REDACTED
+
+// The short LLM-facing name of [AccessibilityAnnotations.REDACTED] on a form
+// control whose secret value the capture left out (`filled` / `empty`).
+private const val REDACTED_ATTRIBUTE = "redacted"
 
 // Embedded content elements and the attributes naming what they embed. The
 // dimensions (`width`/`height`) are presentational and dropped; `title` /

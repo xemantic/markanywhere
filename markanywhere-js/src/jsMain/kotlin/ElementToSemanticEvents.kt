@@ -17,6 +17,10 @@
 package com.xemantic.markanywhere.js
 
 import com.xemantic.markanywhere.SemanticEvent
+import com.xemantic.markanywhere.dump.FormControlState
+import com.xemantic.markanywhere.dump.formControlAttributes
+import com.xemantic.markanywhere.dump.formControlText
+import com.xemantic.markanywhere.dump.hasLiveFormState
 import com.xemantic.markanywhere.flow.SemanticEventScope
 import com.xemantic.markanywhere.flow.semanticEvents
 import kotlinx.coroutines.flow.Flow
@@ -27,6 +31,11 @@ import org.w3c.dom.asList
 
 /**
  * Captures the DOM subtree rooted at this [Element] as a [Flow] of [SemanticEvent]s.
+ *
+ * Form controls are captured as they are *now* — the value typed into them,
+ * the box ticked, the option chosen — and a control the page marks as secret
+ * has its value left out, by the rules `CapturePage` in `markanywhere-browse`
+ * applies too (see [formControlAttributes]), so both captures agree.
  */
 public fun Element.toSemanticEvents(): Flow<SemanticEvent> = semanticEvents(
     tagged = true
@@ -42,12 +51,19 @@ private suspend fun SemanticEventScope.flowElement(
 
     val tagName = element.localName
 
-    val attributes = element.attributes.asList().associate {
-        it.name to it.value
-    }
+    val markupAttributes = element.attributeMap()
+
+    val state = if (hasLiveFormState(tagName)) element.formControlState() else null
+    val attributes = state?.let {
+        formControlAttributes(tagName, markupAttributes, it)
+    } ?: markupAttributes
+    // a <textarea>'s children are only the default value from the markup
+    val replacementText = state?.let { formControlText(tagName, markupAttributes, it) }
 
     tag(name = tagName, attributes) {
-        flowChildren(element)
+        if (replacementText != null) {
+            if (replacementText.isNotEmpty()) +replacementText
+        } else flowChildren(element)
     }
 
 }
@@ -101,6 +117,45 @@ private fun Element.frameDocumentElement(): Element? =
             asDynamic().contentDocument?.documentElement.unsafeCast<Element?>()
         else -> null
     }
+
+/**
+ * The live state of this form control, read off its DOM properties.
+ *
+ * Read dynamically, never through `is HTMLInputElement` and friends — the same
+ * realm problem as [asTextOrNull]: a control inside a frame fails that check.
+ * The computed style comes from the element's own window for the same reason.
+ */
+private fun Element.formControlState(): FormControlState {
+    val control = asDynamic()
+    val value = control.value
+    return FormControlState(
+        value = if (jsTypeOf(value) == "string") value.unsafeCast<String>() else null,
+        checked = control.checked == true,
+        selected = control.selected == true,
+        masked = isMasked(),
+        select = if (localName == "option") enclosingSelect()?.attributeMap() else null,
+    )
+}
+
+/** The `<select>` this `<option>` belongs to, through an `<optgroup>`, if any. */
+private fun Element.enclosingSelect(): Element? =
+    closest("select, datalist")?.takeIf { it.localName == "select" }
+
+private fun Element.attributeMap(): Map<String, String> =
+    attributes.asList().associate { it.name to it.value }
+
+/**
+ * Whether this element renders its text masked: a computed
+ * `-webkit-text-security` other than `none`. Only text-entry controls are
+ * asked, so the style is not computed for every element of the page.
+ */
+private fun Element.isMasked(): Boolean {
+    if (localName != "input" && localName != "textarea") return false
+    val security = ownerDocument?.defaultView
+        ?.getComputedStyle(this)
+        ?.getPropertyValue("-webkit-text-security")
+    return !security.isNullOrEmpty() && security != "none"
+}
 
 /**
  * This node as a [Text], or `null` when it is not one.

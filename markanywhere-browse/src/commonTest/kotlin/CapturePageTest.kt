@@ -18,7 +18,12 @@ package com.xemantic.markanywhere.browse
 
 import com.xemantic.kotlin.test.assert
 import com.xemantic.markanywhere.SemanticEvent
+import com.xemantic.markanywhere.dump.AccessibilityAnnotations.REDACTED
+import com.xemantic.markanywhere.flow.semanticEvents
+import com.xemantic.markanywhere.test.sameAs
 import dev.kdriver.cdp.domain.DOMSnapshot
+import kotlinx.coroutines.flow.asFlow
+import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 
 class CapturePageTest {
@@ -73,6 +78,158 @@ class CapturePageTest {
         assert((events[2] as SemanticEvent.Mark)["src"] == "slow.html")
     }
 
+    /**
+     * Form controls are captured with the live state the snapshot reports
+     * beside the markup's attributes, through the rules shared with the
+     * in-page walker — the redaction of a password and of a control the page
+     * renders masked (its computed `-webkit-text-security`) among them.
+     */
+    @Test
+    fun `should capture form controls with their live state`() = runTest {
+        // given
+        val strings = mutableListOf<String>()
+        fun string(value: String): Int =
+            strings.indexOf(value).takeIf { it >= 0 } ?: strings.size.also { strings += value }
+        fun attributes(vararg pairs: Pair<String, String>): List<Int> =
+            pairs.flatMap { (name, value) -> listOf(string(name), string(value)) }
+
+        val names = listOf(
+            "HTML", "BODY", "INPUT", "INPUT", "INPUT", "TEXTAREA", "#text",
+            "SELECT", "OPTION", "OPTION", "INPUT", "INPUT"
+        )
+        val snapshot = DOMSnapshot.CaptureSnapshotReturn(
+            documents = listOf(
+                document(
+                    nodeType = names.map { if (it == "#text") 3 else 1 },
+                    nodeName = names.map(::string),
+                    nodeValue = names.map { if (it == "#text") string("old bio") else -1 },
+                    parentIndex = listOf(-1, 0, 1, 1, 1, 1, 5, 1, 7, 7, 1, 1),
+                    backendNodeId = names.indices.map { it + 1 },
+                    attributes = listOf(
+                        emptyList(),
+                        emptyList(),
+                        attributes("type" to "text", "value" to "preset"),
+                        attributes("type" to "password", "value" to "markup-secret"),
+                        attributes("type" to "text"),
+                        emptyList(),
+                        emptyList(),
+                        emptyList(),
+                        attributes("value" to "r", "selected" to ""),
+                        attributes("value" to "g"),
+                        attributes("type" to "checkbox"),
+                        attributes("type" to "submit", "value" to "Send"),
+                    ),
+                    inputValue = DOMSnapshot.RareStringData(
+                        index = listOf(2, 3, 4, 10, 11),
+                        value = listOf("Alice", "typed", "1234", "on", "Send").map(::string)
+                    ),
+                    textValue = DOMSnapshot.RareStringData(
+                        index = listOf(5),
+                        value = listOf(string("new bio"))
+                    ),
+                    inputChecked = DOMSnapshot.RareBooleanData(index = listOf(10)),
+                    optionSelected = DOMSnapshot.RareBooleanData(index = listOf(9)),
+                    // every element laid out, only the third input masked
+                    layoutNodeIndex = names.indices.filter { names[it] != "#text" },
+                    layoutStyles = names.indices.filter { names[it] != "#text" }.map {
+                        listOf("block", "visible", if (it == 4) "disc" else "none").map(::string)
+                    },
+                ),
+            ),
+            strings = strings,
+        )
+
+        // when
+        val events = captureEvents(
+            snapshot = snapshot,
+            axNodes = emptyList(),
+            refAttribute = null,
+            isActionable = { false },
+        ).events
+
+        // then
+        events.asFlow() sameAs semanticEvents(tagged = true) {
+            "html" {
+                "body" {
+                    "input"("type" to "text", "value" to "Alice") { }
+                    "input"("type" to "password", REDACTED to "filled") { }
+                    "input"("type" to "text", REDACTED to "filled") { }
+                    "textarea" { +"new bio" }
+                    "select" {
+                        "option"("value" to "r") { }
+                        "option"("value" to "g", "selected" to "") { }
+                    }
+                    "input"("type" to "checkbox", "checked" to "") { }
+                    "input"("type" to "submit", "value" to "Send") { }
+                }
+            }
+        }
+    }
+
+    /**
+     * Which option a secret select (a card expiry) has chosen is the secret:
+     * no option keeps `selected`, markup or live, and the select says only
+     * whether a real value is chosen — through an `<optgroup>` too.
+     */
+    @Test
+    fun `should redact which option a secret select has chosen`() = runTest {
+        // given
+        val strings = mutableListOf<String>()
+        fun string(value: String): Int =
+            strings.indexOf(value).takeIf { it >= 0 } ?: strings.size.also { strings += value }
+        fun attributes(vararg pairs: Pair<String, String>): List<Int> =
+            pairs.flatMap { (name, value) -> listOf(string(name), string(value)) }
+
+        val names = listOf("HTML", "BODY", "SELECT", "OPTION", "OPTGROUP", "OPTION")
+        val snapshot = DOMSnapshot.CaptureSnapshotReturn(
+            documents = listOf(
+                document(
+                    nodeType = names.map { 1 },
+                    nodeName = names.map(::string),
+                    parentIndex = listOf(-1, 0, 1, 2, 2, 4),
+                    backendNodeId = names.indices.map { it + 1 },
+                    attributes = listOf(
+                        emptyList(),
+                        emptyList(),
+                        attributes("autocomplete" to "cc-exp-month"),
+                        attributes("value" to "", "selected" to ""),
+                        attributes("label" to "Summer"),
+                        attributes("value" to "08"),
+                    ),
+                    optionSelected = DOMSnapshot.RareBooleanData(index = listOf(5)),
+                    // every element laid out as a block, so none is annotated
+                    layoutNodeIndex = names.indices.toList(),
+                    layoutStyles = names.map {
+                        listOf("block", "visible", "none").map(::string)
+                    },
+                ),
+            ),
+            strings = strings,
+        )
+
+        // when
+        val events = captureEvents(
+            snapshot = snapshot,
+            axNodes = emptyList(),
+            refAttribute = null,
+            isActionable = { false },
+        ).events
+
+        // then
+        events.asFlow() sameAs semanticEvents(tagged = true) {
+            "html" {
+                "body" {
+                    "select"("autocomplete" to "cc-exp-month", REDACTED to "filled") {
+                        "option"("value" to "") { }
+                        "optgroup"("label" to "Summer") {
+                            "option"("value" to "08") { }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     private fun document(
         nodeType: List<Int>,
         nodeName: List<Int>,
@@ -80,6 +237,13 @@ class CapturePageTest {
         backendNodeId: List<Int>,
         attributes: List<List<Int>>,
         contentDocumentIndex: DOMSnapshot.RareIntegerData? = null,
+        nodeValue: List<Int> = nodeType.map { -1 },
+        inputValue: DOMSnapshot.RareStringData? = null,
+        textValue: DOMSnapshot.RareStringData? = null,
+        inputChecked: DOMSnapshot.RareBooleanData? = null,
+        optionSelected: DOMSnapshot.RareBooleanData? = null,
+        layoutNodeIndex: List<Int> = emptyList(),
+        layoutStyles: List<List<Int>> = emptyList(),
     ) = DOMSnapshot.DocumentSnapshot(
         documentURL = -1,
         title = -1,
@@ -93,14 +257,18 @@ class CapturePageTest {
             parentIndex = parentIndex,
             nodeType = nodeType,
             nodeName = nodeName,
-            nodeValue = nodeType.map { -1 },
+            nodeValue = nodeValue,
             backendNodeId = backendNodeId,
             attributes = attributes,
             contentDocumentIndex = contentDocumentIndex,
+            inputValue = inputValue,
+            textValue = textValue,
+            inputChecked = inputChecked,
+            optionSelected = optionSelected,
         ),
         layout = DOMSnapshot.LayoutTreeSnapshot(
-            nodeIndex = emptyList(),
-            styles = emptyList(),
+            nodeIndex = layoutNodeIndex,
+            styles = layoutStyles,
             bounds = emptyList(),
             text = emptyList(),
             stackingContexts = DOMSnapshot.RareBooleanData(index = emptyList()),

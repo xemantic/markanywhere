@@ -16,6 +16,7 @@
 
 package com.xemantic.markanywhere.js
 
+import com.xemantic.markanywhere.dump.AccessibilityAnnotations.REDACTED
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.test.sameAs
 import kotlinx.browser.document
@@ -1047,6 +1048,74 @@ class ElementToSemanticEventsTest {
                 "p" {
                     +"Hello, "
                     +"world"
+                }
+            }
+        }
+    }
+
+    /**
+     * Form controls are captured with their live state and their secrets
+     * redacted by the rules `CapturePage` applies too, so a dump made in the
+     * page and one made over CDP agree.
+     */
+    @Test
+    fun `should capture form controls with their live state`() = runTest {
+        // given
+        document.body!!.innerHTML = """
+            <form><input type="text" id="name" value="preset"><input type="password" id="secret" value="markup-secret"><input type="text" id="pin" style="-webkit-text-security: disc"><textarea id="bio">old bio</textarea><select id="color"><option value="r">Red</option><option value="g">Green</option></select><input type="checkbox" id="agree"></form>
+        """.trimIndent()
+        fun control(id: String) = document.getElementById(id).asDynamic()
+        control("name").value = "Alice"
+        control("secret").value = "typed"
+        control("bio").value = "new bio"
+        control("color").value = "g"
+        control("agree").checked = true
+
+        // when
+        val events = document.body!!.toSemanticEvents()
+
+        // then
+        events sameAs semanticEvents(tagged = true) {
+            "body" {
+                "form" {
+                    "input"("type" to "text", "id" to "name", "value" to "Alice") {}
+                    "input"("type" to "password", "id" to "secret", REDACTED to "filled") {}
+                    "input"(
+                        "type" to "text",
+                        "id" to "pin",
+                        "style" to "-webkit-text-security: disc",
+                        REDACTED to "empty"
+                    ) {}
+                    "textarea"("id" to "bio") { +"new bio" }
+                    "select"("id" to "color") {
+                        "option"("value" to "r") { +"Red" }
+                        "option"("value" to "g", "selected" to "") { +"Green" }
+                    }
+                    "input"("type" to "checkbox", "id" to "agree", "checked" to "") {}
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should redact which option a secret select has chosen`() = runTest {
+        // given - a card expiry month picked from a select
+        document.body!!.innerHTML = """
+            <select id="month" autocomplete="cc-exp-month"><option value="" selected>Month</option><optgroup label="Summer"><option value="08">08</option></optgroup></select>
+        """.trimIndent()
+        document.getElementById("month").asDynamic().value = "08"
+
+        // when
+        val events = document.body!!.toSemanticEvents()
+
+        // then
+        events sameAs semanticEvents(tagged = true) {
+            "body" {
+                "select"("id" to "month", "autocomplete" to "cc-exp-month", REDACTED to "filled") {
+                    "option"("value" to "") { +"Month" }
+                    "optgroup"("label" to "Summer") {
+                        "option"("value" to "08") { +"08" }
+                    }
                 }
             }
         }

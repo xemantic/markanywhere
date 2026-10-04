@@ -19,8 +19,11 @@ package com.xemantic.markanywhere.browse
 import com.xemantic.kotlin.test.assert
 import com.xemantic.kotlin.test.coroutines.should
 import com.xemantic.kotlin.test.have
+import com.xemantic.markanywhere.SemanticEvent
+import com.xemantic.markanywhere.dump.AccessibilityAnnotations.REDACTED
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.test.sameAs
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -456,6 +459,138 @@ class PageSessionTest {
             session.element("2").click()
             assert(tab.select("#out").text == "clicked")
         }
+    }
+
+    /**
+     * Form controls are captured with their **live** state. Typing, choosing an
+     * option or ticking a box changes DOM properties, never the content
+     * attributes `DOMSnapshot` reports as `attributes` — so a capture built on
+     * those alone shows what the server sent, and an agent can neither see what
+     * it typed nor check a form before submitting it.
+     */
+    @Test
+    fun `should capture form controls with their live state`() = runTest {
+        val dump = runInBrowser { browser ->
+            // given
+            val tab = browser.get(testPageUrl("form-state.html"))
+            tab.waitUntilLoaded()
+            val session = PageSession(tab)
+
+            // when - a user edits every control but one
+            tab.rawEvaluate("document.getElementById('name').value = ''")
+            tab.select("#name").sendKeys("Alice")
+            tab.rawEvaluate("document.getElementById('bio').value = 'new bio\\nline two'")
+            tab.rawEvaluate("document.getElementById('color').value = 'g'")
+            tab.select("#agree").click()
+            tab.select("#news").click()
+            tab.select("#secret").sendKeys("typed")
+            tab.select("#card").sendKeys("4111111111111111")
+            tab.rawEvaluate("document.getElementById('exp').value = '08'")
+            session.dump()
+        }
+
+        // then - each control as it is now, the secrets revealing only
+        // whether they are filled
+        dump.events.form() sameAs semanticEvents(tagged = true) {
+            "form" {
+                "input"("type" to "text", "id" to "name", "name" to "name", "value" to "Alice") { }
+                "input"("type" to "text", "id" to "untouched", "name" to "untouched", "value" to "kept") { }
+                "textarea"("id" to "bio", "name" to "bio") { +"new bio\nline two" }
+                "select"("id" to "color", "name" to "color") {
+                    "option"("value" to "r") { +"Red" }
+                    "option"("value" to "g", "selected" to "") { +"Green" }
+                }
+                "input"("type" to "checkbox", "id" to "agree", "name" to "agree", "checked" to "") { }
+                "input"("type" to "checkbox", "id" to "news", "name" to "news") { }
+                "input"("type" to "password", "id" to "secret", "name" to "secret", REDACTED to "filled") { }
+                "input"(
+                    "type" to "text",
+                    "id" to "card",
+                    "name" to "card",
+                    "autocomplete" to "cc-number",
+                    REDACTED to "filled"
+                ) { }
+                "input"(
+                    "type" to "text",
+                    "id" to "pin",
+                    "name" to "pin",
+                    "style" to "-webkit-text-security: disc",
+                    REDACTED to "empty"
+                ) { }
+                "select"("id" to "exp", "name" to "exp", "autocomplete" to "cc-exp-month", REDACTED to "filled") {
+                    "option"("value" to "") { +"Month" }
+                    "option"("value" to "08") { +"08" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should capture the option a select chooses implicitly`() = runTest {
+        val dump = runInBrowser { browser ->
+            // given - nothing touched: the first option is what would be submitted
+            val tab = browser.get(testPageUrl("form-state.html"))
+            tab.waitUntilLoaded()
+
+            // when
+            PageSession(tab).dump()
+        }
+
+        // then - the markup's defaults, the secrets still redacted
+        dump.events.form() sameAs semanticEvents(tagged = true) {
+            "form" {
+                "input"("type" to "text", "id" to "name", "name" to "name", "value" to "preset") { }
+                "input"("type" to "text", "id" to "untouched", "name" to "untouched", "value" to "kept") { }
+                "textarea"("id" to "bio", "name" to "bio") { +"old bio" }
+                "select"("id" to "color", "name" to "color") {
+                    "option"("value" to "r", "selected" to "") { +"Red" }
+                    "option"("value" to "g") { +"Green" }
+                }
+                "input"("type" to "checkbox", "id" to "agree", "name" to "agree") { }
+                "input"("type" to "checkbox", "id" to "news", "name" to "news", "checked" to "") { }
+                "input"("type" to "password", "id" to "secret", "name" to "secret", REDACTED to "filled") { }
+                "input"(
+                    "type" to "text",
+                    "id" to "card",
+                    "name" to "card",
+                    "autocomplete" to "cc-number",
+                    REDACTED to "empty"
+                ) { }
+                "input"(
+                    "type" to "text",
+                    "id" to "pin",
+                    "name" to "pin",
+                    "style" to "-webkit-text-security: disc",
+                    REDACTED to "empty"
+                ) { }
+                "select"("id" to "exp", "name" to "exp", "autocomplete" to "cc-exp-month", REDACTED to "empty") {
+                    "option"("value" to "") { +"Month" }
+                    "option"("value" to "08") { +"08" }
+                }
+            }
+        }
+    }
+
+    /**
+     * The `<form>` subtree of a capture, without the capture's own annotations
+     * and refs (except the redaction marker the form tests are about) and
+     * without the whitespace between the controls.
+     */
+    private fun List<SemanticEvent>.form(): Flow<SemanticEvent> {
+        val start = indexOfFirst { it is Mark && it.name == "form" }
+        val end = indexOfFirst { it is Unmark && it.name == "form" }
+        return subList(start, end + 1).mapNotNull { event ->
+            when (event) {
+                is Mark -> event.copy(
+                    attributes = event.attributes.filterKeys {
+                        it == REDACTED || !it.startsWith("data-markanywhere-")
+                    }
+                )
+
+                is Text if event.text.isBlank() -> null
+                else -> event
+            }
+        }.asFlow()
     }
 
 }
