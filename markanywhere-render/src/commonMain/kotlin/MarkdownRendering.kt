@@ -504,7 +504,8 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         }
         when {
             nested -> blockStack.addLast(BlockFrame.Inline(""))
-            closerChar == delimiter[0] -> {
+            // A deferred space or hard break will be written between the two.
+            closerChar == delimiter[0] && pendingSpaces == 0 && !pendingHardBreak -> {
                 writeRaw("<$name>")
                 blockStack.addLast(TaggedInline)
             }

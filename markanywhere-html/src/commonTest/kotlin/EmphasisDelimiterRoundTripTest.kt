@@ -848,6 +848,24 @@ class EmphasisDelimiterRoundTripTest {
     }
 
     @Test
+    fun `should round-trip a b element followed by a space and an i element`() = runTest {
+        // when
+        val markdown = htmlToMarkdown { "p" { "b" { +"Note:" }; +" "; "i" { +"see" }; +" this" } }
+        // then
+        markdown sameAs "**Note:** *see* this"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip b elements separated by a line break`() = runTest {
+        // when
+        val markdown = htmlToMarkdown { "p" { "b" { +"a" }; "br" {}; "b" { +"b" } } }
+        // then
+        markdown sameAs "**a**  \n**b**"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
     fun `should keep the actionable ref of a b element`() = runTest {
         // when
         val markdown = htmlToMarkdown {

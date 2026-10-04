@@ -408,6 +408,34 @@ class MarkdownRenderingTest {
     }
 
     @Test
+    fun `should open a span after a closer and a space as Markdown`() = runTest {
+        // given — the space keeps the closer and the opener in separate runs
+        val flow = semanticEvents {
+            "p" { "strong" { +"a" }; +" "; "em" { +"b" } }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "**a** *b*"
+    }
+
+    @Test
+    fun `should open a span after a closer and a hard break as Markdown`() = runTest {
+        // given — the hard break keeps the closer and the opener on separate lines
+        val flow = semanticEvents {
+            "p" { "strong" { +"a" }; "br" {}; "strong" { +"b" } }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "**a**  \n**b**"
+    }
+
+    @Test
     fun `should separate the blocks inside an inline tag from the tag`() = runTest {
         // given — emphasis wrapping blocks stays a raw tag; without a blank line
         // after `<b>` the list would re-parse as the HTML block's raw text
