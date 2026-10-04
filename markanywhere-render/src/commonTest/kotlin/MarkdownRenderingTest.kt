@@ -239,6 +239,104 @@ class MarkdownRenderingTest {
     }
 
     @Test
+    fun `should collapse strong nested in strong into one span`() = runTest {
+        // given — `<b><strong>x</strong></b>` once simplified: `****x****` would
+        // not re-parse as nested strong, and the inner span adds nothing visible
+        val flow = semanticEvents {
+            "p" { "strong" { +"a "; "strong" { +"x" }; +" b" } }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "**a x b**"
+    }
+
+    @Test
+    fun `should collapse emphasis nested in emphasis across another span`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "p" { "em" { +"a "; "strong" { +"b "; "em" { +"c" } }; +" d" } }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "*a **b c** d*"
+    }
+
+    @Test
+    fun `should merge adjacent strong spans`() = runTest {
+        // given — `<b>a</b><b>b</b>`: `**a****b**` would not re-parse as two spans
+        val flow = semanticEvents {
+            "p" { "strong" { +"a" }; "strong" { +"b" }; +" c" }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "**ab** c"
+    }
+
+    @Test
+    fun `should merge adjacent emphasis spans at the end of a paragraph`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "p" { "em" { +"a" }; "em" { +"b" } }
+            "p" { +"next" }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            *ab*
+            
+            next
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should not merge adjacent spans of different kinds`() = runTest {
+        // when
+        val markdown = semanticEvents {
+            "p" { "del" { +"a" }; "mark" { +"b" } }
+        }.renderMarkdown()
+
+        // then
+        markdown sameAs "~~a~~==b=="
+    }
+
+    @Test
+    fun `should keep adjacent superscripts separate`() = runTest {
+        // given — a run of citations: abutting `^` runs re-parse unambiguously
+        val flow = semanticEvents {
+            "p" { +"claim"; "sup" { +"1" }; "sup" { +"2" } }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "claim^1^^2^"
+    }
+
+    @Test
+    fun `should close a trailing emphasis span at the end of the stream`() = runTest {
+        // when
+        val markdown = semanticEvents {
+            "strong" { +"a" }
+        }.renderMarkdown()
+
+        // then
+        markdown sameAs "**a**"
+    }
+
+    @Test
     fun `should render emphasis`() = runTest {
         // given
         val flow = semanticEvents {

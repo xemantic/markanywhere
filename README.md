@@ -163,7 +163,7 @@ Will print:
 ☀️ Sunny and **warm** today — see the [forecast](https://example.com/forecast).
 ```
 
-`transformHtmlToMarkdown()` (in `markanywhere-html`) is a fixed chain of stream operators: `resolveIcons()` maps icon-font glyphs to emoji (`fa-sun` → ☀️), `simplifyHtml()` unwraps the presentational `<body>` and drops the `<script>` noise while keeping semantic tags and link `href`s, blank inline formatting and structural whitespace are dropped, and `encodeActionableRefs()` runs last; `renderMarkdown()` then serializes the result.
+`transformHtmlToMarkdown()` (in `markanywhere-html`) is a fixed chain of stream operators: `resolveIcons()` maps icon-font glyphs to emoji (`fa-sun` → ☀️), `simplifyHtml()` unwraps the presentational `<body>` and drops the `<script>` noise while keeping semantic tags and link `href`s (`<b>`/`<i>`/`<s>`/`<strike>` become `**…**`/`*…*`/`~~…~~`, the way the web actually uses them), blank inline formatting and structural whitespace are dropped, and `encodeActionableRefs()` runs last; `renderMarkdown()` then serializes the result.
 Each operator is a plain `Flow<SemanticEvent>` extension, so you can compose your own subset — the module also ships `applyAccessibility()` (honour the browser's hidden-subtree and layout-table verdicts) for when you start from a raw capture.
 
 The input here is built by hand, but in practice it comes from a captured page: [`markanywhere-dump`](markanywhere-dump) injects `window.markanywhere.dump()` into any browser, and [`markanywhere-browse`](markanywhere-browse) drives a real Chrome over CDP to produce a `SemanticEventDump`.

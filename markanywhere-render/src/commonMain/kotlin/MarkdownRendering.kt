@@ -109,6 +109,10 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
     // pass (escapeActiveInlineDelimiters) needs neither a blockStack rescan nor a
     // set lookup per char — a plain `and` keeps the hot path allocation-free.
     var activeDelimiterMask = 0
+    // An emphasis span whose closing delimiter is held for one event: if the
+    // very next event reopens the same span, the two merge instead of abutting
+    // (`**a****b**` re-parses as neither two spans nor one).
+    var pendingInlineClose: Pair<String, BlockFrame.Inline>? = null
 
     val eventBuffer = StringBuilder()
     var hasPendingNewline = false
@@ -429,6 +433,32 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         activeDelimiterMask = mask
     }
 
+    // Writes the closing delimiter held back by an emphasis unmark.
+    fun closePendingInline() {
+        val (_, frame) = pendingInlineClose ?: return
+        pendingInlineClose = null
+        writeRaw(frame.delimiter)
+        refreshActiveDelimiters()
+    }
+
+    // Opens an emphasis span — or, when a span with the same delimiter is
+    // already open, a transparent one: the inner span adds nothing visible, and
+    // its delimiters would abut the outer ones (`****x****`) in a run that does
+    // not re-parse as nesting. The search stops at a link label, whose content
+    // is delimiter-scoped on re-parse.
+    fun openInline(delimiter: String) {
+        val nested = blockStack.asReversed()
+            .takeWhile { it !is Link }
+            .any { it is Inline && it.delimiter == delimiter }
+        if (nested) {
+            blockStack.addLast(BlockFrame.Inline(""))
+        } else {
+            writeRaw(delimiter)
+            blockStack.addLast(BlockFrame.Inline(delimiter))
+            activeDelimiterMask = activeDelimiterMask or delimiterBit(delimiter[0])
+        }
+    }
+
     // Escaping a leading block marker is only safe in a Markdown-block context —
     // never inside verbatim `pre`/`code` or a raw frontmatter block.
     fun blockMarkerEscapingAllowed(): Boolean =
@@ -641,6 +671,18 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                 yaml.collect(event)
                 return@collect
             }
+        }
+
+        // An emphasis span reopened right where the same span closed continues
+        // it: drop the held closer and put the frame back, writing nothing.
+        val pendingClose = pendingInlineClose
+        if (pendingClose != null) {
+            if (event is Mark && !event.isTagged && event.name == pendingClose.first) {
+                pendingInlineClose = null
+                blockStack.addLast(pendingClose.second)
+                return@collect
+            }
+            closePendingInline()
         }
 
         // A list synthesized for an orphan `li` stays open across its
@@ -890,11 +932,11 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                 // full refreshActiveDelimiters() recompute is needed only on *close*,
                 // where em and strong share the `*` bit (clearing it on strong-close
                 // would wrongly drop emphasis while an em is still open).
-                "strong" -> { writeRaw("**"); blockStack.addLast(BlockFrame.Inline("**")); activeDelimiterMask = activeDelimiterMask or delimiterBit('*') }
-                "em" -> { writeRaw("*"); blockStack.addLast(BlockFrame.Inline("*")); activeDelimiterMask = activeDelimiterMask or delimiterBit('*') }
-                "del" -> { writeRaw("~~"); blockStack.addLast(BlockFrame.Inline("~~")); activeDelimiterMask = activeDelimiterMask or delimiterBit('~') }
-                "mark" -> { writeRaw("=="); blockStack.addLast(BlockFrame.Inline("==")); activeDelimiterMask = activeDelimiterMask or delimiterBit('=') }
-                "sup" -> { writeRaw("^"); blockStack.addLast(BlockFrame.Inline("^")); activeDelimiterMask = activeDelimiterMask or delimiterBit('^') }
+                "strong" -> openInline("**")
+                "em" -> openInline("*")
+                "del" -> openInline("~~")
+                "mark" -> openInline("==")
+                "sup" -> openInline("^")
 
                 "a" -> {
                     labelBuffers.addLast(StringBuilder())
@@ -1027,8 +1069,16 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                     }
 
                     "strong", "em", "del", "mark", "sup" -> {
-                        writeRaw((frame as BlockFrame.Inline).delimiter)
-                        refreshActiveDelimiters()
+                        frame as BlockFrame.Inline
+                        when (frame.delimiter) {
+                            // A transparent (nested) span wrote no delimiter.
+                            "" -> {}
+                            // `^a^^b^` re-parses as the two spans it is (a `^`
+                            // toggles), so adjacent superscripts — a run of
+                            // citations — stay separate.
+                            "^" -> { writeRaw("^"); refreshActiveDelimiters() }
+                            else -> pendingInlineClose = event.name to frame
+                        }
                     }
 
                     "a" -> {
@@ -1101,6 +1151,10 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
 
         flush()
     }
+
+    // A stream ending on an emphasis close (no enclosing block) still owes it.
+    closePendingInline()
+    flush()
 }
 
 /**

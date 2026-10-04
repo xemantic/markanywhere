@@ -256,10 +256,11 @@ class SimplifyHtmlTest {
     }
 
     @Test
-    fun `should preserve b i and s and strike tags as they are`() = runTest {
+    fun `should render b i s and strike as Markdown strong em and del`() = runTest {
         // given
-        // <b>, <i>, <s> elements were rescued from being "italic/bold" buttons
-        // into semantic roles, <strike> is depreciated, but we might still see it in the content
+        // HTML5 gives <b>, <i> and <s> meanings of their own, but the web keeps
+        // using them for plain bold / italic / strikethrough, and a Markdown
+        // reader cannot act on the distinction — so they become native emphasis
         val input = semanticEvents(tagged = true) {
             "p" {
                 "b"("class" to "noisy") { +"bring attention to element" }
@@ -269,6 +270,8 @@ class SimplifyHtmlTest {
                 "s" { +"strikethrough element" }
                 +" "
                 "strike" { +"depreciated strike" }
+                +" "
+                "u" { +"underline" }
             }
         }
 
@@ -278,13 +281,15 @@ class SimplifyHtmlTest {
         // then
         output sameAs semanticEvents {
             "p" {
-                tag("b") { +"bring attention to element" }
+                "strong" { +"bring attention to element" }
                 +" "
-                tag("i") { +"idiomatic text element" }
+                "em" { +"idiomatic text element" }
                 +" "
-                tag("s") { +"strikethrough element" }
+                "del" { +"strikethrough element" }
                 +" "
-                tag("strike") { +"depreciated strike" }
+                "del" { +"depreciated strike" }
+                +" "
+                tag("u") { +"underline" }
             }
         }
     }
