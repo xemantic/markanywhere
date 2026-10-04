@@ -2,10 +2,27 @@ public final class com/xemantic/markanywhere/dump/AccessibilityAnnotations {
 	public static final field DISPLAY Ljava/lang/String;
 	public static final field IGNORED Ljava/lang/String;
 	public static final field INSTANCE Lcom/xemantic/markanywhere/dump/AccessibilityAnnotations;
+	public static final field REDACTED Ljava/lang/String;
 	public static final field REF Ljava/lang/String;
 	public static final field ROLE Ljava/lang/String;
 	public static final field VISIBILITY Ljava/lang/String;
 	public final fun getALL ()Ljava/util/Set;
+}
+
+public final class com/xemantic/markanywhere/dump/FormControlState {
+	public fun <init> ()V
+	public fun <init> (Ljava/lang/String;ZZZ)V
+	public synthetic fun <init> (Ljava/lang/String;ZZZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getChecked ()Z
+	public final fun getMasked ()Z
+	public final fun getSelected ()Z
+	public final fun getValue ()Ljava/lang/String;
+}
+
+public final class com/xemantic/markanywhere/dump/FormControlsKt {
+	public static final fun formControlAttributes (Ljava/lang/String;Ljava/util/Map;Lcom/xemantic/markanywhere/dump/FormControlState;)Ljava/util/Map;
+	public static final fun formControlText (Ljava/lang/String;Ljava/util/Map;Lcom/xemantic/markanywhere/dump/FormControlState;)Ljava/lang/String;
+	public static final fun hasLiveFormState (Ljava/lang/String;)Z
 }
 
 public final class com/xemantic/markanywhere/dump/SemanticEventDump {

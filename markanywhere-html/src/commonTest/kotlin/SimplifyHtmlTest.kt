@@ -17,6 +17,7 @@
 package com.xemantic.markanywhere.html
 
 import com.xemantic.kotlin.test.assert
+import com.xemantic.markanywhere.dump.AccessibilityAnnotations
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.render.MARKDOWN_NATIVE_MARK_NAMES
 import com.xemantic.markanywhere.test.sameAs
@@ -520,6 +521,29 @@ class SimplifyHtmlTest {
                 ) { }
                 tag("button", "type" to "submit") { +"Go" }
             }
+        }
+    }
+
+    @Test
+    fun `should keep a redacted secret marked as filled or empty`() = runTest {
+        // given - a capture left the secrets' values out, saying only whether
+        // each was filled, which is what an agent checking its typing needs
+        val input = semanticEvents(tagged = true) {
+            "input"(
+                "type" to "password",
+                "name" to "pw",
+                AccessibilityAnnotations.REDACTED to "filled",
+            ) { }
+            "textarea"("name" to "otp", AccessibilityAnnotations.REDACTED to "empty") { }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            tag("input", "type" to "password", "name" to "pw", "redacted" to "filled") { }
+            tag("textarea", "name" to "otp", "redacted" to "empty") { }
         }
     }
 

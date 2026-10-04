@@ -37,6 +37,7 @@ kotlin {
             dependencies {
                 api(project(":markanywhere-flow"))
                 api(project(":markanywhere-api"))
+                implementation(project(":markanywhere-dump"))
                 api(libs.kotlinx.coroutines.core)
             }
         }

@@ -20,7 +20,7 @@ package com.xemantic.markanywhere.dump
  * Reserved [com.xemantic.markanywhere.SemanticEvent.Mark] attribute names
  * carrying the browser's accessibility verdicts captured during a DOM dump.
  *
- * The capture (`PageSession` in `markanywhere-dump`) is deliberately
+ * The capture (`PageSession` in `markanywhere-browse`) is deliberately
  * **lossless**: it walks the full DOM and records these verdicts *as data*
  * rather than acting on them, so the
  * same dump can be replayed against different filtering policies without
@@ -82,6 +82,16 @@ public object AccessibilityAnnotations {
      * absent from [ALL]. See `PageSession` in `markanywhere-browse`.
      */
     public const val REF: String = "data-markanywhere-ref"
+
+    /**
+     * Present on a form control holding a secret (a password, a card number, a
+     * one-time code — see [formControlAttributes]) whose value the capture
+     * left out, with value `filled` or `empty`: an agent that typed into the
+     * field can tell its typing landed without the dump carrying what was
+     * typed. Like [REF] it is meant for the LLM-facing output, so it is not in
+     * [ALL].
+     */
+    public const val REDACTED: String = "data-markanywhere-redacted"
 
     /**
      * All reserved verdict annotation names — strip these before output.

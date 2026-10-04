@@ -19,6 +19,8 @@ package com.xemantic.markanywhere.browse
 import com.xemantic.kotlin.test.assert
 import com.xemantic.kotlin.test.coroutines.should
 import com.xemantic.kotlin.test.have
+import com.xemantic.markanywhere.SemanticEvent
+import com.xemantic.markanywhere.dump.AccessibilityAnnotations.REDACTED
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.test.sameAs
 import kotlinx.coroutines.flow.asFlow
@@ -455,6 +457,104 @@ class PageSessionTest {
             // and the button, formerly ref "3", is renumbered to "2"
             session.element("2").click()
             assert(tab.select("#out").text == "clicked")
+        }
+    }
+
+    /**
+     * Form controls are captured with their **live** state. Typing, choosing an
+     * option or ticking a box changes DOM properties, never the content
+     * attributes `DOMSnapshot` reports as `attributes` — so a capture built on
+     * those alone shows what the server sent, and an agent can neither see what
+     * it typed nor check a form before submitting it.
+     */
+    @Test
+    fun `should capture form controls with their live state`() = runTest {
+        val dump = runInBrowser { browser ->
+            // given
+            val tab = browser.get(testPageUrl("form-state.html"))
+            tab.waitUntilLoaded()
+            val session = PageSession(tab)
+
+            // when - a user edits every control but one
+            tab.rawEvaluate("document.getElementById('name').value = ''")
+            tab.select("#name").sendKeys("Alice")
+            tab.rawEvaluate("document.getElementById('bio').value = 'new bio\\nline two'")
+            tab.rawEvaluate("document.getElementById('color').value = 'g'")
+            tab.select("#agree").click()
+            tab.select("#news").click()
+            tab.select("#secret").sendKeys("typed")
+            tab.select("#card").sendKeys("4111111111111111")
+            session.dump()
+        }
+
+        // then - each control as it is now, the secrets revealing only
+        // whether they are filled
+        val controls = dump.events.formControls()
+        assert(
+            controls == listOf(
+                "<input type=text id=name name=name value=Alice>",
+                "<input type=text id=untouched name=untouched value=kept>",
+                "<textarea id=bio name=bio>",
+                "new bio\nline two",
+                "</textarea>",
+                "<select id=color name=color>",
+                "<option value=r>",
+                "<option value=g selected=>",
+                "</select>",
+                "<input type=checkbox id=agree name=agree checked=>",
+                "<input type=checkbox id=news name=news>",
+                "<input type=password id=secret name=secret $REDACTED=filled>",
+                "<input type=text id=card name=card autocomplete=cc-number $REDACTED=filled>",
+                "<input type=text id=pin name=pin style=-webkit-text-security: disc $REDACTED=empty>",
+            )
+        )
+    }
+
+    @Test
+    fun `should capture the option a select chooses implicitly`() = runTest {
+        val dump = runInBrowser { browser ->
+            // given - nothing touched: the first option is what would be submitted
+            val tab = browser.get(testPageUrl("form-state.html"))
+            tab.waitUntilLoaded()
+
+            // when
+            PageSession(tab).dump()
+        }
+
+        // then
+        val controls = dump.events.formControls()
+        assert("<option value=r selected=>" in controls)
+        assert("<option value=g>" in controls)
+        assert("old bio" in controls)
+        assert("<input type=checkbox id=news name=news checked=>" in controls)
+    }
+
+    /**
+     * The form controls of a capture as one line per event, attributes in
+     * document order without the capture's own annotations and refs — except
+     * the redaction marker, which is what the form tests are about.
+     */
+    private fun List<SemanticEvent>.formControls(): List<String> {
+        val controlTags = setOf("input", "textarea", "select", "option")
+        var inTextarea = false
+        return mapNotNull { event ->
+            when (event) {
+                is Mark if event.name in controlTags -> {
+                    inTextarea = event.name == "textarea"
+                    val attributes = event.attributes
+                        .filterKeys { it == REDACTED || !it.startsWith("data-markanywhere-") }
+                        .entries.joinToString("") { " ${it.key}=${it.value}" }
+                    "<${event.name}$attributes>"
+                }
+
+                is Unmark if event.name in setOf("textarea", "select") -> {
+                    inTextarea = false
+                    "</${event.name}>"
+                }
+
+                is Text if inTextarea -> event.text
+                else -> null
+            }
         }
     }
 

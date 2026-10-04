@@ -20,7 +20,8 @@ not own the `Tab` — the caller manages the browser and navigation lifecycle.
 [`SemanticEventDump`](../markanywhere-dump/src/commonMain/kotlin/SemanticEventDump.kt)
 (the page `url`, the `dumpedAt` capture instant, and the semantic event stream of
 the rendered tree). The walk is **lossless** — every element, every inter-tag
-whitespace text node, and every `aria-hidden` / hidden subtree is kept — and the
+whitespace text node, and every `aria-hidden` / hidden subtree is kept, form
+controls being the one exception (see below) — and the
 browser's accessibility verdicts are recorded *as data* on each `mark` (reserved
 attributes, see
 [`AccessibilityAnnotations`](../markanywhere-dump/src/commonMain/kotlin/AccessibilityAnnotations.kt)
@@ -36,6 +37,27 @@ in [`markanywhere-dump`](../markanywhere-dump)) rather than acted on:
   `aria-label`;
 - every **actionable** element (focusable, or carrying an interactive
   accessibility role) → a dense, document-order `data-markanywhere-ref`.
+
+Form controls are the one place the capture departs from the markup.
+A control is captured as it is *now*, not as the server sent it:
+the value typed into an `<input>` replaces its `value` attribute,
+a `<textarea>`'s current value replaces its default text,
+and `checked` / `selected` follow the live checkbox, radio and option state
+(including the option a `<select>` selects implicitly — the one the form would submit).
+A control the page marks as secret —
+`type=password`,
+an `autocomplete` naming a password, a one-time code or card data (`current-password`, `new-password`, `one-time-code`, `cc-number`, `cc-csc`, `cc-exp*`),
+or text the page renders masked with `-webkit-text-security` —
+has its value left out entirely, markup and live alike,
+and carries `data-markanywhere-redacted="filled"` or `"empty"` instead,
+so an agent can check that its typing landed without the dump carrying what was typed.
+Only what the page *declares* can be recognised:
+a secret typed into a plain field that says nothing about it is captured like any other value.
+These rules live in
+[`FormControls.kt`](../markanywhere-dump/src/commonMain/kotlin/FormControls.kt)
+in `markanywhere-dump`,
+shared with the in-page walker of [`markanywhere-js`](../markanywhere-js),
+so both kinds of dump capture and redact the same way.
 
 The `<head>` is exempt from annotation: it computes to `display:none` wholesale,
 so annotating it would let a downstream filter drop the `<title>` / `<meta>`

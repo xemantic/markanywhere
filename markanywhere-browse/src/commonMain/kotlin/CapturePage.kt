@@ -18,7 +18,11 @@ package com.xemantic.markanywhere.browse
 
 import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.dump.AccessibilityAnnotations
+import com.xemantic.markanywhere.dump.FormControlState
 import com.xemantic.markanywhere.dump.SemanticEventDump
+import com.xemantic.markanywhere.dump.formControlAttributes
+import com.xemantic.markanywhere.dump.formControlText
+import com.xemantic.markanywhere.dump.hasLiveFormState
 import dev.kdriver.cdp.domain.Accessibility
 import dev.kdriver.cdp.domain.DOMSnapshot
 import dev.kdriver.cdp.domain.accessibility
@@ -30,6 +34,13 @@ import kotlin.time.Clock
 
 private const val ELEMENT_NODE = 1
 private const val TEXT_NODE = 3
+
+// The computed styles requested from the snapshot, in the order its per-node
+// style lists report them.
+private val COMPUTED_STYLES = listOf("display", "visibility", "-webkit-text-security")
+private const val DISPLAY_STYLE = 0
+private const val VISIBILITY_STYLE = 1
+private const val TEXT_SECURITY_STYLE = 2
 
 /**
  * The result of a [capturePage]: the [SemanticEventDump] plus the `ref →
@@ -61,6 +72,12 @@ internal class PageCapture(
  * on here — so a single dump can be replayed against different filtering
  * policies without re-capturing.
  *
+ * Form controls are the one place the walk departs from the markup: a control
+ * is captured as it is *now* — the value typed into it, the box ticked, the
+ * option chosen — and a control the page marks as secret has its value left
+ * out (see [formControlAttributes], shared with the in-page walker of
+ * `markanywhere-js`, so both captures redact alike).
+ *
  * @param refAttribute when non-null, a dense document-order ref is stamped on
  *   every element [isActionable] accepts (given its accessibility node), and the
  *   `ref → backendNodeId` map is collected for later element retrieval.
@@ -71,7 +88,7 @@ internal suspend fun Tab.capturePage(
     isActionable: (Accessibility.AXNode?) -> Boolean
 ): PageCapture {
     val snapshot = dOMSnapshot.captureSnapshot(
-        computedStyles = listOf("display", "visibility")
+        computedStyles = COMPUTED_STYLES
     )
     val axNodes = accessibility.getAxTree(
         frameIds = snapshot.documents
@@ -175,6 +192,8 @@ internal class SnapshotDom(
 
     private val nodeType = requireNotNull(nodes.nodeType) { "no nodeType in snapshot" }
     private val nodeName = requireNotNull(nodes.nodeName) { "no nodeName in snapshot" }
+    // memoised by [name]: the walk asks for an element's name several times over
+    private val names = arrayOfNulls<String>(nodeName.size)
     private val nodeValue = requireNotNull(nodes.nodeValue) { "no nodeValue in snapshot" }
     private val backendIds = requireNotNull(nodes.backendNodeId) { "no backendNodeId in snapshot" }
     private val attributes = requireNotNull(nodes.attributes) { "no attributes in snapshot" }
@@ -184,8 +203,7 @@ internal class SnapshotDom(
      * children of their originating element — they are not DOM elements and
      * are excluded from the walk and from capture-identity assignment.
      */
-    private val pseudoNodes: Set<Int> =
-        nodes.pseudoType?.index?.toSet() ?: emptySet()
+    private val pseudoNodes: Set<Int> = nodes.pseudoType?.index.toIndexSet()
 
     val children: List<List<Int>> = buildList<MutableList<Int>> {
         repeat(nodeType.size) { add(mutableListOf()) }
@@ -194,28 +212,26 @@ internal class SnapshotDom(
         }
     }
 
-    // styles are aligned with the computedStyles request: [0] = display,
-    // [1] = visibility. Both are absent for a node that is not laid out.
-
     /** Computed `display` per laid-out node index, absent = not laid out. */
-    private val display: Map<Int, String> = buildMap {
-        layout.nodeIndex.forEachIndexed { i, node ->
-            val styles = layout.styles.getOrNull(i) ?: return@forEachIndexed
-            styles.getOrNull(0)?.let {
-                put(node, string(it) ?: return@forEachIndexed)
-            }
-        }
-    }
+    private val display: Map<Int, String> = computedStyle(DISPLAY_STYLE)
 
     /** Computed `visibility` per laid-out node index, absent = not laid out. */
-    private val visibility: Map<Int, String> = buildMap {
-        layout.nodeIndex.forEachIndexed { i, node ->
-            val styles = layout.styles.getOrNull(i) ?: return@forEachIndexed
-            styles.getOrNull(1)?.let {
-                put(node, string(it) ?: return@forEachIndexed)
-            }
+    private val visibility: Map<Int, String> = computedStyle(VISIBILITY_STYLE)
+
+    /**
+     * Computed `-webkit-text-security` per laid-out node index — a control
+     * rendering its text masked — absent = not laid out.
+     */
+    private val textSecurity: Map<Int, String> = computedStyle(TEXT_SECURITY_STYLE)
+
+    /**
+     * One computed style per laid-out node index, [slot] indexing the
+     * [COMPUTED_STYLES] request. Absent for a node that is not laid out.
+     */
+    private fun computedStyle(slot: Int): Map<Int, String> =
+        rareMap(layout.nodeIndex, layout.styles) { styles ->
+            styles.getOrNull(slot)?.let { string(it) }
         }
-    }
 
     /**
      * Whether the node or any of its descendants has a layout object — the
@@ -269,9 +285,9 @@ internal class SnapshotDom(
      * MathML) keeps its case-significant name — so an all-uppercase name is
      * lowercased and any name already containing lowercase is preserved.
      */
-    fun name(index: Int): String = string(nodeName[index]).orEmpty().let { name ->
+    fun name(index: Int): String = names[index] ?: string(nodeName[index]).orEmpty().let { name ->
         if (name.any { it.isLowerCase() }) name else name.lowercase()
-    }
+    }.also { names[index] = it }
 
     fun text(index: Int): String = string(nodeValue[index]).orEmpty()
 
@@ -319,14 +335,74 @@ internal class SnapshotDom(
      */
     fun contentDocumentIndex(index: Int): Int? = contentDocuments[index]
 
-    private val contentDocuments: Map<Int, Int> = buildMap {
-        val rare = nodes.contentDocumentIndex ?: return@buildMap
-        rare.index.forEachIndexed { i, node ->
-            rare.value.getOrNull(i)?.let { put(node, it) }
-        }
+    private val contentDocuments: Map<Int, Int> = nodes.contentDocumentIndex.let {
+        rareMap(it?.index, it?.value) { document -> document }
+    }
+
+    // The live state of form controls. The snapshot's `attributes` are the
+    // *content* attributes — what the markup said — which typing, selecting or
+    // ticking never changes; the state a user (or an agent driving the page)
+    // produced lives in DOM properties, which the snapshot reports separately.
+    private val inputValues: Map<Int, String> = nodes.inputValue.let {
+        rareMap(it?.index, it?.value) { value -> string(value).orEmpty() }
+    }
+    private val textValues: Map<Int, String> = nodes.textValue.let {
+        rareMap(it?.index, it?.value) { value -> string(value).orEmpty() }
+    }
+    private val checkedInputs: Set<Int> = nodes.inputChecked?.index.toIndexSet()
+    private val selectedOptions: Set<Int> = nodes.optionSelected?.index.toIndexSet()
+
+    /**
+     * The live state of a form control (see [FormControlState]), or `null` for
+     * an element that has none.
+     */
+    fun formState(index: Int): FormControlState? =
+        if (hasLiveFormState(name(index))) FormControlState(
+            value = inputValues[index] ?: textValues[index],
+            checked = index in checkedInputs,
+            selected = index in selectedOptions,
+            masked = textSecurity[index].let { it != null && it != "none" },
+        ) else null
+
+    /**
+     * The element's attributes as captured: the markup's, with a form
+     * control's live state written over them (see [formControlAttributes]).
+     */
+    fun capturedAttributeMap(index: Int): Map<String, String> {
+        val attributes = attributeMap(index)
+        val state = formState(index) ?: return attributes
+        return formControlAttributes(name(index), attributes, state)
+    }
+
+    /**
+     * The text captured in place of the element's children — a `<textarea>`'s
+     * current value (see [formControlText]) — or `null` to walk the children.
+     */
+    fun replacementText(index: Int): String? {
+        val state = formState(index) ?: return null
+        return formControlText(name(index), attributeMap(index), state)
     }
 
 }
+
+/**
+ * Unpacks the snapshot's sparse "rare data" shape — parallel lists of node
+ * [index]es and their [values] — into a map by node index, dropping a value
+ * [transform] turns into `null`.
+ */
+private inline fun <T, R : Any> rareMap(
+    index: List<Int>?,
+    values: List<T>?,
+    transform: (T) -> R?
+): Map<Int, R> = buildMap {
+    if (index == null || values == null) return@buildMap
+    index.forEachIndexed { i, node ->
+        values.getOrNull(i)?.let(transform)?.let { put(node, it) }
+    }
+}
+
+/** The node indexes of a snapshot's boolean / presence rare data. */
+private fun List<Int>?.toIndexSet(): Set<Int> = this?.toSet() ?: emptySet()
 
 internal class DomEventBuilder(
     /**
@@ -358,7 +434,11 @@ internal class DomEventBuilder(
     fun walkElement(dom: SnapshotDom, element: Int, annotate: Boolean) {
         val annotated = annotate && dom.name(element) != "head"
         mark(dom, element, annotated)
-        dom.children[element].forEach { child ->
+        val replacementText = dom.replacementText(element)
+        if (replacementText != null) {
+            // what the field holds now, not the default text of its markup
+            if (replacementText.isNotEmpty()) events += SemanticEvent.Text(replacementText)
+        } else dom.children[element].forEach { child ->
             when {
                 dom.isText(child) -> events += SemanticEvent.Text(dom.text(child))
                 dom.isElement(child) -> walkElement(dom, child, annotated)
@@ -386,7 +466,7 @@ internal class DomEventBuilder(
             (++refCounter).toString().also { refs[it] = backendNodeId }
         } else null
         val attributes = buildMap {
-            putAll(dom.attributeMap(element))
+            putAll(dom.capturedAttributeMap(element))
             if (ref != null) put(refAttribute!!, ref)
         }.let { if (annotate) it.withAccessibilityAnnotations(dom, element) else it }
         events += SemanticEvent.Mark(
