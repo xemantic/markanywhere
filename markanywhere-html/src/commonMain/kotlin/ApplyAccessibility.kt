@@ -32,13 +32,17 @@ public fun Flow<SemanticEvent>.applyAccessibility(): Flow<SemanticEvent> = trans
  * reserved annotations (see [AccessibilityAnnotations]) onto an otherwise
  * untouched, full-DOM event stream:
  *
- * - **Drop hidden subtrees** — an element with `aria-hidden="true"`,
- *   [AccessibilityAnnotations.DISPLAY] `= none` (`display:none`), or
- *   [AccessibilityAnnotations.VISIBILITY] `= hidden` (`visibility:hidden`) is
- *   dropped together with its whole subtree. Inside a `<select>` the
- *   `display:none` half of that rule is suspended — the popup lays out no box
- *   for any of its content, which the capture cannot tell apart from real
- *   hiding (see [SELECT_CONTENT_MODE]).
+ * - **Drop hidden subtrees** — an element with `aria-hidden="true"` or
+ *   [AccessibilityAnnotations.DISPLAY] `= none` (`display:none`) is dropped
+ *   together with its whole subtree. Inside a `<select>` the `display:none`
+ *   half of that rule is suspended — the popup lays out no box for any of its
+ *   content, which the capture cannot tell apart from real hiding (see
+ *   [SELECT_CONTENT_MODE]).
+ * - **Drop invisible elements, not their visible descendants** — an element
+ *   with [AccessibilityAnnotations.VISIBILITY] `= hidden` (`visibility:hidden`)
+ *   loses its own mark and its own text, but each descendant element is judged
+ *   on its own verdict (see [INVISIBLE_MODE]): unlike `display:none`,
+ *   `visibility` is inherited and a descendant may set it back to `visible`.
  * - **Unwrap layout tables** — a `<table>` whose computed role
  *   ([AccessibilityAnnotations.ROLE]) is not a data-table role (Blink's
  *   `LayoutTable`, `generic`, `none`, …) emits no mark; its structural
@@ -62,7 +66,7 @@ public fun TransformerBuilder.applyAccessibility() {
 
     // --- default mode ---------------------------------------------------
 
-    accessibilityRules()
+    accessibilityRules(descendIntoInvisible = true)
 
     // everything else flows through, annotations stripped.
     match("*") { event -> passThrough(event) }
@@ -75,6 +79,15 @@ public fun TransformerBuilder.applyAccessibility() {
     // sit in a JS-built select's popup, so both combinations need a mode.
     layoutTableRules(LAYOUT_TABLE_MODE, insideSelect = false)
     layoutTableRules(LAYOUT_TABLE_IN_SELECT_MODE, insideSelect = true)
+
+    // --- inside an invisible (`visibility:hidden`) element --------------
+
+    accessibilityRules(mode = INVISIBLE_MODE, descendIntoInvisible = true)
+
+    // a descendant the browser shows again leaves the invisible ancestry and
+    // is judged in the default mode; the invisible element's own text goes.
+    match("*", mode = INVISIBLE_MODE) { event -> passThrough(event) }
+    matchText(mode = INVISIBLE_MODE) { /* drop */ }
 
     // --- inside a <select> ----------------------------------------------
 
@@ -148,11 +161,18 @@ private fun TransformerBuilder.layoutTableRules(
  * the layout-table skeleton reached inside a popup — so it is passed in rather
  * than derived from [mode].
  *
+ * [descendIntoInvisible] says whether a `visibility:hidden` element drops
+ * only itself and descends into [INVISIBLE_MODE] (the default and invisible
+ * modes), or takes its whole subtree with it — kept inside a `<select>`'s popup
+ * and a layout table's skeleton, which have modes of their own to return to
+ * that [INVISIBLE_MODE] could not restore.
+ *
  * Order matters within a mode: the first matching rule wins.
  */
 private fun TransformerBuilder.accessibilityRules(
     mode: String? = null,
-    insideSelect: Boolean = false
+    insideSelect: Boolean = false,
+    descendIntoInvisible: Boolean = false
 ) {
 
     // never rendered content: <script>, <style>, … carry no display verdict of
@@ -167,6 +187,13 @@ private fun TransformerBuilder.accessibilityRules(
         { isHidden(honourDisplayNone = !insideSelect) },
         mode = mode
     ) { /* drop */ }
+
+    // invisible element: its own mark and text go, but a descendant can be
+    // visible again (Gmail's compose dialog sits in a `visibility:hidden`
+    // host), so each one is judged on its own verdict in INVISIBLE_MODE.
+    match({ isInvisible() }, mode = mode) {
+        if (descendIntoInvisible) children(mode = INVISIBLE_MODE)
+    }
 
     // decorative image: Blink kept it out of the accessibility tree (empty alt,
     // role=presentation, a superseded lazy-load placeholder, …). An <img> is a
@@ -197,6 +224,20 @@ private fun TransformerBuilder.accessibilityRules(
 }
 
 private const val LAYOUT_TABLE_MODE = "layoutTable"
+
+/**
+ * The mode the descendants of a `visibility:hidden` element are transformed
+ * in: text is dropped, an element still carrying the inherited verdict stays
+ * here (losing its own mark), and the first one the browser shows again —
+ * `visibility:visible` set on a descendant — is re-emitted and judged in the
+ * default mode.
+ *
+ * The capture records `visibility` for every laid-out element, so an inherited
+ * `hidden` is on each descendant that has a box. One that has none
+ * (`display:contents`) carries no verdict and is shown — the cheaper error, as
+ * dropping the subtree dropped whole dialogs.
+ */
+private const val INVISIBLE_MODE = "invisible"
 
 /**
  * [LAYOUT_TABLE_MODE] for a layout table reached inside a `<select>`: the
@@ -268,7 +309,9 @@ private val DATA_TABLE_ROLES = setOf("table", "grid", "treegrid")
 private fun SemanticEvent.Mark.isHidden(honourDisplayNone: Boolean = true): Boolean =
     this["aria-hidden"]?.equals("true", ignoreCase = true) == true
         || (honourDisplayNone && this[AccessibilityAnnotations.DISPLAY] == "none")
-        || this[AccessibilityAnnotations.VISIBILITY] == "hidden"
+
+private fun SemanticEvent.Mark.isInvisible(): Boolean =
+    this[AccessibilityAnnotations.VISIBILITY] == "hidden"
 
 private fun SemanticEvent.Mark.isAxIgnoredImage(): Boolean =
     this[AccessibilityAnnotations.IGNORED] == "true"

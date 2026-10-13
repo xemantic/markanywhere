@@ -2517,6 +2517,76 @@ class SimplifyHtmlTest {
     }
 
     @Test
+    fun `should keep role and accessible name on a generic element carrying a ref`() = runTest {
+        // given — Gmail builds its checkbox, star and toolbar controls out of
+        // `div`/`span` that carry nothing but `role` and ARIA name/state.
+        val input = semanticEvents(tagged = true) {
+            "body" {
+                "div"(
+                    "role" to "checkbox",
+                    "aria-checked" to "false",
+                    "aria-labelledby" to ":1qi",
+                    "class" to "oZ-jc",
+                    AccessibilityAnnotations.REF to "137"
+                ) { }
+                "span"(
+                    "role" to "button",
+                    "aria-label" to "Not starred",
+                    "data-tooltip" to "Not starred",
+                    AccessibilityAnnotations.REF to "138"
+                ) { }
+                "span"("role" to "button", "aria-label" to "no ref") { +"plain" }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml(
+            keepAttributes = setOf(AccessibilityAnnotations.REF)
+        )
+
+        // then — the ref-carrying controls keep role + ARIA name/state, the
+        // id-reference and presentational noise go, and an element without a
+        // ref still unwraps.
+        output sameAs semanticEvents {
+            tag(
+                "div",
+                "role" to "checkbox",
+                "aria-checked" to "false",
+                AccessibilityAnnotations.REF to "137"
+            ) { }
+            tag(
+                "span",
+                "role" to "button",
+                "aria-label" to "Not starred",
+                AccessibilityAnnotations.REF to "138"
+            ) { }
+            +"plain"
+        }
+    }
+
+    @Test
+    fun `should promote a div with role dialog to a dialog`() = runTest {
+        // given
+        val input = semanticEvents(tagged = true) {
+            "div"("role" to "dialog", "aria-label" to "Compose: New Message", "class" to "nH") {
+                "p" { +"body" }
+            }
+            "div"("role" to "alertdialog", "aria-modal" to "true") { +"Are you sure?" }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            tag("dialog", "aria-label" to "Compose: New Message") {
+                "p" { +"body" }
+            }
+            tag("dialog", "aria-modal" to "true") { +"Are you sure?" }
+        }
+    }
+
+    @Test
     fun `should not resurrect a dropped or aria-hidden subtree via a keep-attribute`() = runTest {
         // given
         val input = semanticEvents(tagged = true) {

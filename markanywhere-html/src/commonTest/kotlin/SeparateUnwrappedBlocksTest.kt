@@ -53,6 +53,50 @@ class SeparateUnwrappedBlocksTest {
     }
 
     @Test
+    fun `should separate the lines a rich text editor writes as unannotated divs`() = runTest {
+        // given — what Chrome leaves in a contenteditable after "Hi Paul,\nThree
+        // hearts.": the first line as bare text, each later one in a `<div>`
+        // whose plain `block` the capture records by leaving DISPLAY out.
+        val input = semanticEvents(tagged = true) {
+            "div"("role" to "textbox") {
+                +"Hi Paul,"
+                "div" { +"Three hearts." }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "div"("role" to "textbox") {
+                +"Hi Paul,"
+                "div" {
+                    +" "
+                    +"Three hearts."
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should not separate unannotated inline elements`() = runTest {
+        // given — a hand-built stream with no display annotations at all
+        val input = semanticEvents(tagged = true) {
+            "p" {
+                "strong" { +"bold" }
+                "span" { +"plain" }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then — inline by their tags, so they abut as authored
+        output sameAs input
+    }
+
+    @Test
     fun `should separate two block boxes under a non-flex inline parent`() = runTest {
         // given — the BBC card shape: an inline block-wrapping <a> holding an
         // image box and a badge box, each a separate grid box, no whitespace.

@@ -67,6 +67,82 @@ class ApplyAccessibilityTest {
     }
 
     @Test
+    fun `should keep a visible descendant of a visibility hidden element`() = runTest {
+        // given — Gmail's compose dialog: the host is `visibility:hidden`, the
+        // dialog sets `visibility:visible` again, so the capture annotates the
+        // host and its inheriting wrapper but not the dialog.
+        val input = semanticEvents(tagged = true) {
+            "div"("class" to "host", AccessibilityAnnotations.VISIBILITY to "hidden") {
+                +"host text"
+                "div"("class" to "wrapper", AccessibilityAnnotations.VISIBILITY to "hidden") {
+                    "div"("role" to "dialog", "aria-label" to "New Message") {
+                        "input"("aria-label" to "Subject") { }
+                        +"shown"
+                    }
+                }
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "div"("role" to "dialog", "aria-label" to "New Message") {
+                "input"("aria-label" to "Subject") { }
+                +"shown"
+            }
+        }
+    }
+
+    @Test
+    fun `should drop descendants inheriting visibility hidden`() = runTest {
+        // given
+        val input = semanticEvents(tagged = true) {
+            "div" {
+                "div"(AccessibilityAnnotations.VISIBILITY to "hidden") {
+                    "p"(AccessibilityAnnotations.VISIBILITY to "hidden") { +"gone" }
+                    "button"(AccessibilityAnnotations.VISIBILITY to "hidden") { +"gone too" }
+                }
+                "p" { +"kept" }
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "div" {
+                "p" { +"kept" }
+            }
+        }
+    }
+
+    @Test
+    fun `should drop a hidden subtree below a visible descendant of an invisible element`() = runTest {
+        // given — leaving the invisible ancestry restores every other verdict.
+        val input = semanticEvents(tagged = true) {
+            "div"(AccessibilityAnnotations.VISIBILITY to "hidden") {
+                "section" {
+                    "p"(AccessibilityAnnotations.DISPLAY to "none") { +"gone" }
+                    "p" { +"kept" }
+                }
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "section" {
+                "p" { +"kept" }
+            }
+        }
+    }
+
+    @Test
     fun `should drop a subtree hidden via aria-hidden`() = runTest {
         // given
         val input = semanticEvents(tagged = true) {

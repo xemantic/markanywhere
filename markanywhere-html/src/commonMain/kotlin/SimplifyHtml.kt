@@ -456,6 +456,13 @@ private fun Flow<SemanticEvent>.simplifyHtmlElements(
         // element (and is dropped with the unwrapped tag, as it's no longer
         // needed once the element is gone).
         if (kept.keys.all { it == AccessibilityAnnotations.DISPLAY }) children()
+        // A generic element kept for its ref is a control the page built out
+        // of a `<div>` — Gmail's checkboxes, star toggles and toolbar buttons
+        // carry nothing but `role` and `aria-label`, so without them the agent
+        // reads an empty `<div ref="…">` it cannot tell from any other.
+        else if (AccessibilityAnnotations.REF in kept) {
+            preserve(event.name, preserveAttrs(event, "role")) { children() }
+        }
         else preserve(event.name, kept) { children() }
     }
 
@@ -633,6 +640,10 @@ private val ROLE_TO_TAG = mapOf(
     "blockquote" to "blockquote",
     "code" to "code",
     "figure" to "figure",
+    // a modal built on a `<div>` reads as the `<dialog>` it stands for, so the
+    // agent sees what blocks the page (see `dialog` in PRESERVE_WITH_ID_TAGS)
+    "dialog" to "dialog",
+    "alertdialog" to "dialog",
     // table / grid family
     "table" to "table",
     "grid" to "table",

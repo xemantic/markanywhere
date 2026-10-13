@@ -176,9 +176,15 @@ private fun SemanticEvent.Mark.blockBoundary(parentIsFlexGrid: Boolean): BlockBo
         // No annotation = computed `block` *only when reliably captured*. The
         // browser blockifies the direct children of a flex/grid container, so an
         // unannotated child there is a separated box (the BBC metadata spans);
-        // anywhere else an unannotated element is normal inline flow — a hand-
-        // built / un-annotated stream's `<a>`/`<strong>`/`<i>` must not over-split.
-        null -> if (parentIsFlexGrid) BlockBoundary.SEPARATED_BOX else BlockBoundary.INLINE
+        // so is an element that is a block by the UA stylesheet itself — the
+        // `<div>` per line a rich-text editor writes (`Hi,<div>there</div>`),
+        // whose plain `block` the capture records by leaving the annotation
+        // out. Anywhere else an unannotated element is normal inline flow — a
+        // hand-built / un-annotated stream's `<a>`/`<strong>`/`<i>` must not
+        // over-split.
+        null -> if (parentIsFlexGrid || name in UNWRAPPED_DEFAULT_BLOCK_TAGS) {
+            BlockBoundary.SEPARATED_BOX
+        } else BlockBoundary.INLINE
         // An explicit block-level box ([simplifyHtml] unwraps `<div>`/`<span>`):
         // its boundary vanishes on flatten. `inline*` stays inline flow.
         else -> {
@@ -199,3 +205,6 @@ private fun SemanticEvent.Mark.isPreserveRegion(): Boolean =
     isTagged && name in WHITESPACE_PRESERVE_TAGS
 
 private val WHITESPACE_PRESERVE_TAGS = setOf("pre", "code", "textarea")
+
+// The tags [simplifyHtml] unwraps that the UA stylesheet makes `display: block`.
+private val UNWRAPPED_DEFAULT_BLOCK_TAGS = setOf("div", "center")
