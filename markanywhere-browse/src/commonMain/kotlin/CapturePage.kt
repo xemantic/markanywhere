@@ -306,23 +306,17 @@ internal class SnapshotDom(
     }
 
     /**
-     * The value to record for [AccessibilityAnnotations.DISPLAY], or `null` when
-     * nothing should be recorded: `none` when the element is not laid out and has
-     * no laid-out descendant (`display:none`), the computed `display` when it is
-     * laid out and that display is not the ubiquitous `block` default (so the
-     * annotation flags only the inline / table / flex / … cases that change how a
-     * downstream whitespace-collapser treats the element's boundaries), and
-     * `null` for a plain `block` element or a not-laid-out `display:contents`
-     * element (whose own box is transparent — its children's display is what
-     * matters).
+     * The value to record for [AccessibilityAnnotations.DISPLAY] — recorded on
+     * every element, so that a stream without it can only mean one that was
+     * never captured: the computed `display` when the element is laid out (the
+     * plain `block` default included), `contents` when it lays out no box of
+     * its own while a descendant does (`display:contents`, whose box is
+     * transparent — its children's display is what matters), and `none` when
+     * nothing in its subtree is laid out (`display:none`).
      */
     fun displayAnnotation(
         index: Int
-    ): String? = when (val display = display[index]) {
-        null -> if (subtreeHasLayout[index]) null else "none"
-        "block" -> null
-        else -> display
-    }
+    ): String = display[index] ?: if (subtreeHasLayout[index]) "contents" else "none"
 
     /** Whether the element is laid out with computed `visibility:hidden`. */
     fun isVisibilityHidden(index: Int): Boolean = visibility[index] == "hidden"
@@ -542,9 +536,7 @@ internal class DomEventBuilder(
                 result[AccessibilityAnnotations.ROLE] = it
             }
         }
-        dom.displayAnnotation(element)?.let {
-            result[AccessibilityAnnotations.DISPLAY] = it
-        }
+        result[AccessibilityAnnotations.DISPLAY] = dom.displayAnnotation(element)
         if (dom.isVisibilityHidden(element)) {
             result[AccessibilityAnnotations.VISIBILITY] = "hidden"
         }

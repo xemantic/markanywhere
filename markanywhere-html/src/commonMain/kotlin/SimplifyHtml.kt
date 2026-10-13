@@ -99,13 +99,15 @@ import kotlinx.coroutines.flow.Flow
  *   recovers the semantics the author expressed through it — `role="heading"`
  *   (+ `aria-level`) → `h1`–`h6`, `role="img"` → `img` (accessible name as
  *   `alt`), `role="separator"` → `hr`, `role="presentation"`/`"none"` → unwrap,
- *   and the landmark / list / table-grid roles (see [ROLE_TO_TAG]) → their
- *   semantic tag. Promotion is gated to generic containers ([UNWRAPPED_TAGS]) so
+ *   `role="dialog"`/`"alertdialog"` → `dialog` when `aria-modal="true"`, else a
+ *   `section` keeping the `role`, and the landmark / list / table-grid roles
+ *   (see [ROLE_TO_TAG]) → their semantic tag. Promotion is gated to generic containers ([UNWRAPPED_TAGS]) so
  *   a `role` only upgrades an element that would otherwise be unwrapped and never
  *   overrides a native semantic tag (a `<form role="search">` stays a form). The
  *   `presentation`/`none` unwrap is the exception — it deliberately strips an
  *   element's own semantics, so it applies to any element. The now-redundant
- *   `role` is dropped.
+ *   `role` is dropped — except where it still tells more than the tag (an
+ *   alert dialog, a non-modal dialog kept as a `section`).
  * - **ARIA keep-set (every preserved element)**: on top of each element's own
  *   whitelist, the accessible name and actionable state survive — `aria-label`,
  *   `aria-expanded`, `aria-haspopup`, `aria-current`, `aria-checked`,
@@ -114,7 +116,10 @@ import kotlinx.coroutines.flow.Flow
  *   are often the only label on an icon control and the state an LLM-driven
  *   agent needs to decide how to interact. Inline emphasis carries no
  *   attributes, so it does not surface these. Other `aria-*` (id-reference,
- *   live-region, positional) and `role` are dropped.
+ *   live-region, positional) and `role` are dropped, with one exception: a
+ *   generic `div`/`span` kept for its actionable ref (a control the page built
+ *   out of one — a checkbox, a star toggle) keeps its `role`, the only thing
+ *   saying what kind of control it is.
  * - **Caller keep-set ([keepAttributes])**: a generic escape hatch for
  *   application-specific attributes the caller wants to survive simplification
  *   — e.g. a `golemId` correlation id mapping events back to their source DOM
@@ -429,6 +434,25 @@ private fun Flow<SemanticEvent>.simplifyHtmlElements(
         preserve("img", attrs) { /* void — descriptive children collapse to the name */ }
     }
 
+    // `role="dialog"` / `"alertdialog"` → `<dialog>`, but only for one claiming
+    // to block the page (`aria-modal="true"`): a native dialog survives only
+    // when shown (closed it is `display: none`), while a `<div>` keeps its role
+    // on a drawer or popover hidden by a transform or `opacity: 0`, which the
+    // capture sees as laid out. Without the claim it is a labelled region. The
+    // `role` survives wherever it tells more than the tag: an alert dialog, or
+    // a dialog that is a `<section>`.
+    match({ name in UNWRAPPED_TAGS && this["role"]?.lowercase() in DIALOG_ROLES }) { event ->
+        val role = event["role"]!!.lowercase()
+        if (event["aria-modal"]?.lowercase() == "true") {
+            val attrs = if (role == "alertdialog") {
+                mapOf("role" to role) + preserveAttrs(event, "id")
+            } else preserveAttrs(event, "id")
+            preserve("dialog", attrs) { children() }
+        } else {
+            preserve("section", mapOf("role" to role) + preserveAttrs(event, "id")) { children() }
+        }
+    }
+
     // `role="separator"` → thematic break (void).
     match({ name in UNWRAPPED_TAGS && this["role"]?.lowercase() == "separator" }) { event ->
         preserve("hr", preserveAttrs(event, "id")) { /* void */ }
@@ -640,10 +664,6 @@ private val ROLE_TO_TAG = mapOf(
     "blockquote" to "blockquote",
     "code" to "code",
     "figure" to "figure",
-    // a modal built on a `<div>` reads as the `<dialog>` it stands for, so the
-    // agent sees what blocks the page (see `dialog` in PRESERVE_WITH_ID_TAGS)
-    "dialog" to "dialog",
-    "alertdialog" to "dialog",
     // table / grid family
     "table" to "table",
     "grid" to "table",
@@ -654,6 +674,9 @@ private val ROLE_TO_TAG = mapOf(
     "cell" to "td",
     "gridcell" to "td",
 )
+
+// Roles a generic container promotes to a `<dialog>` (modal) or a `<section>`.
+private val DIALOG_ROLES = setOf("dialog", "alertdialog")
 
 private val UNWRAPPED_TAGS = setOf(
     "body", "div", "span", "font", "center", "tt",

@@ -86,11 +86,16 @@ class ApplyAccessibilityTest {
         // when
         val output = input.applyAccessibility()
 
-        // then
+        // then — the invisible boxes still lay out around what is shown, so
+        // they stay; only their own text goes.
         output sameAs semanticEvents(tagged = true) {
-            "div"("role" to "dialog", "aria-label" to "New Message") {
-                "input"("aria-label" to "Subject") { }
-                +"shown"
+            "div"("class" to "host") {
+                "div"("class" to "wrapper") {
+                    "div"("role" to "dialog", "aria-label" to "New Message") {
+                        "input"("aria-label" to "Subject") { }
+                        +"shown"
+                    }
+                }
             }
         }
     }
@@ -136,9 +141,138 @@ class ApplyAccessibilityTest {
 
         // then
         output sameAs semanticEvents(tagged = true) {
-            "section" {
-                "p" { +"kept" }
+            "div" {
+                "section" {
+                    "p" { +"kept" }
+                }
             }
+        }
+    }
+
+    @Test
+    fun `should keep an invisible link whose label is visible`() = runTest {
+        // given — clicking the visible label follows the invisible link, so
+        // the href and the ref must survive with it.
+        val input = semanticEvents(tagged = true) {
+            "a"(
+                "href" to "/compose",
+                AccessibilityAnnotations.REF to "42",
+                AccessibilityAnnotations.VISIBILITY to "hidden"
+            ) {
+                "span"(AccessibilityAnnotations.DISPLAY to "inline") { +"Compose" }
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "a"("href" to "/compose", AccessibilityAnnotations.REF to "42") {
+                "span"(AccessibilityAnnotations.DISPLAY to "inline") { +"Compose" }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep the structure of an invisible data table around a visible cell`() = runTest {
+        // given — an invisible cell beside the visible one keeps its column.
+        val input = semanticEvents(tagged = true) {
+            "table"(
+                AccessibilityAnnotations.ROLE to "table",
+                AccessibilityAnnotations.VISIBILITY to "hidden"
+            ) {
+                "tr"(AccessibilityAnnotations.VISIBILITY to "hidden") {
+                    "td"(AccessibilityAnnotations.VISIBILITY to "hidden") { +"gone" }
+                    "td" { +"Shown" }
+                }
+                "tr"(AccessibilityAnnotations.VISIBILITY to "hidden") {
+                    "td"(AccessibilityAnnotations.VISIBILITY to "hidden") { +"gone" }
+                }
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "table" {
+                "tr" {
+                    "td" { }
+                    "td" { +"Shown" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep a visible descendant of an invisible layout table cell`() = runTest {
+        // given — e-mail HTML lays its body out in a borderless table
+        val input = semanticEvents(tagged = true) {
+            "table"(AccessibilityAnnotations.ROLE to "LayoutTable") {
+                "tr" {
+                    "td"(AccessibilityAnnotations.VISIBILITY to "hidden") {
+                        +"gone"
+                        "span"(AccessibilityAnnotations.DISPLAY to "inline") { +"Shown" }
+                    }
+                }
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then — the cell is unwrapped like any other layout table cell
+        output sameAs semanticEvents(tagged = true) {
+            "span"(AccessibilityAnnotations.DISPLAY to "inline") { +"Shown" }
+            +" "
+        }
+    }
+
+    @Test
+    fun `should drop the text of a display contents element inheriting visibility hidden`() = runTest {
+        // given — a `display: contents` element lays out no box, so the capture
+        // records no visibility of its own: it inherits its parent's.
+        val input = semanticEvents(tagged = true) {
+            "div"(AccessibilityAnnotations.VISIBILITY to "hidden") {
+                "x-host"(AccessibilityAnnotations.DISPLAY to "contents") {
+                    +"Secret label"
+                    "span"(
+                        AccessibilityAnnotations.DISPLAY to "inline",
+                        AccessibilityAnnotations.VISIBILITY to "hidden"
+                    ) { +"gone" }
+                }
+            }
+            "x-host"(AccessibilityAnnotations.DISPLAY to "contents") { +"kept" }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "x-host"(AccessibilityAnnotations.DISPLAY to "contents") { +"kept" }
+        }
+    }
+
+    @Test
+    fun `should drop an invisible select with its options`() = runTest {
+        // given — the options lay out no box, so they inherit the select's
+        // verdict.
+        val input = semanticEvents(tagged = true) {
+            "select"(AccessibilityAnnotations.VISIBILITY to "hidden") {
+                "option"(AccessibilityAnnotations.DISPLAY to "none") { +"apple" }
+            }
+            "p" { +"kept" }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "p" { +"kept" }
         }
     }
 

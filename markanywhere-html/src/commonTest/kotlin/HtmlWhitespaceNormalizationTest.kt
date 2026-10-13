@@ -315,4 +315,30 @@ class HtmlWhitespaceNormalizationTest {
             "span" { +"B" }
         }
     }
+
+    @Test
+    fun `should keep space around a display contents wrapper`() = runTest {
+        // given — a `display: contents` `<div>` lays out no box of its own, so
+        // the whitespace touching it separates the inline content on either
+        // side, whatever its tag name says.
+        val input = semanticEvents(tagged = true) {
+            "span"(AccessibilityAnnotations.DISPLAY to "inline") { +"A" }
+            +" "
+            "div"(AccessibilityAnnotations.DISPLAY to "contents") {
+                "span"(AccessibilityAnnotations.DISPLAY to "inline") { +"B" }
+            }
+        }
+
+        // when
+        val output = input.dropHtmlStructuralWhitespace()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "span" { +"A" }
+            +" "
+            "div" {
+                "span" { +"B" }
+            }
+        }
+    }
 }

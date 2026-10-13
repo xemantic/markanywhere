@@ -189,10 +189,16 @@ private fun SemanticEvent.Mark.isPreserveRegion(): Boolean =
 // any `inline*` value (`inline`, `inline-block`, …) is inline, everything else
 // (`block`, `flex`, `grid`, `table-cell`, `list-item`, …) is a block boundary —
 // this honours CSS overrides a tag-name set can't see (`<span style=display:block>`).
+// `contents` lays out no box of its own, so it is no boundary either: whitespace
+// touching it belongs to the inline flow around it.
 // When no display annotation is present (synthetic / Markdown-native streams) it
 // falls back to the [INLINE_HTML_ELEMENTS] tag-name heuristic.
 private fun SemanticEvent.Mark.isInlineLevel(): Boolean =
-    this[AccessibilityAnnotations.DISPLAY]?.startsWith("inline") ?: (name in INLINE_HTML_ELEMENTS)
+    when (val display = this[AccessibilityAnnotations.DISPLAY]) {
+        null -> name in INLINE_HTML_ELEMENTS
+        "contents" -> true
+        else -> display.startsWith("inline")
+    }
 
 // HTML phrasing / inline-level elements: whitespace touching their boundaries
 // is part of inline flow and collapses to a single space rather than being

@@ -18,6 +18,7 @@ package com.xemantic.markanywhere.browse
 
 import com.xemantic.kotlin.test.assert
 import com.xemantic.markanywhere.SemanticEvent
+import com.xemantic.markanywhere.dump.AccessibilityAnnotations.DISPLAY
 import com.xemantic.markanywhere.dump.AccessibilityAnnotations.REDACTED
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.test.sameAs
@@ -76,6 +77,63 @@ class CapturePageTest {
         }
         assert(outline == listOf("<html>", "<body>", "<iframe>", "</iframe>", "</body>", "</html>"))
         assert((events[2] as SemanticEvent.Mark)["src"] == "slow.html")
+    }
+
+    /**
+     * Every element carries its computed `display`, the plain `block` default
+     * included, so a stream without the annotation can only mean one that was
+     * never captured — and an element that lays out no box of its own while
+     * its descendants do (`display:contents`) is recorded as such, rather than
+     * being indistinguishable from a `block` by an absent annotation.
+     */
+    @Test
+    fun `should record every computed display, block and contents included`() = runTest {
+        // given
+        val strings = mutableListOf<String>()
+        fun string(value: String): Int =
+            strings.indexOf(value).takeIf { it >= 0 } ?: strings.size.also { strings += value }
+
+        val names = listOf("HTML", "BODY", "DIV", "SPAN", "#text", "B", "DIV")
+        val snapshot = DOMSnapshot.CaptureSnapshotReturn(
+            documents = listOf(
+                document(
+                    nodeType = names.map { if (it == "#text") 3 else 1 },
+                    nodeName = names.map(::string),
+                    nodeValue = names.map { if (it == "#text") string("US") else -1 },
+                    parentIndex = listOf(-1, 0, 1, 2, 3, 2, 1),
+                    backendNodeId = names.indices.map { it + 1 },
+                    attributes = names.map { emptyList() },
+                    // the span is `display:contents` — no box of its own, but
+                    // its text is laid out — and the last div is `display:none`
+                    layoutNodeIndex = listOf(0, 1, 2, 4, 5),
+                    layoutStyles = listOf("block", "block", "block", "inline", "inline").map {
+                        listOf(it, "visible", "none").map(::string)
+                    },
+                ),
+            ),
+            strings = strings,
+        )
+
+        // when
+        val events = captureEvents(
+            snapshot = snapshot,
+            axNodes = emptyList(),
+            refAttribute = null,
+            isActionable = { false },
+        ).events
+
+        // then
+        events.asFlow() sameAs semanticEvents(tagged = true) {
+            "html"(DISPLAY to "block") {
+                "body"(DISPLAY to "block") {
+                    "div"(DISPLAY to "block") {
+                        "span"(DISPLAY to "contents") { +"US" }
+                        "b"(DISPLAY to "inline") { }
+                    }
+                    "div"(DISPLAY to "none") { }
+                }
+            }
+        }
     }
 
     /**
@@ -149,18 +207,18 @@ class CapturePageTest {
 
         // then
         events.asFlow() sameAs semanticEvents(tagged = true) {
-            "html" {
-                "body" {
-                    "input"("type" to "text", "value" to "Alice") { }
-                    "input"("type" to "password", REDACTED to "filled") { }
-                    "input"("type" to "text", REDACTED to "filled") { }
-                    "textarea" { +"new bio" }
-                    "select" {
-                        "option"("value" to "r") { }
-                        "option"("value" to "g", "selected" to "") { }
+            "html"(DISPLAY to "block") {
+                "body"(DISPLAY to "block") {
+                    "input"("type" to "text", "value" to "Alice", DISPLAY to "block") { }
+                    "input"("type" to "password", REDACTED to "filled", DISPLAY to "block") { }
+                    "input"("type" to "text", REDACTED to "filled", DISPLAY to "block") { }
+                    "textarea"(DISPLAY to "block") { +"new bio" }
+                    "select"(DISPLAY to "block") {
+                        "option"("value" to "r", DISPLAY to "block") { }
+                        "option"("value" to "g", "selected" to "", DISPLAY to "block") { }
                     }
-                    "input"("type" to "checkbox", "checked" to "") { }
-                    "input"("type" to "submit", "value" to "Send") { }
+                    "input"("type" to "checkbox", "checked" to "", DISPLAY to "block") { }
+                    "input"("type" to "submit", "value" to "Send", DISPLAY to "block") { }
                 }
             }
         }
@@ -197,7 +255,7 @@ class CapturePageTest {
                         attributes("value" to "08"),
                     ),
                     optionSelected = DOMSnapshot.RareBooleanData(index = listOf(5)),
-                    // every element laid out as a block, so none is annotated
+                    // every element laid out as a block
                     layoutNodeIndex = names.indices.toList(),
                     layoutStyles = names.map {
                         listOf("block", "visible", "none").map(::string)
@@ -217,12 +275,12 @@ class CapturePageTest {
 
         // then
         events.asFlow() sameAs semanticEvents(tagged = true) {
-            "html" {
-                "body" {
-                    "select"("autocomplete" to "cc-exp-month", REDACTED to "filled") {
-                        "option"("value" to "") { }
-                        "optgroup"("label" to "Summer") {
-                            "option"("value" to "08") { }
+            "html"(DISPLAY to "block") {
+                "body"(DISPLAY to "block") {
+                    "select"("autocomplete" to "cc-exp-month", REDACTED to "filled", DISPLAY to "block") {
+                        "option"("value" to "", DISPLAY to "block") { }
+                        "optgroup"("label" to "Summer", DISPLAY to "block") {
+                            "option"("value" to "08", DISPLAY to "block") { }
                         }
                     }
                 }

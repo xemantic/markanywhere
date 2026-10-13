@@ -53,10 +53,10 @@ class SeparateUnwrappedBlocksTest {
     }
 
     @Test
-    fun `should separate the lines a rich text editor writes as unannotated divs`() = runTest {
+    fun `should separate the lines of uncaptured divs by their UA default display`() = runTest {
         // given — what Chrome leaves in a contenteditable after "Hi Paul,\nThree
-        // hearts.": the first line as bare text, each later one in a `<div>`
-        // whose plain `block` the capture records by leaving DISPLAY out.
+        // hearts.": the first line as bare text, each later one in a `<div>`.
+        // Without a captured display the UA stylesheet's `block` is assumed.
         val input = semanticEvents(tagged = true) {
             "div"("role" to "textbox") {
                 +"Hi Paul,"
@@ -72,6 +72,52 @@ class SeparateUnwrappedBlocksTest {
             "div"("role" to "textbox") {
                 +"Hi Paul,"
                 "div" {
+                    +" "
+                    +"Three hearts."
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should not separate content across a display contents wrapper`() = runTest {
+        // given — Svelte wraps a component carrying CSS custom properties in a
+        // `<div style="display: contents">`, which lays out no box of its own,
+        // so the price renders flush as `US$5`.
+        val input = semanticEvents(tagged = true) {
+            "p"(AccessibilityAnnotations.DISPLAY to "block") {
+                "span"(AccessibilityAnnotations.DISPLAY to "inline") { +"US" }
+                "div"(AccessibilityAnnotations.DISPLAY to "contents") {
+                    "span"(AccessibilityAnnotations.DISPLAY to "inline") { +"$5" }
+                }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs input
+    }
+
+    @Test
+    fun `should separate the lines of a span the capture recorded as a block`() = runTest {
+        // given — a rich editor's `<span style="display: block">` per line
+        val input = semanticEvents(tagged = true) {
+            "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                "span"(AccessibilityAnnotations.DISPLAY to "block") { +"Hi Paul," }
+                "span"(AccessibilityAnnotations.DISPLAY to "block") { +"Three hearts." }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                "span"(AccessibilityAnnotations.DISPLAY to "block") { +"Hi Paul," }
+                "span"(AccessibilityAnnotations.DISPLAY to "block") {
                     +" "
                     +"Three hearts."
                 }

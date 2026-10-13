@@ -2565,10 +2565,11 @@ class SimplifyHtmlTest {
     }
 
     @Test
-    fun `should promote a div with role dialog to a dialog`() = runTest {
-        // given
+    fun `should promote a div with role dialog claiming modality to a dialog`() = runTest {
+        // given — `aria-modal` is the author's claim that the dialog blocks the
+        // page, the one thing a `<dialog>` in the output tells the agent.
         val input = semanticEvents(tagged = true) {
-            "div"("role" to "dialog", "aria-label" to "Compose: New Message", "class" to "nH") {
+            "div"("role" to "dialog", "aria-modal" to "true", "aria-label" to "Consent", "class" to "nH") {
                 "p" { +"body" }
             }
             "div"("role" to "alertdialog", "aria-modal" to "true") { +"Are you sure?" }
@@ -2577,12 +2578,37 @@ class SimplifyHtmlTest {
         // when
         val output = input.simplifyHtml()
 
-        // then
+        // then — an alert dialog keeps its role, the one thing telling it apart
         output sameAs semanticEvents {
-            tag("dialog", "aria-label" to "Compose: New Message") {
+            tag("dialog", "aria-label" to "Consent", "aria-modal" to "true") {
                 "p" { +"body" }
             }
-            tag("dialog", "aria-modal" to "true") { +"Are you sure?" }
+            tag("dialog", "role" to "alertdialog", "aria-modal" to "true") { +"Are you sure?" }
+        }
+    }
+
+    @Test
+    fun `should keep a div with role dialog not claiming modality as a section`() = runTest {
+        // given — a closed native `<dialog>` is `display: none`, so surviving
+        // means shown; a `<div role="dialog">` makes no such promise (drawers
+        // and popovers hidden by a transform or `opacity: 0` keep their role),
+        // so without `aria-modal` it is a labelled region, not a blocking modal.
+        val input = semanticEvents(tagged = true) {
+            "div"("role" to "dialog", "aria-label" to "Compose: New Message", "class" to "nH") {
+                "p" { +"body" }
+            }
+            "div"("role" to "alertdialog", "aria-modal" to "false") { +"Saved" }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            tag("section", "role" to "dialog", "aria-label" to "Compose: New Message") {
+                "p" { +"body" }
+            }
+            tag("section", "role" to "alertdialog", "aria-modal" to "false") { +"Saved" }
         }
     }
 
