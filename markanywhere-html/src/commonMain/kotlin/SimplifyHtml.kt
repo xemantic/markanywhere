@@ -447,10 +447,17 @@ private fun Flow<SemanticEvent>.simplifyHtmlElements(
             val attrs = if (role == "alertdialog") {
                 mapOf("role" to role) + preserveAttrs(event, "id")
             } else preserveAttrs(event, "id")
-            preserve("dialog", attrs) { children() }
+            preserve("dialog", DIALOG_SHOWN + attrs) { children() }
         } else {
             preserve("section", mapOf("role" to role) + preserveAttrs(event, "id")) { children() }
         }
+    }
+
+    // A native `<dialog>` reaching this operator is shown (see
+    // [PRESERVE_WITH_ID_TAGS]), and says so: without `open` a browser
+    // rendering the output hides it.
+    match("dialog") { event ->
+        preserve("dialog", DIALOG_SHOWN + preserveAttrs(event, "id")) { children() }
     }
 
     // `role="separator"` → thematic break (void).
@@ -678,6 +685,9 @@ private val ROLE_TO_TAG = mapOf(
 // Roles a generic container promotes to a `<dialog>` (modal) or a `<section>`.
 private val DIALOG_ROLES = setOf("dialog", "alertdialog")
 
+// Every `<dialog>` this operator emits is on screen, so it carries `open`.
+private val DIALOG_SHOWN = mapOf("open" to "")
+
 private val UNWRAPPED_TAGS = setOf(
     "body", "div", "span", "font", "center", "tt",
 )
@@ -715,7 +725,7 @@ private val HEAD_METADATA_TAGS = setOf("title", "meta")
 // capture nests inside them (see the "frame" mode) — the same three the JS
 // walker (`frameDocumentElement`) descends into, the legacy frameset `<frame>`
 // included.
-private val FRAME_TAGS = setOf("iframe", "frame", "object")
+internal val FRAME_TAGS = setOf("iframe", "frame", "object")
 
 // The capture's own bookkeeping (see [AccessibilityAnnotations]): stripped from
 // a preserved svg element unless the caller asked for one through

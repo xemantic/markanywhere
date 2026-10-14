@@ -2578,12 +2578,13 @@ class SimplifyHtmlTest {
         // when
         val output = input.simplifyHtml()
 
-        // then — an alert dialog keeps its role, the one thing telling it apart
+        // then — `open`, since a `<dialog>` without it renders hidden, and an
+        // alert dialog keeps its role, the one thing telling it apart
         output sameAs semanticEvents {
-            tag("dialog", "aria-label" to "Consent", "aria-modal" to "true") {
+            tag("dialog", "open" to "", "aria-label" to "Consent", "aria-modal" to "true") {
                 "p" { +"body" }
             }
-            tag("dialog", "role" to "alertdialog", "aria-modal" to "true") { +"Are you sure?" }
+            tag("dialog", "open" to "", "role" to "alertdialog", "aria-modal" to "true") { +"Are you sure?" }
         }
     }
 
@@ -2766,9 +2767,10 @@ class SimplifyHtmlTest {
         // when
         val output = input.simplifyHtml()
 
-        // then
+        // then — `open` is kept (normalised), or a browser rendering the
+        // output would hide the dialog the page showed
         output sameAs semanticEvents {
-            tag("dialog", "id" to "consent", "aria-modal" to "true") {
+            tag("dialog", "open" to "", "id" to "consent", "aria-modal" to "true") {
                 "p" { +"in dialog" }
             }
         }

@@ -101,6 +101,59 @@ class SeparateUnwrappedBlocksTest {
     }
 
     @Test
+    fun `should not separate across an unannotated div in a dump that left block out`() = runTest {
+        // given — a dump captured before every display was recorded: a plain
+        // `block` and a `display: contents` were both left unannotated, so an
+        // absent annotation in a captured stream (the `<head>`'s `none` shows
+        // it is one) cannot be read as the UA default of the tag.
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head"(AccessibilityAnnotations.DISPLAY to "none") { }
+                "body" {
+                    "p" {
+                        "span"(AccessibilityAnnotations.DISPLAY to "inline") { +"US" }
+                        "div" {
+                            "span"(AccessibilityAnnotations.DISPLAY to "inline") { +"$5" }
+                        }
+                    }
+                }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs input
+    }
+
+    @Test
+    fun `should read an uncaptured element the way the whitespace normalizer does`() = runTest {
+        // given — one UA-default fallback serves both operators: an element
+        // the normalizer reads as a block boundary is a box here too.
+        val input = semanticEvents(tagged = true) {
+            "div" {
+                "x-row" { +"first" }
+                "x-row" { +"second" }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "div" {
+                "x-row" { +"first" }
+                "x-row" {
+                    +" "
+                    +"second"
+                }
+            }
+        }
+    }
+
+    @Test
     fun `should separate the lines of a span the capture recorded as a block`() = runTest {
         // given — a rich editor's `<span style="display: block">` per line
         val input = semanticEvents(tagged = true) {

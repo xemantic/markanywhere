@@ -389,7 +389,7 @@ class HtmlToMarkdownTest {
         markdown sameAsMarkdown """
             Article text.
             
-            <dialog aria-modal="true">
+            <dialog open="" aria-modal="true">
             
             ## We value your privacy
             

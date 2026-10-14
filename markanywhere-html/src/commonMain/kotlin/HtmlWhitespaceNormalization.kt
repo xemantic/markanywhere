@@ -195,16 +195,22 @@ private fun SemanticEvent.Mark.isPreserveRegion(): Boolean =
 // falls back to the [INLINE_HTML_ELEMENTS] tag-name heuristic.
 private fun SemanticEvent.Mark.isInlineLevel(): Boolean =
     when (val display = this[AccessibilityAnnotations.DISPLAY]) {
-        null -> name in INLINE_HTML_ELEMENTS
+        null -> isInlineByUaDefault()
         "contents" -> true
         else -> display.startsWith("inline")
     }
 
+/**
+ * Whether the UA stylesheet lays this element out inline — the one fallback
+ * every operator uses for an element with no captured display (a hand-built or
+ * Markdown-native stream), so they cannot read the same element differently.
+ */
+internal fun SemanticEvent.Mark.isInlineByUaDefault(): Boolean = name in INLINE_HTML_ELEMENTS
+
 // HTML phrasing / inline-level elements: whitespace touching their boundaries
 // is part of inline flow and collapses to a single space rather than being
 // dropped. Everything not listed here (div, p, section, li, table, …, and any
-// unknown / custom tag) is treated as a block boundary. Used only as a fallback
-// by [isInlineLevel] when the dump carries no computed-display annotation.
+// unknown / custom tag) is treated as a block boundary.
 private val INLINE_HTML_ELEMENTS = setOf(
     "a", "abbr", "b", "bdi", "bdo", "big", "cite", "code", "data", "dfn",
     "em", "font", "i", "img", "ins", "del", "kbd", "label", "mark", "q",

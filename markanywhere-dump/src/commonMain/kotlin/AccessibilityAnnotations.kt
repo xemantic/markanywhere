@@ -58,12 +58,14 @@ public object AccessibilityAnnotations {
     public const val DISPLAY: String = "data-markanywhere-display"
 
     /**
-     * Present with value `hidden` when the element lays out a box and computes
-     * to `visibility:hidden` — its own content is invisible, but unlike
+     * Present with value `hidden` when the element computes to
+     * `visibility:hidden` — its own content is invisible, but unlike
      * [DISPLAY] `none` not necessarily its subtree: `visibility` is inherited
      * and a descendant may set it back to `visible`, so each descendant laying
      * out a box carries its own verdict. One laying out none (`contents`)
-     * carries none and inherits its parent's.
+     * carries one only where its own value differs from the one it inherits —
+     * `hidden`, or `visible` set back under a hidden ancestor — and otherwise
+     * inherits its parent's.
      */
     public const val VISIBILITY: String = "data-markanywhere-visibility"
 

@@ -75,8 +75,12 @@ class ApplyAccessibilityTest {
             "div"("class" to "host", AccessibilityAnnotations.VISIBILITY to "hidden") {
                 +"host text"
                 "div"("class" to "wrapper", AccessibilityAnnotations.VISIBILITY to "hidden") {
-                    "div"("role" to "dialog", "aria-label" to "New Message") {
-                        "input"("aria-label" to "Subject") { }
+                    "div"(
+                        "role" to "dialog",
+                        "aria-label" to "New Message",
+                        AccessibilityAnnotations.DISPLAY to "block"
+                    ) {
+                        "input"("aria-label" to "Subject", AccessibilityAnnotations.DISPLAY to "inline-block") { }
                         +"shown"
                     }
                 }
@@ -91,8 +95,12 @@ class ApplyAccessibilityTest {
         output sameAs semanticEvents(tagged = true) {
             "div"("class" to "host") {
                 "div"("class" to "wrapper") {
-                    "div"("role" to "dialog", "aria-label" to "New Message") {
-                        "input"("aria-label" to "Subject") { }
+                    "div"(
+                        "role" to "dialog",
+                        "aria-label" to "New Message",
+                        AccessibilityAnnotations.DISPLAY to "block"
+                    ) {
+                        "input"("aria-label" to "Subject", AccessibilityAnnotations.DISPLAY to "inline-block") { }
                         +"shown"
                     }
                 }
@@ -129,9 +137,9 @@ class ApplyAccessibilityTest {
         // given — leaving the invisible ancestry restores every other verdict.
         val input = semanticEvents(tagged = true) {
             "div"(AccessibilityAnnotations.VISIBILITY to "hidden") {
-                "section" {
+                "section"(AccessibilityAnnotations.DISPLAY to "block") {
                     "p"(AccessibilityAnnotations.DISPLAY to "none") { +"gone" }
-                    "p" { +"kept" }
+                    "p"(AccessibilityAnnotations.DISPLAY to "block") { +"kept" }
                 }
             }
         }
@@ -142,8 +150,8 @@ class ApplyAccessibilityTest {
         // then
         output sameAs semanticEvents(tagged = true) {
             "div" {
-                "section" {
-                    "p" { +"kept" }
+                "section"(AccessibilityAnnotations.DISPLAY to "block") {
+                    "p"(AccessibilityAnnotations.DISPLAY to "block") { +"kept" }
                 }
             }
         }
@@ -184,7 +192,7 @@ class ApplyAccessibilityTest {
             ) {
                 "tr"(AccessibilityAnnotations.VISIBILITY to "hidden") {
                     "td"(AccessibilityAnnotations.VISIBILITY to "hidden") { +"gone" }
-                    "td" { +"Shown" }
+                    "td"(AccessibilityAnnotations.DISPLAY to "table-cell") { +"Shown" }
                 }
                 "tr"(AccessibilityAnnotations.VISIBILITY to "hidden") {
                     "td"(AccessibilityAnnotations.VISIBILITY to "hidden") { +"gone" }
@@ -200,7 +208,7 @@ class ApplyAccessibilityTest {
             "table" {
                 "tr" {
                     "td" { }
-                    "td" { +"Shown" }
+                    "td"(AccessibilityAnnotations.DISPLAY to "table-cell") { +"Shown" }
                 }
             }
         }
@@ -253,6 +261,162 @@ class ApplyAccessibilityTest {
         // then
         output sameAs semanticEvents(tagged = true) {
             "x-host"(AccessibilityAnnotations.DISPLAY to "contents") { +"kept" }
+        }
+    }
+
+    @Test
+    fun `should keep the text of a display contents element set visible again`() = runTest {
+        // given — the capture records `visible` on a box-less element only
+        // where it differs from what the element would inherit.
+        val input = semanticEvents(tagged = true) {
+            "div"(AccessibilityAnnotations.VISIBILITY to "hidden") {
+                +"gone"
+                "x-host"(
+                    AccessibilityAnnotations.DISPLAY to "contents",
+                    AccessibilityAnnotations.VISIBILITY to "visible"
+                ) { +"shown" }
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "div" {
+                "x-host"(AccessibilityAnnotations.DISPLAY to "contents") { +"shown" }
+            }
+        }
+    }
+
+    @Test
+    fun `should drop an unannotated descendant of an invisible element`() = runTest {
+        // given — a hand-built stream, or a dump captured before every display
+        // was recorded (where an absent annotation may be `display:contents`,
+        // which carries no visibility of its own): only a recorded box shows
+        // the element has a verdict of its own, so anything else inherits.
+        val input = semanticEvents(tagged = true) {
+            "div"(AccessibilityAnnotations.VISIBILITY to "hidden") {
+                "p" { +"secret" }
+            }
+            "p" { +"kept" }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "p" { +"kept" }
+        }
+    }
+
+    @Test
+    fun `should drop the document of an invisible frame`() = runTest {
+        // given — the capture nests a same-origin frame's document in its
+        // <iframe>. `visibility` does not inherit across the document boundary,
+        // so the frame's elements carry no verdict, yet the browser paints
+        // nothing of an invisible frame.
+        val input = semanticEvents(tagged = true) {
+            "iframe"(
+                "src" to "frame.html",
+                AccessibilityAnnotations.DISPLAY to "inline",
+                AccessibilityAnnotations.VISIBILITY to "hidden"
+            ) {
+                "html"(AccessibilityAnnotations.DISPLAY to "block") {
+                    "body"(AccessibilityAnnotations.DISPLAY to "block") { +"framed secret" }
+                }
+            }
+            "p" { +"kept" }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "p" { +"kept" }
+        }
+    }
+
+    @Test
+    fun `should keep the invisible header row of a data table with a visible body`() = runTest {
+        // given — the browser keeps the (blank) header row; dropping it would
+        // promote the first body row to the table's header.
+        val input = semanticEvents(tagged = true) {
+            "table"(AccessibilityAnnotations.ROLE to "table") {
+                "thead"(AccessibilityAnnotations.VISIBILITY to "hidden") {
+                    "tr"(AccessibilityAnnotations.VISIBILITY to "hidden") {
+                        "th"(AccessibilityAnnotations.VISIBILITY to "hidden") { +"A" }
+                    }
+                }
+                "tbody" {
+                    "tr" {
+                        "td" { +"x" }
+                    }
+                }
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "table" {
+                "thead" {
+                    "tr" {
+                        "th" { }
+                    }
+                }
+                "tbody" {
+                    "tr" {
+                        "td" { +"x" }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep the invisible header row of an invisible table around a visible cell`() = runTest {
+        // given — the header row closes while the table's own verdict is still
+        // pending, so it is held with the table and released with it.
+        val input = semanticEvents(tagged = true) {
+            "table"(
+                AccessibilityAnnotations.ROLE to "table",
+                AccessibilityAnnotations.VISIBILITY to "hidden"
+            ) {
+                "thead"(AccessibilityAnnotations.VISIBILITY to "hidden") {
+                    "tr"(AccessibilityAnnotations.VISIBILITY to "hidden") {
+                        "th"(AccessibilityAnnotations.VISIBILITY to "hidden") { +"A" }
+                    }
+                }
+                "tbody"(AccessibilityAnnotations.VISIBILITY to "hidden") {
+                    "tr"(AccessibilityAnnotations.VISIBILITY to "hidden") {
+                        "td"(AccessibilityAnnotations.DISPLAY to "table-cell") { +"x" }
+                    }
+                }
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "table" {
+                "thead" {
+                    "tr" {
+                        "th" { }
+                    }
+                }
+                "tbody" {
+                    "tr" {
+                        "td"(AccessibilityAnnotations.DISPLAY to "table-cell") { +"x" }
+                    }
+                }
+            }
         }
     }
 

@@ -78,42 +78,67 @@ public fun Flow<SemanticEvent>.applyAccessibility(): Flow<SemanticEvent> =
  *
  * The capture records `visibility` for every element that lays out a box, so
  * an inherited `hidden` is on each such descendant. One that lays out none
- * (`display: contents`, `display: none`) carries no verdict of its own and
- * inherits its parent's. An invisible `<td>`/`<th>` in a row that is emitted is
- * kept as an (empty) cell, so the columns after it stay aligned — the row's
- * invisible cells are held (as marks) until the row's verdict is known.
+ * (`display: contents`, `display: none`) carries a verdict only where its own
+ * value differs from the one it inherits (`hidden`, or `visible` again), and
+ * otherwise inherits its parent's — as does a descendant with no recorded
+ * display at all (a hand-built stream, or a dump captured before every display
+ * was recorded, where it may well be `display: contents`). An invisible frame
+ * (`<iframe>`, …) hides the document nested in it whole: `visibility` does not
+ * inherit across the document boundary, so the frame's elements carry no
+ * verdict, yet the browser paints none of them.
+ *
+ * An invisible `<td>`/`<th>` in a row that is emitted is kept as an (empty)
+ * cell, so the columns after it stay aligned, and likewise an invisible
+ * `<thead>` and its rows in a table that is emitted, so the first body row is
+ * not promoted to the table's header — structure closing while the verdict of
+ * its parent is still pending is held (as marks) until that verdict is known.
  */
 private fun Flow<SemanticEvent>.resolveVisibility(): Flow<SemanticEvent> = flow {
 
     class Frame(val mark: SemanticEvent.Mark, val invisible: Boolean, var emitted: Boolean) {
-        // the invisible cells this held-back row closed, re-emitted empty if
-        // the row turns out to be shown
-        val heldCells = mutableListOf<SemanticEvent.Mark>()
+        // the invisible table structure this held-back element closed,
+        // re-emitted empty if the element turns out to be shown
+        val heldStructure = mutableListOf<SemanticEvent>()
     }
 
     val stack = ArrayDeque<Frame>()
+    var skipDepth = 0 // inside an invisible frame's document
 
+    // Emitted frames are always a prefix of the stack: a frame is emitted only
+    // after every ancestor was.
     suspend fun FlowCollector<SemanticEvent>.emitHeldBack() {
-        stack.filter { !it.emitted }.forEach { frame ->
+        val first = stack.indexOfFirst { !it.emitted }
+        if (first < 0) return
+        for (index in first until stack.size) {
+            val frame = stack[index]
             emit(frame.mark)
             frame.emitted = true
-            frame.heldCells.forEach { cell ->
-                emit(cell)
-                emit(SemanticEvent.Unmark(cell.name, isTagged = cell.isTagged))
-            }
+            frame.heldStructure.forEach { emit(it) }
         }
     }
 
     collect { event ->
+        if (skipDepth > 0) {
+            when (event) {
+                is SemanticEvent.Mark -> skipDepth++
+                is SemanticEvent.Unmark -> skipDepth--
+                is SemanticEvent.Text -> { /* drop */ }
+            }
+            return@collect
+        }
         when (event) {
             is SemanticEvent.Mark -> {
                 val parent = stack.lastOrNull()
                 val invisible = event.isInvisible(parentInvisible = parent?.invisible == true)
+                if (invisible && event.name in FRAME_TAGS) {
+                    skipDepth = 1
+                    return@collect
+                }
                 val mark = if (AccessibilityAnnotations.VISIBILITY in event.attributes) {
                     event.copy(attributes = event.attributes - AccessibilityAnnotations.VISIBILITY)
                 } else event
                 val frame = Frame(mark, invisible, emitted = false)
-                if (!invisible || (event.name in TABLE_CELL_TAGS && parent?.emitted == true)) {
+                if (!invisible || (parent?.emitted == true && event.isTableStructure(parent.mark.name))) {
                     if (parent != null && !parent.emitted) emitHeldBack()
                     emit(mark)
                     frame.emitted = true
@@ -123,13 +148,27 @@ private fun Flow<SemanticEvent>.resolveVisibility(): Flow<SemanticEvent> = flow 
             is SemanticEvent.Text -> if (stack.lastOrNull()?.invisible != true) emit(event)
             is SemanticEvent.Unmark -> {
                 val frame = stack.removeLastOrNull()
+                val parent = stack.lastOrNull()
                 if (frame == null || frame.emitted) emit(event)
-                else if (frame.mark.name in TABLE_CELL_TAGS) {
-                    stack.lastOrNull()?.heldCells?.add(frame.mark)
+                else if (parent != null && frame.mark.isTableStructure(parent.mark.name)) {
+                    parent.heldStructure += frame.mark
+                    parent.heldStructure += frame.heldStructure
+                    parent.heldStructure += event
                 }
             }
         }
     }
+}
+
+/**
+ * Whether this element is table structure an emitted parent keeps even when
+ * invisible: a cell holds its column, and a header row keeps the first body
+ * row from becoming the table's header.
+ */
+private fun SemanticEvent.Mark.isTableStructure(parentName: String): Boolean = when (name) {
+    "td", "th", "thead" -> true
+    "tr" -> parentName == "thead"
+    else -> false
 }
 
 /**
@@ -349,18 +388,29 @@ private fun SemanticEvent.Mark.isHidden(honourDisplayNone: Boolean = true): Bool
         || (honourDisplayNone && this[AccessibilityAnnotations.DISPLAY] == "none")
 
 /**
- * Whether this element renders invisible: its own `visibility:hidden` verdict,
- * or — for an element laying out no box, which the capture records no
- * visibility for — the one it inherits from its parent.
+ * Whether this element renders invisible: its own recorded `visibility`
+ * verdict, or — for an element with no recorded box, which carries a verdict
+ * only where it differs from its parent's — the one it inherits.
  */
-private fun SemanticEvent.Mark.isInvisible(parentInvisible: Boolean): Boolean = when {
-    this[AccessibilityAnnotations.VISIBILITY] == "hidden" -> true
-    !parentInvisible -> false
-    else -> this[AccessibilityAnnotations.DISPLAY].let { it == "contents" || it == "none" }
-}
+private fun SemanticEvent.Mark.isInvisible(parentInvisible: Boolean): Boolean =
+    when (this[AccessibilityAnnotations.VISIBILITY]) {
+        "hidden" -> true
+        "visible" -> false
+        // a laid-out box carries its own verdict; anything else inherits
+        else -> parentInvisible && !hasOwnLayoutBox()
+    }
 
-/** The table cells an emitted row keeps even when invisible, holding their column. */
-private val TABLE_CELL_TAGS = setOf("td", "th")
+/**
+ * Whether the capture recorded a box laid out for this element, which then
+ * carries a `visibility` verdict of its own — neither `contents` nor `none`,
+ * and not absent either (never captured, or captured before every display
+ * was recorded, when a `display: contents` was left out too).
+ */
+private fun SemanticEvent.Mark.hasOwnLayoutBox(): Boolean =
+    when (this[AccessibilityAnnotations.DISPLAY]) {
+        null, "contents", "none" -> false
+        else -> true
+    }
 
 private fun SemanticEvent.Mark.isAxIgnoredImage(): Boolean =
     this[AccessibilityAnnotations.IGNORED] == "true"
