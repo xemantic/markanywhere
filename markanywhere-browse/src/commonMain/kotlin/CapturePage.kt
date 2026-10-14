@@ -321,8 +321,9 @@ internal class SnapshotDom(
     /**
      * The value to record for [AccessibilityAnnotations.VISIBILITY], or `null`
      * when nothing should be recorded: `hidden` for an element laid out with
-     * computed `visibility:hidden` (each laid-out descendant inheriting it is
-     * annotated on its own).
+     * computed `visibility:hidden` — or `collapse`, which hides it the same
+     * way (a collapsed table row or column is not painted either) — each
+     * laid-out descendant inheriting it being annotated on its own.
      *
      * An element laying out no box of its own (`display:contents`) has no
      * computed style in the layout tree, so its value is read from the text it
@@ -332,9 +333,9 @@ internal class SnapshotDom(
      * element's own is painted, so its value does not matter.
      */
     fun visibilityAnnotation(index: Int): String? {
-        visibility[index]?.let { return if (it == "hidden") "hidden" else null }
+        visibility[index]?.let { return if (it.normalizedVisibility() == "hidden") "hidden" else null }
         val own = ownVisibility(index) ?: return null
-        val inherited = inheritedVisibility(index)
+        val inherited = parents?.getOrNull(index)?.let { resolvedVisibility.getOrNull(it) } ?: "visible"
         return if (own == inherited) null else own
     }
 
@@ -343,23 +344,28 @@ internal class SnapshotDom(
         if (isText(it)) visibility[it] else null
     }?.normalizedVisibility()
 
-    /** The visibility an element inherits: its nearest ancestor's known one. */
-    private fun inheritedVisibility(index: Int): String {
-        var ancestor = parents?.getOrNull(index) ?: -1
-        while (ancestor >= 0) {
-            (visibility[ancestor] ?: ownVisibility(ancestor))?.let {
-                return it.normalizedVisibility()
-            }
-            ancestor = parents?.getOrNull(ancestor) ?: -1
-        }
-        return "visible"
-    }
-
     private val parents = nodes.parentIndex
 
+    /**
+     * Per node, the visibility its descendants inherit: its own known one, else
+     * its parent's. One pre-order pass (parents precede children in the
+     * flattened array), so a chain of `display:contents` wrappers is not
+     * re-walked for every element in it.
+     */
+    private val resolvedVisibility: Array<String> by lazy {
+        val resolved = Array(nodeType.size) { "visible" }
+        for (index in nodeType.indices) {
+            val parent = parents?.getOrNull(index) ?: -1
+            resolved[index] = (visibility[index]?.normalizedVisibility() ?: ownVisibility(index))
+                ?: if (parent >= 0) resolved[parent] else "visible"
+        }
+        resolved
+    }
+
     // only `hidden` is recorded for a laid-out element, so anything else reads
-    // as visible here as well
-    private fun String.normalizedVisibility(): String = if (this == "hidden") "hidden" else "visible"
+    // as visible here as well; `collapse` hides like `hidden`
+    private fun String.normalizedVisibility(): String =
+        if (this == "hidden" || this == "collapse") "hidden" else "visible"
 
     /**
      * For an `<iframe>` / `<object>` / `<embed>`, the index in the snapshot's

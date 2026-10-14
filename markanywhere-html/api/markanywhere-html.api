@@ -7,6 +7,7 @@ public final class com/xemantic/markanywhere/html/ActionableRef {
 }
 
 public final class com/xemantic/markanywhere/html/ApplyAccessibilityKt {
+	public static final fun applyAccessibility (Lcom/xemantic/markanywhere/transform/TransformerBuilder;)V
 	public static final fun applyAccessibility (Lkotlinx/coroutines/flow/Flow;)Lkotlinx/coroutines/flow/Flow;
 }
 

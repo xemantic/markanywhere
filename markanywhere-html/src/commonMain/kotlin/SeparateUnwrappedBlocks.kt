@@ -85,8 +85,11 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
     val openLinks = ArrayDeque<Int>()
     var linkSerial = 0
     var previousTokenLink = 0
-    // Whether the stream was captured, which a display annotation on any
-    // element so far shows (a dump's `<head>` always carries `none`).
+    // Whether the stream was captured, which any capture annotation on an
+    // element so far shows. Nothing shows it sooner: a dump's `<head>` is
+    // captured raw, and an old dump left the `block` of its `<html>`, `<body>`
+    // and leading wrappers out, so those still read as their tag's UA default
+    // — a `<div>`'s `block`, wrong only for a leading `display: contents` one.
     var captured = false
 
     fun cross(boundary: BlockBoundary) {
@@ -131,7 +134,7 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
         when (event) {
             is Mark -> {
                 val parentIsFlexGrid = stack.lastOrNull()?.isFlexGridContainer == true
-                if (AccessibilityAnnotations.DISPLAY in event.attributes) captured = true
+                if (!captured && event.attributes.keys.any { it in CAPTURE_ANNOTATIONS }) captured = true
                 val boundary = event.blockBoundary(parentIsFlexGrid, captured)
                 if (preserveDepth == 0) {
                     cross(boundary)

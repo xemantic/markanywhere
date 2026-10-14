@@ -205,6 +205,66 @@ class CapturePageTest {
     }
 
     /**
+     * `visibility:collapse` hides an element like `hidden` (a collapsed table
+     * row is not painted), so it is recorded as `hidden`, on a laid-out
+     * element and through the text of a `display:contents` one alike.
+     */
+    @Test
+    fun `should record visibility collapse as hidden`() = runTest {
+        // given
+        val strings = mutableListOf<String>()
+        fun string(value: String): Int =
+            strings.indexOf(value).takeIf { it >= 0 } ?: strings.size.also { strings += value }
+
+        val names = listOf("HTML", "BODY", "DIV", "#text", "SPAN", "#text")
+        val texts = listOf("collapsed", "contents")
+        var textIndex = 0
+        val snapshot = DOMSnapshot.CaptureSnapshotReturn(
+            documents = listOf(
+                document(
+                    nodeType = names.map { if (it == "#text") 3 else 1 },
+                    nodeName = names.map(::string),
+                    nodeValue = names.map { if (it == "#text") string(texts[textIndex++]) else -1 },
+                    parentIndex = listOf(-1, 0, 1, 2, 1, 4),
+                    backendNodeId = names.indices.map { it + 1 },
+                    attributes = names.map { emptyList() },
+                    // the div is laid out collapsed, the span is
+                    // `display:contents`, its text collapsed
+                    layoutNodeIndex = listOf(0, 1, 2, 3, 5),
+                    layoutStyles = listOf(
+                        "block" to "visible",
+                        "block" to "visible",
+                        "block" to "collapse",
+                        "inline" to "collapse",
+                        "inline" to "collapse",
+                    ).map { (display, visibility) ->
+                        listOf(display, visibility, "none").map(::string)
+                    },
+                ),
+            ),
+            strings = strings,
+        )
+
+        // when
+        val events = captureEvents(
+            snapshot = snapshot,
+            axNodes = emptyList(),
+            refAttribute = null,
+            isActionable = { false },
+        ).events
+
+        // then
+        events.asFlow() sameAs semanticEvents(tagged = true) {
+            "html"(DISPLAY to "block") {
+                "body"(DISPLAY to "block") {
+                    "div"(DISPLAY to "block", VISIBILITY to "hidden") { +"collapsed" }
+                    "span"(DISPLAY to "contents", VISIBILITY to "hidden") { +"contents" }
+                }
+            }
+        }
+    }
+
+    /**
      * Form controls are captured with the live state the snapshot reports
      * beside the markup's attributes, through the rules shared with the
      * in-page walker — the redaction of a password and of a control the page

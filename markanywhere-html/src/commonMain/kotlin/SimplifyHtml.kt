@@ -237,6 +237,15 @@ private fun Flow<SemanticEvent>.simplifyHtmlElements(
         return result
     }
 
+    // Whether the keep-attributes of an element that would be unwrapped
+    // promote it to a preserved wrapper, so an attribute the caller asked for
+    // (e.g. a `golemId` correlation id) is not lost with the tag. The display
+    // annotation alone never does: it is downstream whitespace metadata the
+    // capture records on every element, not content, and it is no longer
+    // needed once the element is gone.
+    fun promotes(kept: Map<String, String>): Boolean =
+        kept.keys.any { it != AccessibilityAnnotations.DISPLAY }
+
     // --- aria-hidden subtree drop (must win over every other matcher) ---
 
     // `aria-hidden="true"` removes the element from the accessibility tree
@@ -413,12 +422,12 @@ private fun Flow<SemanticEvent>.simplifyHtmlElements(
     // would otherwise be unwrapped. The now-redundant `role` is dropped (it is
     // not in ARIA_KEEP). `presentation`/`none` is the exception: it strips an
     // element's *own* semantics on purpose, so it applies to any element (e.g. a
-    // layout `<table role="presentation">`), carrying any caller keep-attribute
-    // like the UNWRAPPED_TAGS rule does.
+    // layout `<table role="presentation">`), promoted by a caller
+    // keep-attribute like the UNWRAPPED_TAGS rule is.
     match({ name !in DROPPED_TAGS && this["role"]?.lowercase() in PRESENTATION_ROLES }) { event ->
         val kept = extraKept(event)
-        if (kept.isEmpty()) children()
-        else preserve(event.name, kept) { children() }
+        if (promotes(kept)) preserve(event.name, kept) { children() }
+        else children()
     }
 
     // `role="heading"` + `aria-level` → `h1`–`h6` (ARIA's default level is 2).
@@ -453,11 +462,19 @@ private fun Flow<SemanticEvent>.simplifyHtmlElements(
         }
     }
 
-    // A native `<dialog>` reaching this operator is shown (see
-    // [PRESERVE_WITH_ID_TAGS]), and says so: without `open` a browser
-    // rendering the output hides it.
+    // A native `<dialog>` is kept, not flattened into a stray paragraph: one
+    // on screen is usually a modal blocking the rest of the page — for an
+    // agent, the first thing to act on. It says whether it is shown, since a
+    // browser rendering the output hides a `<dialog>` without `open`: the
+    // source's own `open`, or a captured display, as a closed dialog is
+    // `display: none` per the UA stylesheet and `applyAccessibility` has
+    // already dropped it. A hand-built or parsed stream carries no display,
+    // so a dialog there is shown only if its markup says so.
     match("dialog") { event ->
-        preserve("dialog", DIALOG_SHOWN + preserveAttrs(event, "id")) { children() }
+        val shown = event["open"] != null ||
+                event[AccessibilityAnnotations.DISPLAY].let { it != null && it != "none" }
+        val attrs = preserveAttrs(event, "id")
+        preserve("dialog", if (shown) DIALOG_SHOWN + attrs else attrs) { children() }
     }
 
     // `role="separator"` → thematic break (void).
@@ -477,16 +494,11 @@ private fun Flow<SemanticEvent>.simplifyHtmlElements(
     // Not descending (no children()) skips the wrapper and its whole subtree.
     match({ name in DROPPED_TAGS }) { }
 
-    // Unwrap presentational wrappers — but if one carries a caller-requested
-    // keep-attribute, promote it to a preserved wrapper so the attribute (e.g.
-    // a `golemId` correlation id) is not lost with the unwrapped tag.
+    // Unwrap presentational wrappers — unless their keep-attributes promote
+    // them (see `promotes`).
     match({ name in UNWRAPPED_TAGS }) { event ->
         val kept = extraKept(event)
-        // The display annotation is downstream whitespace metadata, not
-        // meaningful content — it alone must not promote an otherwise-unwrapped
-        // element (and is dropped with the unwrapped tag, as it's no longer
-        // needed once the element is gone).
-        if (kept.keys.all { it == AccessibilityAnnotations.DISPLAY }) children()
+        if (!promotes(kept)) children()
         // A generic element kept for its ref is a control the page built out
         // of a `<div>` — Gmail's checkboxes, star toggles and toolbar buttons
         // carry nothing but `role` and `aria-label`, so without them the agent
@@ -699,12 +711,6 @@ private val PRESERVE_WITH_ID_TAGS = setOf(
     "article", "aside", "footer", "header", "main", "nav", "section",
     "figure", "figcaption", "details", "summary", "address", "hgroup",
     "search",
-    // A closed `<dialog>` is `display:none` per the UA stylesheet, so one that
-    // reaches this operator is on screen — usually a modal blocking the rest of
-    // the page. That is content-level information (and, for an agent, the first
-    // thing to act on), so the tag is kept rather than flattened into a stray
-    // paragraph.
-    "dialog",
     // Markdown-equivalent blocks
     "p", "blockquote", "pre", "hr", "br",
     "h1", "h2", "h3", "h4", "h5", "h6",
@@ -730,8 +736,8 @@ internal val FRAME_TAGS = setOf("iframe", "frame", "object")
 // The capture's own bookkeeping (see [AccessibilityAnnotations]): stripped from
 // a preserved svg element unless the caller asked for one through
 // `keepAttributes`, the way every other preserved element only keeps them
-// through `preserveAttrs`.
-private val CAPTURE_ANNOTATIONS = AccessibilityAnnotations.ALL +
+// through `preserveAttrs`; [separateUnwrappedBlocks] tells a capture by them.
+internal val CAPTURE_ANNOTATIONS = AccessibilityAnnotations.ALL +
         AccessibilityAnnotations.REF + AccessibilityAnnotations.REDACTED
 
 // The short LLM-facing name of [AccessibilityAnnotations.REDACTED] on a form

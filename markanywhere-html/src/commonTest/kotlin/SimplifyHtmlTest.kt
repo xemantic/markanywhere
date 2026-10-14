@@ -780,6 +780,30 @@ class SimplifyHtmlTest {
     }
 
     @Test
+    fun `should unwrap a role presentation element carrying only its display`() = runTest {
+        // given — the capture records a display on every element, and the
+        // pipeline keeps it for the whitespace normalizer; that alone must not
+        // turn a presentational wrapper into a raw tag
+        val input = semanticEvents(tagged = true) {
+            "div"("role" to "presentation", AccessibilityAnnotations.DISPLAY to "block") {
+                +"Hello"
+            }
+            "table"("role" to "none", AccessibilityAnnotations.DISPLAY to "table") {
+                "p" { +"laid out" }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml(keepAttributes = setOf(AccessibilityAnnotations.DISPLAY))
+
+        // then
+        output sameAs semanticEvents {
+            +"Hello"
+            "p" { +"laid out" }
+        }
+    }
+
+    @Test
     fun `should promote the ARIA grid family to a table`() = runTest {
         // given — a data grid built on divs.
         val input = semanticEvents(tagged = true) {
@@ -2772,6 +2796,48 @@ class SimplifyHtmlTest {
         output sameAs semanticEvents {
             tag("dialog", "open" to "", "id" to "consent", "aria-modal" to "true") {
                 "p" { +"in dialog" }
+            }
+        }
+    }
+
+    @Test
+    fun `should mark a captured dialog as shown`() = runTest {
+        // given — captured, so surviving accessibility filtering means it was
+        // laid out, whether the page opened it with `open` or with CSS
+        val input = semanticEvents(tagged = true) {
+            "dialog"(AccessibilityAnnotations.DISPLAY to "block") {
+                "p" { +"in dialog" }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            tag("dialog", "open" to "") {
+                "p" { +"in dialog" }
+            }
+        }
+    }
+
+    @Test
+    fun `should not mark an uncaptured closed dialog as shown`() = runTest {
+        // given — a parsed or hand-built stream: no display verdict, so only
+        // the markup can say the dialog is open, and this one does not
+        val input = semanticEvents(tagged = true) {
+            "dialog"("id" to "confirm") {
+                "p" { +"Delete everything?" }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            tag("dialog", "id" to "confirm") {
+                "p" { +"Delete everything?" }
             }
         }
     }

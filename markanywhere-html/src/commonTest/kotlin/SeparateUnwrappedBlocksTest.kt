@@ -103,12 +103,13 @@ class SeparateUnwrappedBlocksTest {
     @Test
     fun `should not separate across an unannotated div in a dump that left block out`() = runTest {
         // given — a dump captured before every display was recorded: a plain
-        // `block` and a `display: contents` were both left unannotated, so an
-        // absent annotation in a captured stream (the `<head>`'s `none` shows
-        // it is one) cannot be read as the UA default of the tag.
+        // `block` and a `display: contents` were both left unannotated, so once
+        // an annotation shows the stream is a capture (the `<html>`, `<head>`
+        // and `<body>` of such a dump carry none), an absent one cannot be read
+        // as the UA default of the tag.
         val input = semanticEvents(tagged = true) {
             "html" {
-                "head"(AccessibilityAnnotations.DISPLAY to "none") { }
+                "head" { }
                 "body" {
                     "p" {
                         "span"(AccessibilityAnnotations.DISPLAY to "inline") { +"US" }
@@ -128,10 +129,33 @@ class SeparateUnwrappedBlocksTest {
     }
 
     @Test
-    fun `should read an uncaptured element the way the whitespace normalizer does`() = runTest {
-        // given — one UA-default fallback serves both operators: an element
-        // the normalizer reads as a block boundary is a box here too.
+    fun `should recognise a capture by any of its annotations`() = runTest {
+        // given — an old dump's first annotated element may be a control, its
+        // ref the only capture annotation on it
         val input = semanticEvents(tagged = true) {
+            "body" {
+                "a"(AccessibilityAnnotations.REF to "1") { +"US" }
+                "div" { +"$5" }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs input
+    }
+
+    @Test
+    fun `should read an uncaptured custom element as inline like a browser does`() = runTest {
+        // given — the UA stylesheet lays an unknown or custom element out
+        // inline, so a web component inside a word must not split it
+        val input = semanticEvents(tagged = true) {
+            "p" {
+                +"Price: "
+                "x-currency" { +"€" }
+                +"5"
+            }
             "div" {
                 "x-row" { +"first" }
                 "x-row" { +"second" }
@@ -142,15 +166,7 @@ class SeparateUnwrappedBlocksTest {
         val output = input.separateUnwrappedBlocks()
 
         // then
-        output sameAs semanticEvents(tagged = true) {
-            "div" {
-                "x-row" { +"first" }
-                "x-row" {
-                    +" "
-                    +"second"
-                }
-            }
-        }
+        output sameAs input
     }
 
     @Test

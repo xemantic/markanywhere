@@ -62,6 +62,23 @@ public fun Flow<SemanticEvent>.applyAccessibility(): Flow<SemanticEvent> =
     resolveVisibility().transform { accessibilityRuleSet() }
 
 /**
+ * Formerly registered the accessibility rules on a [TransformerBuilder]. The
+ * `visibility:hidden` verdicts now need a streaming pre-pass no rule can
+ * express (a mode cannot return to its caller's), so the policy is only
+ * available as the [Flow] operator: apply it before your own `transform`.
+ */
+@Deprecated(
+    message = "visibility now needs a pre-pass rules cannot express; " +
+            "apply the Flow operator before your own transform instead",
+    level = DeprecationLevel.ERROR,
+)
+public fun TransformerBuilder.applyAccessibility() {
+    throw UnsupportedOperationException(
+        "use Flow<SemanticEvent>.applyAccessibility() before the transform"
+    )
+}
+
+/**
  * Resolves the `visibility:hidden` verdicts ahead of the rule set, the same way
  * wherever the element sits — a layout table's skeleton and a `<select>`'s
  * popup included, which the rule set handles in modes of their own.
@@ -97,8 +114,13 @@ private fun Flow<SemanticEvent>.resolveVisibility(): Flow<SemanticEvent> = flow 
 
     class Frame(val mark: SemanticEvent.Mark, val invisible: Boolean, var emitted: Boolean) {
         // the invisible table structure this held-back element closed,
-        // re-emitted empty if the element turns out to be shown
-        val heldStructure = mutableListOf<SemanticEvent>()
+        // re-emitted empty if the element turns out to be shown — allocated
+        // only by the few elements holding any, not by every mark
+        var heldStructure: MutableList<SemanticEvent>? = null
+
+        fun hold(events: List<SemanticEvent>) {
+            (heldStructure ?: mutableListOf<SemanticEvent>().also { heldStructure = it }) += events
+        }
     }
 
     val stack = ArrayDeque<Frame>()
@@ -113,7 +135,7 @@ private fun Flow<SemanticEvent>.resolveVisibility(): Flow<SemanticEvent> = flow 
             val frame = stack[index]
             emit(frame.mark)
             frame.emitted = true
-            frame.heldStructure.forEach { emit(it) }
+            frame.heldStructure?.forEach { emit(it) }
         }
     }
 
@@ -151,9 +173,9 @@ private fun Flow<SemanticEvent>.resolveVisibility(): Flow<SemanticEvent> = flow 
                 val parent = stack.lastOrNull()
                 if (frame == null || frame.emitted) emit(event)
                 else if (parent != null && frame.mark.isTableStructure(parent.mark.name)) {
-                    parent.heldStructure += frame.mark
-                    parent.heldStructure += frame.heldStructure
-                    parent.heldStructure += event
+                    parent.hold(listOf(frame.mark))
+                    frame.heldStructure?.let { parent.hold(it) }
+                    parent.hold(listOf(event))
                 }
             }
         }
