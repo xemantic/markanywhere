@@ -37,6 +37,7 @@ kotlin {
         commonMain {
             dependencies {
                 api(project(":markanywhere-api"))
+                implementation(project(":markanywhere-html-spec"))
                 api(libs.kotlinx.serialization.core)
             }
         }

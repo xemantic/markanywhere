@@ -16,6 +16,8 @@
 
 package com.xemantic.markanywhere.dump
 
+import com.xemantic.markanywhere.html.spec.splitOnHtmlWhitespace
+
 /**
  * The live state of one form control, as a capture read it from the page.
  *
@@ -73,7 +75,7 @@ public fun hasLiveFormState(name: String): Boolean = name in LIVE_STATE_ELEMENTS
  * `value` is not user input keep their markup: the buttons, `file` (which
  * reports a fake path) and `hidden`.
  *
- * A **secret** control — see [isSecretControl] — has its value dropped, markup
+ * A **secret** control — see [isRedactedControl] — has its value dropped, markup
  * and live alike, and carries [AccessibilityAnnotations.REDACTED] instead,
  * saying only whether it is filled, so a capture shows that the typing landed
  * without showing what was typed. For a secret `<select>` (a card expiry
@@ -86,34 +88,22 @@ public fun formControlAttributes(
     name: String,
     attributes: Map<String, String>,
     state: FormControlState
-): Map<String, String> = when (name) {
-    "input" -> when (attributes.inputType) {
+): Map<String, String> = when {
+    isRedactedControl(name, attributes, state) -> attributes.redacted(
+        filled = !(if (name == "input") state.value ?: attributes["value"] else state.value).isNullOrEmpty()
+    )
+
+    name == "input" -> when (attributes.inputType) {
         "checkbox", "radio" -> attributes.withFlag("checked", state.checked)
         in MARKUP_VALUE_TYPES -> attributes
-        else -> when {
-            isSecretControl(name, attributes, state.masked) -> attributes.redacted(
-                filled = !(state.value ?: attributes["value"]).isNullOrEmpty()
-            )
-
-            else -> when (val value = state.value) {
-                null -> attributes
-                "" -> attributes - "value"
-                else -> attributes + ("value" to value)
-            }
+        else -> when (val value = state.value) {
+            null -> attributes
+            "" -> attributes - "value"
+            else -> attributes + ("value" to value)
         }
     }
 
-    "textarea" ->
-        if (isSecretControl(name, attributes, state.masked)) {
-            attributes.redacted(filled = !state.value.isNullOrEmpty())
-        } else attributes
-
-    "select" ->
-        if (isSecretControl(name, attributes, masked = false)) {
-            attributes.redacted(filled = !state.value.isNullOrEmpty())
-        } else attributes
-
-    "option" -> when {
+    name == "option" -> when {
         state.select != null && isSecretControl("select", state.select, masked = false) ->
             attributes - "selected"
 
@@ -121,6 +111,30 @@ public fun formControlAttributes(
     }
 
     else -> attributes
+}
+
+/**
+ * Whether the capture hides the value of the element named [name] as a
+ * secret (see [isSecretControl]): [formControlAttributes] then drops the value
+ * and marks the control with [AccessibilityAnnotations.REDACTED] instead.
+ *
+ * Whatever else a capture derives from a control's value — an accessible name
+ * the browser composed from it, for instance — asks this rather than deciding
+ * on its own, so that a value hidden on the control never surfaces elsewhere.
+ * Only a text-entry `<input>`, a `<textarea>` and a `<select>` hold such a
+ * value: a checkbox, a button or a `type=hidden` input keeps its markup.
+ */
+public fun isRedactedControl(
+    name: String,
+    attributes: Map<String, String>,
+    state: FormControlState
+): Boolean = when (name) {
+    "input" -> attributes.inputType !in UNREDACTED_INPUT_TYPES &&
+            isSecretControl(name, attributes, state.masked)
+
+    "textarea" -> isSecretControl(name, attributes, state.masked)
+    "select" -> isSecretControl(name, attributes, masked = false)
+    else -> false
 }
 
 /**
@@ -138,7 +152,7 @@ public fun formControlText(
     state: FormControlState
 ): String? = when {
     name != "textarea" -> null
-    isSecretControl(name, attributes, state.masked) -> ""
+    isRedactedControl(name, attributes, state) -> ""
     else -> state.value
 }
 
@@ -186,13 +200,17 @@ private val MARKUP_VALUE_TYPES = setOf(
     "file", "submit", "reset", "button", "image", "hidden"
 )
 
+// the input types whose value is never redacted: either it is not user input
+// or the control's state is a tick, not a value
+private val UNREDACTED_INPUT_TYPES = MARKUP_VALUE_TYPES + setOf("checkbox", "radio")
+
 private val Map<String, String>.inputType: String
     get() = this["type"]?.trim()?.lowercase().orEmpty()
 
 private val Map<String, String>.hasSecretAutocomplete: Boolean
     get() = this["autocomplete"]
         ?.lowercase()
-        ?.split(' ', '\t', '\n', '\u000C', '\r')
+        ?.splitOnHtmlWhitespace()
         ?.any { it in SECRET_AUTOCOMPLETE_TOKENS }
         ?: false
 
