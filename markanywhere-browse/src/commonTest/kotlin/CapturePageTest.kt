@@ -88,7 +88,7 @@ class CapturePageTest {
      * being indistinguishable from a `block` by an absent annotation.
      */
     @Test
-    fun `should record every computed display, block and contents included`() = runTest {
+    fun `should record every computed display including block and contents`() = runTest {
         // given
         val strings = mutableListOf<String>()
         fun string(value: String): Int =
