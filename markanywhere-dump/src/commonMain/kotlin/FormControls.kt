@@ -93,7 +93,7 @@ public fun formControlAttributes(
         filled = !(if (name == "input") state.value ?: attributes["value"] else state.value).isNullOrEmpty()
     )
 
-    name == "input" -> when (attributes.inputType) {
+    name == "input" -> when (inputType(attributes)) {
         "checkbox", "radio" -> attributes.withFlag("checked", state.checked)
         in MARKUP_VALUE_TYPES -> attributes
         else -> when (val value = state.value) {
@@ -129,7 +129,7 @@ public fun isRedactedControl(
     attributes: Map<String, String>,
     state: FormControlState
 ): Boolean = when (name) {
-    "input" -> attributes.inputType !in UNREDACTED_INPUT_TYPES &&
+    "input" -> inputType(attributes) !in UNREDACTED_INPUT_TYPES &&
             isSecretControl(name, attributes, state.masked)
 
     "textarea" -> isSecretControl(name, attributes, state.masked)
@@ -172,7 +172,7 @@ internal fun isSecretControl(
     attributes: Map<String, String>,
     masked: Boolean
 ): Boolean = when (name) {
-    "input" -> attributes.inputType == "password" || masked || attributes.hasSecretAutocomplete
+    "input" -> inputType(attributes) == "password" || masked || attributes.hasSecretAutocomplete
     "textarea" -> masked || attributes.hasSecretAutocomplete
     "select" -> attributes.hasSecretAutocomplete
     else -> false
@@ -204,8 +204,15 @@ private val MARKUP_VALUE_TYPES = setOf(
 // or the control's state is a tick, not a value
 private val UNREDACTED_INPUT_TYPES = MARKUP_VALUE_TYPES + setOf("checkbox", "radio")
 
-private val Map<String, String>.inputType: String
-    get() = this["type"]?.trim()?.lowercase().orEmpty()
+/**
+ * The type of an `<input>` with these [attributes], as the redaction rules read
+ * it: its `type` attribute trimmed and lowercased, empty when absent. Anything
+ * else that classifies inputs — which of them contribute a value to an
+ * accessible name, for instance — reads the type through this function, so it
+ * never disagrees with the redaction verdict.
+ */
+public fun inputType(attributes: Map<String, String>): String =
+    attributes["type"]?.trim()?.lowercase().orEmpty()
 
 private val Map<String, String>.hasSecretAutocomplete: Boolean
     get() = this["autocomplete"]

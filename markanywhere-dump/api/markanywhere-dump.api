@@ -24,6 +24,7 @@ public final class com/xemantic/markanywhere/dump/FormControlsKt {
 	public static final fun formControlAttributes (Ljava/lang/String;Ljava/util/Map;Lcom/xemantic/markanywhere/dump/FormControlState;)Ljava/util/Map;
 	public static final fun formControlText (Ljava/lang/String;Ljava/util/Map;Lcom/xemantic/markanywhere/dump/FormControlState;)Ljava/lang/String;
 	public static final fun hasLiveFormState (Ljava/lang/String;)Z
+	public static final fun inputType (Ljava/util/Map;)Ljava/lang/String;
 	public static final fun isRedactedControl (Ljava/lang/String;Ljava/util/Map;Lcom/xemantic/markanywhere/dump/FormControlState;)Z
 }
 
