@@ -306,26 +306,69 @@ internal class SnapshotDom(
     }
 
     /**
-     * The value to record for [AccessibilityAnnotations.DISPLAY], or `null` when
-     * nothing should be recorded: `none` when the element is not laid out and has
-     * no laid-out descendant (`display:none`), the computed `display` when it is
-     * laid out and that display is not the ubiquitous `block` default (so the
-     * annotation flags only the inline / table / flex / … cases that change how a
-     * downstream whitespace-collapser treats the element's boundaries), and
-     * `null` for a plain `block` element or a not-laid-out `display:contents`
-     * element (whose own box is transparent — its children's display is what
-     * matters).
+     * The value to record for [AccessibilityAnnotations.DISPLAY] — recorded on
+     * every element, so that a stream without it can only mean one that was
+     * never captured: the computed `display` when the element is laid out (the
+     * plain `block` default included), `contents` when it lays out no box of
+     * its own while a descendant does (`display:contents`, whose box is
+     * transparent — its children's display is what matters), and `none` when
+     * nothing in its subtree is laid out (`display:none`).
      */
     fun displayAnnotation(
         index: Int
-    ): String? = when (val display = display[index]) {
-        null -> if (subtreeHasLayout[index]) null else "none"
-        "block" -> null
-        else -> display
+    ): String = display[index] ?: if (subtreeHasLayout[index]) "contents" else "none"
+
+    /**
+     * The value to record for [AccessibilityAnnotations.VISIBILITY], or `null`
+     * when nothing should be recorded: `hidden` for an element laid out with
+     * computed `visibility:hidden` — or `collapse`, which hides it the same
+     * way (a collapsed table row or column is not painted either) — each
+     * laid-out descendant inheriting it being annotated on its own.
+     *
+     * An element laying out no box of its own (`display:contents`) has no
+     * computed style in the layout tree, so its value is read from the text it
+     * lays out, which inherits it, and recorded only where it differs from what
+     * the element inherits: `hidden` set on the element itself, or `visible`
+     * set back under a hidden ancestor. Without such text nothing of the
+     * element's own is painted, so its value does not matter.
+     */
+    fun visibilityAnnotation(index: Int): String? {
+        visibility[index]?.let { return if (it.normalizedVisibility() == "hidden") "hidden" else null }
+        val own = visibilities.own[index] ?: return null
+        val inherited = parentIndex?.getOrNull(index)?.let { visibilities.resolved.getOrNull(it) } ?: "visible"
+        return if (own == inherited) null else own
     }
 
-    /** Whether the element is laid out with computed `visibility:hidden`. */
-    fun isVisibilityHidden(index: Int): Boolean = visibility[index] == "hidden"
+    /** The visibility a box-less element's directly laid-out text inherits from it. */
+    private fun ownVisibility(index: Int): String? = children[index].firstNotNullOfOrNull {
+        if (isText(it)) visibility[it] else null
+    }?.normalizedVisibility()
+
+    /**
+     * Per node, its own known visibility ([Visibilities.own] — computed, or
+     * read from its text for a box-less element) and the one its descendants
+     * inherit ([Visibilities.resolved] — its own, else its parent's). One
+     * pre-order pass (parents precede children in the flattened array), so a
+     * chain of `display:contents` wrappers is not re-walked for every element
+     * in it, and no element's children are scanned twice.
+     */
+    private val visibilities: Visibilities by lazy {
+        val own = arrayOfNulls<String>(nodeType.size)
+        val resolved = Array(nodeType.size) { "visible" }
+        for (index in nodeType.indices) {
+            val parent = parentIndex?.getOrNull(index) ?: -1
+            own[index] = visibility[index]?.normalizedVisibility() ?: ownVisibility(index)
+            resolved[index] = own[index] ?: if (parent >= 0) resolved[parent] else "visible"
+        }
+        Visibilities(own, resolved)
+    }
+
+    private class Visibilities(val own: Array<String?>, val resolved: Array<String>)
+
+    // only `hidden` is recorded for a laid-out element, so anything else reads
+    // as visible here as well; `collapse` hides like `hidden`
+    private fun String.normalizedVisibility(): String =
+        if (this == "hidden" || this == "collapse") "hidden" else "visible"
 
     /**
      * For an `<iframe>` / `<object>` / `<embed>`, the index in the snapshot's
@@ -542,11 +585,9 @@ internal class DomEventBuilder(
                 result[AccessibilityAnnotations.ROLE] = it
             }
         }
-        dom.displayAnnotation(element)?.let {
-            result[AccessibilityAnnotations.DISPLAY] = it
-        }
-        if (dom.isVisibilityHidden(element)) {
-            result[AccessibilityAnnotations.VISIBILITY] = "hidden"
+        result[AccessibilityAnnotations.DISPLAY] = dom.displayAnnotation(element)
+        dom.visibilityAnnotation(element)?.let {
+            result[AccessibilityAnnotations.VISIBILITY] = it
         }
         // Blink's own decorative-image verdict: an <img> kept out of the
         // accessibility tree is decorative / redundant. Recorded for images

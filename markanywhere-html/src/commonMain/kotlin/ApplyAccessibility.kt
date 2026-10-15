@@ -18,27 +18,30 @@ package com.xemantic.markanywhere.html
 
 import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.dump.AccessibilityAnnotations
+import com.xemantic.markanywhere.html.spec.isHtmlBlank
 import com.xemantic.markanywhere.transform.MatcherScope
 import com.xemantic.markanywhere.transform.TransformerBuilder
 import com.xemantic.markanywhere.transform.transform
 import kotlinx.coroutines.flow.Flow
-
-public fun Flow<SemanticEvent>.applyAccessibility(): Flow<SemanticEvent> = transform {
-    applyAccessibility()
-}
+import kotlinx.coroutines.flow.FlowCollector
+import kotlinx.coroutines.flow.flow
 
 /**
  * Applies the browser's accessibility verdicts that a page dump recorded as
  * reserved annotations (see [AccessibilityAnnotations]) onto an otherwise
  * untouched, full-DOM event stream:
  *
- * - **Drop hidden subtrees** — an element with `aria-hidden="true"`,
- *   [AccessibilityAnnotations.DISPLAY] `= none` (`display:none`), or
- *   [AccessibilityAnnotations.VISIBILITY] `= hidden` (`visibility:hidden`) is
- *   dropped together with its whole subtree. Inside a `<select>` the
- *   `display:none` half of that rule is suspended — the popup lays out no box
- *   for any of its content, which the capture cannot tell apart from real
- *   hiding (see [SELECT_CONTENT_MODE]).
+ * - **Drop hidden subtrees** — an element with `aria-hidden="true"` or
+ *   [AccessibilityAnnotations.DISPLAY] `= none` (`display:none`) is dropped
+ *   together with its whole subtree. Inside a `<select>` the `display:none`
+ *   half of that rule is suspended — the popup lays out no box for any of its
+ *   content, which the capture cannot tell apart from real hiding (see
+ *   [SELECT_CONTENT_MODE]).
+ * - **Drop invisible content, not its visible descendants** — the text of an
+ *   element with [AccessibilityAnnotations.VISIBILITY] `= hidden`
+ *   (`visibility:hidden`) is dropped, and the element itself only when nothing
+ *   below it is visible: unlike `display:none`, `visibility` is inherited and a
+ *   descendant may set it back to `visible` (see [resolveVisibility]).
  * - **Unwrap layout tables** — a `<table>` whose computed role
  *   ([AccessibilityAnnotations.ROLE]) is not a data-table role (Blink's
  *   `LayoutTable`, `generic`, `none`, …) emits no mark; its structural
@@ -54,11 +57,166 @@ public fun Flow<SemanticEvent>.applyAccessibility(): Flow<SemanticEvent> = trans
  * lossless dump be replayed against different filtering rules.
  *
  * In the HTML→Markdown pipeline this runs *before* `simplifyHtml` (which then
- * sees a tree already cleaned of hidden/layout noise). Registers its rules on
- * the receiving [TransformerBuilder]; use it inside a
- * [com.xemantic.markanywhere.transform.transform] block.
+ * sees a tree already cleaned of hidden/layout noise).
  */
+public fun Flow<SemanticEvent>.applyAccessibility(): Flow<SemanticEvent> =
+    resolveVisibility().transform { accessibilityRuleSet() }
+
+/**
+ * Formerly registered the accessibility rules on a [TransformerBuilder]. The
+ * `visibility:hidden` verdicts now need a streaming pre-pass no rule can
+ * express (a mode cannot return to its caller's), so the policy is only
+ * available as the [Flow] operator: apply it before your own `transform`.
+ */
+@Deprecated(
+    message = "visibility now needs a pre-pass rules cannot express; " +
+            "apply the Flow operator before your own transform instead",
+    level = DeprecationLevel.ERROR,
+)
 public fun TransformerBuilder.applyAccessibility() {
+    throw UnsupportedOperationException(
+        "use Flow<SemanticEvent>.applyAccessibility() before the transform"
+    )
+}
+
+/**
+ * Resolves the `visibility:hidden` verdicts ahead of the rule set, the same way
+ * wherever the element sits — a layout table's skeleton and a `<select>`'s
+ * popup included, which the rule set handles in modes of their own.
+ *
+ * `visibility` is inherited and a descendant can set it back to `visible`
+ * (Gmail's compose dialog sits in a `visibility:hidden` host), so an invisible
+ * element is not a hidden *subtree*: its own text is dropped, and its mark is
+ * held back until a visible descendant shows that its box still matters —
+ * the `<a>` a visible label clicks through, the `<table>`/`<tr>` a visible cell
+ * sits in, the `<form>` a visible input submits. An invisible element with
+ * nothing visible below it is dropped whole. Only marks are held, never
+ * content: nothing is emitted while the verdict is pending, as everything
+ * below an invisible element is either dropped text or another pending mark.
+ *
+ * The capture records `visibility` for every element that lays out a box, so
+ * an inherited `hidden` is on each such descendant. One that lays out none
+ * (`display: contents`, `display: none`) carries a verdict only where its own
+ * value differs from the one it inherits (`hidden`, or `visible` again), and
+ * otherwise inherits its parent's — as does a descendant with no recorded
+ * display at all (a hand-built stream, or a dump captured before every display
+ * was recorded, where it may well be `display: contents`). An invisible frame
+ * (`<iframe>`, …) hides the document nested in it whole: `visibility` does not
+ * inherit across the document boundary, so the frame's elements carry no
+ * verdict, yet the browser paints none of them.
+ *
+ * The whitespace-only text of an invisible element is kept, held back like
+ * the marks: should the element be kept for a visible descendant, it is what
+ * separates the visible content on either side (`Inbox Sent`, not
+ * `InboxSent`); dropped with the element otherwise.
+ *
+ * The `<head>` never inherits invisibility: its metadata is not painted at
+ * all, so `visibility` does not apply to it, and the capture leaves it
+ * unannotated — inheriting an anti-flicker `html { visibility: hidden }` lost
+ * the page's title and front matter.
+ *
+ * An invisible `<td>`/`<th>` in a row that is emitted is kept as an (empty)
+ * cell, so the columns after it stay aligned, and likewise an invisible
+ * `<thead>` and its rows in a table that is emitted, so the first body row is
+ * not promoted to the table's header — structure closing while the verdict of
+ * its parent is still pending is held (as marks) until that verdict is known.
+ */
+private fun Flow<SemanticEvent>.resolveVisibility(): Flow<SemanticEvent> = flow {
+
+    class Frame(val mark: SemanticEvent.Mark, val invisible: Boolean, var emitted: Boolean) {
+        // the invisible table structure this held-back element closed,
+        // re-emitted empty if the element turns out to be shown — allocated
+        // only by the few elements holding any, not by every mark
+        var heldStructure: MutableList<SemanticEvent>? = null
+
+        fun hold(events: List<SemanticEvent>) {
+            (heldStructure ?: mutableListOf<SemanticEvent>().also { heldStructure = it }) += events
+        }
+    }
+
+    val stack = ArrayDeque<Frame>()
+    var skipDepth = 0 // inside an invisible frame's document
+
+    // Emitted frames are always a prefix of the stack: a frame is emitted only
+    // after every ancestor was.
+    suspend fun FlowCollector<SemanticEvent>.emitHeldBack() {
+        val first = stack.indexOfFirst { !it.emitted }
+        if (first < 0) return
+        for (index in first until stack.size) {
+            val frame = stack[index]
+            emit(frame.mark)
+            frame.emitted = true
+            frame.heldStructure?.forEach { emit(it) }
+        }
+    }
+
+    collect { event ->
+        if (skipDepth > 0) {
+            when (event) {
+                is SemanticEvent.Mark -> skipDepth++
+                is SemanticEvent.Unmark -> skipDepth--
+                is SemanticEvent.Text -> { /* drop */ }
+            }
+            return@collect
+        }
+        when (event) {
+            is Mark -> {
+                val parent = stack.lastOrNull()
+                val invisible = event.isInvisible(parentInvisible = parent?.invisible == true)
+                if (invisible && event.name in FRAME_TAGS) {
+                    skipDepth = 1
+                    return@collect
+                }
+                val mark = if (AccessibilityAnnotations.VISIBILITY in event.attributes) {
+                    event.copy(attributes = event.attributes - AccessibilityAnnotations.VISIBILITY)
+                } else event
+                val frame = Frame(mark, invisible, emitted = false)
+                if (!invisible || (parent?.emitted == true && event.isTableStructure(parent.mark.name))) {
+                    if (parent != null && !parent.emitted) emitHeldBack()
+                    emit(mark)
+                    frame.emitted = true
+                }
+                stack.addLast(frame)
+            }
+            is Text -> {
+                val parent = stack.lastOrNull()
+                if (parent?.invisible != true) emit(event)
+                // the whitespace of an element kept for a visible descendant
+                // still separates the visible content on either side of it
+                else if (event.text.isHtmlBlank()) {
+                    if (parent.emitted) emit(event) else parent.hold(listOf(event))
+                }
+            }
+            is Unmark -> {
+                val frame = stack.removeLastOrNull()
+                val parent = stack.lastOrNull()
+                if (frame == null || frame.emitted) emit(event)
+                else if (parent != null && frame.mark.isTableStructure(parent.mark.name)) {
+                    parent.hold(listOf(frame.mark))
+                    frame.heldStructure?.let { parent.hold(it) }
+                    parent.hold(listOf(event))
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Whether this element is table structure an emitted parent keeps even when
+ * invisible: a cell holds its column, and a header row keeps the first body
+ * row from becoming the table's header.
+ */
+private fun SemanticEvent.Mark.isTableStructure(parentName: String): Boolean = when (name) {
+    "td", "th", "thead" -> true
+    "tr" -> parentName == "thead"
+    else -> false
+}
+
+/**
+ * The rules applying every verdict but `visibility`, which [resolveVisibility]
+ * has already resolved.
+ */
+private fun TransformerBuilder.accessibilityRuleSet() {
 
     // --- default mode ---------------------------------------------------
 
@@ -222,8 +380,9 @@ private const val LAYOUT_TABLE_IN_SELECT_MODE = "layoutTableInSelect"
  *
  * So in this mode the `display:none` drop is suspended and the meaningless
  * annotation is stripped (see [passThrough]), while everything else still
- * applies: `aria-hidden` / `visibility:hidden` are author signals and still
- * hide, [NEVER_RENDERED_TAGS] are still dropped, and a hidden `<select>` never
+ * applies: `aria-hidden` is an author signal and still hides (as does
+ * `visibility:hidden`, resolved before any mode — see [resolveVisibility]),
+ * [NEVER_RENDERED_TAGS] are still dropped, and a hidden `<select>` never
  * enters this mode at all — the hidden-subtree rule matches first and takes its
  * whole subtree with it.
  *
@@ -268,7 +427,32 @@ private val DATA_TABLE_ROLES = setOf("table", "grid", "treegrid")
 private fun SemanticEvent.Mark.isHidden(honourDisplayNone: Boolean = true): Boolean =
     this["aria-hidden"]?.equals("true", ignoreCase = true) == true
         || (honourDisplayNone && this[AccessibilityAnnotations.DISPLAY] == "none")
-        || this[AccessibilityAnnotations.VISIBILITY] == "hidden"
+
+/**
+ * Whether this element renders invisible: its own recorded `visibility`
+ * verdict, or — for an element with no recorded box, which carries a verdict
+ * only where it differs from its parent's — the one it inherits.
+ */
+private fun SemanticEvent.Mark.isInvisible(parentInvisible: Boolean): Boolean =
+    if (name == "head") false
+    else when (this[AccessibilityAnnotations.VISIBILITY]) {
+        "hidden" -> true
+        "visible" -> false
+        // a laid-out box carries its own verdict; anything else inherits
+        else -> parentInvisible && !hasOwnLayoutBox()
+    }
+
+/**
+ * Whether the capture recorded a box laid out for this element, which then
+ * carries a `visibility` verdict of its own — neither `contents` nor `none`,
+ * and not absent either (never captured, or captured before every display
+ * was recorded, when a `display: contents` was left out too).
+ */
+private fun SemanticEvent.Mark.hasOwnLayoutBox(): Boolean =
+    when (this[AccessibilityAnnotations.DISPLAY]) {
+        null, "contents", "none" -> false
+        else -> true
+    }
 
 private fun SemanticEvent.Mark.isAxIgnoredImage(): Boolean =
     this[AccessibilityAnnotations.IGNORED] == "true"
@@ -278,13 +462,15 @@ private fun SemanticEvent.Mark.isAxIgnoredImage(): Boolean =
  * its descendants — the single verdict a `<select>`'s popup content produces,
  * and the only state in which the missing box is uninterpretable.
  *
- * An **absent** annotation is emphatically not this state: the capture omits
- * the annotation for a laid-out element whose computed display is the plain
- * `block` default (and for a not-laid-out `display:contents` element that does
- * have laid-out descendants) — see `CapturePage.displayAnnotation()`. Reading
- * "no annotation" as "no layout box" would keep the popup exemption alive
- * across a laid-out listbox `<option>` or a plain-`block` `<button>` face, and
- * a genuine `display:none` below it would then leak into the output.
+ * Any other value is not this state — a laid-out `block` or `inline-block`,
+ * and equally `contents` (no box of its own, but laid-out descendants) — and
+ * neither is an **absent** annotation: the stream was never captured, or was
+ * captured before the capture recorded every element's display (see
+ * `CapturePage.displayAnnotation()`), when a plain `block` was left out.
+ * Reading "no annotation" as "no layout box" would keep the popup exemption
+ * alive across a laid-out listbox `<option>` or a plain-`block` `<button>`
+ * face, and a genuine `display:none` below it would then leak into the
+ * output.
  */
 private fun SemanticEvent.Mark.hasNoLayoutBox(): Boolean =
     this[AccessibilityAnnotations.DISPLAY] == "none"

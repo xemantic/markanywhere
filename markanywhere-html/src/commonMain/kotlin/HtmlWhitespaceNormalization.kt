@@ -143,7 +143,7 @@ public fun Flow<SemanticEvent>.dropHtmlStructuralWhitespace(): Flow<SemanticEven
                 depth--
                 // The closing tag reads back its open-tag inline verdict.
                 val inline = inlineStack.removeLastOrNull()
-                    ?: (event.name in INLINE_HTML_ELEMENTS)
+                    ?: isInlineByUaDefault(event.name)
                 if (inline && pending) {
                     // An inline close is no boundary for whitespace: the run
                     // before it (`<b>Note: </b>text`) still separates the
@@ -189,19 +189,62 @@ private fun SemanticEvent.Mark.isPreserveRegion(): Boolean =
 // any `inline*` value (`inline`, `inline-block`, …) is inline, everything else
 // (`block`, `flex`, `grid`, `table-cell`, `list-item`, …) is a block boundary —
 // this honours CSS overrides a tag-name set can't see (`<span style=display:block>`).
+// `contents` lays out no box of its own, so it is no boundary either: whitespace
+// touching it belongs to the inline flow around it.
 // When no display annotation is present (synthetic / Markdown-native streams) it
-// falls back to the [INLINE_HTML_ELEMENTS] tag-name heuristic.
+// falls back to the UA default of the tag ([isInlineByUaDefault]).
+//
+// The synthetic `frontmatter` block (`simplifyHtml`'s, or the parser's) is no
+// HTML element at all: a browser would lay an unknown tag out inline, but it
+// is document metadata standing apart from the body, so it is a block.
 private fun SemanticEvent.Mark.isInlineLevel(): Boolean =
-    this[AccessibilityAnnotations.DISPLAY]?.startsWith("inline") ?: (name in INLINE_HTML_ELEMENTS)
+    when (val display = this[AccessibilityAnnotations.DISPLAY]) {
+        null -> name != "frontmatter" && isInlineByUaDefault()
+        "contents" -> true
+        else -> display.startsWith("inline")
+    }
 
-// HTML phrasing / inline-level elements: whitespace touching their boundaries
-// is part of inline flow and collapses to a single space rather than being
-// dropped. Everything not listed here (div, p, section, li, table, …, and any
-// unknown / custom tag) is treated as a block boundary. Used only as a fallback
-// by [isInlineLevel] when the dump carries no computed-display annotation.
-private val INLINE_HTML_ELEMENTS = setOf(
-    "a", "abbr", "b", "bdi", "bdo", "big", "cite", "code", "data", "dfn",
-    "em", "font", "i", "img", "ins", "del", "kbd", "label", "mark", "q",
-    "rp", "rt", "ruby", "s", "samp", "small", "span", "strike", "strong",
-    "sub", "sup", "time", "tt", "u", "var", "wbr",
+/**
+ * Whether the UA stylesheet lays this element out inline — the one fallback
+ * every operator uses for an element with no captured display (a hand-built or
+ * Markdown-native stream), so they cannot read the same element differently.
+ */
+internal fun SemanticEvent.Mark.isInlineByUaDefault(): Boolean = isInlineByUaDefault(name)
+
+private fun isInlineByUaDefault(name: String): Boolean = name !in UA_NON_INLINE_ELEMENTS
+
+/**
+ * Whether the UA stylesheet never renders this element (`display: none`) —
+ * the subset of the non-inline elements laying out no box at all.
+ */
+internal fun SemanticEvent.Mark.isNeverRenderedByUaDefault(): Boolean = name in UA_NEVER_RENDERED_ELEMENTS
+
+private val UA_NEVER_RENDERED_ELEMENTS = setOf(
+    "head", "title", "meta", "link", "base", "style", "script", "noscript",
+    "template", "area", "datalist", "param", "source", "track", "noembed",
+    "noframes",
 )
+
+// The elements the HTML rendering section (WHATWG HTML §15.3) lays out as
+// anything but inline — `block`, `list-item`, the `table-*` family — plus the
+// ones it never renders (`display: none`), which are no inline content either,
+// and `br`, a line break rather than a space. The polarity matters: every other
+// element, an unknown or custom one (`x-currency`, `my-b`) included, is inline
+// by default, as in a browser, so a web component inside a word does not split
+// it (`Price: <x-currency>€</x-currency>5`).
+private val UA_NON_INLINE_ELEMENTS = setOf(
+    // block
+    "html", "body", "address", "article", "aside", "blockquote", "center",
+    "dialog", "dir", "div", "dd", "details", "dl", "dt", "fieldset",
+    "figcaption", "figure", "footer", "form", "frame", "frameset",
+    "h1", "h2", "h3", "h4", "h5", "h6", "header", "hgroup", "hr", "legend",
+    "listing", "main", "menu", "nav", "ol", "optgroup", "option", "p",
+    "plaintext", "pre", "search", "section", "summary", "ul", "xmp",
+    // list-item
+    "li",
+    // table
+    "table", "caption", "colgroup", "col", "thead", "tbody", "tfoot", "tr",
+    "td", "th",
+    // line break
+    "br",
+) + UA_NEVER_RENDERED_ELEMENTS

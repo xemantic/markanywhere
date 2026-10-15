@@ -213,6 +213,32 @@ class HtmlWhitespaceNormalizationTest {
     }
 
     @Test
+    fun `should drop whitespace between the frontmatter block and the body text`() = runTest {
+        // given — `simplifyHtml` unwraps the `<body>`, so its leading
+        // whitespace and first text follow the front matter directly; the
+        // synthetic block is no inline element, whatever a browser would make
+        // of an unknown tag
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"Shop" }
+            }
+            +"\n  "
+            +"Hello"
+        }
+
+        // when
+        val output = input.dropHtmlStructuralWhitespace()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"Shop" }
+            }
+            +"Hello"
+        }
+    }
+
+    @Test
     fun `should preserve non-breaking spaces as content`() = runTest {
         // given — NBSP (U+00A0) is content, not structural whitespace: HTML
         // never collapses it (e.g. legal citations keep "\u00A0823" together).
@@ -313,6 +339,32 @@ class HtmlWhitespaceNormalizationTest {
         output sameAs semanticEvents(tagged = true) {
             "a"("href" to "/x") { +"A" }
             "span" { +"B" }
+        }
+    }
+
+    @Test
+    fun `should keep space around a display contents wrapper`() = runTest {
+        // given — a `display: contents` `<div>` lays out no box of its own, so
+        // the whitespace touching it separates the inline content on either
+        // side, whatever its tag name says.
+        val input = semanticEvents(tagged = true) {
+            "span"(AccessibilityAnnotations.DISPLAY to "inline") { +"A" }
+            +" "
+            "div"(AccessibilityAnnotations.DISPLAY to "contents") {
+                "span"(AccessibilityAnnotations.DISPLAY to "inline") { +"B" }
+            }
+        }
+
+        // when
+        val output = input.dropHtmlStructuralWhitespace()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "span" { +"A" }
+            +" "
+            "div" {
+                "span" { +"B" }
+            }
         }
     }
 }

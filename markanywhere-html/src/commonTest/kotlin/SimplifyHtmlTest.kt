@@ -780,6 +780,30 @@ class SimplifyHtmlTest {
     }
 
     @Test
+    fun `should unwrap a role presentation element carrying only its display`() = runTest {
+        // given — the capture records a display on every element, and the
+        // pipeline keeps it for the whitespace normalizer; that alone must not
+        // turn a presentational wrapper into a raw tag
+        val input = semanticEvents(tagged = true) {
+            "div"("role" to "presentation", AccessibilityAnnotations.DISPLAY to "block") {
+                +"Hello"
+            }
+            "table"("role" to "none", AccessibilityAnnotations.DISPLAY to "table") {
+                "p" { +"laid out" }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml(keepAttributes = setOf(AccessibilityAnnotations.DISPLAY))
+
+        // then
+        output sameAs semanticEvents {
+            +"Hello"
+            "p" { +"laid out" }
+        }
+    }
+
+    @Test
     fun `should promote the ARIA grid family to a table`() = runTest {
         // given — a data grid built on divs.
         val input = semanticEvents(tagged = true) {
@@ -2517,6 +2541,103 @@ class SimplifyHtmlTest {
     }
 
     @Test
+    fun `should keep role and accessible name on a generic element carrying a ref`() = runTest {
+        // given — Gmail builds its checkbox, star and toolbar controls out of
+        // `div`/`span` that carry nothing but `role` and ARIA name/state.
+        val input = semanticEvents(tagged = true) {
+            "body" {
+                "div"(
+                    "role" to "checkbox",
+                    "aria-checked" to "false",
+                    "aria-labelledby" to ":1qi",
+                    "class" to "oZ-jc",
+                    AccessibilityAnnotations.REF to "137"
+                ) { }
+                "span"(
+                    "role" to "button",
+                    "aria-label" to "Not starred",
+                    "data-tooltip" to "Not starred",
+                    AccessibilityAnnotations.REF to "138"
+                ) { }
+                "span"("role" to "button", "aria-label" to "no ref") { +"plain" }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml(
+            keepAttributes = setOf(AccessibilityAnnotations.REF)
+        )
+
+        // then — the ref-carrying controls keep role + ARIA name/state, the
+        // id-reference and presentational noise go, and an element without a
+        // ref still unwraps.
+        output sameAs semanticEvents {
+            tag(
+                "div",
+                "role" to "checkbox",
+                "aria-checked" to "false",
+                AccessibilityAnnotations.REF to "137"
+            ) { }
+            tag(
+                "span",
+                "role" to "button",
+                "aria-label" to "Not starred",
+                AccessibilityAnnotations.REF to "138"
+            ) { }
+            +"plain"
+        }
+    }
+
+    @Test
+    fun `should promote a div with role dialog claiming modality to a dialog`() = runTest {
+        // given — `aria-modal` is the author's claim that the dialog blocks the
+        // page, the one thing a `<dialog>` in the output tells the agent.
+        val input = semanticEvents(tagged = true) {
+            "div"("role" to "dialog", "aria-modal" to "true", "aria-label" to "Consent", "class" to "nH") {
+                "p" { +"body" }
+            }
+            "div"("role" to "alertdialog", "aria-modal" to "true") { +"Are you sure?" }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then — `open`, since a `<dialog>` without it renders hidden, and an
+        // alert dialog keeps its role, the one thing telling it apart
+        output sameAs semanticEvents {
+            tag("dialog", "open" to "", "aria-label" to "Consent", "aria-modal" to "true") {
+                "p" { +"body" }
+            }
+            tag("dialog", "open" to "", "role" to "alertdialog", "aria-modal" to "true") { +"Are you sure?" }
+        }
+    }
+
+    @Test
+    fun `should keep a div with role dialog not claiming modality as a section`() = runTest {
+        // given — a closed native `<dialog>` is `display: none`, so surviving
+        // means shown; a `<div role="dialog">` makes no such promise (drawers
+        // and popovers hidden by a transform or `opacity: 0` keep their role),
+        // so without `aria-modal` it is a labelled region, not a blocking modal.
+        val input = semanticEvents(tagged = true) {
+            "div"("role" to "dialog", "aria-label" to "Compose: New Message", "class" to "nH") {
+                "p" { +"body" }
+            }
+            "div"("role" to "alertdialog", "aria-modal" to "false") { +"Saved" }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            tag("section", "role" to "dialog", "aria-label" to "Compose: New Message") {
+                "p" { +"body" }
+            }
+            tag("section", "role" to "alertdialog", "aria-modal" to "false") { +"Saved" }
+        }
+    }
+
+    @Test
     fun `should not resurrect a dropped or aria-hidden subtree via a keep-attribute`() = runTest {
         // given
         val input = semanticEvents(tagged = true) {
@@ -2670,10 +2791,80 @@ class SimplifyHtmlTest {
         // when
         val output = input.simplifyHtml()
 
+        // then — `open` is kept (normalised), or a browser rendering the
+        // output would hide the dialog the page showed
+        output sameAs semanticEvents {
+            tag("dialog", "open" to "", "id" to "consent", "aria-modal" to "true") {
+                "p" { +"in dialog" }
+            }
+        }
+    }
+
+    @Test
+    fun `should mark a captured dialog as shown`() = runTest {
+        // given — captured, so surviving accessibility filtering means it was
+        // laid out, whether the page opened it with `open` or with CSS
+        val input = semanticEvents(tagged = true) {
+            "dialog"(AccessibilityAnnotations.DISPLAY to "block") {
+                "p" { +"in dialog" }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
         // then
         output sameAs semanticEvents {
-            tag("dialog", "id" to "consent", "aria-modal" to "true") {
+            tag("dialog", "open" to "") {
                 "p" { +"in dialog" }
+            }
+        }
+    }
+
+    @Test
+    fun `should not mark an uncaptured closed dialog as shown`() = runTest {
+        // given — a parsed or hand-built stream: no display verdict, so only
+        // the markup can say the dialog is open, and this one does not
+        val input = semanticEvents(tagged = true) {
+            "dialog"("id" to "confirm") {
+                "p" { +"Delete everything?" }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            tag("dialog", "id" to "confirm") {
+                "p" { +"Delete everything?" }
+            }
+        }
+    }
+
+
+    @Test
+    fun `should mark a dialog shown in a dump that left block out`() = runTest {
+        // given — a dump captured before every display was recorded left a
+        // plain `block` out, so a dialog the page showed through CSS carries
+        // no display of its own; that the stream is a capture shows earlier
+        val input = semanticEvents(tagged = true) {
+            "body" {
+                "span"(AccessibilityAnnotations.DISPLAY to "inline") { +"Menu" }
+                "dialog"("class" to "cookie") {
+                    "p" { +"Accept cookies?" }
+                }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            +"Menu"
+            tag("dialog", "open" to "") {
+                "p" { +"Accept cookies?" }
             }
         }
     }
