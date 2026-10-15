@@ -45,7 +45,7 @@ class PageSessionTest {
 
         // then
         dump.events.asFlow() sameAs semanticEvents(tagged = true) {
-            "html"("lang" to "en") {
+            "html"("lang" to "en", "data-markanywhere-display" to "block") {
                 "head" {
                     +"\n    "
                     "title" {
@@ -54,9 +54,9 @@ class PageSessionTest {
                     +"\n"
                 }
                 +"\n"
-                "body" {
+                "body"("data-markanywhere-display" to "block") {
                     +"\n"
-                    "h1" {
+                    "h1"("data-markanywhere-display" to "block") {
                         +"Hello"
                     }
                     +"\n\n\n"
@@ -73,7 +73,7 @@ class PageSessionTest {
      * the decorative `aria-hidden="true"` votearrow `<div>`s, and the inter-tag
      * whitespace — and *annotates* the browser's verdicts (see
      * [com.xemantic.markanywhere.dump.AccessibilityAnnotations]): each layout `<table>`
-     * carries `data-markanywhere-role="LayoutTable"`, every non-`block` element
+     * carries `data-markanywhere-role="LayoutTable"`, every element
      * its computed `data-markanywhere-display`, and — since [PageSession] is the
      * entry point — every actionable element (here the 18 `<a>` links) a dense
      * `data-markanywhere-ref`. Acting on those verdicts is a downstream concern;
@@ -94,7 +94,7 @@ class PageSessionTest {
 
         // then
         dump.events.asFlow() sameAs semanticEvents(tagged = true) {
-            "html"("lang" to "en") {
+            "html"("lang" to "en", "data-markanywhere-display" to "block") {
                 "head" {
                     +"\n    "
                     "meta"("charset" to "utf-8") { }
@@ -105,9 +105,9 @@ class PageSessionTest {
                     +"\n"
                 }
                 +"\n"
-                "body" {
+                "body"("data-markanywhere-display" to "block") {
                     +"\n"
-                    "center" {
+                    "center"("data-markanywhere-display" to "block") {
                         +"\n    "
                         "table"("id" to "hnmain", "border" to "0", "cellpadding" to "0", "cellspacing" to "0", "width" to "85%", "bgcolor" to "#f6f6ef", "data-markanywhere-role" to "LayoutTable", "data-markanywhere-display" to "table") {
                             +"\n        "
@@ -186,7 +186,7 @@ class PageSessionTest {
                                                     "td"("valign" to "top", "class" to "votelinks", "data-markanywhere-display" to "table-cell") {
                                                         +"\n                            "
                                                         "a"("href" to "vote?id=40001&how=up", "data-markanywhere-ref" to "7", "data-markanywhere-display" to "inline") {
-                                                            "div"("class" to "votearrow", "title" to "upvote", "aria-hidden" to "true") { }
+                                                            "div"("class" to "votearrow", "title" to "upvote", "aria-hidden" to "true", "data-markanywhere-display" to "block") { }
                                                         }
                                                         +"\n                        "
                                                     }
@@ -255,7 +255,7 @@ class PageSessionTest {
                                                     "td"("valign" to "top", "class" to "votelinks", "data-markanywhere-display" to "table-cell") {
                                                         +"\n                            "
                                                         "a"("href" to "vote?id=40002&how=up", "data-markanywhere-ref" to "13", "data-markanywhere-display" to "inline") {
-                                                            "div"("class" to "votearrow", "title" to "upvote", "aria-hidden" to "true") { }
+                                                            "div"("class" to "votearrow", "title" to "upvote", "aria-hidden" to "true", "data-markanywhere-display" to "block") { }
                                                         }
                                                         +"\n                        "
                                                     }
@@ -349,7 +349,7 @@ class PageSessionTest {
 
         // then
         dump.events.asFlow() sameAs semanticEvents(tagged = true) {
-            "html"("lang" to "en") {
+            "html"("lang" to "en", "data-markanywhere-display" to "block") {
                 "head" {
                     +"\n    "
                     "meta"("charset" to "utf-8") { }
@@ -360,9 +360,9 @@ class PageSessionTest {
                     +"\n"
                 }
                 +"\n"
-                "body" {
+                "body"("data-markanywhere-display" to "block") {
                     +"\n"
-                    "h1" {
+                    "h1"("data-markanywhere-display" to "block") {
                         +"Actionable"
                     }
                     +"\n"
@@ -380,7 +380,7 @@ class PageSessionTest {
                         +"just text, not actionable"
                     }
                     +"\n"
-                    "p"("id" to "out") {
+                    "p"("id" to "out", "data-markanywhere-display" to "block") {
                         +"idle"
                     }
                     +"\n\n\n"

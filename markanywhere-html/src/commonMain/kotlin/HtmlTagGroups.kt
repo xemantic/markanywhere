@@ -22,7 +22,7 @@ package com.xemantic.markanywhere.html
  * Admission rule: a tag-name set belongs here only once at least two operators
  * consume it. Single-use sets stay private to their operator (e.g.
  * `SimplifyHtml`'s `PRESERVE_WITH_ID_TAGS`, the whitespace transformer's
- * broader `INLINE_HTML_ELEMENTS`).
+ * `UA_NON_INLINE_ELEMENTS`).
  */
 
 /**

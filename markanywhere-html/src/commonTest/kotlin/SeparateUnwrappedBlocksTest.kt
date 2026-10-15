@@ -53,6 +53,214 @@ class SeparateUnwrappedBlocksTest {
     }
 
     @Test
+    fun `should separate the lines of uncaptured divs by their UA default display`() = runTest {
+        // given — what Chrome leaves in a contenteditable after "Hi Paul,\nThree
+        // hearts.": the first line as bare text, each later one in a `<div>`.
+        // Without a captured display the UA stylesheet's `block` is assumed.
+        val input = semanticEvents(tagged = true) {
+            "div"("role" to "textbox") {
+                +"Hi Paul,"
+                "div" { +"Three hearts." }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "div"("role" to "textbox") {
+                +"Hi Paul,"
+                "div" {
+                    +" "
+                    +"Three hearts."
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should not separate content across a display contents wrapper`() = runTest {
+        // given — Svelte wraps a component carrying CSS custom properties in a
+        // `<div style="display: contents">`, which lays out no box of its own,
+        // so the price renders flush as `US$5`.
+        val input = semanticEvents(tagged = true) {
+            "p"(AccessibilityAnnotations.DISPLAY to "block") {
+                "span"(AccessibilityAnnotations.DISPLAY to "inline") { +"US" }
+                "div"(AccessibilityAnnotations.DISPLAY to "contents") {
+                    "span"(AccessibilityAnnotations.DISPLAY to "inline") { +"$5" }
+                }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs input
+    }
+
+    @Test
+    fun `should not separate across an unannotated div in a dump that left block out`() = runTest {
+        // given — a dump captured before every display was recorded: a plain
+        // `block` and a `display: contents` were both left unannotated, so once
+        // an annotation shows the stream is a capture (the `<html>`, `<head>`
+        // and `<body>` of such a dump carry none), an absent one cannot be read
+        // as the UA default of the tag.
+        val input = semanticEvents(tagged = true) {
+            "html" {
+                "head" { }
+                "body" {
+                    "p" {
+                        "span"(AccessibilityAnnotations.DISPLAY to "inline") { +"US" }
+                        "div" {
+                            "span"(AccessibilityAnnotations.DISPLAY to "inline") { +"$5" }
+                        }
+                    }
+                }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs input
+    }
+
+    @Test
+    fun `should recognise a capture by any of its annotations`() = runTest {
+        // given — an old dump's first annotated element may be a control, its
+        // ref the only capture annotation on it
+        val input = semanticEvents(tagged = true) {
+            "body" {
+                "a"(AccessibilityAnnotations.REF to "1") { +"US" }
+                "div" { +"$5" }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs input
+    }
+
+
+    @Test
+    fun `should not take a redacted control for a capture`() = runTest {
+        // given — the JS walker records no display at all, but it marks a
+        // password field redacted through the producers' shared form state;
+        // the divs after it must still read as their UA default `block`
+        val input = semanticEvents(tagged = true) {
+            "body" {
+                "input"("type" to "password", AccessibilityAnnotations.REDACTED to "filled") { }
+                "div" { +"Forgot password?" }
+                "div" { +"Sign up" }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "body" {
+                "input"("type" to "password", AccessibilityAnnotations.REDACTED to "filled") { }
+                "div" { +"Forgot password?" }
+                "div" {
+                    +" "
+                    +"Sign up"
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should not separate across an uncaptured element the browser never renders`() = runTest {
+        // given — the UA stylesheet gives a `<script>` `display: none`: it
+        // lays out no box, so there is no boundary to cross
+        val input = semanticEvents(tagged = true) {
+            "p" {
+                +"price"
+                "script" { +"track()" }
+                +"5"
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs input
+    }
+
+    @Test
+    fun `should read an uncaptured custom element as inline like a browser does`() = runTest {
+        // given — the UA stylesheet lays an unknown or custom element out
+        // inline, so a web component inside a word must not split it
+        val input = semanticEvents(tagged = true) {
+            "p" {
+                +"Price: "
+                "x-currency" { +"€" }
+                +"5"
+            }
+            "div" {
+                "x-row" { +"first" }
+                "x-row" { +"second" }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs input
+    }
+
+    @Test
+    fun `should separate the lines of a span the capture recorded as a block`() = runTest {
+        // given — a rich editor's `<span style="display: block">` per line
+        val input = semanticEvents(tagged = true) {
+            "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                "span"(AccessibilityAnnotations.DISPLAY to "block") { +"Hi Paul," }
+                "span"(AccessibilityAnnotations.DISPLAY to "block") { +"Three hearts." }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                "span"(AccessibilityAnnotations.DISPLAY to "block") { +"Hi Paul," }
+                "span"(AccessibilityAnnotations.DISPLAY to "block") {
+                    +" "
+                    +"Three hearts."
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should not separate unannotated inline elements`() = runTest {
+        // given — a hand-built stream with no display annotations at all
+        val input = semanticEvents(tagged = true) {
+            "p" {
+                "strong" { +"bold" }
+                "span" { +"plain" }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then — inline by their tags, so they abut as authored
+        output sameAs input
+    }
+
+    @Test
     fun `should separate two block boxes under a non-flex inline parent`() = runTest {
         // given — the BBC card shape: an inline block-wrapping <a> holding an
         // image box and a badge box, each a separate grid box, no whitespace.

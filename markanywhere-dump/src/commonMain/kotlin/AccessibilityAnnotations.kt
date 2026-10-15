@@ -44,18 +44,28 @@ public object AccessibilityAnnotations {
     public const val ROLE: String = "data-markanywhere-role"
 
     /**
-     * The element's computed `display`, recorded when it is not the ubiquitous
-     * `block` default — so a consumer can tell inline-level content (`inline`,
-     * `inline-block`, …), whose flanking whitespace is a rendered separator,
-     * from block-level content, whose flanking whitespace is structural. The
-     * special value `none` (`display:none`, not rendered) means hidden — drop
-     * the subtree.
+     * The element's computed `display`, recorded on every element — so a
+     * consumer can tell inline-level content (`inline`, `inline-block`, …),
+     * whose flanking whitespace is a rendered separator, from block-level
+     * content, whose flanking whitespace is structural, and a stream lacking
+     * the annotation can only be one that was never captured (dumps captured
+     * before this left the plain `block` default out). Two values describe an
+     * element laying out no box: `contents` (`display:contents` — the box is
+     * transparent and its children's display is what counts) and `none`
+     * (`display:none`, nothing in the subtree rendered) — hidden, drop the
+     * subtree.
      */
     public const val DISPLAY: String = "data-markanywhere-display"
 
     /**
      * Present with value `hidden` when the element computes to
-     * `visibility:hidden` — hidden, drop its subtree.
+     * `visibility:hidden` — its own content is invisible, but unlike
+     * [DISPLAY] `none` not necessarily its subtree: `visibility` is inherited
+     * and a descendant may set it back to `visible`, so each descendant laying
+     * out a box carries its own verdict. One laying out none (`contents`)
+     * carries one only where its own value differs from the one it inherits —
+     * `hidden`, or `visible` set back under a hidden ancestor — and otherwise
+     * inherits its parent's.
      */
     public const val VISIBILITY: String = "data-markanywhere-visibility"
 
