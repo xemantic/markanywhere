@@ -1086,4 +1086,70 @@ class ApplyAccessibilityTest {
         }
     }
 
+    @Test
+    fun `should keep the whitespace between visible children of an invisible element`() = runTest {
+        // given — the space separating the two labels belongs to the hidden
+        // host, but the browser still lays it out between them
+        val input = semanticEvents(tagged = true) {
+            "div"(
+                AccessibilityAnnotations.DISPLAY to "block",
+                AccessibilityAnnotations.VISIBILITY to "hidden"
+            ) {
+                "span"(AccessibilityAnnotations.DISPLAY to "inline") { +"Inbox" }
+                +" "
+                "span"(AccessibilityAnnotations.DISPLAY to "inline") { +"Sent" }
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                "span"(AccessibilityAnnotations.DISPLAY to "inline") { +"Inbox" }
+                +" "
+                "span"(AccessibilityAnnotations.DISPLAY to "inline") { +"Sent" }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep the head of a document hidden with visibility`() = runTest {
+        // given — an anti-flicker `html { visibility: hidden }` with a loading
+        // overlay set back to visible; the `<head>` is captured unannotated
+        // and its metadata is never painted, so visibility does not apply
+        val input = semanticEvents(tagged = true) {
+            "html"(
+                AccessibilityAnnotations.DISPLAY to "block",
+                AccessibilityAnnotations.VISIBILITY to "hidden"
+            ) {
+                "head" {
+                    "title" { +"Shop" }
+                }
+                "body"(
+                    AccessibilityAnnotations.DISPLAY to "block",
+                    AccessibilityAnnotations.VISIBILITY to "hidden"
+                ) {
+                    "div"(AccessibilityAnnotations.DISPLAY to "block") { +"Loading" }
+                }
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "html"(AccessibilityAnnotations.DISPLAY to "block") {
+                "head" {
+                    "title" { +"Shop" }
+                }
+                "body"(AccessibilityAnnotations.DISPLAY to "block") {
+                    "div"(AccessibilityAnnotations.DISPLAY to "block") { +"Loading" }
+                }
+            }
+        }
+    }
+
 }

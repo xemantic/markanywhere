@@ -213,6 +213,32 @@ class HtmlWhitespaceNormalizationTest {
     }
 
     @Test
+    fun `should drop whitespace between the frontmatter block and the body text`() = runTest {
+        // given — `simplifyHtml` unwraps the `<body>`, so its leading
+        // whitespace and first text follow the front matter directly; the
+        // synthetic block is no inline element, whatever a browser would make
+        // of an unknown tag
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"Shop" }
+            }
+            +"\n  "
+            +"Hello"
+        }
+
+        // when
+        val output = input.dropHtmlStructuralWhitespace()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"Shop" }
+            }
+            +"Hello"
+        }
+    }
+
+    @Test
     fun `should preserve non-breaking spaces as content`() = runTest {
         // given — NBSP (U+00A0) is content, not structural whitespace: HTML
         // never collapses it (e.g. legal citations keep "\u00A0823" together).

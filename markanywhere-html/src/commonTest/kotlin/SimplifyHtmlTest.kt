@@ -2842,6 +2842,33 @@ class SimplifyHtmlTest {
         }
     }
 
+
+    @Test
+    fun `should mark a dialog shown in a dump that left block out`() = runTest {
+        // given — a dump captured before every display was recorded left a
+        // plain `block` out, so a dialog the page showed through CSS carries
+        // no display of its own; that the stream is a capture shows earlier
+        val input = semanticEvents(tagged = true) {
+            "body" {
+                "span"(AccessibilityAnnotations.DISPLAY to "inline") { +"Menu" }
+                "dialog"("class" to "cookie") {
+                    "p" { +"Accept cookies?" }
+                }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            +"Menu"
+            tag("dialog", "open" to "") {
+                "p" { +"Accept cookies?" }
+            }
+        }
+    }
+
     @Test
     fun `should preserve the search element`() = runTest {
         // given

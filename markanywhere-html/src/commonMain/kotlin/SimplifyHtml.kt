@@ -22,6 +22,9 @@ import com.xemantic.markanywhere.html.spec.asciiLowercase
 import com.xemantic.markanywhere.transform.MatcherScope
 import com.xemantic.markanywhere.transform.transform
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.onEach
 
 /**
  * Simplifies an HTML-derived semantic event stream by keeping only the
@@ -195,6 +198,21 @@ public fun Flow<SemanticEvent>.simplifyHtml(
 private fun Flow<SemanticEvent>.simplifyHtmlElements(
     keepAttributes: Set<String>,
     svgMode: SvgMode,
+): Flow<SemanticEvent> = flow {
+    // Whether the stream is a capture, as far as it has been read (see
+    // [showsCapture]) — latched ahead of the rules, which see the element
+    // that shows it only if no earlier rule claimed it.
+    var captured = false
+    emitAll(
+        onEach { if (!captured && it is SemanticEvent.Mark && it.showsCapture()) captured = true }
+            .simplifyHtmlRules(keepAttributes, svgMode) { captured }
+    )
+}
+
+private fun Flow<SemanticEvent>.simplifyHtmlRules(
+    keepAttributes: Set<String>,
+    svgMode: SvgMode,
+    captured: () -> Boolean,
 ): Flow<SemanticEvent> = transform {
 
     // A value that tells a reader nothing is never added — judged by
@@ -466,13 +484,15 @@ private fun Flow<SemanticEvent>.simplifyHtmlElements(
     // on screen is usually a modal blocking the rest of the page — for an
     // agent, the first thing to act on. It says whether it is shown, since a
     // browser rendering the output hides a `<dialog>` without `open`: the
-    // source's own `open`, or a captured display, as a closed dialog is
-    // `display: none` per the UA stylesheet and `applyAccessibility` has
-    // already dropped it. A hand-built or parsed stream carries no display,
-    // so a dialog there is shown only if its markup says so.
+    // source's own `open`, or a capture, as a closed dialog is `display: none`
+    // per the UA stylesheet and `applyAccessibility` has already dropped it —
+    // the dialog's own display is no evidence, a dump captured before every
+    // display was recorded left a CSS-shown dialog's `block` out. A
+    // hand-built or parsed stream carries no display, so a dialog there is
+    // shown only if its markup says so.
     match("dialog") { event ->
         val shown = event["open"] != null ||
-                event[AccessibilityAnnotations.DISPLAY].let { it != null && it != "none" }
+                (captured() && event[AccessibilityAnnotations.DISPLAY] != "none")
         val attrs = preserveAttrs(event, "id")
         preserve("dialog", if (shown) DIALOG_SHOWN + attrs else attrs) { children() }
     }
@@ -736,9 +756,26 @@ internal val FRAME_TAGS = setOf("iframe", "frame", "object")
 // The capture's own bookkeeping (see [AccessibilityAnnotations]): stripped from
 // a preserved svg element unless the caller asked for one through
 // `keepAttributes`, the way every other preserved element only keeps them
-// through `preserveAttrs`; [separateUnwrappedBlocks] tells a capture by them.
+// through `preserveAttrs`.
 internal val CAPTURE_ANNOTATIONS = AccessibilityAnnotations.ALL +
         AccessibilityAnnotations.REF + AccessibilityAnnotations.REDACTED
+
+// The annotations only the CDP capture writes. [AccessibilityAnnotations.REDACTED]
+// is not one of them: the in-page JS walker writes it too (the two producers
+// share `formControlAttributes`), while recording no display at all — taking
+// it for a capture switched a JS dump's display fallback halfway down the page.
+private val CDP_CAPTURE_ANNOTATIONS = AccessibilityAnnotations.ALL + AccessibilityAnnotations.REF
+
+/**
+ * Whether this element shows that the stream is a CDP capture, the one
+ * producer recording a display. The capture records one on every element, the
+ * `<html>` first, while a dump captured before that left a plain `block` out —
+ * there the first annotated element is what shows it. Every operator that
+ * reads an absent display differently in a capture asks this, so they cannot
+ * disagree about the same stream.
+ */
+internal fun SemanticEvent.Mark.showsCapture(): Boolean =
+    attributes.keys.any { it in CDP_CAPTURE_ANNOTATIONS }
 
 // The short LLM-facing name of [AccessibilityAnnotations.REDACTED] on a form
 // control whose secret value the capture left out (`filled` / `empty`).

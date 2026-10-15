@@ -85,9 +85,8 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
     val openLinks = ArrayDeque<Int>()
     var linkSerial = 0
     var previousTokenLink = 0
-    // Whether the stream was captured, which any capture annotation on an
-    // element so far shows. Nothing shows it sooner: a dump's `<head>` is
-    // captured raw, and an old dump left the `block` of its `<html>`, `<body>`
+    // Whether the stream was captured, as far as it has been read (see
+    // [showsCapture]). An old dump left the `block` of its `<html>`, `<body>`
     // and leading wrappers out, so those still read as their tag's UA default
     // — a `<div>`'s `block`, wrong only for a leading `display: contents` one.
     var captured = false
@@ -134,7 +133,7 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
         when (event) {
             is Mark -> {
                 val parentIsFlexGrid = stack.lastOrNull()?.isFlexGridContainer == true
-                if (!captured && event.attributes.keys.any { it in CAPTURE_ANNOTATIONS }) captured = true
+                if (!captured && event.showsCapture()) captured = true
                 val boundary = event.blockBoundary(parentIsFlexGrid, captured)
                 if (preserveDepth == 0) {
                     cross(boundary)
@@ -198,7 +197,12 @@ private fun SemanticEvent.Mark.blockBoundary(
         // way the whitespace normalizer reads it — a `<div>` is a block (the
         // `<div>` per line a rich-text editor writes, `Hi,<div>there</div>`),
         // while a hand-built stream's `<a>`/`<strong>`/`<i>` must not over-split.
-        null -> if (isInlineByUaDefault()) BlockBoundary.INLINE else BlockBoundary.SEPARATED_BOX
+        // An element the UA stylesheet never renders (`<script>`, `<style>`, …)
+        // lays out no box, so like `contents` it has no boundary to cross.
+        null -> when {
+            isInlineByUaDefault() || isNeverRenderedByUaDefault() -> BlockBoundary.INLINE
+            else -> BlockBoundary.SEPARATED_BOX
+        }
         // `display: contents` lays out no box of its own, so it has no
         // boundary to cross — its children's display is what separates.
         "contents" -> BlockBoundary.INLINE

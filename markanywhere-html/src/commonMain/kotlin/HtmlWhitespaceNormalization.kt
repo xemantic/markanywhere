@@ -193,9 +193,13 @@ private fun SemanticEvent.Mark.isPreserveRegion(): Boolean =
 // touching it belongs to the inline flow around it.
 // When no display annotation is present (synthetic / Markdown-native streams) it
 // falls back to the UA default of the tag ([isInlineByUaDefault]).
+//
+// The synthetic `frontmatter` block (`simplifyHtml`'s, or the parser's) is no
+// HTML element at all: a browser would lay an unknown tag out inline, but it
+// is document metadata standing apart from the body, so it is a block.
 private fun SemanticEvent.Mark.isInlineLevel(): Boolean =
     when (val display = this[AccessibilityAnnotations.DISPLAY]) {
-        null -> isInlineByUaDefault()
+        null -> name != "frontmatter" && isInlineByUaDefault()
         "contents" -> true
         else -> display.startsWith("inline")
     }
@@ -208,6 +212,18 @@ private fun SemanticEvent.Mark.isInlineLevel(): Boolean =
 internal fun SemanticEvent.Mark.isInlineByUaDefault(): Boolean = isInlineByUaDefault(name)
 
 private fun isInlineByUaDefault(name: String): Boolean = name !in UA_NON_INLINE_ELEMENTS
+
+/**
+ * Whether the UA stylesheet never renders this element (`display: none`) —
+ * the subset of the non-inline elements laying out no box at all.
+ */
+internal fun SemanticEvent.Mark.isNeverRenderedByUaDefault(): Boolean = name in UA_NEVER_RENDERED_ELEMENTS
+
+private val UA_NEVER_RENDERED_ELEMENTS = setOf(
+    "head", "title", "meta", "link", "base", "style", "script", "noscript",
+    "template", "area", "datalist", "param", "source", "track", "noembed",
+    "noframes",
+)
 
 // The elements the HTML rendering section (WHATWG HTML §15.3) lays out as
 // anything but inline — `block`, `list-item`, the `table-*` family — plus the
@@ -229,10 +245,6 @@ private val UA_NON_INLINE_ELEMENTS = setOf(
     // table
     "table", "caption", "colgroup", "col", "thead", "tbody", "tfoot", "tr",
     "td", "th",
-    // never rendered
-    "head", "title", "meta", "link", "base", "style", "script", "noscript",
-    "template", "area", "datalist", "param", "source", "track", "noembed",
-    "noframes",
     // line break
     "br",
-)
+) + UA_NEVER_RENDERED_ELEMENTS

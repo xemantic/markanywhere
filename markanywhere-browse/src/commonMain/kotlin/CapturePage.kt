@@ -334,8 +334,8 @@ internal class SnapshotDom(
      */
     fun visibilityAnnotation(index: Int): String? {
         visibility[index]?.let { return if (it.normalizedVisibility() == "hidden") "hidden" else null }
-        val own = ownVisibility(index) ?: return null
-        val inherited = parents?.getOrNull(index)?.let { resolvedVisibility.getOrNull(it) } ?: "visible"
+        val own = visibilities.own[index] ?: return null
+        val inherited = parentIndex?.getOrNull(index)?.let { visibilities.resolved.getOrNull(it) } ?: "visible"
         return if (own == inherited) null else own
     }
 
@@ -344,23 +344,26 @@ internal class SnapshotDom(
         if (isText(it)) visibility[it] else null
     }?.normalizedVisibility()
 
-    private val parents = nodes.parentIndex
-
     /**
-     * Per node, the visibility its descendants inherit: its own known one, else
-     * its parent's. One pre-order pass (parents precede children in the
-     * flattened array), so a chain of `display:contents` wrappers is not
-     * re-walked for every element in it.
+     * Per node, its own known visibility ([Visibilities.own] — computed, or
+     * read from its text for a box-less element) and the one its descendants
+     * inherit ([Visibilities.resolved] — its own, else its parent's). One
+     * pre-order pass (parents precede children in the flattened array), so a
+     * chain of `display:contents` wrappers is not re-walked for every element
+     * in it, and no element's children are scanned twice.
      */
-    private val resolvedVisibility: Array<String> by lazy {
+    private val visibilities: Visibilities by lazy {
+        val own = arrayOfNulls<String>(nodeType.size)
         val resolved = Array(nodeType.size) { "visible" }
         for (index in nodeType.indices) {
-            val parent = parents?.getOrNull(index) ?: -1
-            resolved[index] = (visibility[index]?.normalizedVisibility() ?: ownVisibility(index))
-                ?: if (parent >= 0) resolved[parent] else "visible"
+            val parent = parentIndex?.getOrNull(index) ?: -1
+            own[index] = visibility[index]?.normalizedVisibility() ?: ownVisibility(index)
+            resolved[index] = own[index] ?: if (parent >= 0) resolved[parent] else "visible"
         }
-        resolved
+        Visibilities(own, resolved)
     }
+
+    private class Visibilities(val own: Array<String?>, val resolved: Array<String>)
 
     // only `hidden` is recorded for a laid-out element, so anything else reads
     // as visible here as well; `collapse` hides like `hidden`

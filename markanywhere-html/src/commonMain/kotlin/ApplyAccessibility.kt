@@ -18,6 +18,7 @@ package com.xemantic.markanywhere.html
 
 import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.dump.AccessibilityAnnotations
+import com.xemantic.markanywhere.html.spec.isHtmlBlank
 import com.xemantic.markanywhere.transform.MatcherScope
 import com.xemantic.markanywhere.transform.TransformerBuilder
 import com.xemantic.markanywhere.transform.transform
@@ -104,6 +105,16 @@ public fun TransformerBuilder.applyAccessibility() {
  * inherit across the document boundary, so the frame's elements carry no
  * verdict, yet the browser paints none of them.
  *
+ * The whitespace-only text of an invisible element is kept, held back like
+ * the marks: should the element be kept for a visible descendant, it is what
+ * separates the visible content on either side (`Inbox Sent`, not
+ * `InboxSent`); dropped with the element otherwise.
+ *
+ * The `<head>` never inherits invisibility: its metadata is not painted at
+ * all, so `visibility` does not apply to it, and the capture leaves it
+ * unannotated — inheriting an anti-flicker `html { visibility: hidden }` lost
+ * the page's title and front matter.
+ *
  * An invisible `<td>`/`<th>` in a row that is emitted is kept as an (empty)
  * cell, so the columns after it stay aligned, and likewise an invisible
  * `<thead>` and its rows in a table that is emitted, so the first body row is
@@ -149,7 +160,7 @@ private fun Flow<SemanticEvent>.resolveVisibility(): Flow<SemanticEvent> = flow 
             return@collect
         }
         when (event) {
-            is SemanticEvent.Mark -> {
+            is Mark -> {
                 val parent = stack.lastOrNull()
                 val invisible = event.isInvisible(parentInvisible = parent?.invisible == true)
                 if (invisible && event.name in FRAME_TAGS) {
@@ -167,8 +178,16 @@ private fun Flow<SemanticEvent>.resolveVisibility(): Flow<SemanticEvent> = flow 
                 }
                 stack.addLast(frame)
             }
-            is SemanticEvent.Text -> if (stack.lastOrNull()?.invisible != true) emit(event)
-            is SemanticEvent.Unmark -> {
+            is Text -> {
+                val parent = stack.lastOrNull()
+                if (parent?.invisible != true) emit(event)
+                // the whitespace of an element kept for a visible descendant
+                // still separates the visible content on either side of it
+                else if (event.text.isHtmlBlank()) {
+                    if (parent.emitted) emit(event) else parent.hold(listOf(event))
+                }
+            }
+            is Unmark -> {
                 val frame = stack.removeLastOrNull()
                 val parent = stack.lastOrNull()
                 if (frame == null || frame.emitted) emit(event)
@@ -415,7 +434,8 @@ private fun SemanticEvent.Mark.isHidden(honourDisplayNone: Boolean = true): Bool
  * only where it differs from its parent's — the one it inherits.
  */
 private fun SemanticEvent.Mark.isInvisible(parentInvisible: Boolean): Boolean =
-    when (this[AccessibilityAnnotations.VISIBILITY]) {
+    if (name == "head") false
+    else when (this[AccessibilityAnnotations.VISIBILITY]) {
         "hidden" -> true
         "visible" -> false
         // a laid-out box carries its own verdict; anything else inherits

@@ -146,6 +146,55 @@ class SeparateUnwrappedBlocksTest {
         output sameAs input
     }
 
+
+    @Test
+    fun `should not take a redacted control for a capture`() = runTest {
+        // given — the JS walker records no display at all, but it marks a
+        // password field redacted through the producers' shared form state;
+        // the divs after it must still read as their UA default `block`
+        val input = semanticEvents(tagged = true) {
+            "body" {
+                "input"("type" to "password", AccessibilityAnnotations.REDACTED to "filled") { }
+                "div" { +"Forgot password?" }
+                "div" { +"Sign up" }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "body" {
+                "input"("type" to "password", AccessibilityAnnotations.REDACTED to "filled") { }
+                "div" { +"Forgot password?" }
+                "div" {
+                    +" "
+                    +"Sign up"
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should not separate across an uncaptured element the browser never renders`() = runTest {
+        // given — the UA stylesheet gives a `<script>` `display: none`: it
+        // lays out no box, so there is no boundary to cross
+        val input = semanticEvents(tagged = true) {
+            "p" {
+                +"price"
+                "script" { +"track()" }
+                +"5"
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs input
+    }
+
     @Test
     fun `should read an uncaptured custom element as inline like a browser does`() = runTest {
         // given — the UA stylesheet lays an unknown or custom element out
