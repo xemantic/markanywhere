@@ -23,10 +23,7 @@ import com.xemantic.markanywhere.dump.SemanticEventDump
 import com.xemantic.markanywhere.dump.formControlAttributes
 import com.xemantic.markanywhere.dump.formControlText
 import com.xemantic.markanywhere.dump.hasLiveFormState
-import com.xemantic.markanywhere.dump.inputType
 import com.xemantic.markanywhere.dump.isRedactedControl
-import com.xemantic.markanywhere.html.spec.isHtmlBlank
-import com.xemantic.markanywhere.html.spec.splitOnHtmlWhitespace
 import com.xemantic.markanywhere.html.spec.stripAndCollapseHtmlWhitespace
 import dev.kdriver.cdp.domain.Accessibility
 import dev.kdriver.cdp.domain.DOMSnapshot
@@ -39,7 +36,6 @@ import kotlin.time.Clock
 
 private const val ELEMENT_NODE = 1
 private const val TEXT_NODE = 3
-private const val DOCUMENT_FRAGMENT_NODE = 11
 
 // The computed styles requested from the snapshot, in the order its per-node
 // style lists report them.
@@ -47,13 +43,6 @@ private val COMPUTED_STYLES = listOf("display", "visibility", "-webkit-text-secu
 private const val DISPLAY_STYLE = 0
 private const val VISIBILITY_STYLE = 1
 private const val TEXT_SECURITY_STYLE = 2
-
-// the elements whose content never contributes to an accessible name, even
-// when hidden content counts
-private val NEVER_NAMING_ELEMENTS = setOf("script", "style", "template", "noscript")
-
-// the elements HTML associates with a <label> (labelable elements)
-private val LABELABLE_ELEMENTS = setOf("button", "input", "meter", "output", "progress", "select", "textarea")
 
 // the only elements whose value the capture can redact (see isRedactedControl)
 private val REDACTABLE_ELEMENTS = setOf("input", "textarea", "select")
@@ -205,6 +194,7 @@ internal class SnapshotDom(
     private val document = snapshot.documents[documentIndex]
     private val nodes = document.nodes
     private val layout = document.layout
+    private val parentIndex = nodes.parentIndex
 
     private val nodeType = requireNotNull(nodes.nodeType) { "no nodeType in snapshot" }
     private val nodeName = requireNotNull(nodes.nodeName) { "no nodeName in snapshot" }
@@ -223,7 +213,7 @@ internal class SnapshotDom(
 
     val children: List<List<Int>> = buildList<MutableList<Int>> {
         repeat(nodeType.size) { add(mutableListOf()) }
-        nodes.parentIndex?.forEachIndexed { index, parent ->
+        parentIndex?.forEachIndexed { index, parent ->
             if (parent >= 0) this[parent] += index
         }
     }
@@ -259,7 +249,13 @@ internal class SnapshotDom(
         size = nodeType.size
     ).also { has ->
         layout.nodeIndex.forEach { has[it] = true }
-        propagateToAncestors(has)
+        val parents = parentIndex ?: return@also
+        // parents precede children in the flattened pre-order array,
+        // so one reverse pass propagates the bit bottom-up
+        for (index in nodeType.size - 1 downTo 0) {
+            val parent = parents.getOrNull(index) ?: continue
+            if (parent >= 0 && has[index]) has[parent] = true
+        }
     }
 
     /**
@@ -430,35 +426,30 @@ internal class SnapshotDom(
      */
     private fun selectedValue(select: Int): String? =
         descendants(select).firstOrNull { it in selectedOptions && name(it) == "option" }
-            ?.let { option -> attributeMap(option)["value"] ?: optionText(option).trim() }
+            ?.let { option -> attributeMap(option)["value"] ?: textContent(option).trim() }
 
     /**
-     * The text of an `<option>`, read from its text nodes whatever their
-     * display: everything below a `<select>` is annotated `none` (see
-     * [displayAnnotation]), its popup having no layout box.
+     * The text of the node's descendant text nodes whatever their display — an
+     * `<option>`'s label, a `<textarea>`'s markup value: everything below a
+     * `<select>` is annotated `none` (see [displayAnnotation]), its popup having
+     * no layout box.
      */
-    private fun optionText(option: Int): String =
-        descendants(option).filter { isText(it) }.joinToString("") { text(it) }
+    private fun textContent(index: Int): String =
+        descendants(index).filter { isText(it) }.joinToString("") { text(it) }
 
     /** The `<select>` an `<option>` belongs to, through an `<optgroup>`, if any. */
-    private fun enclosingSelect(option: Int): Int? {
-        val parents = parentIndex ?: return null
-        var index = parents.getOrNull(option) ?: return null
-        while (index >= 0) {
-            when (name(index)) {
-                "select" -> return index
-                "datalist" -> return null
-            }
-            index = parents.getOrNull(index) ?: return null
+    private fun enclosingSelect(option: Int): Int? =
+        ancestors(option).firstOrNull { name(it) == "select" || name(it) == "datalist" }
+            ?.takeIf { name(it) == "select" }
+
+    private fun ancestors(index: Int): Sequence<Int> =
+        generateSequence(parentIndex?.getOrNull(index)?.takeIf { it >= 0 }) { node ->
+            parentIndex?.getOrNull(node)?.takeIf { it >= 0 }
         }
-        return null
-    }
 
     private fun descendants(index: Int): Sequence<Int> = children[index].asSequence().flatMap {
         sequenceOf(it) + descendants(it)
     }
-
-    private val parentIndex = nodes.parentIndex
 
     /**
      * The element's attributes as captured: the markup's, with a form
@@ -471,199 +462,62 @@ internal class SnapshotDom(
     }
 
     /**
-     * The accessible name of [element], named by the `aria-labelledby` of
-     * [idRefs], with every secret control left out; `null` when no secret can
-     * reach the name, so the browser's [computed] one is safe to use; or an
-     * empty string when the name is withheld.
+     * [name], a name the browser computed for an element, with the value of
+     * every secret control taken out of it — or an empty string when a value
+     * cannot be taken out cleanly.
      *
      * The accessible-name computation takes a text box's *value* (a select's
-     * chosen option) when it reaches one, and it reaches one in two ways:
-     *
-     * - through the references — a referenced control, or one inside a
-     *   referenced element.
-     * - through the element's other sources of a name, which the browser falls
-     *   back on when the references yield no text: the element itself, its
-     *   content and its `<label>`s.
-     *
-     * Whether the browser's references yielded text is not known here — the
-     * text alternative composed here follows Blink's (see [textAlternative]),
-     * but cannot be trusted to agree with it everywhere — so [computed] is
-     * used only when no secret is reachable either way. Otherwise the name is
-     * composed here from the references, secret controls skipped, or, when
-     * they yield nothing, withheld — unless [computed] is the element's
-     * `title`, which holds no value.
-     *
-     * A secret is what the capture redacts from the control itself (see
-     * [isRedactedControl]), so a name never hides a value the dump shows, nor
-     * shows one it hides.
-     *
-     * An id resolves only within the element's tree scope: `<template>`
-     * content and shadow trees are in the snapshot too, but `getElementById`
-     * never returns an element from them for an element outside. An id carried
-     * by several elements of the scope counts as holding a secret when any of
-     * them does.
+     * chosen option) whenever it reaches one, and it reaches one along many
+     * paths — `aria-labelledby`, the element's content, its `<label>`s,
+     * `aria-owns`, a descendant's own `aria-labelledby`, shadow trees — so
+     * whether a secret *can* reach the name is not judged here; the name is
+     * checked for the secrets themselves instead, which the capture knows
+     * already (see [isRedactedControl]). A secret is then a word run of its
+     * own in the name ("Card number 4111…") and is dropped, label text kept;
+     * one glued to other text ("Card4111…", or a CVC `123` inside an unrelated
+     * `1234`) cannot be told apart from it, so the name is withheld whole.
      */
-    fun nameWithoutSecrets(element: Int, idRefs: String, computed: String): String? {
-        if (holdsSecret.none { it }) return null
-        val scope = treeScope(element)
-        val targets = idRefs.splitOnHtmlWhitespace().mapNotNull { id ->
-            elementsById[id]?.filter { treeScope(it) == scope }?.takeIf { it.isNotEmpty() }
-        }
-        val referenced = targets
-            .joinToString(" ") { ids -> textAlternative(ids.first()) }
-            .stripAndCollapseHtmlWhitespace()
-        return when {
-            targets.any { ids -> ids.any { subtreeHoldsSecret[it] } } -> referenced
-            !fallbackHoldsSecret(element) -> null
-            referenced.isNotEmpty() -> referenced
-            computed == attributeMap(element)["title"]?.stripAndCollapseHtmlWhitespace() -> null
-            else -> ""
+    fun withoutSecrets(name: String): String {
+        if (secretTexts.isEmpty()) return name
+        var result = name.stripAndCollapseHtmlWhitespace()
+        if (secretTexts.none { it in result }) return name
+        while (true) {
+            val secret = secretTexts.firstOrNull { it in result } ?: return result
+            val start = result.indexOf(secret)
+            val end = start + secret.length
+            if (start > 0 && result[start - 1] != ' ' || end < result.length && result[end] != ' ') return ""
+            result = (result.take(start) + result.drop(end)).stripAndCollapseHtmlWhitespace()
         }
     }
 
     /**
-     * Whether a secret can reach the name the browser computes for [element]
-     * from its sources other than `aria-labelledby`: the element itself, its
-     * content, or — for a labelable element — a `<label>` wrapping it or
-     * pointing at it with `for`.
+     * The text every [redacted][isRedactedControl] control can lend to an
+     * accessible name, whitespace collapsed as in a computed name, longest
+     * first so a secret containing another is taken out whole: a text box's
+     * value, a select's chosen options by text and `label`.
      */
-    private fun fallbackHoldsSecret(element: Int): Boolean =
-        subtreeHoldsSecret[element] || name(element) in LABELABLE_ELEMENTS && (
-                ancestors(element).any { name(it) == "label" && subtreeHoldsSecret[it] } ||
-                        attributeMap(element)["id"]?.let { id ->
-                            labelsByFor[id]?.any { subtreeHoldsSecret[it] }
-                        } == true
-                )
-
-    /** Every `<label>` carrying a `for` attribute, by the id it names. */
-    private val labelsByFor: Map<String, List<Int>> by lazy {
-        nodeType.indices
-            .filter { isElement(it) && name(it) == "label" }
-            .mapNotNull { label -> attributeMap(label)["for"]?.let { it to label } }
-            .groupBy({ it.first }, { it.second })
-    }
-
-    private fun ancestors(index: Int): Sequence<Int> =
-        generateSequence(parentIndex?.getOrNull(index)?.takeIf { it >= 0 }) { node ->
-            parentIndex?.getOrNull(node)?.takeIf { it >= 0 }
-        }
-
-    /**
-     * The tree scope of the node, as the nearest ancestor that roots one — a
-     * document fragment (a shadow root, or template content where the snapshot
-     * reports it as one) or a `<template>` element — or `-1` for the document.
-     */
-    private fun treeScope(index: Int): Int =
-        ancestors(index).firstOrNull { nodeType[it] == DOCUMENT_FRAGMENT_NODE || name(it) == "template" } ?: -1
-
-    /** Whether the control's value is redacted as a secret (see [isRedactedControl]). */
-    private val holdsSecret: BooleanArray by lazy {
-        BooleanArray(nodeType.size) { index ->
+    private val secretTexts: List<String> by lazy {
+        nodeType.indices.asSequence()
             // checked first: formState is costly for an <option>, and only these can be redacted
-            isElement(index) && name(index) in REDACTABLE_ELEMENTS && formState(index)?.let {
-                isRedactedControl(name(index), attributeMap(index), it)
-            } ?: false
-        }
-    }
+            .filter { isElement(it) && name(it) in REDACTABLE_ELEMENTS }
+            .mapNotNull { index -> formState(index)?.let { index to it } }
+            .filter { (index, state) -> isRedactedControl(name(index), attributeMap(index), state) }
+            .flatMap { (index, state) ->
+                when (name(index)) {
+                    "select" -> descendants(index)
+                        .filter { it in selectedOptions && name(it) == "option" }
+                        .flatMap { option -> listOfNotNull(textContent(option), attributeMap(option)["label"]) }
 
-    /** Whether the node or any of its descendants [holds a secret][holdsSecret]. */
-    private val subtreeHoldsSecret: BooleanArray by lazy {
-        holdsSecret.copyOf().also { propagateToAncestors(it) }
-    }
-
-    /**
-     * The text alternative of the node as the accessible-name computation
-     * takes it from a referenced element (WAI-ARIA accname 1.2, step 2): its
-     * `aria-label`, an image's `alt`, a control's value — a select's chosen
-     * option — and else its content, with every secret control skipped, hidden
-     * content too (unless the referenced element is hidden itself, when all
-     * of it counts, but for elements never rendered at all, such as `<script>`
-     * or a `type=hidden` input) and a space around each block.
-     */
-    private fun textAlternative(index: Int): String = buildString {
-        val includeHidden = isHidden(index)
-        fun walk(node: Int) {
-            if (isText(node)) {
-                append(text(node))
-                return
-            }
-            if (!isElement(node) || holdsSecret[node] || name(node) in NEVER_NAMING_ELEMENTS) return
-            if (!includeHidden && isHidden(node)) return
-            val attributes = attributeMap(node)
-            val block = display[node].let { it != null && !it.startsWith("inline") }
-            if (block) append(' ')
-            val label = attributes["aria-label"]?.takeUnless { it.isHtmlBlank() }
-            when {
-                label != null -> append(label)
-                name(node) == "img" -> append(attributes["alt"].orEmpty())
-                name(node) == "input" -> append(inputTextAlternative(node, attributes))
-                name(node) == "select" -> descendants(node)
-                    .filter { it in selectedOptions && name(it) == "option" }
-                    .forEach { option -> append(optionText(option)) }
-
-                else -> replacementText(node)?.let { append(it) } ?: children[node].forEach(::walk)
-            }
-            if (block) append(' ')
-        }
-        walk(index)
-    }
-
-    /**
-     * The text an `<input>` contributes to a name it is referenced in, as
-     * Blink computes it: a text box its value, a button its value or default
-     * label, an image button its `alt`; a checkbox, a radio and a `type=hidden`
-     * input nothing.
-     */
-    private fun inputTextAlternative(input: Int, attributes: Map<String, String>): String {
-        val value = attributes["value"]
-        return when (inputType(attributes)) {
-            "checkbox", "radio", "hidden" -> ""
-            "submit" -> value ?: "Submit"
-            "reset" -> value ?: "Reset"
-            "button", "file" -> value.orEmpty()
-            "image" -> attributes["alt"] ?: value ?: "Submit"
-            else -> capturedAttributeMap(input)["value"].orEmpty()
-        }
-    }
-
-    /**
-     * Whether the element is hidden from the accessibility tree: `aria-hidden`,
-     * or not rendered (`display:none`, `visibility:hidden`).
-     */
-    private fun isHidden(index: Int): Boolean =
-        isElement(index) && (attributeMap(index)["aria-hidden"]?.trim()?.lowercase() == "true" ||
-                displayAnnotation(index) == "none" || visibilities.resolved[index] == "hidden")
-
-    /**
-     * Sets the bit of every ancestor of a node whose bit is set: parents
-     * precede children in the flattened pre-order array, so one reverse pass
-     * propagates it bottom-up.
-     */
-    private fun propagateToAncestors(bits: BooleanArray) {
-        // not parentIndex, which is not yet initialised for subtreeHasLayout
-        val parents = nodes.parentIndex ?: return
-        for (index in bits.size - 1 downTo 0) {
-            val parent = parents.getOrNull(index) ?: continue
-            if (parent >= 0 && bits[index]) bits[parent] = true
-        }
-    }
-
-    /** Every element carrying an id, by id, in snapshot order. */
-    private val elementsById: Map<String, List<Int>> by lazy {
-        val byId = mutableMapOf<String, MutableList<Int>>()
-        nodeType.indices.filter { isElement(it) }.forEach { index ->
-            // scanned in place: building the whole attribute map of every
-            // element just to read its id would allocate one per element
-            val flat = attributes[index]
-            for (i in 0 until flat.size - 1 step 2) {
-                if (string(flat[i]) == "id") {
-                    @OptIn(ExperimentalStdlibApi::class)
-                    byId.getOrPutIfMissing(string(flat[i + 1]).orEmpty()) { mutableListOf() } += index
-                    break
+                    // the markup's value when the live one could not be read
+                    "textarea" -> sequenceOf(state.value ?: textContent(index))
+                    else -> sequenceOf(state.value ?: attributeMap(index)["value"].orEmpty())
                 }
             }
-        }
-        byId
+            .map { it.stripAndCollapseHtmlWhitespace() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+            .sortedByDescending { it.length }
+            .toList()
     }
 
     /**
@@ -814,23 +668,21 @@ internal class DomEventBuilder(
      * resolves the browser's computed accessible name into a synthetic
      * `aria-label`. A map that already carries an explicit `aria-label`, or
      * no `aria-labelledby`, or an element whose name computes to nothing, is
-     * returned unchanged. When a secret control can contribute to the name,
-     * the name is composed without it (see [SnapshotDom.nameWithoutSecrets]),
-     * since the computed one would carry the value the capture redacts from
-     * the control itself.
+     * returned unchanged. The value of a secret control is taken out of the
+     * name (see [SnapshotDom.withoutSecrets]), since the computed one may carry
+     * what the capture redacts from the control itself.
      */
     private fun Map<String, String>.withResolvedAccessibleName(
         dom: SnapshotDom,
         element: Int
     ): Map<String, String> {
-        if ("aria-label" in this) return this
-        val idRefs = this["aria-labelledby"] ?: return this
-        val computed = element.axNode(dom)?.computedName?.stripAndCollapseHtmlWhitespace()
-        // isBlank, not isEmpty: a name of non-breaking spaces alone would read as
-        // a label downstream while showing nothing
-        if (computed.isNullOrBlank()) return this
-        val name = dom.nameWithoutSecrets(element, idRefs, computed) ?: computed
-        return if (name.isBlank()) this else this + ("aria-label" to name)
+        if ("aria-label" in this || "aria-labelledby" !in this) return this
+        // trim, which strips non-breaking spaces too: a name of them alone
+        // would read as a label downstream while showing nothing
+        val computed = element.axNode(dom)?.computedName?.trim()
+        if (computed.isNullOrEmpty()) return this
+        val name = dom.withoutSecrets(computed)
+        return if (name.isEmpty()) this else this + ("aria-label" to name)
     }
 
 }

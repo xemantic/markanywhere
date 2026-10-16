@@ -104,7 +104,7 @@ public fun formControlAttributes(
     }
 
     name == "option" -> when {
-        state.select != null && isSecretControl("select", state.select, masked = false) ->
+        state.select != null && isRedactedControl("select", state.select, FormControlState()) ->
             attributes - "selected"
 
         else -> attributes.withFlag("selected", state.selected)
@@ -204,14 +204,7 @@ private val MARKUP_VALUE_TYPES = setOf(
 // or the control's state is a tick, not a value
 private val UNREDACTED_INPUT_TYPES = MARKUP_VALUE_TYPES + setOf("checkbox", "radio")
 
-/**
- * The type of an `<input>` with these [attributes], as the redaction rules read
- * it: its `type` attribute trimmed and lowercased, empty when absent. Anything
- * else that classifies inputs — which of them contribute a value to an
- * accessible name, for instance — reads the type through this function, so it
- * never disagrees with the redaction verdict.
- */
-public fun inputType(attributes: Map<String, String>): String =
+private fun inputType(attributes: Map<String, String>): String =
     attributes["type"]?.trim()?.lowercase().orEmpty()
 
 private val Map<String, String>.hasSecretAutocomplete: Boolean

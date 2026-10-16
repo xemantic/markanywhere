@@ -424,8 +424,8 @@ class CapturePageTest {
      * A text box referenced by `aria-labelledby` contributes its *value* to the
      * computed accessible name, so resolving that name into a synthetic
      * `aria-label` would carry a secret field's value past its redaction —
-     * whether the secret is a target itself or sits inside one. The name is
-     * then composed from the references that hold no secret. Issue #101.
+     * whether the secret is a target itself or sits inside one. The value is
+     * taken out of the name, the label text kept. Issue #101.
      */
     @Test
     fun `should leave a secret control out of a resolved accessible name`() = runTest {
@@ -473,47 +473,12 @@ class CapturePageTest {
     }
 
     /**
-     * `getElementById` returns the first match in tree order, but the snapshot
-     * also holds `<template>` content (and flattened shadow trees), so the first
-     * element carrying an id in the snapshot is not necessarily the one Blink
-     * resolved. Every element carrying a referenced id is checked.
+     * A name that holds no secret is resolved as Blink computed it, even when
+     * a secret control sits inside the named element — a sign-in form's
+     * password field.
      */
     @Test
-    fun `should check every element carrying a referenced id for a secret`() = runTest {
-        // given
-        val page = NamedNodes(
-            Node("SPAN", parent = 1, attributes = mapOf("id" to "lbl")),
-            Node("#text", parent = 2, text = "Card number"),
-            Node("TEMPLATE", parent = 1),
-            Node("INPUT", parent = 4, attributes = mapOf("id" to "cc")),
-            Node("INPUT", parent = 1, value = "4111111111111111", attributes = mapOf(
-                "id" to "cc", "autocomplete" to "cc-number"
-            )),
-            Node("BUTTON", parent = 1, attributes = mapOf("aria-labelledby" to "lbl cc")),
-        )
-        val axNames = mapOf(7 to "Card number 4111111111111111")
-
-        // when
-        val events = page.capture(axNames)
-
-        // then
-        events sameAs page.expected {
-            "span"("id" to "lbl", DISPLAY to "block") { +"Card number" }
-            "template"(DISPLAY to "block") { "input"("id" to "cc", DISPLAY to "block") { } }
-            "input"("id" to "cc", "autocomplete" to "cc-number", REDACTED to "filled", DISPLAY to "block") { }
-            "button"("aria-labelledby" to "lbl cc", DISPLAY to "block", "aria-label" to "Card number") { }
-        }
-    }
-
-    /**
-     * Blink names an element from its references whenever they yield any
-     * text, so a secret elsewhere in the element — a sign-in form's password
-     * field, a hidden honeypot — never reaches the name. Whether Blink's
-     * references did yield text is not known for sure, so the name is
-     * composed from them, which gives the same name.
-     */
-    @Test
-    fun `should name an element from references that reach no secret`() = runTest {
+    fun `should keep a computed name that holds no secret`() = runTest {
         // given
         val page = NamedNodes(
             Node("FORM", parent = 1, attributes = mapOf("aria-labelledby" to "h")),
@@ -540,108 +505,105 @@ class CapturePageTest {
     }
 
     /**
-     * When no id reference resolves, Blink falls back to the other sources of
-     * a name, the element's own content among them — which takes the value of
-     * a text box inside it. Which source it took is not known here, so the name
-     * is withheld, unless it is the element's `title`, which holds no value.
+     * The accessible-name computation reaches a field's value along paths no
+     * DOM walk follows — `aria-owns`, a descendant's own `aria-labelledby`,
+     * the `<label>` of a form-associated custom element, the element's content
+     * when its references resolve to nothing — so the name Blink computed is
+     * checked for the secret itself, whichever path brought it.
      */
     @Test
-    fun `should withhold a name that may come from content holding a secret`() = runTest {
+    fun `should take a secret out of a name whatever path brought it`() = runTest {
         // given
         val page = NamedNodes(
-            Node("LABEL", parent = 1, attributes = mapOf("aria-labelledby" to "missing")),
-            Node("#text", parent = 2, text = "Card "),
-            Node("INPUT", parent = 2, value = "4111111111111111", attributes = mapOf(
-                "autocomplete" to "cc-number"
-            )),
-            Node("DIV", parent = 1, attributes = mapOf(
-                "role" to "dialog", "aria-labelledby" to "gone", "title" to "Sign in"
-            )),
-            Node("INPUT", parent = 5, value = "hunter2", attributes = mapOf("type" to "password")),
+            Node("INPUT", parent = 1, value = "123", attributes = mapOf("id" to "cvc", "autocomplete" to "cc-csc")),
+            Node("SPAN", parent = 1, attributes = mapOf("id" to "lbl", "aria-owns" to "cvc")),
+            Node("#text", parent = 3, text = "Code"),
+            Node("DIV", parent = 1, attributes = mapOf("aria-labelledby" to "lbl")),
+            Node("BUTTON", parent = 1, attributes = mapOf("aria-labelledby" to "missing")),
+            Node("SPAN", parent = 6, attributes = mapOf("aria-labelledby" to "cvc")),
+            Node("LABEL", parent = 1),
+            Node("#text", parent = 8, text = "Security code "),
+            Node("X-PAY-FIELD", parent = 8, attributes = mapOf("aria-labelledby" to "none")),
         )
-        val axNames = mapOf(2 to "Card 4111111111111111", 5 to "Sign in")
+        val axNames = mapOf(5 to "Code 123", 6 to "123", 10 to "Security code 123")
 
         // when
         val events = page.capture(axNames)
 
         // then
         events sameAs page.expected {
-            "label"("aria-labelledby" to "missing", DISPLAY to "block") {
-                +"Card "
-                "input"("autocomplete" to "cc-number", REDACTED to "filled", DISPLAY to "block") { }
+            "input"("id" to "cvc", "autocomplete" to "cc-csc", REDACTED to "filled", DISPLAY to "block") { }
+            "span"("id" to "lbl", "aria-owns" to "cvc", DISPLAY to "block") { +"Code" }
+            "div"("aria-labelledby" to "lbl", DISPLAY to "block", "aria-label" to "Code") { }
+            "button"("aria-labelledby" to "missing", DISPLAY to "block") {
+                "span"("aria-labelledby" to "cvc", DISPLAY to "block") { }
             }
-            "div"(
-                "role" to "dialog",
-                "aria-labelledby" to "gone",
-                "title" to "Sign in",
-                DISPLAY to "block",
-                "aria-label" to "Sign in"
-            ) {
-                "input"("type" to "password", REDACTED to "filled", DISPLAY to "block") { }
+            "label"(DISPLAY to "block") {
+                +"Security code "
+                "x-pay-field"("aria-labelledby" to "none", DISPLAY to "block", "aria-label" to "Security code") { }
             }
         }
     }
 
     /**
-     * A name composed without a secret follows the text alternative Blink
-     * computes for each reference: a select names its chosen option, an image
-     * its `alt`, an element its `aria-label`, hidden content is skipped and
-     * blocks are kept apart.
+     * A secret glued to other text — no space between the label and the value,
+     * or a short value that is only part of a longer number — cannot be told
+     * apart from the text around it, so the name is withheld whole rather
+     * than cut up or leaked.
      */
     @Test
-    fun `should compose a name without a secret as the browser computes it`() = runTest {
+    fun `should withhold a name a secret is glued into`() = runTest {
         // given
         val page = NamedNodes(
-            Node("DIV", parent = 1, attributes = mapOf("id" to "lbl")),
-            Node("P", parent = 2),
-            Node("#text", parent = 3, text = "Card"),
-            Node("P", parent = 2),
-            Node("#text", parent = 5, text = "expiry"),
-            Node("SPAN", parent = 2, display = "inline", attributes = mapOf("aria-hidden" to "true")),
-            Node("#text", parent = 7, text = "*"),
-            Node("SPAN", parent = 2, laidOut = false),
-            Node("#text", parent = 9, text = "(required)"),
-            Node("SELECT", parent = 1, attributes = mapOf("id" to "month")),
-            Node("OPTION", parent = 11, attributes = mapOf("value" to "02")),
-            Node("#text", parent = 12, text = "February"),
-            Node("OPTION", parent = 11, selected = true, attributes = mapOf("value" to "03")),
-            Node("#text", parent = 14, text = "March"),
-            Node("SPAN", parent = 1, display = "inline", attributes = mapOf("id" to "icon")),
-            Node("IMG", parent = 16, display = "inline", attributes = mapOf("alt" to "Visa")),
-            Node("SPAN", parent = 1, display = "inline", attributes = mapOf("id" to "hint", "aria-label" to "or later")),
-            Node("#text", parent = 18, text = "≥"),
-            Node("INPUT", parent = 1, value = "2031", attributes = mapOf(
-                "id" to "year", "autocomplete" to "cc-exp-year"
-            )),
-            Node("BUTTON", parent = 1, attributes = mapOf("aria-labelledby" to "lbl month icon hint year")),
+            Node("INPUT", parent = 1, value = "123", attributes = mapOf("autocomplete" to "cc-csc")),
+            Node("BUTTON", parent = 1, attributes = mapOf("aria-labelledby" to "a")),
+            Node("BUTTON", parent = 1, attributes = mapOf("aria-labelledby" to "b")),
         )
-        val axNames = mapOf(21 to "Card expiry March Visa or later 2031")
+        val axNames = mapOf(3 to "CVC:123", 4 to "Order 1234")
 
         // when
         val events = page.capture(axNames)
 
         // then
         events sameAs page.expected {
-            "div"("id" to "lbl", DISPLAY to "block") {
-                "p"(DISPLAY to "block") { +"Card" }
-                "p"(DISPLAY to "block") { +"expiry" }
-                "span"("aria-hidden" to "true", DISPLAY to "inline") { +"*" }
-                "span"(DISPLAY to "none") { +"(required)" }
+            "input"("autocomplete" to "cc-csc", REDACTED to "filled", DISPLAY to "block") { }
+            "button"("aria-labelledby" to "a", DISPLAY to "block") { }
+            "button"("aria-labelledby" to "b", DISPLAY to "block") { }
+        }
+    }
+
+    /**
+     * A secret select lends a name its chosen option — by text, or by the
+     * option's `label` where it has one — and a secret text area its value,
+     * whitespace collapsed as in the computed name; a secret's markup value
+     * counts when the live one was not read.
+     */
+    @Test
+    fun `should take secret select options and text area values out of a name`() = runTest {
+        // given
+        val page = NamedNodes(
+            Node("SELECT", parent = 1, attributes = mapOf("autocomplete" to "cc-exp-month")),
+            Node("OPTION", parent = 2, selected = true, laidOut = false, attributes = mapOf("label" to "Mar")),
+            Node("#text", parent = 3, text = "March"),
+            Node("TEXTAREA", parent = 1, value = "line one\nline  two", masked = true),
+            Node("INPUT", parent = 1, attributes = mapOf("autocomplete" to "cc-number", "value" to "4111")),
+            Node("BUTTON", parent = 1, attributes = mapOf("aria-labelledby" to "x")),
+            Node("BUTTON", parent = 1, attributes = mapOf("aria-labelledby" to "y")),
+        )
+        val axNames = mapOf(7 to "Expires Mar or March", 8 to "Memo line one line two 4111")
+
+        // when
+        val events = page.capture(axNames)
+
+        // then
+        events sameAs page.expected {
+            "select"("autocomplete" to "cc-exp-month", REDACTED to "filled", DISPLAY to "block") {
+                "option"("label" to "Mar", DISPLAY to "none") { +"March" }
             }
-            "select"("id" to "month", DISPLAY to "block") {
-                "option"("value" to "02", DISPLAY to "block") { +"February" }
-                "option"("value" to "03", "selected" to "", DISPLAY to "block") { +"March" }
-            }
-            "span"("id" to "icon", DISPLAY to "inline") {
-                "img"("alt" to "Visa", DISPLAY to "inline") { }
-            }
-            "span"("id" to "hint", "aria-label" to "or later", DISPLAY to "inline") { +"≥" }
-            "input"("id" to "year", "autocomplete" to "cc-exp-year", REDACTED to "filled", DISPLAY to "block") { }
-            "button"(
-                "aria-labelledby" to "lbl month icon hint year",
-                DISPLAY to "block",
-                "aria-label" to "Card expiry March Visa or later"
-            ) { }
+            "textarea"(REDACTED to "filled", DISPLAY to "block") { }
+            "input"("autocomplete" to "cc-number", REDACTED to "filled", DISPLAY to "block") { }
+            "button"("aria-labelledby" to "x", DISPLAY to "block", "aria-label" to "Expires or") { }
+            "button"("aria-labelledby" to "y", DISPLAY to "block", "aria-label" to "Memo") { }
         }
     }
 
@@ -674,244 +636,26 @@ class CapturePageTest {
     }
 
     /**
-     * The computed name and a composed one are normalised alike: HTML
-     * whitespace is stripped and collapsed, a non-breaking space is content.
+     * A computed name is trimmed as the browser reported it — non-breaking
+     * spaces at its edges included — and otherwise kept as it is.
      */
     @Test
-    fun `should normalise a computed name as a composed one`() = runTest {
+    fun `should trim a computed name`() = runTest {
         // given
         val page = NamedNodes(
             Node("SPAN", parent = 1, attributes = mapOf("id" to "lbl")),
-            Node("#text", parent = 2, text = "\u00A0Card  number "),
+            Node("#text", parent = 2, text = "Search\u00A0"),
             Node("BUTTON", parent = 1, attributes = mapOf("aria-labelledby" to "lbl")),
         )
-        val axNames = mapOf(4 to " \u00A0Card  number ")
+        val axNames = mapOf(4 to " Search\u00A0")
 
         // when
         val events = page.capture(axNames)
 
         // then
         events sameAs page.expected {
-            "span"("id" to "lbl", DISPLAY to "block") { +"\u00A0Card  number " }
-            "button"("aria-labelledby" to "lbl", DISPLAY to "block", "aria-label" to "\u00A0Card number") { }
-        }
-    }
-
-    /**
-     * An id carried only by `<template>` content or by an element of a shadow
-     * tree is not found by `getElementById`, so Blink falls back on the
-     * element's content, which holds the secret. The reference counts as
-     * unresolved and the name is withheld.
-     */
-    @Test
-    fun `should withhold a name whose only reference lies outside the tree scope`() = runTest {
-        // given
-        val page = NamedNodes(
-            Node("LABEL", parent = 1, attributes = mapOf("aria-labelledby" to "t")),
-            Node("#text", parent = 2, text = "Card "),
-            Node("INPUT", parent = 2, value = "4111111111111111", attributes = mapOf(
-                "autocomplete" to "cc-number"
-            )),
-            Node("TEMPLATE", parent = 1),
-            Node("SPAN", parent = 5, attributes = mapOf("id" to "t")),
-            Node("#text", parent = 6, text = "Pay"),
-            Node("DIV", parent = 1),
-            Node("#document-fragment", parent = 8),
-            Node("SPAN", parent = 9, attributes = mapOf("id" to "s")),
-            Node("#text", parent = 10, text = "Pay"),
-            Node("LABEL", parent = 1, attributes = mapOf("aria-labelledby" to "s")),
-            Node("#text", parent = 12, text = "CVC "),
-            Node("INPUT", parent = 12, value = "123", attributes = mapOf("autocomplete" to "cc-csc")),
-        )
-        val axNames = mapOf(2 to "Card 4111111111111111", 12 to "CVC 123")
-
-        // when
-        val events = page.capture(axNames)
-
-        // then
-        events sameAs page.expected {
-            "label"("aria-labelledby" to "t", DISPLAY to "block") {
-                +"Card "
-                "input"("autocomplete" to "cc-number", REDACTED to "filled", DISPLAY to "block") { }
-            }
-            "template"(DISPLAY to "block") { "span"("id" to "t", DISPLAY to "block") { +"Pay" } }
-            "div"(DISPLAY to "block") { }
-            "label"("aria-labelledby" to "s", DISPLAY to "block") {
-                +"CVC "
-                "input"("autocomplete" to "cc-csc", REDACTED to "filled", DISPLAY to "block") { }
-            }
-        }
-    }
-
-    /**
-     * When a referenced element is hidden its hidden content counts, but never
-     * what is not rendered at all — a `type=hidden` input's value, a script's
-     * source — which Blink does not take into a name either. Counting it would
-     * make references that yield nothing look as if they named the element.
-     */
-    @Test
-    fun `should leave unrendered content of a hidden reference out of a name`() = runTest {
-        // given
-        val page = NamedNodes(
-            Node("LABEL", parent = 1, attributes = mapOf("aria-labelledby" to "h")),
-            Node("#text", parent = 2, text = "Card "),
-            Node("INPUT", parent = 2, value = "4111111111111111", attributes = mapOf(
-                "id" to "cc", "autocomplete" to "cc-number"
-            )),
-            Node("DIV", parent = 1, laidOut = false, attributes = mapOf("id" to "h")),
-            Node("INPUT", parent = 5, laidOut = false, attributes = mapOf("type" to "hidden", "value" to "csrf123")),
-            Node("SCRIPT", parent = 5, laidOut = false),
-            Node("#text", parent = 7, text = "track()"),
-            Node("BUTTON", parent = 1, attributes = mapOf("aria-labelledby" to "h cc")),
-        )
-        val axNames = mapOf(2 to "Card 4111111111111111", 9 to "4111111111111111")
-
-        // when
-        val events = page.capture(axNames)
-
-        // then
-        events sameAs page.expected {
-            "label"("aria-labelledby" to "h", DISPLAY to "block") {
-                +"Card "
-                "input"("id" to "cc", "autocomplete" to "cc-number", REDACTED to "filled", DISPLAY to "block") { }
-            }
-            "div"("id" to "h", DISPLAY to "none") {
-                "input"("type" to "hidden", "value" to "csrf123", DISPLAY to "none") { }
-                "script"(DISPLAY to "none") { +"track()" }
-            }
-            "button"("aria-labelledby" to "h cc", DISPLAY to "block") { }
-        }
-    }
-
-    /**
-     * Blink's fallback sources of a name include a labelable element's
-     * `<label>`s — one pointing at it with `for`, or one wrapping it — whose
-     * text takes the value of a control inside them.
-     */
-    @Test
-    fun `should withhold a name that may come from a label holding a secret`() = runTest {
-        // given
-        val page = NamedNodes(
-            Node("INPUT", parent = 1, value = "50", attributes = mapOf("id" to "amt", "aria-labelledby" to "gone")),
-            Node("LABEL", parent = 1, attributes = mapOf("for" to "amt")),
-            Node("#text", parent = 3, text = "Card "),
-            Node("INPUT", parent = 3, value = "4111111111111111", attributes = mapOf("autocomplete" to "cc-number")),
-            Node("LABEL", parent = 1),
-            Node("#text", parent = 6, text = "CVC "),
-            Node("INPUT", parent = 6, value = "123", attributes = mapOf("autocomplete" to "cc-csc")),
-            Node("SELECT", parent = 6, attributes = mapOf("aria-labelledby" to "missing")),
-        )
-        val axNames = mapOf(2 to "Card 4111111111111111", 9 to "CVC 123")
-
-        // when
-        val events = page.capture(axNames)
-
-        // then
-        events sameAs page.expected {
-            "input"("id" to "amt", "aria-labelledby" to "gone", "value" to "50", DISPLAY to "block") { }
-            "label"("for" to "amt", DISPLAY to "block") {
-                +"Card "
-                "input"("autocomplete" to "cc-number", REDACTED to "filled", DISPLAY to "block") { }
-            }
-            "label"(DISPLAY to "block") {
-                +"CVC "
-                "input"("autocomplete" to "cc-csc", REDACTED to "filled", DISPLAY to "block") { }
-                "select"("aria-labelledby" to "missing", DISPLAY to "block") { }
-            }
-        }
-    }
-
-    /**
-     * A secret control naming itself through a reference that does not resolve
-     * may get its name from its own value — a select its chosen option.
-     */
-    @Test
-    fun `should withhold a name a secret control may take from itself`() = runTest {
-        // given
-        val page = NamedNodes(
-            Node("SELECT", parent = 1, attributes = mapOf(
-                "autocomplete" to "cc-exp-month", "aria-labelledby" to "missing"
-            )),
-            Node("OPTION", parent = 2, selected = true, attributes = mapOf("value" to "03")),
-            Node("#text", parent = 3, text = "March"),
-        )
-        val axNames = mapOf(2 to "March")
-
-        // when
-        val events = page.capture(axNames)
-
-        // then
-        events sameAs page.expected {
-            "select"(
-                "autocomplete" to "cc-exp-month",
-                "aria-labelledby" to "missing",
-                REDACTED to "filled",
-                DISPLAY to "block"
-            ) {
-                "option"("value" to "03", DISPLAY to "block") { +"March" }
-            }
-        }
-    }
-
-    /**
-     * Everything below a `<select>` is annotated `display:none` (its popup has
-     * no layout box), so a chosen option's text is read from its text nodes,
-     * markup inside the option included.
-     */
-    @Test
-    fun `should name a referenced select by its chosen option's marked-up text`() = runTest {
-        // given
-        val page = NamedNodes(
-            Node("SELECT", parent = 1, attributes = mapOf("id" to "month")),
-            Node("OPTION", parent = 2, selected = true, laidOut = false),
-            Node("SPAN", parent = 3, laidOut = false),
-            Node("#text", parent = 4, text = "March"),
-            Node("INPUT", parent = 1, value = "2031", attributes = mapOf(
-                "id" to "year", "autocomplete" to "cc-exp-year"
-            )),
-            Node("BUTTON", parent = 1, attributes = mapOf("aria-labelledby" to "month year")),
-        )
-        val axNames = mapOf(7 to "March 2031")
-
-        // when
-        val events = page.capture(axNames)
-
-        // then
-        events sameAs page.expected {
-            "select"("id" to "month", DISPLAY to "block") {
-                "option"("selected" to "", DISPLAY to "none") { "span"(DISPLAY to "none") { +"March" } }
-            }
-            "input"("id" to "year", "autocomplete" to "cc-exp-year", REDACTED to "filled", DISPLAY to "block") { }
-            "button"("aria-labelledby" to "month year", DISPLAY to "block", "aria-label" to "March") { }
-        }
-    }
-
-    /**
-     * A referenced input contributes what Blink takes from it: a submit or
-     * reset button its value or default label, an image button its `alt`.
-     */
-    @Test
-    fun `should name referenced input buttons as the browser does`() = runTest {
-        // given
-        val page = NamedNodes(
-            Node("INPUT", parent = 1, attributes = mapOf("id" to "s", "type" to "submit")),
-            Node("INPUT", parent = 1, attributes = mapOf("id" to "r", "type" to "reset", "value" to "Clear")),
-            Node("INPUT", parent = 1, attributes = mapOf("id" to "i", "type" to "image", "alt" to "Go")),
-            Node("INPUT", parent = 1, value = "hunter2", attributes = mapOf("id" to "p", "type" to "password")),
-            Node("DIV", parent = 1, attributes = mapOf("aria-labelledby" to "s r i p")),
-        )
-        val axNames = mapOf(6 to "Submit Clear Go hunter2")
-
-        // when
-        val events = page.capture(axNames)
-
-        // then
-        events sameAs page.expected {
-            "input"("id" to "s", "type" to "submit", DISPLAY to "block") { }
-            "input"("id" to "r", "type" to "reset", "value" to "Clear", DISPLAY to "block") { }
-            "input"("id" to "i", "type" to "image", "alt" to "Go", DISPLAY to "block") { }
-            "input"("id" to "p", "type" to "password", REDACTED to "filled", DISPLAY to "block") { }
-            "div"("aria-labelledby" to "s r i p", DISPLAY to "block", "aria-label" to "Submit Clear Go") { }
+            "span"("id" to "lbl", DISPLAY to "block") { +"Search\u00A0" }
+            "button"("aria-labelledby" to "lbl", DISPLAY to "block", "aria-label" to "Search") { }
         }
     }
 

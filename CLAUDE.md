@@ -540,6 +540,9 @@ If the fix is bounded (one inline construct, one or two lines of lookahead), it'
 - A dump has **two producers** — the CDP capture (`CapturePage.kt`) and the in-page JS walker (`ElementToSemanticEvents.kt`) — and anything decided about a captured element's content must be decided by a shared function both call, never in one of them.
   Live form state and secret redaction (`FormControls.kt` in `markanywhere-dump`) are the case in point: a first version lived only in the CDP capture, so a JS dump kept a markup password the CDP dump hid.
   Redaction belongs at **capture**, not in a downstream operator: a secret that reaches a dump has already leaked (dumps are committed as fixtures and sent to services), and only the capture sees the live value at all.
+- Keeping secrets out of a resolved `aria-labelledby` name (`SnapshotDom.withoutSecrets`) checks **Blink's computed name for the secret values themselves** — never re-implement accname to predict whether a secret *can* reach the name.
+  A first version of #101 did that, walking the DOM, and every path Blink takes that the copy lacked became a leak (`aria-owns`, a descendant's own `aria-labelledby`, a form-associated custom element's `<label>`) or a lost name (shadow trees, `visibility:visible` under `hidden`).
+  A secret that is a whitespace-bounded run of its own is cut out, label text kept; one glued to other text withholds the whole name, since cutting it would mangle unrelated text (CVC `123` inside `Order 1234`).
 - Running `:markanywhere-js:jsTest` needs `-PjvmOnlyBuild=false -PtargetGroup=js`, and that build **narrows `kotlin-js-store/yarn.lock`** (it drops entries the full multi-target build needs, e.g. `ws`).
   Run `kotlinUpgradeYarnLock` to let the tests run, then **revert the lock** — committing the narrowed version breaks the full build.
   Karma's `ChromeHeadless` works locally.
