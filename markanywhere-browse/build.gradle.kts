@@ -51,6 +51,7 @@ kotlin {
             dependencies {
                 api(project(":markanywhere-api"))
                 api(project(":markanywhere-dump"))
+                implementation(project(":markanywhere-html-spec"))
                 api(libs.kdriver.core)
                 implementation(libs.kotlinx.coroutines.core)
             }

@@ -25,7 +25,6 @@ import com.xemantic.markanywhere.SemanticEvent
  */
 public val SemanticEvent.Mark.classList: List<String> get() =
     this["class"]
-        ?.split(*HTML_WHITESPACE_CHARS)
-        ?.filter { it.isNotEmpty() }
+        ?.splitOnHtmlWhitespace()
         ?.distinct()
         ?: emptyList()

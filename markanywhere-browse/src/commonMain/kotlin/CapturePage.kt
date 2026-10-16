@@ -23,6 +23,8 @@ import com.xemantic.markanywhere.dump.SemanticEventDump
 import com.xemantic.markanywhere.dump.formControlAttributes
 import com.xemantic.markanywhere.dump.formControlText
 import com.xemantic.markanywhere.dump.hasLiveFormState
+import com.xemantic.markanywhere.dump.isRedactedControl
+import com.xemantic.markanywhere.html.spec.stripAndCollapseHtmlWhitespace
 import dev.kdriver.cdp.domain.Accessibility
 import dev.kdriver.cdp.domain.DOMSnapshot
 import dev.kdriver.cdp.domain.accessibility
@@ -41,6 +43,9 @@ private val COMPUTED_STYLES = listOf("display", "visibility", "-webkit-text-secu
 private const val DISPLAY_STYLE = 0
 private const val VISIBILITY_STYLE = 1
 private const val TEXT_SECURITY_STYLE = 2
+
+// the only elements whose value the capture can redact (see isRedactedControl)
+private val REDACTABLE_ELEMENTS = setOf("input", "textarea", "select")
 
 /**
  * The result of a [capturePage]: the [SemanticEventDump] plus the `ref →
@@ -189,6 +194,7 @@ internal class SnapshotDom(
     private val document = snapshot.documents[documentIndex]
     private val nodes = document.nodes
     private val layout = document.layout
+    private val parentIndex = nodes.parentIndex
 
     private val nodeType = requireNotNull(nodes.nodeType) { "no nodeType in snapshot" }
     private val nodeName = requireNotNull(nodes.nodeName) { "no nodeName in snapshot" }
@@ -207,7 +213,7 @@ internal class SnapshotDom(
 
     val children: List<List<Int>> = buildList<MutableList<Int>> {
         repeat(nodeType.size) { add(mutableListOf()) }
-        nodes.parentIndex?.forEachIndexed { index, parent ->
+        parentIndex?.forEachIndexed { index, parent ->
             if (parent >= 0) this[parent] += index
         }
     }
@@ -243,7 +249,7 @@ internal class SnapshotDom(
         size = nodeType.size
     ).also { has ->
         layout.nodeIndex.forEach { has[it] = true }
-        val parents = nodes.parentIndex ?: return@also
+        val parents = parentIndex ?: return@also
         // parents precede children in the flattened pre-order array,
         // so one reverse pass propagates the bit bottom-up
         for (index in nodeType.size - 1 downTo 0) {
@@ -420,30 +426,30 @@ internal class SnapshotDom(
      */
     private fun selectedValue(select: Int): String? =
         descendants(select).firstOrNull { it in selectedOptions && name(it) == "option" }
-            ?.let { option ->
-                attributeMap(option)["value"]
-                    ?: descendants(option).filter { isText(it) }.joinToString("") { text(it) }.trim()
-            }
+            ?.let { option -> attributeMap(option)["value"] ?: textContent(option).trim() }
+
+    /**
+     * The text of the node's descendant text nodes whatever their display — an
+     * `<option>`'s label, a `<textarea>`'s markup value: everything below a
+     * `<select>` is annotated `none` (see [displayAnnotation]), its popup having
+     * no layout box.
+     */
+    private fun textContent(index: Int): String =
+        descendants(index).filter { isText(it) }.joinToString("") { text(it) }
 
     /** The `<select>` an `<option>` belongs to, through an `<optgroup>`, if any. */
-    private fun enclosingSelect(option: Int): Int? {
-        val parents = parentIndex ?: return null
-        var index = parents.getOrNull(option) ?: return null
-        while (index >= 0) {
-            when (name(index)) {
-                "select" -> return index
-                "datalist" -> return null
-            }
-            index = parents.getOrNull(index) ?: return null
+    private fun enclosingSelect(option: Int): Int? =
+        ancestors(option).firstOrNull { name(it) == "select" || name(it) == "datalist" }
+            ?.takeIf { name(it) == "select" }
+
+    private fun ancestors(index: Int): Sequence<Int> =
+        generateSequence(parentIndex?.getOrNull(index)?.takeIf { it >= 0 }) { node ->
+            parentIndex?.getOrNull(node)?.takeIf { it >= 0 }
         }
-        return null
-    }
 
     private fun descendants(index: Int): Sequence<Int> = children[index].asSequence().flatMap {
         sequenceOf(it) + descendants(it)
     }
-
-    private val parentIndex = nodes.parentIndex
 
     /**
      * The element's attributes as captured: the markup's, with a form
@@ -453,6 +459,65 @@ internal class SnapshotDom(
         val attributes = attributeMap(index)
         val state = formState(index) ?: return attributes
         return formControlAttributes(name(index), attributes, state)
+    }
+
+    /**
+     * [name], a name the browser computed for an element, with the value of
+     * every secret control taken out of it — or an empty string when a value
+     * cannot be taken out cleanly.
+     *
+     * The accessible-name computation takes a text box's *value* (a select's
+     * chosen option) whenever it reaches one, and it reaches one along many
+     * paths — `aria-labelledby`, the element's content, its `<label>`s,
+     * `aria-owns`, a descendant's own `aria-labelledby`, shadow trees — so
+     * whether a secret *can* reach the name is not judged here; the name is
+     * checked for the secrets themselves instead, which the capture knows
+     * already (see [isRedactedControl]). A secret is then a word run of its
+     * own in the name ("Card number 4111…") and is dropped, label text kept;
+     * one glued to other text ("Card4111…", or a CVC `123` inside an unrelated
+     * `1234`) cannot be told apart from it, so the name is withheld whole.
+     */
+    fun withoutSecrets(name: String): String {
+        if (secretTexts.isEmpty()) return name
+        var result = name.stripAndCollapseHtmlWhitespace()
+        if (secretTexts.none { it in result }) return name
+        while (true) {
+            val secret = secretTexts.firstOrNull { it in result } ?: return result
+            val start = result.indexOf(secret)
+            val end = start + secret.length
+            if (start > 0 && result[start - 1] != ' ' || end < result.length && result[end] != ' ') return ""
+            result = (result.take(start) + result.drop(end)).stripAndCollapseHtmlWhitespace()
+        }
+    }
+
+    /**
+     * The text every [redacted][isRedactedControl] control can lend to an
+     * accessible name, whitespace collapsed as in a computed name, longest
+     * first so a secret containing another is taken out whole: a text box's
+     * value, a select's chosen options by text and `label`.
+     */
+    private val secretTexts: List<String> by lazy {
+        nodeType.indices.asSequence()
+            // checked first: formState is costly for an <option>, and only these can be redacted
+            .filter { isElement(it) && name(it) in REDACTABLE_ELEMENTS }
+            .mapNotNull { index -> formState(index)?.let { index to it } }
+            .filter { (index, state) -> isRedactedControl(name(index), attributeMap(index), state) }
+            .flatMap { (index, state) ->
+                when (name(index)) {
+                    "select" -> descendants(index)
+                        .filter { it in selectedOptions && name(it) == "option" }
+                        .flatMap { option -> listOfNotNull(textContent(option), attributeMap(option)["label"]) }
+
+                    // the markup's value when the live one could not be read
+                    "textarea" -> sequenceOf(state.value ?: textContent(index))
+                    else -> sequenceOf(state.value ?: attributeMap(index)["value"].orEmpty())
+                }
+            }
+            .map { it.stripAndCollapseHtmlWhitespace() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+            .sortedByDescending { it.length }
+            .toList()
     }
 
     /**
@@ -603,18 +668,21 @@ internal class DomEventBuilder(
      * resolves the browser's computed accessible name into a synthetic
      * `aria-label`. A map that already carries an explicit `aria-label`, or
      * no `aria-labelledby`, or an element whose name computes to nothing, is
-     * returned unchanged.
+     * returned unchanged. The value of a secret control is taken out of the
+     * name (see [SnapshotDom.withoutSecrets]), since the computed one may carry
+     * what the capture redacts from the control itself.
      */
     private fun Map<String, String>.withResolvedAccessibleName(
         dom: SnapshotDom,
         element: Int
-    ): Map<String, String> = when {
-        "aria-label" in this -> this
-        "aria-labelledby" !in this -> this
-        else -> {
-            val name = element.axNode(dom)?.computedName?.trim()
-            if (name.isNullOrEmpty()) this else this + ("aria-label" to name)
-        }
+    ): Map<String, String> {
+        if ("aria-label" in this || "aria-labelledby" !in this) return this
+        // trim, which strips non-breaking spaces too: a name of them alone
+        // would read as a label downstream while showing nothing
+        val computed = element.axNode(dom)?.computedName?.trim()
+        if (computed.isNullOrEmpty()) return this
+        val name = dom.withoutSecrets(computed)
+        return if (name.isEmpty()) this else this + ("aria-label" to name)
     }
 
 }

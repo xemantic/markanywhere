@@ -60,3 +60,12 @@ public fun String.stripAndCollapseHtmlWhitespace(): String = buildString(length)
         }
     }
 }
+
+/**
+ * The tokens of this string split on [HTML whitespace][isHtmlWhitespace],
+ * empty ones dropped — the WHATWG "split a string on ASCII whitespace", how
+ * the DOM reads every space-separated attribute value (`class`,
+ * `autocomplete`, the id references of `aria-labelledby`, …).
+ */
+public fun String.splitOnHtmlWhitespace(): List<String> =
+    split(*HTML_WHITESPACE_CHARS).filter { it.isNotEmpty() }

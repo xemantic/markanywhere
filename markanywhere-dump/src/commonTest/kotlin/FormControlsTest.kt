@@ -307,4 +307,40 @@ class FormControlsTest {
         assert(hasLiveFormState("select"))
     }
 
+    /**
+     * Anything else a capture derives from a control's value — an accessible
+     * name resolved from it, say — has to know which controls hide theirs, and
+     * must agree with [formControlAttributes] on every one of them.
+     */
+    @Test
+    fun `should report a control as redacted exactly when its attributes are`() {
+        // given
+        val controls = listOf(
+            Triple("input", mapOf("type" to "password"), FormControlState(value = "hunter2")),
+            Triple("input", mapOf("autocomplete" to "cc-number"), FormControlState(value = "")),
+            Triple("input", mapOf("type" to "text"), FormControlState(value = "1234", masked = true)),
+            Triple("input", mapOf("type" to "hidden", "autocomplete" to "one-time-code"), FormControlState()),
+            Triple("input", mapOf("type" to "checkbox", "autocomplete" to "cc-csc"), FormControlState()),
+            Triple("input", mapOf("type" to "text"), FormControlState(value = "Alice")),
+            Triple("textarea", mapOf("autocomplete" to "one-time-code"), FormControlState(value = "x")),
+            Triple("textarea", emptyMap(), FormControlState(value = "bio")),
+            Triple("select", mapOf("autocomplete" to "cc-exp-month"), FormControlState(value = "08")),
+            Triple("select", mapOf("autocomplete" to "country"), FormControlState(value = "PL")),
+            Triple("option", emptyMap(), FormControlState(select = mapOf("autocomplete" to "cc-exp"))),
+            Triple("div", mapOf("autocomplete" to "cc-number"), FormControlState()),
+        )
+
+        // when
+        val verdicts = controls.map { (name, attributes, state) ->
+            isRedactedControl(name, attributes, state) to
+                    (redacted in formControlAttributes(name, attributes, state))
+        }
+
+        // then
+        assert(verdicts.all { (redacts, marked) -> redacts == marked })
+        assert(verdicts.map { it.first } == listOf(
+            true, true, true, false, false, false, true, false, true, false, false, false
+        ))
+    }
+
 }

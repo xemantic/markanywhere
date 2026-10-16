@@ -98,4 +98,31 @@ class HtmlWhitespaceTest {
         result sameAs ""
     }
 
+    @Test
+    fun `should split a string on HTML whitespace into its tokens`() {
+        // when
+        val tokens = " lbl\tcc\r\n\u000Csection-pay  ".splitOnHtmlWhitespace()
+
+        // then
+        assert(tokens == listOf("lbl", "cc", "section-pay"))
+    }
+
+    @Test
+    fun `should not split on NBSP`() {
+        // when
+        val tokens = "a\u00A0b c".splitOnHtmlWhitespace()
+
+        // then
+        assert(tokens == listOf("a\u00A0b", "c"))
+    }
+
+    @Test
+    fun `should split a blank string into no tokens`() {
+        // when
+        val tokens = " \t\n".splitOnHtmlWhitespace()
+
+        // then
+        assert(tokens == emptyList<String>())
+    }
+
 }
