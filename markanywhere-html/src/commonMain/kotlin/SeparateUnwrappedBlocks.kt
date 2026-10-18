@@ -65,7 +65,16 @@ import kotlinx.coroutines.flow.flow
  * outside its label. Controls are distinct things to act on (see
  * [isDeclaredControl] — only a declared one: a bare ref-bearing `<span>` may
  * be half a word, `US` + `$5`), and nothing renders two of them flush against
- * each other on purpose — they would read as one. Whitespace-only text passes through untouched —
+ * each other on purpose — they would read as one.
+ *
+ * A separator goes *before* the marks opened since the previous token (`<b>`,
+ * `<em>`, an inline `<a>`, a blockified `<strong>`, the box itself …), never
+ * inside them: the whitespace normalizer drops a space that directly follows
+ * an opening tag, so `[x](u)<b><a>y</a></b>` would otherwise still render
+ * `[x](u)**[y](v)**` (issues #96, #148). Those marks are held only until the
+ * next event decides — a run of opening tags, never content. The first text
+ * of a preserve region (`<code>`, …) is a token like any other for this
+ * decision, its own text left verbatim. Whitespace-only text passes through untouched —
  * the downstream collapser already turns it into the separator, and any doubling
  * with an injected space collapses there.
  *
@@ -93,6 +102,14 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
     // and leading wrappers out, so those still read as their tag's UA default
     // — a `<div>`'s `block`, wrong only for a leading `display: contents` one.
     var captured = false
+    // The opening marks held since the last token, so a separator can still
+    // be placed before them.
+    val heldMarks = mutableListOf<SemanticEvent>()
+
+    suspend fun releaseHeldMarks() {
+        heldMarks.forEach { emit(it) }
+        heldMarks.clear()
+    }
 
     fun cross(boundary: BlockBoundary) {
         when (boundary) {
@@ -113,6 +130,7 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
         ) {
             emit(SemanticEvent.Text(" "))
         }
+        releaseHeldMarks()
         emit(token)
         crossedSeparatedBox = false
         crossedSurvivingBlock = false
@@ -142,8 +160,9 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
                 if (preserveDepth == 0) {
                     cross(boundary)
                     if (control) separateAdjacentControl()
-                    if (event.name == "img") emitInlineToken(event) else emit(event)
-                } else emit(event)
+                }
+                if (preserveDepth == 0 && event.name == "img") emitInlineToken(event)
+                else heldMarks += event
                 if (control) openControls.addLast(++controlSerial)
                 val opensPreserve = event.isPreserveRegion()
                 stack.addLast(
@@ -156,15 +175,22 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
                 if (frame?.opensPreserve == true) preserveDepth--
                 if (frame?.control == true) openControls.removeLastOrNull()
                 if (preserveDepth == 0) cross(frame?.boundary ?: BlockBoundary.INLINE)
+                releaseHeldMarks()
                 emit(event)
             }
             is Text -> when {
-                preserveDepth > 0 -> emit(event)
-                event.text.isHtmlBlank() -> emit(event)
+                // Verbatim text: no separator is injected inside the region,
+                // as nothing is crossed there once its first token is seen.
+                preserveDepth > 0 && event.text.isNotEmpty() -> emitInlineToken(event)
+                preserveDepth > 0 || event.text.isHtmlBlank() -> {
+                    releaseHeldMarks()
+                    emit(event)
+                }
                 else -> emitInlineToken(event)
             }
         }
     }
+    releaseHeldMarks()
 }
 
 /** How crossing an element's boundary bears on separating adjacent inline content. */

@@ -39,15 +39,13 @@ class SeparateUnwrappedBlocksTest {
         // when
         val output = input.separateUnwrappedBlocks()
 
-        // then — a space is injected before the second box's content
+        // then — a space is injected before the second box
         output sameAs semanticEvents(tagged = true) {
             "div"(AccessibilityAnnotations.DISPLAY to "flex") {
                 "span" { +"3 hrs ago" }
                 "div"("data-testid" to "card-metadata-separator") { }
-                "span" {
-                    +" "
-                    +"Europe"
-                }
+                +" "
+                "span" { +"Europe" }
             }
         }
     }
@@ -71,10 +69,8 @@ class SeparateUnwrappedBlocksTest {
         output sameAs semanticEvents(tagged = true) {
             "div"("role" to "textbox") {
                 +"Hi Paul,"
-                "div" {
-                    +" "
-                    +"Three hearts."
-                }
+                +" "
+                "div" { +"Three hearts." }
             }
         }
     }
@@ -168,10 +164,8 @@ class SeparateUnwrappedBlocksTest {
             "body" {
                 "input"("type" to "password", AccessibilityAnnotations.REDACTED to "filled") { }
                 "div" { +"Forgot password?" }
-                "div" {
-                    +" "
-                    +"Sign up"
-                }
+                +" "
+                "div" { +"Sign up" }
             }
         }
     }
@@ -235,10 +229,8 @@ class SeparateUnwrappedBlocksTest {
         output sameAs semanticEvents(tagged = true) {
             "div"(AccessibilityAnnotations.DISPLAY to "block") {
                 "span"(AccessibilityAnnotations.DISPLAY to "block") { +"Hi Paul," }
-                "span"(AccessibilityAnnotations.DISPLAY to "block") {
-                    +" "
-                    +"Three hearts."
-                }
+                +" "
+                "span"(AccessibilityAnnotations.DISPLAY to "block") { +"Three hearts." }
             }
         }
     }
@@ -284,11 +276,9 @@ class SeparateUnwrappedBlocksTest {
                 "div"(AccessibilityAnnotations.DISPLAY to "grid") {
                     "img"("src" to "/photo.jpg", "alt" to "Photo") {}
                 }
+                +" "
                 "div"(AccessibilityAnnotations.DISPLAY to "grid") {
-                    "span" {
-                        +" "
-                        +"LIVE"
-                    }
+                    "span" { +"LIVE" }
                 }
             }
         }
@@ -398,6 +388,145 @@ class SeparateUnwrappedBlocksTest {
                 "a"("href" to "newest", AccessibilityAnnotations.DISPLAY to "inline") { +"new" }
                 +" | "
                 "a"("href" to "front", AccessibilityAnnotations.DISPLAY to "inline") { +"past" }
+            }
+        }
+    }
+
+    @Test
+    fun `should separate an adjacent link outside the formatting wrapping it`() = runTest {
+        // given — the masthead shape reversed: the second link sits in a <b>,
+        // so a separator right before its <a> would land inside the <b>, where
+        // the whitespace normalizer drops it after the opening tag (issue #96)
+        val input = semanticEvents(tagged = true) {
+            "p" {
+                "a"("href" to "u") { +"x" }
+                "b" {
+                    "a"("href" to "v") { +"y" }
+                }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then — the space lands before the <b>, between the two controls
+        output sameAs semanticEvents(tagged = true) {
+            "p" {
+                "a"("href" to "u") { +"x" }
+                +" "
+                "b" {
+                    "a"("href" to "v") { +"y" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should separate an adjacent declared control outside the formatting wrapping it`() = runTest {
+        // given — a link followed by a `role="button"` span inside a <b>: a
+        // declared control adjacent to the link, so the separator before it
+        // must not land inside the <b> either (a native <button> renders as a
+        // block of its own and needs none)
+        val input = semanticEvents(tagged = true) {
+            "p" {
+                "a"("href" to "u") { +"x" }
+                "b" {
+                    "span"("role" to "button", AccessibilityAnnotations.DISPLAY to "inline") { +"y" }
+                }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then — the space lands before the <b>, between the two controls
+        output sameAs semanticEvents(tagged = true) {
+            "p" {
+                "a"("href" to "u") { +"x" }
+                +" "
+                "b" {
+                    "span"("role" to "button", AccessibilityAnnotations.DISPLAY to "inline") { +"y" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should separate box content outside the formatting wrapping it`() = runTest {
+        // given — the second flex child's content opens in a <b>: a separator
+        // right before the text would land inside the <b> and be dropped
+        val input = semanticEvents(tagged = true) {
+            "div"(AccessibilityAnnotations.DISPLAY to "flex") {
+                "span" { +"3 hrs ago" }
+                "span" {
+                    "b"(AccessibilityAnnotations.DISPLAY to "inline") { +"Europe" }
+                }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then — the space lands before every mark opened since "3 hrs ago"
+        output sameAs semanticEvents(tagged = true) {
+            "div"(AccessibilityAnnotations.DISPLAY to "flex") {
+                "span" { +"3 hrs ago" }
+                +" "
+                "span" {
+                    "b"(AccessibilityAnnotations.DISPLAY to "inline") { +"Europe" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should separate box content that starts with a code span before the span`() = runTest {
+        // given — issue #148: a tagged <code> is a preserve region, whose
+        // verbatim text still decides the separator in front of it
+        val input = semanticEvents(tagged = true) {
+            "section" {
+                "div" { +"Pro" }
+                "div" {
+                    "code" { +"teams" }
+                }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then — the space lands before the marks opened since "Pro"
+        output sameAs semanticEvents(tagged = true) {
+            "section" {
+                "div" { +"Pro" }
+                +" "
+                "div" {
+                    "code" { +"teams" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should separate a block displayed kept element before its opening tag`() = runTest {
+        // given — a blockified <strong> survives simplifyHtml, so the space
+        // must not follow its opening tag
+        val input = semanticEvents(tagged = true) {
+            "div"(AccessibilityAnnotations.DISPLAY to "flex") {
+                "span"(AccessibilityAnnotations.DISPLAY to "block") { +"Price" }
+                "strong"(AccessibilityAnnotations.DISPLAY to "block") { +"5" }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "div"(AccessibilityAnnotations.DISPLAY to "flex") {
+                "span"(AccessibilityAnnotations.DISPLAY to "block") { +"Price" }
+                +" "
+                "strong"(AccessibilityAnnotations.DISPLAY to "block") { +"5" }
             }
         }
     }

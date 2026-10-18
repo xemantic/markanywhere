@@ -152,6 +152,6 @@ private val MARKDOWN_EMPHASIS_EQUIVALENTS = mapOf(
     "strike" to "del",
 )
 
-private val MARKDOWN_EMPHASIS = setOf("strong", "em", "del", "mark", "sup")
+internal val MARKDOWN_EMPHASIS = setOf("strong", "em", "del", "mark", "sup")
 
 private val CODE_TAGS = setOf("pre", "code")

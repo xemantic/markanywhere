@@ -563,6 +563,173 @@ class HtmlToMarkdownTest {
     }
 
     @Test
+    fun `should separate adjacent links when the second is wrapped in formatting`() = runTest {
+        // given — issue #96: no whitespace between the links, the second in a <b>
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "p" {
+                    "a"("href" to "u") { +"x" }
+                    "b" {
+                        "a"("href" to "v") { +"y" }
+                    }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown(refMode = RefMode.STRIP).renderMarkdown()
+        val reRendered = flowOf(markdown).parse().renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown "[x](u) **[y](v)**"
+        reRendered sameAs markdown
+    }
+
+    @Test
+    fun `should separate the boxes of a section when the second starts with emphasis`() = runTest {
+        // given — issue #148: a captured section whose second block box opens
+        // with markup simplifyHtml keeps
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "section"(AccessibilityAnnotations.DISPLAY to "block") {
+                    "div"(AccessibilityAnnotations.DISPLAY to "block") { +"Pro" }
+                    "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                        "em"(AccessibilityAnnotations.DISPLAY to "inline") { +"teams" }
+                    }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown(refMode = RefMode.STRIP).renderMarkdown()
+        val reRendered = flowOf(markdown).parse().renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            <section>
+            
+            Pro *teams*
+            
+            </section>
+        """.trimIndent()
+        reRendered sameAs markdown
+    }
+
+    @Test
+    fun `should separate the boxes of a section when the second starts with code`() = runTest {
+        // given — issue #148: the code span is a preserve region, whose text
+        // still decides the separator before it
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "section"(AccessibilityAnnotations.DISPLAY to "block") {
+                    "div"(AccessibilityAnnotations.DISPLAY to "block") { +"Pro" }
+                    "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                        "code"(AccessibilityAnnotations.DISPLAY to "inline") { +"teams" }
+                    }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown(refMode = RefMode.STRIP).renderMarkdown()
+        val reRendered = flowOf(markdown).parse().renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            <section>
+            
+            Pro `teams`
+            
+            </section>
+        """.trimIndent()
+        reRendered sameAs markdown
+    }
+
+    @Test
+    fun `should separate the boxes of a section when the second starts with bold code`() = runTest {
+        // given — issue #148: the code span nested in a kept <b>
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "section"(AccessibilityAnnotations.DISPLAY to "block") {
+                    "div"(AccessibilityAnnotations.DISPLAY to "block") { +"Pro" }
+                    "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                        "b"(AccessibilityAnnotations.DISPLAY to "inline") {
+                            "code"(AccessibilityAnnotations.DISPLAY to "inline") { +"teams" }
+                        }
+                    }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown(refMode = RefMode.STRIP).renderMarkdown()
+        val reRendered = flowOf(markdown).parse().renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            <section>
+            
+            Pro **`teams`**
+            
+            </section>
+        """.trimIndent()
+        reRendered sameAs markdown
+    }
+
+    @Test
+    fun `should separate the boxes of an option when the second starts with code`() = runTest {
+        // given — issue #148: a customizable select's option holding two boxes
+        val page = semanticEvents(tagged = true) {
+            "select"("id" to "plan") {
+                "option"("value" to "pro") {
+                    "div" { +"Pro" }
+                    "div" {
+                        "code" { +"teams" }
+                    }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown(refMode = RefMode.STRIP).renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            <select id="plan">
+            <option value="pro">
+            
+            Pro `teams`
+            
+            </option>
+            </select>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should separate flex children displayed as blocks when the second is kept emphasis`() = runTest {
+        // given — a blockified <strong> is a box simplifyHtml keeps, so a
+        // separator inside it would follow its opening tag and be dropped
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "p" {
+                    "div"(AccessibilityAnnotations.DISPLAY to "flex") {
+                        "span"(AccessibilityAnnotations.DISPLAY to "block") { +"Price" }
+                        "strong"(AccessibilityAnnotations.DISPLAY to "block") { +"5" }
+                    }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown(refMode = RefMode.STRIP).renderMarkdown()
+        val reRendered = flowOf(markdown).parse().renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown "Price **5**"
+        reRendered sameAs markdown
+    }
+
+    @Test
     fun `should render a table caption as the block above its table`() = runTest {
         // given
         val page = semanticEvents(tagged = true) {

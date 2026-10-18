@@ -148,6 +148,31 @@ class HtmlWhitespaceNormalizationTest {
     }
 
     @Test
+    fun `should keep a space before Markdown emphasis displayed as a block`() = runTest {
+        // given — a blockified <strong> that simplifyHtml kept as Markdown
+        // emphasis: it renders inline whatever its CSS display, so the space
+        // separating it from the text before is significant
+        val input = semanticEvents {
+            "p" {
+                +"Price"
+                +" "
+                "strong"(AccessibilityAnnotations.DISPLAY to "block") { +"5" }
+            }
+        }
+
+        // when
+        val output = input.dropHtmlStructuralWhitespace()
+
+        // then
+        output sameAs semanticEvents {
+            "p" {
+                +"Price "
+                "strong" { +"5" }
+            }
+        }
+    }
+
+    @Test
     fun `should collapse interior whitespace and trim block edges of text`() = runTest {
         // given — a content text node with a leading newline+indent, a tab run
         // inside, and a trailing space, sitting directly inside a block.
