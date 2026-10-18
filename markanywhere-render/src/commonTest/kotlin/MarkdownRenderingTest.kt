@@ -1464,6 +1464,73 @@ class MarkdownRenderingTest {
     }
 
     @Test
+    fun `should keep a list item's text in one paragraph across a raw inline tag`() = runTest {
+        // given - item text with no `p` around it: closing the raw `<span>`
+        // must not end the item's paragraph, or the text after it (and a
+        // following block) gets a blank line the re-parse does not keep
+        val flow = semanticEvents {
+            "ol" {
+                "li" {
+                    tag("span", "ref" to "1") { +"x" }
+                    +" more"
+                }
+                "li" {
+                    tag("b") { +"y" }
+                    "br" { }
+                    +"z"
+                }
+                "li" {
+                    tag("span", "ref" to "2") { +"w" }
+                    "pre" { "code" { +"code" } }
+                }
+            }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs """
+            1. <span ref="1">x</span> more
+            2. <b>y</b>  
+               z
+            3. <span ref="2">w</span>
+               ```
+               code
+               ```
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should separate a paragraph from the list item text before it`() = runTest {
+        // given - item text with no `p` around it, then a paragraph: the
+        // paragraph starts its own line, never glued onto the item's text
+        val flow = semanticEvents {
+            "ul" {
+                "li" {
+                    tag("kbd") { +"Ctrl" }
+                    "p" { +"copies" }
+                }
+                "li" {
+                    +"Label"
+                    "p" { +"Description" }
+                }
+            }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs """
+            - <kbd>Ctrl</kbd>
+              copies
+            - Label
+              Description
+        """.trimIndent()
+    }
+
+    @Test
     fun `should render list item whose only content is a link`() = runTest {
         // A list item with no leading text and no <p> wrapper — the item's
         // first (and only) content is a link. Reproduces the BBC footer nav

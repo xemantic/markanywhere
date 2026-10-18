@@ -17,7 +17,10 @@
 package com.xemantic.markanywhere.html
 
 import com.xemantic.markanywhere.SemanticEvent
+import com.xemantic.markanywhere.SemanticEvent.Mark
+import com.xemantic.markanywhere.SemanticEvent.Unmark
 import com.xemantic.markanywhere.dump.AccessibilityAnnotations
+import com.xemantic.markanywhere.html.spec.HTML_VOID_ELEMENTS
 import com.xemantic.markanywhere.html.ActionableRef.ATTRIBUTE
 import com.xemantic.markanywhere.html.ActionableRef.SCHEME
 import com.xemantic.markanywhere.html.ActionableRef.decode
@@ -121,8 +124,11 @@ internal val LINK_BLOCK_CONTENT_TAGS: Set<String> = setOf(
  * Rewrites the dump's [AccessibilityAnnotations.REF] into its LLM-facing
  * [ActionableRef] form. An inline `<a>` folds its ref into the
  * `ref:<id>:<href>` destination; a block-wrapping `<a>` (rendered as a raw tag)
- * and every other ref-bearing element take the short `ref="<id>"` attribute.
- * Elements without a ref pass through untouched.
+ * and every other ref-bearing element take the short `ref="<id>"` attribute —
+ * on a tagged `span` around the content of an untagged list item, heading or
+ * cell, whose Markdown syntax carries no attributes (see
+ * [moveRefsOffAttributelessBlocks]). Elements without a ref pass through
+ * untouched.
  *
  * This is a **separate, optional step** on purpose: the rest of the pipeline
  * ([simplifyHtml] etc.) is ref-agnostic, so a human-readable rendering can reuse
@@ -136,9 +142,220 @@ internal val LINK_BLOCK_CONTENT_TAGS: Set<String> = setOf(
  * handled by the matcher pass that follows.
  */
 public fun Flow<SemanticEvent>.encodeActionableRefs(): Flow<SemanticEvent> =
-    encodeActionableLinkRefs().transform {
+    encodeActionableLinkRefs().moveRefsOffAttributelessBlocks().transform {
         encodeActionableNonLinkRefs()
     }
+
+/**
+ * Untagged Markdown blocks that hold inline content but whose Markdown syntax
+ * carries no attributes — `- `, `## `, a `| cell |` — so a ref on one of them
+ * would vanish when the renderer writes it. A list item is the common case: a
+ * combobox suggestion, `<li role="option">`.
+ */
+private val ATTRIBUTELESS_BLOCKS = setOf(
+    "li", "p", "h1", "h2", "h3", "h4", "h5", "h6", "th", "td", "caption",
+)
+
+/**
+ * Moves the ref of each ref-bearing untagged [ATTRIBUTELESS_BLOCKS] mark, with
+ * the ARIA state that goes with it ([isMovedToRefSpan]: `role`, `aria-*`),
+ * onto a tagged `span` around the block's leading inline content — the item's
+ * own label — so it reaches the output as `- <span ref="23">Berlin Hbf</span>`.
+ * Structural attributes the renderer reads from the block itself (`colspan`,
+ * `rowspan`, `align`, `id`, …) stay on the block. A moved `aria-label` the span
+ * already shows as its text (the name [labelActionableElements] wrote there)
+ * is dropped rather than said twice.
+ *
+ * The label ends at the first [breaksRefSpan] mark — a nested block (a raw
+ * inline tag cannot wrap a Markdown block) or a `<br>` (the parser closes
+ * inline HTML at a line end, so a `</span>` after the break would come back as
+ * literal text) — and so does the span, even when that mark sits deep inside
+ * an inline wrapper (`<a><h3>…</h3></a>`): each top-level inline child is held
+ * until it closes, and one that holds such a mark goes after the span instead
+ * of into it. Three shapes of the item's *first* child need more than that:
+ *
+ * - a `p` (a loose item): the span moves into it, around its leading content;
+ * - a child that carries a ref of its own (a `<button>`, a card `<a>`): it is
+ *   what an agent acts on, so no empty span is put beside it;
+ * - a leading raw void tag (a task-list checkbox `<input>`), which the
+ *   renderer writes as a line-start block tag: it goes before the span.
+ *
+ * Any other item with no leading inline content gets an empty span, since its
+ * ref is still something to act on. Bounded by one top-level inline child of
+ * the innermost ref-bearing block at a time — which can be a whole card `<a>`
+ * subtree, the same bound [encodeActionableLinkRefs] pays per link.
+ *
+ * A tagged mark is a literal tag that keeps its attributes, so it is left to
+ * the matcher pass like any other element.
+ */
+private fun Flow<SemanticEvent>.moveRefsOffAttributelessBlocks(): Flow<SemanticEvent> = flow {
+    // One frame per open ref-bearing block, innermost last. Only the innermost
+    // can still be deciding its span: an inner block opens only after a
+    // [breaksRefSpan] mark has settled every enclosing one.
+    class Holder(val moved: Map<String, String>) {
+        var depth = 0 // nesting depth below the block's own mark
+        var state: SpanState = PENDING
+        val child = mutableListOf<SemanticEvent>() // the held top-level inline child
+        var childDepth = 0
+    }
+    val holders = ArrayDeque<Holder>()
+    // The span attributes a ref-bearing item hands to its first `p`.
+    var handedToParagraph: Map<String, String>? = null
+
+    suspend fun openSpan(holder: Holder, firstText: String?) {
+        val label = holder.moved["aria-label"]
+        val attributes = if (label != null && firstText != null &&
+            label.collapseWhitespace() == firstText.collapseWhitespace()
+        ) holder.moved - "aria-label" else holder.moved
+        emit(Mark("span", isTagged = true, attributes = attributes))
+        holder.state = OPEN
+    }
+
+    // Ends the label: closes the span, or, when there was no label, emits an
+    // empty one unless [besideOwnControl] says the next child carries a ref.
+    suspend fun settle(holder: Holder, besideOwnControl: Boolean = false) {
+        when (holder.state) {
+            PENDING -> if (!besideOwnControl) {
+                openSpan(holder, firstText = null)
+                emit(Unmark("span", isTagged = true))
+            }
+            OPEN -> emit(Unmark("span", isTagged = true))
+            CLOSED -> { /* already settled */ }
+        }
+        holder.state = CLOSED
+    }
+
+    suspend fun process(event: SemanticEvent) {
+        val holder = holders.lastOrNull()
+        if (holder != null && holder.state != CLOSED) {
+            if (holder.childDepth > 0) {
+                if (event is Mark && event.breaksRefSpan()) {
+                    // The held child is no label: it goes after the span.
+                    val held = holder.child.toList()
+                    settle(holder, besideOwnControl = held.first().carriesRef())
+                    holder.child.clear()
+                    holder.childDepth = 0
+                    held.forEach { process(it) }
+                    process(event)
+                    return
+                }
+                holder.child.add(event)
+                when (event) {
+                    is Mark -> holder.childDepth++
+                    is Unmark -> holder.childDepth--
+                    else -> { /* text does not nest */ }
+                }
+                if (holder.childDepth == 0) {
+                    // A whole inline child, nothing in it breaking the label.
+                    // A leading raw void tag stays outside: the renderer
+                    // writes it as a block tag at the start of the line.
+                    val first = holder.child.first() as Mark
+                    val leadingVoid = holder.state == PENDING && first.isTagged &&
+                        first.name in HTML_VOID_ELEMENTS
+                    if (holder.state == PENDING && !leadingVoid) openSpan(holder, firstText = null)
+                    holder.child.forEach { emit(it) }
+                    holder.child.clear()
+                }
+                return
+            }
+            when {
+                event is Mark && holder.state == PENDING && event.name == "p" &&
+                    !event.isTagged && !event.carriesRef() -> {
+                    // A loose item: its label is the paragraph's lead.
+                    holder.state = CLOSED
+                    handedToParagraph = holder.moved
+                }
+                event is Mark && event.breaksRefSpan() ->
+                    settle(holder, besideOwnControl = event.carriesRef())
+                event is Unmark -> settle(holder) // the block's own close
+                event is Text -> {
+                    if (holder.state == PENDING) openSpan(holder, event.text)
+                    emit(event)
+                    return
+                }
+                event is Mark -> {
+                    holder.child.add(event)
+                    holder.childDepth = 1
+                    return
+                }
+                else -> { /* nothing else reaches here */ }
+            }
+        }
+        when (event) {
+            is Mark -> holders.forEach { it.depth++ }
+            is Unmark -> holders.forEach { it.depth-- }
+            else -> { /* text does not nest */ }
+        }
+        val handed = handedToParagraph
+        when {
+            handed != null && event is Mark -> {
+                handedToParagraph = null
+                emit(event)
+                holders.addLast(Holder(handed))
+            }
+            event is Mark && !event.isTagged && event.name in ATTRIBUTELESS_BLOCKS &&
+                event.carriesRef() -> {
+                val (moved, kept) = event.attributes.entries.partition { it.key.isMovedToRefSpan() }
+                emit(event.copy(attributes = kept.associate { it.toPair() }))
+                holders.addLast(Holder(moved.associate { it.toPair() }))
+            }
+            event is Unmark && holder != null && holder.depth < 0 -> {
+                holders.removeLast()
+                emit(event)
+            }
+            else -> emit(event)
+        }
+    }
+
+    collect { process(it) }
+    // An unclosed block at end-of-stream (synthetic edge): flush what is held.
+    holders.lastOrNull()?.let { holder ->
+        if (holder.child.isNotEmpty()) {
+            if (holder.state == PENDING) openSpan(holder, firstText = null)
+            holder.child.forEach { emit(it) }
+        }
+        settle(holder)
+    }
+}
+
+private fun SemanticEvent.carriesRef(): Boolean =
+    this is Mark && this[AccessibilityAnnotations.REF] != null
+
+/**
+ * Whether an attribute of a ref-bearing block moves onto its ref span: the ref
+ * and the ARIA role and state describing the control. Everything else is the
+ * block's own structure (`colspan`, `align`, `id`, …).
+ */
+private fun String.isMovedToRefSpan(): Boolean =
+    this == AccessibilityAnnotations.REF || this == "role" || startsWith("aria-")
+
+/**
+ * Whether this mark ends the inline label a ref span may wrap: a Markdown
+ * block, or a `<br>`, which the parser would read as the end of the span's
+ * line.
+ */
+private fun Mark.breaksRefSpan(): Boolean =
+    name in LINK_BLOCK_CONTENT_TAGS || name in ATTRIBUTELESS_BLOCKS || name == "br"
+
+/**
+ * Trims and collapses whitespace runs — by [Char.isWhitespace], which counts a
+ * no-break space on every target, unlike a `\s` regex, which does not on the
+ * JVM — so an accessible name and the text written from it compare equal.
+ */
+private fun String.collapseWhitespace(): String = buildString {
+    var pendingSpace = false
+    for (c in this@collapseWhitespace) {
+        if (c.isWhitespace()) {
+            pendingSpace = isNotEmpty()
+        } else {
+            if (pendingSpace) append(' ')
+            pendingSpace = false
+            append(c)
+        }
+    }
+}
+
+private enum class SpanState { PENDING, OPEN, CLOSED }
 
 public fun TransformerBuilder.encodeActionableNonLinkRefs() {
 

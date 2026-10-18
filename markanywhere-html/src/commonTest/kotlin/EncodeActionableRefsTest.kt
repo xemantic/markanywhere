@@ -18,8 +18,13 @@ package com.xemantic.markanywhere.html
 
 import com.xemantic.kotlin.test.assert
 import com.xemantic.kotlin.test.sameAs
+import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.dump.AccessibilityAnnotations
 import com.xemantic.markanywhere.flow.semanticEvents
+import com.xemantic.markanywhere.parse.parse
+import com.xemantic.markanywhere.render.renderMarkdown
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.toList
 import com.xemantic.markanywhere.render.MARKDOWN_BLOCK_CONTENT_TAGS
 import com.xemantic.markanywhere.test.sameAs
 import kotlinx.coroutines.test.runTest
@@ -391,6 +396,489 @@ class EncodeActionableRefsTest {
                 +"before "
                 "span"("class" to "x") { +"plain" }
                 +" after"
+            }
+        }
+    }
+
+    @Test
+    fun `should carry a list item's ref on a span around its label`() = runTest {
+        // given - a Markdown list item carries no attributes, so its ref would
+        // vanish with the `li` the renderer writes as `- `
+        val input = semanticEvents {
+            "ul" {
+                "li"(AccessibilityAnnotations.REF to "23", "aria-selected" to "false") { +"Berlin Hbf." }
+            }
+        }
+
+        // when
+        val output = input.encodeActionableRefs()
+
+        // then
+        output sameAs semanticEvents {
+            "ul" {
+                "li" {
+                    tag("span", "aria-selected" to "false", "ref" to "23") { +"Berlin Hbf." }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep a list item's nested list outside its ref span`() = runTest {
+        // given - a raw inline tag cannot wrap a Markdown block
+        val input = semanticEvents {
+            "ul" {
+                "li"(AccessibilityAnnotations.REF to "5") {
+                    +"Parent "
+                    "em" { +"item" }
+                    "ul" { "li" { +"child" } }
+                }
+            }
+        }
+
+        // when
+        val output = input.encodeActionableRefs()
+
+        // then
+        output sameAs semanticEvents {
+            "ul" {
+                "li" {
+                    tag("span", "ref" to "5") {
+                        +"Parent "
+                        "em" { +"item" }
+                    }
+                    "ul" { "li" { +"child" } }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep the ref of a list item with no label`() = runTest {
+        // given - an option nothing names: the ref is still something to click
+        val input = semanticEvents {
+            "ul" {
+                "li"(AccessibilityAnnotations.REF to "6") { }
+            }
+        }
+
+        // when
+        val output = input.encodeActionableRefs()
+
+        // then
+        output sameAs semanticEvents {
+            "ul" {
+                "li" {
+                    tag("span", "ref" to "6") { }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should carry a heading's ref on a span around its text`() = runTest {
+        // given
+        val input = semanticEvents {
+            "h3"(AccessibilityAnnotations.REF to "7") { +"Settings" }
+        }
+
+        // when
+        val output = input.encodeActionableRefs()
+
+        // then
+        output sameAs semanticEvents {
+            "h3" {
+                tag("span", "ref" to "7") { +"Settings" }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep the ref of a tagged list item on the item itself`() = runTest {
+        // given - a literal `<li>` tag holds its own attributes
+        val input = semanticEvents(tagged = true) {
+            "li"(AccessibilityAnnotations.REF to "8") { +"Item" }
+        }
+
+        // when
+        val output = input.encodeActionableRefs()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "li"("ref" to "8") { +"Item" }
+        }
+    }
+
+    @Test
+    fun `should end a list item's ref span at a line break`() = runTest {
+        // given - a raw inline tag cannot span a hard break: the parser closes
+        // inline HTML at the line end, and the `</span>` would come back as text
+        val input = semanticEvents {
+            "ul" {
+                "li"(AccessibilityAnnotations.REF to "1") {
+                    +"Berlin Hbf"
+                    "br" { }
+                    +"Station"
+                }
+            }
+        }
+
+        // when
+        val output = input.encodeActionableRefs()
+
+        // then
+        output sameAs semanticEvents {
+            "ul" {
+                "li" {
+                    tag("span", "ref" to "1") { +"Berlin Hbf" }
+                    "br" { }
+                    +"Station"
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should round-trip a ref-bearing paragraph holding a line break`() = runTest {
+        // given
+        val input = semanticEvents {
+            "p"(AccessibilityAnnotations.REF to "2") {
+                +"a"
+                "br" { }
+                +"b"
+            }
+        }
+
+        // when
+        val markdown = input.encodeActionableRefs().renderMarkdown()
+
+        // then
+        markdown sameAs "<span ref=\"2\">a</span>  \nb"
+        flowOf(markdown).parse().renderMarkdown() sameAs markdown
+    }
+
+    @Test
+    fun `should not leave a literal span close when re-parsing a list item holding a line break`() = runTest {
+        // given
+        val input = semanticEvents {
+            "ul" {
+                "li"(AccessibilityAnnotations.REF to "1") {
+                    +"Berlin Hbf"
+                    "br" { }
+                    +"Station"
+                }
+            }
+        }
+
+        // when
+        val reparsed = flowOf(input.encodeActionableRefs().renderMarkdown()).parse().toList()
+
+        // then - the span closes on its own line; a hard break in a list item
+        // does not survive the re-parse either way (a separate parser gap)
+        val text = reparsed.filterIsInstance<SemanticEvent.Text>().joinToString("") { it.text }
+        assert("</span>" !in text)
+        assert(reparsed.count { it is SemanticEvent.Mark && it.name == "span" } == 1)
+    }
+
+    @Test
+    fun `should round-trip a ref-bearing ordered list item holding a code block`() = runTest {
+        // given
+        val input = semanticEvents {
+            "ol" {
+                "li"(AccessibilityAnnotations.REF to "1") {
+                    +"x"
+                    "pre" { "code" { +"code" } }
+                }
+            }
+        }
+
+        // when
+        val markdown = input.encodeActionableRefs().renderMarkdown()
+
+        // then
+        flowOf(markdown).parse().renderMarkdown() sameAs markdown
+    }
+
+    @Test
+    fun `should leave a block nested in an inline wrapper outside the ref span`() = runTest {
+        // given - the span opens before it can see what the wrapper holds
+        val input = semanticEvents {
+            "ul" {
+                "li"(AccessibilityAnnotations.REF to "1") {
+                    "a"("href" to "/a") { "h3" { +"Title" } }
+                }
+                "li"(AccessibilityAnnotations.REF to "2") {
+                    +"lead "
+                    "strong" {
+                        +"x"
+                        "p" { +"y" }
+                    }
+                }
+            }
+        }
+
+        // when
+        val output = input.encodeActionableRefs()
+
+        // then - the label is what precedes the wrapper
+        output sameAs semanticEvents {
+            "ul" {
+                "li" {
+                    tag("span", "ref" to "1") { }
+                    "a"("href" to "/a") { "h3" { +"Title" } }
+                }
+                "li" {
+                    tag("span", "ref" to "2") { +"lead " }
+                    "strong" {
+                        +"x"
+                        "p" { +"y" }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should carry the refs of a table cell and a caption on spans`() = runTest {
+        // given
+        val input = semanticEvents {
+            "table" {
+                "caption"(AccessibilityAnnotations.REF to "1") { +"Prices" }
+                "tbody" {
+                    "tr" {
+                        "td"(AccessibilityAnnotations.REF to "2") { +"5" }
+                    }
+                }
+            }
+        }
+
+        // when
+        val output = input.encodeActionableRefs()
+
+        // then
+        output sameAs semanticEvents {
+            "table" {
+                "caption" { tag("span", "ref" to "1") { +"Prices" } }
+                "tbody" {
+                    "tr" {
+                        "td" { tag("span", "ref" to "2") { +"5" } }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should carry the ref of a list item nested in a ref-bearing list item`() = runTest {
+        // given
+        val input = semanticEvents {
+            "ul" {
+                "li"(AccessibilityAnnotations.REF to "1") {
+                    +"Parent"
+                    "ul" {
+                        "li"(AccessibilityAnnotations.REF to "2") { +"child" }
+                    }
+                }
+            }
+        }
+
+        // when
+        val output = input.encodeActionableRefs()
+
+        // then
+        output sameAs semanticEvents {
+            "ul" {
+                "li" {
+                    tag("span", "ref" to "1") { +"Parent" }
+                    "ul" {
+                        "li" { tag("span", "ref" to "2") { +"child" } }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should drop a moved aria-label its span already shows as text`() = runTest {
+        // given - labelActionableElements wrote the option's name as its text
+        val input = semanticEvents {
+            "ul" {
+                "li"("aria-label" to "Berlin  Hbf. ", AccessibilityAnnotations.REF to "1") { +"Berlin Hbf." }
+                "li"("aria-label" to "Berlin Südkreuz", AccessibilityAnnotations.REF to "2") { +"Südkreuz" }
+            }
+        }
+
+        // when
+        val output = input.encodeActionableRefs()
+
+        // then - a name that says more than the text stays
+        output sameAs semanticEvents {
+            "ul" {
+                "li" { tag("span", "ref" to "1") { +"Berlin Hbf." } }
+                "li" { tag("span", "aria-label" to "Berlin Südkreuz", "ref" to "2") { +"Südkreuz" } }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep a cell's structural attributes on the cell`() = runTest {
+        // given - a date-picker grid: the renderer reads `colspan` from the
+        // cell itself, so only the ref and the ARIA state may move
+        val input = semanticEvents {
+            "table" {
+                "thead" { "tr" { "th" { +"Mo" }; "th" { +"Tu" }; "th" { +"We" } } }
+                "tbody" {
+                    "tr" {
+                        "td"("colspan" to "2", "aria-selected" to "true", AccessibilityAnnotations.REF to "7") { +"1" }
+                        "td"(AccessibilityAnnotations.REF to "8") { +"2" }
+                    }
+                }
+            }
+        }
+
+        // when
+        val output = input.encodeActionableRefs()
+
+        // then
+        output sameAs semanticEvents {
+            "table" {
+                "thead" { "tr" { "th" { +"Mo" }; "th" { +"Tu" }; "th" { +"We" } } }
+                "tbody" {
+                    "tr" {
+                        "td"("colspan" to "2") { tag("span", "aria-selected" to "true", "ref" to "7") { +"1" } }
+                        "td" { tag("span", "ref" to "8") { +"2" } }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should round-trip a ref-bearing spanning cell`() = runTest {
+        // given
+        val input = semanticEvents {
+            "table" {
+                "thead" { "tr" { "th" { +"Mo" }; "th" { +"Tu" }; "th" { +"We" } } }
+                "tbody" {
+                    "tr" {
+                        "td"("colspan" to "2", AccessibilityAnnotations.REF to "7") { +"1" }
+                        "td"(AccessibilityAnnotations.REF to "8") { +"2" }
+                    }
+                }
+            }
+        }
+
+        // when
+        val markdown = input.encodeActionableRefs().renderMarkdown()
+
+        // then - "2" stays under We
+        markdown sameAs """
+            | Mo | Tu | We |
+            | --- | --- | --- |
+            | <span ref="7">1</span> |  | <span ref="8">2</span> |
+        """.trimIndent()
+        flowOf(markdown).parse().renderMarkdown() sameAs markdown
+    }
+
+    @Test
+    fun `should wrap the leading content of a list item's first paragraph`() = runTest {
+        // given
+        val input = semanticEvents {
+            "ul" {
+                "li"(AccessibilityAnnotations.REF to "2") { "p" { +"Only para" } }
+            }
+        }
+
+        // when
+        val output = input.encodeActionableRefs()
+
+        // then
+        output sameAs semanticEvents {
+            "ul" {
+                "li" { "p" { tag("span", "ref" to "2") { +"Only para" } } }
+            }
+        }
+    }
+
+    @Test
+    fun `should leave the ref span out when the item's first child is a control of its own`() = runTest {
+        // given - the button is what an agent clicks; an empty span beside it
+        // would only add a second handle that says nothing
+        val input = semanticEvents {
+            "ul" {
+                "li"(AccessibilityAnnotations.REF to "1") {
+                    tag("button", AccessibilityAnnotations.REF to "2") { +"Pick" }
+                }
+            }
+        }
+
+        // when
+        val output = input.encodeActionableRefs()
+
+        // then
+        output sameAs semanticEvents {
+            "ul" {
+                "li" { tag("button", "ref" to "2") { +"Pick" } }
+            }
+        }
+    }
+
+    @Test
+    fun `should round-trip a ref-bearing task list item`() = runTest {
+        // given - the checkbox renders as a raw tag at the start of the line
+        val input = semanticEvents {
+            "ul" {
+                "li"(AccessibilityAnnotations.REF to "1") {
+                    tag("input", "type" to "checkbox", "checked" to "", "disabled" to "") { }
+                    +"done"
+                }
+            }
+        }
+
+        // when
+        val markdown = input.encodeActionableRefs().renderMarkdown()
+
+        // then
+        assert("<span ref=\"1\">done</span>" in markdown)
+        flowOf(markdown).parse().renderMarkdown() sameAs markdown
+    }
+
+    @Test
+    fun `should round-trip a ref-bearing list item followed by a paragraph`() = runTest {
+        // given
+        val input = semanticEvents {
+            "ul" {
+                "li"(AccessibilityAnnotations.REF to "1") {
+                    +"Label"
+                    "p" { +"Description" }
+                }
+            }
+        }
+
+        // when
+        val markdown = input.encodeActionableRefs().renderMarkdown()
+
+        // then
+        markdown sameAs "- <span ref=\"1\">Label</span>\n  Description"
+        flowOf(markdown).parse().renderMarkdown() sameAs markdown
+    }
+
+    @Test
+    fun `should compare a moved aria-label across a non-breaking space`() = runTest {
+        // given
+        val input = semanticEvents {
+            "ul" {
+                "li"("aria-label" to "Berlin Hbf.", AccessibilityAnnotations.REF to "1") { +"Berlin Hbf." }
+            }
+        }
+
+        // when
+        val output = input.encodeActionableRefs()
+
+        // then
+        output sameAs semanticEvents {
+            "ul" {
+                "li" { tag("span", "ref" to "1") { +"Berlin Hbf." } }
             }
         }
     }

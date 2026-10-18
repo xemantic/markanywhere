@@ -18,6 +18,8 @@ package com.xemantic.markanywhere.html
 
 import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.SemanticEvent.*
+import com.xemantic.markanywhere.dump.AccessibilityAnnotations
+import com.xemantic.markanywhere.html.spec.HTML_VOID_ELEMENTS
 import com.xemantic.markanywhere.html.spec.isHtmlBlank
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -35,7 +37,17 @@ import kotlinx.coroutines.flow.flow
  * this operator every one of them becomes an actionable ref with nothing saying
  * what it does.
  *
- * For each [ACTIONABLE_TAGS] element the operator holds the subtree only until
+ * A *control* is decided by what the element is, not by its tag name (see
+ * [isControl]): a link, button or `<summary>`; anything with an interactive
+ * ARIA role that takes its name from its content (`option`, `menuitem`, `tab`,
+ * `switch`, …); and anything the capture found actionable — it carries an
+ * [AccessibilityAnnotations.REF] — unless its content is not where its name
+ * goes (a void element, a field whose content is its value, a container of
+ * options or rows). A combobox suggestion `<li role="option">` whose visible
+ * text is `aria-hidden` and whose only name is `aria-label` would otherwise
+ * reach the output empty, and an empty list item vanishes with its ref.
+ *
+ * For each control the operator holds the subtree only until
  * the question is settled: the first child that would render as a label releases
  * everything held so far and the rest of the control streams through untouched
  * (for the common text-labelled link that is the first text node). Only a
@@ -104,7 +116,7 @@ public fun Flow<SemanticEvent>.labelActionableElements(
     }
 
     collect { event ->
-        if (event is Mark && event.name in ACTIONABLE_TAGS) {
+        if (event is Mark && event.isControl()) {
             frames.addLast(Control().also { it.buffer.add(event) })
             return@collect
         }
@@ -149,6 +161,85 @@ private class Control {
 
 /** Elements whose whole point is to be activated by the reader. */
 private val ACTIONABLE_TAGS = setOf("a", "button", "summary")
+
+/**
+ * The interactive ARIA roles whose accessible name is computed from their
+ * content (WAI-ARIA 1.2 "name from: contents"): for these, writing the name as
+ * content is what a screen reader would read anyway. An element carrying one
+ * is a control whatever its tag.
+ */
+private val INTERACTIVE_NAME_FROM_CONTENT_ROLES = setOf(
+    "button", "link", "option", "menuitem", "menuitemcheckbox", "menuitemradio",
+    "tab", "checkbox", "radio", "switch", "treeitem", "gridcell",
+)
+
+/**
+ * The roles a ref-bearing element may carry and still be named from its
+ * content: the interactive ones, the non-interactive "name from: contents"
+ * roles, and the roles that say nothing about the element at all.
+ */
+private val CONTENT_NAMED_ROLES = INTERACTIVE_NAME_FROM_CONTENT_ROLES + setOf(
+    "cell", "columnheader", "rowheader", "row", "heading", "tooltip",
+    "generic", "presentation", "none",
+)
+
+/**
+ * Elements whose content is not where their name goes, even when the capture
+ * found them actionable — mostly because their implicit role is not named from
+ * content: a field's content is its value; a container's content is its
+ * options, items or rows; a landmark, section, form or dialog *holds* the
+ * page's controls (a focusable `<main tabindex="-1">` carries a ref, and the
+ * name of the search box inside it must not be written into it); an embedded
+ * document or graphic is its own thing. A name written there would read as a
+ * value or an item.
+ */
+private val NOT_CONTENT_NAMED_TAGS = setOf(
+    "select", "textarea", "optgroup", "datalist",
+    "ul", "ol", "menu", "dl",
+    "table", "thead", "tbody", "tfoot", "tr", "colgroup",
+    "html", "body", "main", "nav", "section", "article", "aside",
+    "header", "footer", "search", "address", "hgroup", "blockquote",
+    "form", "fieldset", "dialog", "details", "figure",
+    "iframe", "frame", "object", "video", "audio", "canvas", "picture",
+    "svg", "math", "template",
+)
+
+/**
+ * Whether this element is a control this operator labels — see the operator's
+ * KDoc. An explicit `role` is read here; an element without one is judged by
+ * its tag, whose implicit role [NOT_CONTENT_NAMED_TAGS] and
+ * [HTML_VOID_ELEMENTS] exclude where it is not named from content. The tag
+ * wins over an explicit role too: a name written into a `<select>` or a
+ * `<main>` is wrong whatever role the author gave it.
+ */
+internal fun Mark.isControl(): Boolean {
+    if (name in ACTIONABLE_TAGS) return true
+    if (!mayHoldItsName()) return false
+    val role = explicitRole()
+    return role in INTERACTIVE_NAME_FROM_CONTENT_ROLES ||
+        (this[AccessibilityAnnotations.REF] != null && (role == null || role in CONTENT_NAMED_ROLES))
+}
+
+/**
+ * Whether this element *says* it is a control — a link, button or `<summary>`,
+ * or an interactive [INTERACTIVE_NAME_FROM_CONTENT_ROLES] role — as opposed to
+ * one the capture merely found actionable ([isControl] also counts a bare
+ * ref-bearing generic, which may be a fragment of a word: `US` + `$5`).
+ */
+internal fun Mark.isDeclaredControl(): Boolean =
+    name in ACTIONABLE_TAGS || (mayHoldItsName() && explicitRole() in INTERACTIVE_NAME_FROM_CONTENT_ROLES)
+
+private fun Mark.mayHoldItsName(): Boolean =
+    name !in HTML_VOID_ELEMENTS && name !in NOT_CONTENT_NAMED_TAGS && !isEditable()
+
+// `role` is a token list whose first recognised token wins; the first token is
+// what every page in practice relies on.
+private fun Mark.explicitRole(): String? =
+    this["role"]?.trim()?.lowercase()?.substringBefore(' ')?.takeIf { it.isNotEmpty() }
+
+/** Whether this element is a rich-text editor, whose content is its value. */
+private fun Mark.isEditable(): Boolean =
+    this["contenteditable"]?.trim()?.lowercase()?.let { it != "false" } == true
 
 /**
  * The `alt` given to a nameless graphic inside an unlabelled control, following

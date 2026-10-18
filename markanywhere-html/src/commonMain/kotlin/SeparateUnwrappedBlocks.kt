@@ -58,11 +58,14 @@ import kotlinx.coroutines.flow.flow
  *   stray space between the header's `<a><button>Register</button></a>` items).
  *
  * Adjacent **inline** elements (`<b>bold</b><i>italic</i>`) cross no separated
- * box, so they are never split — with one exception: two **adjacent links**
- * (`<b><a>Hacker News</a></b><a>new</a>`, the gap a CSS margin) get a separator
- * *before* the second `<a>`, outside its label. Links are distinct controls, and
- * nothing renders two of them flush against each other on purpose — they would
- * read as one. Whitespace-only text passes through untouched —
+ * box, so they are never split — with one exception: two **adjacent controls**
+ * (`<b><a>Hacker News</a></b><a>new</a>`, the gap a CSS margin; two icon
+ * buttons built out of `<div role="button">`s, named by
+ * [labelActionableElements]) get a separator *before* the second control,
+ * outside its label. Controls are distinct things to act on (see
+ * [isDeclaredControl] — only a declared one: a bare ref-bearing `<span>` may
+ * be half a word, `US` + `$5`), and nothing renders two of them flush against
+ * each other on purpose — they would read as one. Whitespace-only text passes through untouched —
  * the downstream collapser already turns it into the separator, and any doubling
  * with an injected space collapses there.
  *
@@ -80,11 +83,11 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
     var crossedSurvivingBlock = false
     var seenInlineToken = false // suppresses a leading separator at stream start
     var previousEndedWithSpace = false // last token already ended in whitespace
-    // The open `<a>` elements, innermost last, each by a serial number, and the
-    // link (0 = none) holding the last inline content token.
-    val openLinks = ArrayDeque<Int>()
-    var linkSerial = 0
-    var previousTokenLink = 0
+    // The open controls, innermost last, each by a serial number, and the
+    // control (0 = none) holding the last inline content token.
+    val openControls = ArrayDeque<Int>()
+    var controlSerial = 0
+    var previousTokenControl = 0
     // Whether the stream was captured, as far as it has been read (see
     // [showsCapture]). An old dump left the `block` of its `<html>`, `<body>`
     // and leading wrappers out, so those still read as their tag's UA default
@@ -115,12 +118,12 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
         crossedSurvivingBlock = false
         seenInlineToken = true
         previousEndedWithSpace = text?.lastOrNull()?.isWhitespace() == true
-        previousTokenLink = openLinks.lastOrNull() ?: 0
+        previousTokenControl = openControls.lastOrNull() ?: 0
     }
 
-    // Separates a link opening right after the content of another, closed one.
-    suspend fun separateAdjacentLink() {
-        if (previousTokenLink != 0 && previousTokenLink !in openLinks &&
+    // Separates a control opening right after the content of another, closed one.
+    suspend fun separateAdjacentControl() {
+        if (previousTokenControl != 0 && previousTokenControl !in openControls &&
             !crossedSurvivingBlock && !previousEndedWithSpace
         ) {
             emit(SemanticEvent.Text(" "))
@@ -135,22 +138,23 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
                 val parentIsFlexGrid = stack.lastOrNull()?.isFlexGridContainer == true
                 if (!captured && event.showsCapture()) captured = true
                 val boundary = event.blockBoundary(parentIsFlexGrid, captured)
+                val control = event.isDeclaredControl()
                 if (preserveDepth == 0) {
                     cross(boundary)
-                    if (event.name == "a") separateAdjacentLink()
+                    if (control) separateAdjacentControl()
                     if (event.name == "img") emitInlineToken(event) else emit(event)
                 } else emit(event)
-                if (event.name == "a") openLinks.addLast(++linkSerial)
+                if (control) openControls.addLast(++controlSerial)
                 val opensPreserve = event.isPreserveRegion()
                 stack.addLast(
-                    BlockBoundaryFrame(boundary, opensPreserve, event.isFlexGridContainer())
+                    BlockBoundaryFrame(boundary, opensPreserve, event.isFlexGridContainer(), control)
                 )
                 if (opensPreserve) preserveDepth++
             }
             is Unmark -> {
                 val frame = stack.removeLastOrNull()
                 if (frame?.opensPreserve == true) preserveDepth--
-                if (event.name == "a") openLinks.removeLastOrNull()
+                if (frame?.control == true) openControls.removeLastOrNull()
                 if (preserveDepth == 0) cross(frame?.boundary ?: BlockBoundary.INLINE)
                 emit(event)
             }
@@ -170,6 +174,7 @@ private class BlockBoundaryFrame(
     val boundary: BlockBoundary,
     val opensPreserve: Boolean,
     val isFlexGridContainer: Boolean,
+    val control: Boolean,
 )
 
 private fun SemanticEvent.Mark.blockBoundary(
