@@ -197,6 +197,35 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
     }
     fun inLabel(): Boolean = labelBuffers.isNotEmpty()
 
+    // Whether the current content lands on a heading's line: the nearest
+    // enclosing block frame is a `Heading`. Inline frames — emphasis, links and
+    // raw tags rendered inline — are transparent; a raw tag rendered as a block
+    // is not, so a block nested in a heading behaves as it would anywhere else.
+    fun onHeadingLine(): Boolean {
+        for (i in blockStack.indices.reversed()) {
+            when (val frame = blockStack[i]) {
+                is Inline, is Link -> continue
+                is TaggedInline -> if (frame.block) return false
+                else -> return frame == BlockFrame.Heading
+            }
+        }
+        return false
+    }
+
+    // The one decision every raw-tag site shares: does a raw tag named [name],
+    // opened here, render as a block-level tag on lines of its own? A sectioning
+    // or form tag does, and so does a void element or an `<a>` landing at a line
+    // start. A Markdown heading is a single line, though, so on a heading's line
+    // only a tag the parser cannot keep inline stays a block — phrasing content
+    // ([HEADING_INLINE_TAGS], the disclosure `<button>` of an accordion heading)
+    // joins the line instead of leaving the heading empty above it.
+    fun rendersAsBlockTag(name: String): Boolean {
+        if (inLabel()) return false
+        val block = name in BLOCK_TAGGED_ELEMENTS ||
+            ((name in HTML_VOID_ELEMENTS || name == "a") && atLineStart)
+        return block && !(name in HEADING_INLINE_TAGS && onHeadingLine())
+    }
+
     // Serialize one event of a nested table as raw HTML into the enclosing
     // cell buffer — no newlines (the outer row is a single line), text nodes
     // HTML-escaped, void elements emitted as a bare open tag. The `<table>`
@@ -504,7 +533,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
             // A deferred space or hard break will be written between the two.
             closerChar == delimiter[0] && pendingSpaces == 0 && !pendingHardBreak -> {
                 writeRaw("<$name>")
-                blockStack.addLast(TaggedInline)
+                blockStack.addLast(BlockFrame.TaggedInline())
             }
             else -> {
                 writeRaw(delimiter)
@@ -526,6 +555,11 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
     // fresh Markdown line so a continuation line that begins with a block
     // marker (`# x`, `- x`, …) is still escaped on re-emission.
     fun emitSoftBreak() {
+        // A heading is a single line: a soft break inside it is a space.
+        if (onHeadingLine()) {
+            pendingSpaces = 1
+            return
+        }
         pendingSpaces = 0
         out("\n")
         atLineStart = true
@@ -619,7 +653,12 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
             // Once this link's label buffer is popped, the *next* spill writes
             // into either an outer label buffer (nested link) or the actual
             // output (the outermost link).
-            if (labelBuffers.isEmpty()) {
+            if (labelBuffers.isEmpty() && onHeadingLine()) {
+                // Outermost spilled link on a heading's line: the heading is a
+                // single line, so the raw tag stays on it (see rendersAsBlockTag).
+                writeRaw("$openTag$labelText")
+                frame.rawInline = true
+            } else if (labelBuffers.isEmpty()) {
                 // Outermost spilled link: a block-level raw tag. Separate it
                 // from the preceding block (blank line at a Markdown→tag
                 // boundary, newline-tight after another tag) and put the open
@@ -654,14 +693,13 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
             pendingParagraph = false
             startBlock()
         }
-        val isBlockTagged = !inLabel() && event.name in BLOCK_TAGGED_ELEMENTS
         val isVoid = event.name in HTML_VOID_ELEMENTS
         // A void element — and an `<a>` (a block-wrapping link the forward
         // pipeline spills to raw HTML) — only counts as a block-level tag when
         // it lands at a line start; mid-line (e.g. `<input>` after text, or an
         // inline link/autolink) it is inline content.
-        val blockLevelTag = !inLabel() &&
-            (isBlockTagged || ((isVoid || event.name == "a") && atLineStart))
+        val headingLine = onHeadingLine()
+        val blockLevelTag = rendersAsBlockTag(event.name)
         if (!inLabel()) {
             // A block-level tag always starts its own line (breaking the
             // current line if needed); an inline tag only separates when it
@@ -670,13 +708,15 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
             else if (atLineStart && pendingSpaces == 0) ensureBlankLine()
         }
         writeTag(event.renderOpenTag())
-        // Block decision captured before writeTag cleared atLineStart.
-        if ((isBlockTagged || isVoid || blockLevelTag) && !inLabel()) {
+        // Block decision captured before writeTag cleared atLineStart. A void
+        // element also ends its line outside a heading (a soft break there);
+        // on a heading's line only a block-level tag may end it.
+        if (blockLevelTag || (isVoid && !inLabel() && !headingLine)) {
             ensureLineStart()
         }
         if (!inLabel()) lastBlock = if (blockLevelTag) BLOCK_TAG else BLOCK_MARKDOWN
         blockStack.addLast(
-            if (isVoid) BlockFrame.SelfClosed else BlockFrame.TaggedInline
+            if (isVoid) BlockFrame.SelfClosed else BlockFrame.TaggedInline(block = blockLevelTag)
         )
     }
 
@@ -814,8 +854,9 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                 flush()
                 return@collect
             }
-            val blockTagged = !inLabel() &&
-                (event.name in BLOCK_TAGGED_ELEMENTS || (event.name == "a" && atLineStart))
+            // The close mirrors its own open (see rendersAsBlockTag).
+            val blockTagged = if (frame is TaggedInline) frame.block
+                else rendersAsBlockTag(event.name)
             if (blockTagged) {
                 separateBeforeBlockTag()
                 writeTag("</${event.name}>")
@@ -1177,7 +1218,10 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
 
                     "a" -> {
                         val link = frame as BlockFrame.Link
-                        if (link.rawMode) {
+                        if (link.rawInline) {
+                            // Spilled inline on a heading's line — close it there.
+                            writeRaw("</a>")
+                        } else if (link.rawMode) {
                             // Already spilled to a raw `<a …>` tag — close it as a
                             // block-level raw tag (blank line at the Markdown→tag
                             // boundary), mirroring its block-level open.
@@ -1224,8 +1268,9 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                         if (frame is BlockFrame.SelfClosed) {
                             // void element — no closing tag
                         } else {
-                            val blockTagged = !inLabel()
-                                && event.name in BLOCK_TAGGED_ELEMENTS
+                            // The close mirrors its own open (see rendersAsBlockTag).
+                            val blockTagged = if (frame is TaggedInline) frame.block
+                                else rendersAsBlockTag(event.name)
                             if (blockTagged) {
                                 separateBeforeBlockTag()
                                 writeTag("</${event.name}>")
@@ -1266,7 +1311,7 @@ private const val BLOCK_MARKDOWN = 2
 
 private sealed interface BlockFrame {
     fun isInline(): Boolean = when (this) {
-        is Paragraph, Heading, is Inline, is Link, is TableCell, TaggedInline -> true
+        is Paragraph, Heading, is Inline, is Link, is TableCell, is TaggedInline -> true
         else -> false
     }
     data object Heading : BlockFrame
@@ -1290,10 +1335,15 @@ private sealed interface BlockFrame {
     class Link(
         val href: String,
         val attributes: Map<String, String>,
-        var rawMode: Boolean = false
+        var rawMode: Boolean = false,
+        // Spilled inline on a heading's line (see spillActiveLinks), so its
+        // `</a>` closes there too instead of as a block-level tag.
+        var rawInline: Boolean = false
     ) : BlockFrame
     data object SelfClosed : BlockFrame
-    data object TaggedInline : BlockFrame
+    // A raw HTML tag, transparent to the inline context around it; [block] when
+    // its tags render as a block-level raw tag on lines of their own.
+    class TaggedInline(val block: Boolean = false) : BlockFrame
     data object Frontmatter : BlockFrame
     class Table(var columnCount: Int = 0, var headerEmitted: Boolean = false) : BlockFrame
     class TableSection(val name: String) : BlockFrame
@@ -1317,6 +1367,18 @@ private val BLOCK_LEVEL_MARK_NAMES = setOf(
     "ul", "ol", "li",
     "pre",
     "table", "thead", "tbody", "tr", "caption"
+)
+
+// Raw tags that stay on a heading's line even where they would otherwise render
+// as a block (see `rendersAsBlockTag`): phrasing content that the parser reads
+// back as an inline tag mid-line. Deliberately absent: `iframe` and `textarea`
+// (dropped mid-line, see the parser's `INLINE_DISALLOWED_TAGS`), `select` and
+// `datalist` (their `option`s re-parse as literal text), and every element that
+// can hold Markdown blocks (`object`, `menu`, `details`, `section`, `dialog`…),
+// whose tags re-parse as literal text inside a heading.
+private val HEADING_INLINE_TAGS = setOf(
+    "a", "button", "label",
+    "input", "img", "br", "wbr", "embed", "area"
 )
 
 // HTML5 block-level semantic and form-associated elements. Each is rendered
