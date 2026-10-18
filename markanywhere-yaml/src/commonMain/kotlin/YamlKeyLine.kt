@@ -38,8 +38,10 @@ public fun isYamlKeyLine(line: String): Boolean = yamlKeyLineKeyOrNull(line) != 
  * The key of [line] when it is a YAML block mapping key line by the rule of
  * [isYamlKeyLine] — a quoted key decoded — or null when it is not one.
  *
- * Lets a consumer of a front matter line kept verbatim (one outside the
- * subset `YamlParser` parses) still tell which key it defines.
+ * The key of a line [YamlParser] parses is its `entry` mark's `key`
+ * attribute — also when the value is outside the subset (`type` =
+ * [YAML_VERBATIM_TYPE]) — so this is for a line seen as text, such as the
+ * one front matter detection checks.
  */
 public fun yamlKeyLineKeyOrNull(line: String): String? {
     if (line.isEmpty()) return null

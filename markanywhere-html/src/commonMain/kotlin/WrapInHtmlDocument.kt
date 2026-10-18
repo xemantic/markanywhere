@@ -37,7 +37,8 @@ import kotlinx.coroutines.flow.Flow
  *
  * Only top-level scalar entries are interpreted — exactly the shape
  * [simplifyHtml] produces. A nested mapping or sequence, a null value, a
- * blank value and verbatim text are skipped (never an error). Keys are read
+ * blank value, a value the YAML parser kept as source (`type=verbatim`) and
+ * verbatim text are skipped (never an error). Keys are read
  * the way HTML reads `<meta>` names, ASCII case-insensitively — a `Title`
  * entry is the title. Of duplicate keys the later one wins, as front matter
  * readers (Jekyll, PyYAML) resolve them, except that a key spelled in

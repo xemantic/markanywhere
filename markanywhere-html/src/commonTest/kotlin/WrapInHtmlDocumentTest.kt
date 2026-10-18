@@ -105,9 +105,7 @@ class WrapInHtmlDocumentTest {
 
     @Test
     fun `should trim HTML whitespace around the lang`() = runTest {
-        // given — as simplifyHtml trims it on the way in (text that opens
-        // with indentation and ends with a newline would read as a verbatim
-        // line of unknown value)
+        // given — as simplifyHtml trims it on the way in
         val input = semanticEvents {
             "frontmatter" {
                 "entry"("key" to "lang") { +"\n en " }
@@ -476,8 +474,8 @@ class WrapInHtmlDocumentTest {
 
     @Test
     fun `should read no value from indented verbatim lines under a bare key`() = runTest {
-        // given — the lines are outside the YAML subset, kept verbatim with
-        // their indentation, and readers disagree on what they hold
+        // given — the lines are outside the YAML subset, kept as the entry's
+        // source with their indentation (readers disagree on the first)
         val markdown = """
             ---
             title:
@@ -509,6 +507,90 @@ class WrapInHtmlDocumentTest {
               </body>
             </html>
         """.trimIndent()
+    }
+
+    @Test
+    fun `should read no entry from the lines of a quoted value left open`() = runTest {
+        // given — the quote continues past the key-shaped line, so readers
+        // read the title `x author: y` and no author
+        val markdown = """
+            ---
+            title: "x
+            author: y"
+            lang: en
+            ---
+            Body.
+        """.trimIndent()
+
+        // when
+        val html = flowOf(markdown)
+            .parse()
+            .wrapInHtmlDocument()
+            .renderHtml()
+
+        // then
+        html sameAsHtml """
+            <html lang="en">
+              <head>
+              </head>
+              <body>
+                <p>
+                  Body.
+                </p>
+              </body>
+            </html>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should read a quoted value that opens with indentation and ends with a newline`() = runTest {
+        // given — a decoded quoted scalar (`title: " Hello\n"`) of the shape a
+        // verbatim line has: whether a value is known is the YAML parser's
+        // `type=verbatim`, never the shape of the text
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +" Hello\n" }
+                "entry"("key" to "description") { +"  first\n" }
+            }
+        }
+
+        // when
+        val output = input.wrapInHtmlDocument()
+
+        // then
+        output sameAs semanticEvents {
+            "html" {
+                "head" {
+                    "title" { +"Hello" }
+                    "meta"("name" to "description", "content" to "  first\n") { }
+                }
+                "body" { }
+            }
+        }
+    }
+
+    @Test
+    fun `should read no value from an entry the YAML parser kept as source`() = runTest {
+        // given
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title", "type" to "verbatim") { +" Hello" }
+                "entry"("key" to "author") { +"Alice" }
+            }
+        }
+
+        // when
+        val output = input.wrapInHtmlDocument()
+
+        // then
+        output sameAs semanticEvents {
+            "html" {
+                "head" {
+                    "meta"("name" to "author", "content" to "Alice") { }
+                }
+                "body" { }
+            }
+        }
     }
 
     @Test

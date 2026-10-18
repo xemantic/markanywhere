@@ -22,6 +22,14 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 
 /**
+ * The `type` of an `entry` / `item` whose value is outside the YAML subset
+ * [YamlParser] parses: the value is unknown — only a YAML reader knows it —
+ * and the mark's text is the value's YAML source, which [YamlWriter] writes
+ * back as-is.
+ */
+public const val YAML_VERBATIM_TYPE: String = "verbatim"
+
+/**
  * Parses a YAML document, arriving in arbitrary chunks, into a stream of
  * semantic events: top-level `entry` marks (attribute `key`) for a root
  * mapping, `item` marks for a root sequence — see [YamlParser] for the

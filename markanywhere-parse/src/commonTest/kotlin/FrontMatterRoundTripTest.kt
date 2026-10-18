@@ -41,7 +41,8 @@ class FrontMatterRoundTripTest {
     @Test
     fun `should round-trip every value shape`() = runTest {
         // given — typed scalars, empty string, null, empty collections,
-        // nested mappings and sequences, a verbatim line
+        // nested mappings and sequences, values kept as source, a verbatim
+        // line
         val events = semanticEvents {
             "frontmatter" {
                 "entry"("key" to "draft", "type" to "bool") { +"true" }
@@ -72,7 +73,9 @@ class FrontMatterRoundTripTest {
                         "item" { +"x\ny\n" }
                     }
                     "item" { +"plain" }
+                    "item"("type" to "verbatim") { +" a\n  b\n" }
                 }
+                "entry"("key" to "title", "type" to "verbatim") { +" A long\n  title\n" }
                 +"? complex\n: value\n"
             }
             "h1" { +"Body" }
@@ -125,6 +128,38 @@ class FrontMatterRoundTripTest {
         """.trimIndent()
         renderedAgain sameAs rendered
         assert(first == second)
+    }
+
+    @Test
+    fun `should keep values kept as source as written between the fences`() = runTest {
+        // given — values outside the YAML subset, the first one opening the
+        // front matter (detection needs a key there) and the last one
+        // running up to the closing fence, an empty line included
+        val source = """
+            ---
+            title: A long
+              title
+            tags: [a,
+              b]
+            description:
+              first line
+
+              second
+
+            ---
+
+            # Hello
+        """.trimIndent()
+
+        // when
+        val first = flowOf(source).parse().events()
+        val rendered = flowOf(source).parse().renderMarkdown()
+        val second = flowOf(rendered).parse().events()
+
+        // then
+        rendered sameAs source
+        assert(first == second)
+        assert(first.count { it is SemanticEvent.Mark && it["type"] == "verbatim" } == 3)
     }
 
     @Test

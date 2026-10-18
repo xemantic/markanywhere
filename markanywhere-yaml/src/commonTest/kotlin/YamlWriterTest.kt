@@ -285,15 +285,16 @@ class YamlWriterTest {
     }
 
     @Test
-    fun `should write verbatim text as-is`() = runTest {
+    fun `should write verbatim text as-is indented to its container`() = runTest {
         // given — a line the parser kept verbatim (see YamlParserTest) is a
-        // text child of its container; the renderer writes it back unchanged
+        // text child of its container, its indentation up to the container's
+        // entries removed; the renderer writes it back at its container's
         val flow = semanticEvents {
             "entry"("key" to "title") { +"x" }
             +"? complex\n: value\n"
             "entry"("key" to "nested") {
                 "entry"("key" to "a") { +"b" }
-                +"  &anchor\n"
+                +"&anchor\n ? deeper\n"
             }
         }
 
@@ -308,7 +309,47 @@ class YamlWriterTest {
             nested:
               a: b
               &anchor
+               ? deeper
         """.trimIndent() + "\n"
+    }
+
+    @Test
+    fun `should write the source of a verbatim value after its key`() = runTest {
+        // given — a value the parser kept as source (see YamlParserTest):
+        // its first line follows the key or dash, every further line is
+        // indented by the node's own column
+        val flow = semanticEvents {
+            "entry"("key" to "title", "type" to "verbatim") { +" A long\n  title\n" }
+            "entry"("key" to "tags", "type" to "verbatim") { +"\n  [a:, b]\n\n" }
+            "entry"("key" to "a") {
+                "entry"("key" to "b", "type" to "verbatim") { +" A\n x\n" }
+            }
+            "entry"("key" to "list") {
+                "item"("type" to "verbatim") { +" a\n b\n" }
+            }
+        }
+
+        // when
+        val yaml = flow.renderYaml()
+
+        // then
+        yaml sameAs "title: A long\n  title\ntags:\n  [a:, b]\n\na:\n  b: A\n   x\nlist:\n  - a\n   b\n"
+    }
+
+    @Test
+    fun `should separate a verbatim value from its key`() = runTest {
+        // given — a hand-built verbatim value that starts with no whitespace
+        // and does not end its line
+        val flow = semanticEvents {
+            "entry"("key" to "k", "type" to "verbatim") { +"[a:, b]" }
+            "entry"("key" to "next") { +"x" }
+        }
+
+        // when
+        val yaml = flow.renderYaml()
+
+        // then
+        yaml sameAs "k: [a:, b]\nnext: x\n"
     }
 
     @Test

@@ -43,6 +43,16 @@ import kotlinx.coroutines.flow.FlowCollector
  *   base prefixes, base 60) in its text. An empty
  *   flow collection carries `type` = `seq` / `map`. An empty string is an
  *   entry with no text and no type; a missing value (`key:`) is `type=null`.
+ * - An entry / item whose value is outside the subset carries `type` =
+ *   `verbatim`: its value is unknown, only the front matter readers know it,
+ *   and its text is the value's YAML source — the rest of the key or dash
+ *   line, then every further line of the value, each ending in `\n`, with
+ *   its indentation up to the key's or dash's column removed (so it re-indents
+ *   along with its key). Further lines are the ones more indented than that
+ *   column, and the blank and comment lines among them — or, while a quoted
+ *   scalar or flow collection the value opens is left open, any line, as
+ *   the readers continue one whatever its indentation (to the end of the
+ *   document, if it never closes).
  *
  * Supported: block mappings and sequences (a sequence may sit at its key's
  * own indentation), nesting, plain / double-quoted / single-quoted scalars,
@@ -50,14 +60,21 @@ import kotlinx.coroutines.flow.FlowCollector
  * single-line flow sequences and mappings, comments (dropped), blank lines,
  * duplicate keys (all kept, in order).
  *
- * DIVERGENCE (verbatim fallback): a line the subset does not understand —
- * complex keys, directives, multi-line flow collections or quoted scalars,
- * a plain scalar's continuation line, a `- item` inside a mapping, or a
- * shape the front matter readers read differently from one another (a
- * flow scalar's `:` before `,` / `[` / `]` / `{` / `}`, a block scalar
- * header followed by `#` with no space) — is
- * emitted **verbatim** (with its `\n`) as a text child of the container it
- * sits in, so nothing is lost and [YamlWriter] can write it back as-is.
+ * DIVERGENCE (verbatim fallback): a value the subset does not understand —
+ * multi-line flow collections or quoted scalars, a plain scalar continued on
+ * further lines, a line under a bare `key:` that is neither an entry nor an
+ * item, a line the readers refuse after a single-line value or a block
+ * scalar, or a shape the front matter readers read differently from one
+ * another (a flow scalar's `:` before `,` / `[` / `]` / `{` / `}`, a block
+ * scalar header followed by `#` with no space) — is kept as source in a
+ * `type=verbatim` entry / item, as above: whether a value is known is a fact
+ * of this parse, so a consumer never has to guess it from the events around
+ * an entry. Any other line the subset does not understand — complex keys,
+ * directives, a `- item` inside a mapping, a line with no key — is emitted
+ * **verbatim** (with its `\n`) as a text child of the container it sits in,
+ * its indentation up to the column of the container's entries removed, so
+ * the writer re-indents it along with them.
+ * Either way nothing is lost and [YamlWriter] writes it back as-is.
  * Anchors, aliases and tags are not resolved: a plain scalar starting with
  * `&` / `*` / `!` is just a string. Document markers (`---`, `...`) and
  * directives are not recognised — a multi-document stream is outside the
@@ -70,10 +87,12 @@ import kotlinx.coroutines.flow.FlowCollector
  * (an item holding the entry `Note`), as in YAML. This does not make such a
  * value safe to write plain: [YamlWriter] still quotes it.
  *
- * Streaming: a `key: value` line commits on its newline. A bare `key:` (or
- * `-`) is held for one line to decide between a nested block and a null
- * value. A block scalar is buffered until it closes — never past the
- * enclosing construct. Never throws.
+ * Streaming: a `key: value` line is held until the next line that is not
+ * blank or a comment, which decides whether the value continues (and is
+ * verbatim). A bare `key:` (or `-`) is held for one line to decide between a
+ * nested block, a verbatim value and a null value. A block scalar is
+ * buffered until it closes — never past the enclosing construct. A verbatim
+ * value streams line by line. Never throws.
  */
 public class YamlParser(
     private val downstream: FlowCollector<SemanticEvent>
@@ -94,11 +113,30 @@ public class YamlParser(
     private class Pending(
         val indent: Int,
         val isItem: Boolean,
-        val key: String?
+        val key: String?,
+        // the source after the `:` / `-`, kept should the value be verbatim
+        val source: String
     )
+
+    // An entry / item whose single-line value is complete, held for one line:
+    // a more indented line continues it (a plain scalar's continuation, or a
+    // line the readers refuse), which makes its value verbatim. The blank and
+    // comment lines in between are kept, as they are part of such a value.
+    private class Held(
+        val owner: String,
+        val key: String?,
+        val indent: Int,
+        val value: Value,
+        val source: String
+    ) {
+        val skipped = mutableListOf<String>()
+    }
 
     private class BlockScalar(
         val owner: String,
+        val key: String?,
+        // the source after the `:` / `-`, kept should the value be verbatim
+        val source: String,
         val folded: Boolean,
         val chomp: Char,
         // absolute content indentation from an explicit indicator, else -1
@@ -107,6 +145,8 @@ public class YamlParser(
     ) {
         var contentIndent = -1
         val lines = mutableListOf<String>()
+        // the same lines as source, should the value turn out verbatim
+        val sourceLines = mutableListOf<String>()
     }
 
     private sealed interface Value {
@@ -119,23 +159,69 @@ public class YamlParser(
 
     private val frames = ArrayDeque<Frame>()
     private var pending: Pending? = null
+    private var held: Held? = null
     private var block: BlockScalar? = null
+    // the column of the open verbatim entry / item, -1 when none is open
+    private var verbatimIndent = -1
+    private var verbatimOwner = ENTRY
+    // the quoted scalar or flow collection the open verbatim value leaves
+    // open, which continues on any line, whatever its indentation, until it
+    // closes; null when none is open
+    private var openValue: OpenValueScan? = null
+    // whether an entry / item was emitted at the root: the lines ahead of
+    // the first one keep their own indentation, which is what keeps an
+    // indented root indented once the writer writes them back
+    private var rootHasNode = false
+    // whether a line less indented than the root was read
+    private var rootBroken = false
 
     /** Feeds one source line, without its line terminator. */
     public suspend fun line(line: String) {
         block?.let { if (feedBlock(it, line)) return }
         val indent = leadingSpaces(line)
-        if (indent == line.length || line[indent] == '#') return // blank / comment
+        val skipped = indent == line.length || line[indent] == '#' // blank / comment
+        if (verbatimIndent >= 0) {
+            openValue?.let {
+                emitText(sourceLine(line, verbatimIndent))
+                if (!it.feed(line)) openValue = null
+                return
+            }
+            if (skipped || indent > verbatimIndent) {
+                emitText(sourceLine(line, verbatimIndent))
+                return
+            }
+            closeVerbatim()
+        }
+        held?.let { h ->
+            if (skipped) {
+                h.skipped += line
+                return
+            }
+            held = null
+            if (indent > h.indent) {
+                openVerbatim(h.owner, h.key, h.indent, h.source)
+                for (s in h.skipped) emitText(sourceLine(s, h.indent))
+                emitText(sourceLine(line, h.indent))
+                return
+            }
+            emitValue(h.owner, h.key, h.indent, h.value)
+        }
+        if (skipped) return
         processContent(line, indent, line.substring(indent))
     }
 
     /** Closes every open construct; the parser is then ready for a new document. */
     public suspend fun finish() {
         block?.let { closeBlock(it) }
+        if (verbatimIndent >= 0) closeVerbatim()
+        held?.let { emitValue(it.owner, it.key, it.indent, it.value) }
+        held = null
         pending?.let { resolvePendingAsNull(it) }
         pending = null
         while (frames.size > 1) closeTopFrame()
         frames.clear()
+        rootHasNode = false
+        rootBroken = false
     }
 
     private suspend fun processContent(line: String, indent: Int, content: String) {
@@ -148,6 +234,15 @@ public class YamlParser(
             pending = null
             if (indent > p.indent || (indent == p.indent && seqLine && !p.isItem)) {
                 val owner = if (p.isItem) ITEM else ENTRY
+                // a deeper line that is neither an entry nor an item is the
+                // value itself, in a shape the subset does not parse (plain
+                // lines the readers join, a flow collection they disagree on)
+                if (indent > p.indent && !seqLine && parseKey(content) == null) {
+                    openVerbatim(owner, p.key, p.indent, p.source, value = null)
+                    emitText(sourceLine(line, p.indent))
+                    scanOpenValue(content)
+                    return
+                }
                 emitMark(owner, p.key, type = null)
                 frames.addLast(Frame(indent, seqLine, owner))
             } else {
@@ -155,6 +250,13 @@ public class YamlParser(
             }
         }
         while (frames.size > 1 && frames.last().indent > indent) closeTopFrame()
+        // DIVERGENCE: a line less indented than the root — PyYAML refuses
+        // it, Psych and go-yaml v2 read the document up to it — and every
+        // line after it is text at the root, with its own indentation. The
+        // writer writes the root at column 0, so such a document loses the
+        // fixpoint, but no entry is read that the readers do not see.
+        if (frames.last().indent > indent) rootBroken = true
+        if (rootBroken) return verbatim(line)
         // a sequence at its key's own indentation ends at the first non-`-` line
         while (frames.size > 1 && frames.last().isSequence && !seqLine
             && frames.last().indent == indent
@@ -170,8 +272,8 @@ public class YamlParser(
 
     private suspend fun entry(line: String, indent: Int, content: String) {
         val (key, rest) = parseKey(content) ?: return verbatim(line)
-        val value = parseValue(rest) ?: return verbatim(line)
-        emitValue(ENTRY, key, indent, value)
+        val value = parseValue(rest) ?: return openVerbatim(ENTRY, key, indent, rest)
+        lineValue(ENTRY, key, indent, value, rest)
     }
 
     // [content] is `-` or starts with `- `; the value after the dash is parsed
@@ -183,7 +285,7 @@ public class YamlParser(
         val col = indent + 1 + spaces
         when {
             inner.isEmpty() || inner[0] == '#' ->
-                pending = Pending(indent, isItem = true, key = null)
+                pending = Pending(indent, isItem = true, key = null, source = after)
             isSequenceEntry(inner) -> {
                 emitMark(ITEM, null, null)
                 frames.addLast(Frame(col, isSequence = true, owner = ITEM))
@@ -192,35 +294,50 @@ public class YamlParser(
             else -> {
                 val keyed = parseKey(inner)
                 if (keyed != null) {
-                    val value = parseValue(keyed.second) ?: return verbatim(line)
+                    // the item holds a mapping either way: a compact entry
+                    // outside the subset is an entry of it, as one on the
+                    // next line would be
+                    val value = parseValue(keyed.second)
                     emitMark(ITEM, null, null)
                     frames.addLast(Frame(col, isSequence = false, owner = ITEM))
-                    emitValue(ENTRY, keyed.first, col, value)
+                    if (value == null) return openVerbatim(ENTRY, keyed.first, col, keyed.second)
+                    lineValue(ENTRY, keyed.first, col, value, keyed.second)
                 } else {
-                    val value = parseValue(inner) ?: return verbatim(line)
-                    emitValue(ITEM, null, indent, value)
+                    val value = parseValue(inner) ?: return openVerbatim(ITEM, null, indent, after)
+                    lineValue(ITEM, null, indent, value, after)
                 }
             }
         }
     }
 
+    // The value of an entry / item line, [source] being the line after its
+    // `:` / `-`: a bare key decides on the next line, a block scalar is
+    // buffered until it closes, and a complete value is held for one line.
+    private fun lineValue(owner: String, key: String?, indent: Int, value: Value, source: String) {
+        when (value) {
+            Value.Pending -> pending = Pending(indent, owner == ITEM, key, source)
+            is Block -> block = BlockScalar(
+                owner = owner,
+                key = key,
+                source = source,
+                folded = value.folded,
+                chomp = value.chomp,
+                explicitIndent = if (value.indentDigit > 0) indent + value.indentDigit else -1,
+                parentIndent = indent
+            )
+            else -> held = Held(owner, key, indent, value, source)
+        }
+    }
+
+    // Emits a complete value: a scalar or a single-line flow collection.
     private suspend fun emitValue(owner: String, key: String?, indent: Int, value: Value) {
         when (value) {
-            Value.Pending -> pending = Pending(indent, owner == ITEM, key)
+            // never a complete value, see lineValue
+            Value.Pending, is Block -> {}
             is Scalar -> {
                 emitMark(owner, key, value.type)
                 if (value.text.isNotEmpty()) emitText(value.text)
                 emitUnmark(owner)
-            }
-            is Block -> {
-                emitMark(owner, key, null)
-                block = BlockScalar(
-                    owner = owner,
-                    folded = value.folded,
-                    chomp = value.chomp,
-                    explicitIndent = if (value.indentDigit > 0) indent + value.indentDigit else -1,
-                    parentIndent = indent
-                )
             }
             is Seq -> {
                 emitMark(owner, key, if (value.items.isEmpty()) "seq" else null)
@@ -246,8 +363,51 @@ public class YamlParser(
         frame.owner?.let { emitUnmark(it) }
     }
 
+    // A line outside the subset that is no entry or item: a text child of the
+    // top container, its indentation up to the container's entries removed
+    // (a line indented less keeps its own), so the writer can re-indent it
+    // along with the container. At the root, a line ahead of the first entry
+    // or item, or after the root was broken, keeps its own indentation.
     private suspend fun verbatim(line: String) {
-        emitText(line + "\n")
+        val root = frames.size == 1
+        val indent = if (root && (rootBroken || !rootHasNode)) 0 else frames.last().indent
+        emitText(sourceLine(line, indent))
+    }
+
+    // Opens an entry / item at column [indent] whose value is outside the
+    // subset: `type=verbatim`, its text the value's source — [source], the
+    // rest of its own line, then every line the value spans, each with its
+    // `\n` and its indentation up to [indent] removed. Each line more indented
+    // than the key or dash, blank or a comment continues it — and, while a
+    // quoted scalar or flow collection opening [value] is left open, any line.
+    private suspend fun openVerbatim(
+        owner: String,
+        key: String?,
+        indent: Int,
+        source: String,
+        value: String? = source
+    ) {
+        emitMark(owner, key, VERBATIM)
+        emitText(source + "\n")
+        verbatimIndent = indent
+        verbatimOwner = owner
+        openValue = null
+        if (value != null) scanOpenValue(value)
+    }
+
+    // Starts tracking the quoted scalar or flow collection [value] opens, if
+    // it opens one and leaves it open.
+    private fun scanOpenValue(value: String) {
+        val start = skipSpaces(value, 0)
+        if (start == value.length || value[start] !in OPEN_VALUE_STARTS) return
+        val scan = OpenValueScan()
+        if (scan.feed(value.substring(start))) openValue = scan
+    }
+
+    private suspend fun closeVerbatim() {
+        verbatimIndent = -1
+        openValue = null
+        emitUnmark(verbatimOwner)
     }
 
     // --- block scalars ----------------------------------------------------
@@ -260,31 +420,47 @@ public class YamlParser(
         if (b.contentIndent < 0) {
             if (blank) {
                 b.lines += ""
+                b.sourceLines += sourceLine(line, b.parentIndent)
                 return true
             }
             val contentIndent = if (b.explicitIndent >= 0) b.explicitIndent else indent
             if (indent <= b.parentIndent || indent < contentIndent) {
-                closeBlock(b)
-                return false
+                return endBlock(b, line, indent)
             }
             b.contentIndent = contentIndent
             b.lines += line.substring(contentIndent)
+            b.sourceLines += sourceLine(line, b.parentIndent)
             return true
         }
-        if (blank) {
-            b.lines += if (line.length > b.contentIndent) line.substring(b.contentIndent) else ""
-            return true
+        if (!blank && indent < b.contentIndent) return endBlock(b, line, indent)
+        b.sourceLines += sourceLine(line, b.parentIndent)
+        b.lines += when {
+            !blank -> line.substring(b.contentIndent)
+            line.length > b.contentIndent -> line.substring(b.contentIndent)
+            else -> ""
         }
-        if (indent < b.contentIndent) {
-            closeBlock(b)
-            return false
-        }
-        b.lines += line.substring(b.contentIndent)
         return true
+    }
+
+    // Ends the block scalar at a line indented less than its content; true
+    // when that line is consumed. A line still more indented than the key or
+    // dash (not a comment, which the readers take as one) is one the readers
+    // refuse, so the value becomes verbatim, that line included.
+    private suspend fun endBlock(b: BlockScalar, line: String, indent: Int): Boolean {
+        if (indent > b.parentIndent && line[indent] != '#') {
+            block = null
+            openVerbatim(b.owner, b.key, b.parentIndent, b.source)
+            for (s in b.sourceLines) emitText(s)
+            emitText(sourceLine(line, b.parentIndent))
+            return true
+        }
+        closeBlock(b)
+        return false
     }
 
     private suspend fun closeBlock(b: BlockScalar) {
         block = null
+        emitMark(b.owner, b.key, null)
         val lines = b.lines
         var end = lines.size
         while (end > 0 && lines[end - 1].isEmpty()) end--
@@ -513,6 +689,7 @@ public class YamlParser(
     // --- emission ---------------------------------------------------------
 
     private suspend fun emitMark(name: String, key: String?, type: String?) {
+        if (frames.size == 1) rootHasNode = true
         val attributes = LinkedHashMap<String, String>(2)
         if (key != null) attributes["key"] = key
         if (type != null) attributes["type"] = type
@@ -531,6 +708,78 @@ public class YamlParser(
 
 private const val ENTRY = "entry"
 private const val ITEM = "item"
+
+// The `type` of an entry / item whose text is its value's YAML source.
+private const val VERBATIM = YAML_VERBATIM_TYPE
+
+// What opens a quoted scalar or a flow collection.
+private const val OPEN_VALUE_STARTS = "\"'[{"
+
+// Tracks, line by line, a quoted scalar or flow collection (and the quoted
+// scalars nested in it) until it closes, the way the front matter readers
+// read one that spans lines: whatever the indentation of its lines. Starts
+// at the opening quote or bracket.
+private class OpenValueScan {
+
+    private var quote = NO_QUOTE
+    private var depth = 0
+    // whether a quote here would open a quoted scalar: at the start of a
+    // node, after `[` / `{` / `,` / `:`, not inside a plain scalar
+    private var atNodeStart = true
+
+    // Feeds the next stretch of source; true while the value is still open.
+    fun feed(text: String): Boolean {
+        var i = 0
+        while (i < text.length) {
+            val c = text[i]
+            if (quote != NO_QUOTE) {
+                when {
+                    quote == '"' && c == '\\' -> i++
+                    c == '\'' && quote == '\'' && i + 1 < text.length && text[i + 1] == '\'' -> i++
+                    c == quote -> {
+                        quote = NO_QUOTE
+                        if (depth == 0) return false
+                        atNodeStart = false
+                    }
+                }
+                i++
+                continue
+            }
+            when {
+                c == '"' || c == '\'' -> if (atNodeStart) quote = c
+                c == '[' || c == '{' -> if (atNodeStart) depth++
+                c == ']' || c == '}' -> {
+                    if (depth > 0) depth--
+                    if (depth == 0) return false
+                    atNodeStart = false
+                }
+                c == ',' -> atNodeStart = true
+                // a colon starts a node only as a mapping indicator: before
+                // whitespace, the end of the line or a flow indicator
+                // (`x:"y` is one plain scalar)
+                c == ':' -> atNodeStart =
+                    i + 1 == text.length || text[i + 1] == ' ' || text[i + 1] == '\t' ||
+                        text[i + 1] in FLOW_INDICATORS
+                c == '#' && (i == 0 || text[i - 1] == ' ' || text[i - 1] == '\t') -> break
+                c == ' ' || c == '\t' -> {}
+                else -> atNodeStart = false
+            }
+            i++
+        }
+        // a line break ends a plain scalar inside a flow collection
+        if (depth > 0) atNodeStart = true
+        return quote != NO_QUOTE || depth > 0
+    }
+
+}
+
+private const val NO_QUOTE = '\u0000'
+
+// A line of a verbatim value: its indentation up to the column of the key
+// or dash removed (a blank or comment line may have less), then `\n` — so
+// the writer can re-indent the value along with its key.
+private fun sourceLine(line: String, indent: Int): String =
+    line.substring(minOf(indent, leadingSpaces(line))) + "\n"
 
 // Indicator characters that cannot start a plain mapping key in the
 // supported subset (`-` is handled by the sequence check first).

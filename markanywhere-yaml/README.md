@@ -44,16 +44,23 @@ The vocabulary is deliberately small and the key lives in an attribute, so a key
   Beyond the core schema that means booleans and nulls in any letter case and `y` / `n`, numbers with `_` / `,` separators or a binary / octal / upper-case base prefix (`1_000`, `1,000`, `0b101`, `0X1F`), base-60 numbers (`12:30` is an `int`), and timestamps with a one-digit month or day or a colonless offset (`2016-01-01 12:00:00 -0500`); a date only when it is in the calendar, and a number only go-yaml v2 reads only within its 64-bit range (`1e999` stays a string).
   So `type="int"` / `type="float"` says a reader reads a number, not that the text is a Kotlin literal: reading the value yourself takes that reader's rules (drop the separators, resolve the prefix or the base 60).
   No text and no type is an empty string; a bare `key:` is `type="null"`; an empty `[]` / `{}` is `type="seq"` / `type="map"` with no children.
+- `type="verbatim"` marks an `entry` / `item` whose value is outside the supported subset: its value is unknown (only a YAML reader knows it), and its text is the value's YAML source — the rest of the key or dash line, then every further line of the value, each ending in `\n`, with its indentation up to the key's or dash's column removed, so it re-indents along with its key.
+  While a quoted scalar or flow collection the value opens is left open, every line belongs to it whatever its indentation, as the readers read it (to the end of the document, if it never closes).
+  A consumer can tell a known value from an unknown one by this attribute alone, never by guessing from the text around an entry.
 - All marks are untagged.
 
 ## Supported YAML
 
 Block mappings and sequences (a sequence may sit at its key's own indentation), nesting, plain / double-quoted / single-quoted scalars, block scalars (`|`, `>`, chomping `-`/`+`, indentation indicator), single-line flow sequences and mappings, comments and blank lines (dropped), duplicate keys (all kept, in order), any line ending.
 
-Streaming: a `key: value` line commits on its newline.
-A bare `key:` (or `-`) is held for one line to decide between a nested block and a null value; a block scalar is buffered until it closes — never past the enclosing construct.
+Streaming: a `key: value` line is held until the next line that is not blank or a comment, which decides whether the value continues on it.
+A bare `key:` (or `-`) is held for one line to decide between a nested block, a verbatim value and a null value; a block scalar is buffered until it closes — never past the enclosing construct.
 
-DIVERGENCE (never throws, never loses content): a line outside that subset — a complex `? key`, a directive, a document marker, a multi-line flow collection or quoted scalar, a plain scalar's continuation line, a `- item` inside a mapping, a shape the front matter readers read differently from one another (`[draft:, x]`, `{a:[1]}`, `|-#note`) — is emitted **verbatim** (with its `\n`) as a text child of the container it sits in, and the writer writes it back as-is.
+DIVERGENCE (never throws, never loses content): a value outside that subset — a multi-line flow collection or quoted scalar, a plain scalar continued on further lines, plain lines under a bare `key:`, a line the readers refuse after a value, a shape the front matter readers read differently from one another (`[draft:, x]`, `{a:[1]}`, `|-#note`) — is kept as source in a `type="verbatim"` entry or item (see above).
+Any other line outside the subset — a complex `? key`, a directive, a document marker, a `- item` inside a mapping — is emitted **verbatim** (with its `\n`) as a text child of the container it sits in, its indentation up to the container's entries removed, so the writer re-indents it with them.
+At the root, a line ahead of the first entry or item keeps its own indentation, which is what keeps an indented root indented once written back.
+DIVERGENCE: a line less indented than an indented root (PyYAML refuses it, Psych and go-yaml v2 read the document up to it) and every line after it is text at the root with its own indentation — no entry is read that the readers do not see, but as the writer writes the root at column 0, such a document loses the fixpoint.
+The writer writes both back as-is.
 Anchors, aliases and tags are not resolved: a plain scalar starting with `&`, `*` or `!` is just a string.
 
 ## Writing
