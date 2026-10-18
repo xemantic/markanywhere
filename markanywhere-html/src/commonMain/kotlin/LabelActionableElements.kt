@@ -321,12 +321,17 @@ private fun SemanticEvent.rendersALabel(): Boolean = when (this) {
 
 /**
  * Whether the control holds a graphic that will **vanish** from the output — a
- * nameless `<svg>`, which [resolveInlineGraphics] drops as decorative.
+ * nameless `<svg>`, which [resolveInlineGraphics] drops as decorative, or an
+ * unnamed `<img>` left without a usable `src` (an inline `data:` icon), which
+ * [resolveLazyImages] drops — asked of the same [LazyImageResolver].
  *
- * Deliberately not `img`: an unnamed `<img>` survives as `![](src)`, which
+ * Not an unnamed `<img>` with a real `src`: it survives as `![](src)`, which
  * already tells the reader a picture is there, so standing a placeholder beside
  * it (`![:svg:]()![](y18.svg)`, the Hacker News masthead) would say it twice.
  */
-private fun List<SemanticEvent>.holdsAVanishingGraphic(): Boolean = asSequence()
-    .drop(1)
-    .any { it is Mark && it.name == "svg" }
+private fun List<SemanticEvent>.holdsAVanishingGraphic(): Boolean {
+    val images = LazyImageResolver()
+    return asSequence()
+        .drop(1)
+        .any { images.resolve(it) == null || (it is Mark && it.name == "svg") }
+}
