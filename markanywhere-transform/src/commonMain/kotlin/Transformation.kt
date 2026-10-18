@@ -48,8 +48,77 @@ public interface MatcherScope {
      * Useful when an output event depends on information collected from
      * the subtree (e.g. emitting a synthetic `frontmatter` mark once
      * `<head>` closes).
+     *
+     * Its output always lands *after* the matched mark's own deferred
+     * close; to emit computed content *inside* it, use [defer].
      */
     public fun afterClose(block: suspend MatcherScope.() -> Unit)
+
+    /**
+     * Schedules [block] to run at the matched mark's unmark, once the
+     * input subtree has streamed. Its emissions are spliced into the
+     * deferred output at the position of this call — unlike direct
+     * emission after [children], which defers the events but captures
+     * their content eagerly (a list rendered there is still empty), and
+     * unlike [afterClose], which always lands after the matched mark's
+     * own close.
+     *
+     * Deferred emissions and [defer] blocks share one queue, run in
+     * source order at the unmark:
+     *
+     * ```kotlin
+     * match("body") {
+     *     "body" {
+     *         "main" { children(mode = "content") }
+     *         defer { "aside" { toc.forEach { "a" { +it } } } }
+     *     }
+     * }
+     * ```
+     *
+     * emits `<body><main>…</main><aside>…</aside></body>`, the `aside`
+     * built from whatever the subtree collected into `toc`. Where the
+     * call sits decides the slot:
+     *
+     * - after [children] inside an emitted mark — the last child of
+     *   that mark, before its deferred close;
+     * - after an emitted mark that contains [children] — between that
+     *   mark's close and the enclosing one's (`</main>…</body>` above);
+     * - before [children] — output before [children] is emitted
+     *   eagerly, so there is no slot at the call site: the block lands at
+     *   the earliest deferred position, right after the subtree, ahead
+     *   of the deferred output that follows it;
+     * - in a matcher that does not call [children] — the subtree is
+     *   skipped, and the block runs at the skipped mark's unmark.
+     *
+     * The deferred slot belongs to the **matched frame**, not to the
+     * emitted mark the call sits in: a [defer] inside an eagerly closed
+     * mark does not land inside that mark. Given the input `body { x }`,
+     *
+     * ```kotlin
+     * match("body") {
+     *     "body" {
+     *         "header" { defer { "lazy" {} } }
+     *         "main" { children() }
+     *     }
+     * }
+     * ```
+     *
+     * emits `<body><header/><main>x<lazy/></main></body>` — `header` has
+     * already closed when the block runs, so it joins the deferred queue
+     * at its earliest position, as a [defer] before [children] does.
+     *
+     * The block keeps the [tagged] / [untagged] default in force at the
+     * call site and runs on a sink scope, like an [afterClose] block:
+     * [children] and [afterClose] are no-ops inside it, and a nested
+     * [defer] — like a [defer] in a [TransformerBuilder.matchText] or
+     * [afterClose] block, where there is no subtree left to wait for —
+     * runs [block] in place.
+     *
+     * An exception thrown by [block] propagates to the collector at the
+     * unmark. If collection stops before the unmark (cancellation, or a
+     * truncated input that never closes the mark), [block] never runs.
+     */
+    public suspend fun defer(block: suspend MatcherScope.() -> Unit)
 
     public suspend operator fun String.unaryPlus()
 
@@ -154,6 +223,76 @@ internal class TransformerImpl(
 
         val outputScope = this
 
+        // Scope used for text/afterClose/defer contexts where there is no
+        // owning match frame whose lifecycle applies. children()/afterClose
+        // are no-ops, defer runs in place (nothing left to wait for); emits
+        // go straight to the output flow.
+        fun sinkScope(initiallyTagged: Boolean = false): MatcherScope = object : MatcherScope {
+
+            var defaultTagged = initiallyTagged
+
+            override fun children(mode: String?) { /* no children */ }
+            override fun afterClose(block: suspend MatcherScope.() -> Unit) { /* no-op */ }
+            override suspend fun defer(block: suspend MatcherScope.() -> Unit) {
+                block()
+            }
+
+            override suspend fun String.unaryPlus() {
+                outputScope.text(this)
+            }
+
+            override suspend fun String.invoke(
+                attributes: Map<String, String>,
+                block: suspend MatcherScope.() -> Unit
+            ) {
+                outputScope.mark(this, isTagged = defaultTagged, attributes = attributes)
+                block()
+                outputScope.unmark(this, isTagged = defaultTagged)
+            }
+
+            override suspend fun tag(
+                name: String,
+                attributes: Map<String, String>,
+                block: suspend MatcherScope.() -> Unit
+            ) {
+                outputScope.mark(name, isTagged = true, attributes = attributes)
+                block()
+                outputScope.unmark(name, isTagged = true)
+            }
+
+            override suspend fun tag(
+                name: String,
+                vararg attributes: Pair<String, String>,
+                block: suspend MatcherScope.() -> Unit
+            ) {
+                outputScope.mark(name, isTagged = true, attributes = attributes.toMap())
+                block()
+                outputScope.unmark(name, isTagged = true)
+            }
+
+            override suspend fun tagged(block: suspend MatcherScope.() -> Unit) {
+                val previous = defaultTagged
+                defaultTagged = true
+                try {
+                    block()
+                } finally {
+                    defaultTagged = previous
+                }
+            }
+
+            override suspend fun untagged(block: suspend MatcherScope.() -> Unit) {
+                val previous = defaultTagged
+                defaultTagged = false
+                try {
+                    block()
+                } finally {
+                    defaultTagged = previous
+                }
+            }
+        }
+
+        val defaultSinkScope = sinkScope()
+
         fun matcherScope(state: MatchState): MatcherScope = object : MatcherScope {
 
             var afterChildren = false
@@ -167,6 +306,13 @@ internal class TransformerImpl(
 
             override fun afterClose(block: suspend MatcherScope.() -> Unit) {
                 state.afterCloseOps += block
+            }
+
+            override suspend fun defer(block: suspend MatcherScope.() -> Unit) {
+                val tagged = defaultTagged
+                state.pendingOps += {
+                    sinkScope(initiallyTagged = tagged).block()
+                }
             }
 
             override suspend fun String.unaryPlus() {
@@ -253,70 +399,6 @@ internal class TransformerImpl(
             }
         }
 
-        // Scope used for text/afterClose contexts where there is no owning
-        // match frame whose lifecycle applies. children()/afterClose are
-        // no-ops; emits go straight to the output flow.
-        val sinkScope: MatcherScope = object : MatcherScope {
-
-            var defaultTagged = false
-
-            override fun children(mode: String?) { /* no children */ }
-            override fun afterClose(block: suspend MatcherScope.() -> Unit) { /* no-op */ }
-
-            override suspend fun String.unaryPlus() {
-                outputScope.text(this)
-            }
-
-            override suspend fun String.invoke(
-                attributes: Map<String, String>,
-                block: suspend MatcherScope.() -> Unit
-            ) {
-                outputScope.mark(this, isTagged = defaultTagged, attributes = attributes)
-                block()
-                outputScope.unmark(this, isTagged = defaultTagged)
-            }
-
-            override suspend fun tag(
-                name: String,
-                attributes: Map<String, String>,
-                block: suspend MatcherScope.() -> Unit
-            ) {
-                outputScope.mark(name, isTagged = true, attributes = attributes)
-                block()
-                outputScope.unmark(name, isTagged = true)
-            }
-
-            override suspend fun tag(
-                name: String,
-                vararg attributes: Pair<String, String>,
-                block: suspend MatcherScope.() -> Unit
-            ) {
-                outputScope.mark(name, isTagged = true, attributes = attributes.toMap())
-                block()
-                outputScope.unmark(name, isTagged = true)
-            }
-
-            override suspend fun tagged(block: suspend MatcherScope.() -> Unit) {
-                val previous = defaultTagged
-                defaultTagged = true
-                try {
-                    block()
-                } finally {
-                    defaultTagged = previous
-                }
-            }
-
-            override suspend fun untagged(block: suspend MatcherScope.() -> Unit) {
-                val previous = defaultTagged
-                defaultTagged = false
-                try {
-                    block()
-                } finally {
-                    defaultTagged = previous
-                }
-            }
-        }
-
         flow.collect { event ->
 
             when (event) {
@@ -360,7 +442,7 @@ internal class TransformerImpl(
                         ?: textMatchers.firstOrNull { it.mode == null }
                     // Text survives only via an explicit matchText rule; with
                     // no matching rule it is dropped (no implicit passthrough).
-                    matcher?.block(sinkScope, event.text)
+                    matcher?.block(defaultSinkScope, event.text)
                 }
 
                 is Unmark -> {
@@ -368,7 +450,7 @@ internal class TransformerImpl(
                     val state = matchStack.removeLast()
                     if (state.incrementedSkip) skipDepth--
                     for (op in state.pendingOps) op()
-                    for (op in state.afterCloseOps) op(sinkScope)
+                    for (op in state.afterCloseOps) op(defaultSinkScope)
                 }
 
             }
