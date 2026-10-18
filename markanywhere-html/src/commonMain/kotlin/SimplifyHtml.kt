@@ -105,17 +105,20 @@ import kotlinx.coroutines.flow.onEach
  *   - form elements — their semantically meaningful attributes
  * - **ARIA role promotion**: a `role` attribute on an otherwise generic element
  *   recovers the semantics the author expressed through it — `role="heading"`
- *   (+ `aria-level`) → `h1`–`h6`, `role="img"` → `img` (accessible name as
- *   `alt`), `role="separator"` → `hr`, `role="presentation"`/`"none"` → unwrap,
+ *   (+ `aria-level`) → `h1`–`h6`, `role="img"` → `img` (accessible name —
+ *   `aria-label`, else `title` — as `alt`), `role="separator"` → `hr`, `role="presentation"`/`"none"` → unwrap,
  *   `role="dialog"`/`"alertdialog"` → `dialog` when `aria-modal="true"`, else a
  *   `section` keeping the `role`, and the landmark / list / table-grid roles
- *   (see [ROLE_TO_TAG]) → their semantic tag. Promotion is gated to generic containers ([UNWRAPPED_TAGS]) so
- *   a `role` only upgrades an element that would otherwise be unwrapped and never
- *   overrides a native semantic tag (a `<form role="search">` stays a form). The
- *   `presentation`/`none` unwrap is the exception — it deliberately strips an
- *   element's own semantics, so it applies to any element. The now-redundant
- *   `role` is dropped — except where it still tells more than the tag (an
- *   alert dialog, a non-modal dialog kept as a `section`).
+ *   (see [ROLE_TO_TAG]) → their semantic tag. The role is the first token of
+ *   the `role` token list ([explicitRole]). Promotion is gated to generic
+ *   containers ([isGenericContainer]: the [UNWRAPPED_TAGS] and custom
+ *   elements) so a `role` only upgrades an element that would otherwise be
+ *   unwrapped and never overrides a native semantic tag (a `<form
+ *   role="search">` stays a form). The `presentation`/`none` unwrap is the
+ *   exception — it deliberately strips an element's own semantics, so it
+ *   applies to any element. The now-redundant `role` is dropped — except
+ *   where it still tells more than the tag (an alert dialog, a non-modal
+ *   dialog kept as a `section`).
  * - **ARIA keep-set (every preserved element)**: on top of each element's own
  *   whitelist, the accessible name and actionable state survive — `aria-label`,
  *   `aria-expanded`, `aria-haspopup`, `aria-current`, `aria-checked`,
@@ -125,9 +128,10 @@ import kotlinx.coroutines.flow.onEach
  *   agent needs to decide how to interact. Inline emphasis carries no
  *   attributes, so it does not surface these. Other `aria-*` (id-reference,
  *   live-region, positional) and `role` are dropped, with one exception: a
- *   generic `div`/`span` kept for its actionable ref (a control the page built
- *   out of one — a checkbox, a star toggle) keeps its `role`, the only thing
- *   saying what kind of control it is.
+ *   generic `div`/`span` or custom element kept for its actionable ref (a
+ *   control the page built out of one — a checkbox, a star toggle, a
+ *   `<sl-tab>`) keeps its `role`, the only thing saying what kind of control
+ *   it is.
  * - **Caller keep-set ([keepAttributes])**: a generic escape hatch for
  *   application-specific attributes the caller wants to survive simplification
  *   — e.g. a `golemId` correlation id mapping events back to their source DOM
@@ -451,31 +455,32 @@ private fun Flow<SemanticEvent>.simplifyHtmlRules(
     // --- ARIA role promotion (explicit, before the tag-family groups) ---
 
     // Recover the document semantics an author expressed via `role` on otherwise
-    // generic containers (the div/span soup of SPAs and design systems). The
-    // promotion matchers are gated to UNWRAPPED_TAGS so a `role` never overrides
-    // a native semantic tag — a `<form role="search">` stays a form, a
-    // `<button role="button">` stays a button — it only upgrades an element that
-    // would otherwise be unwrapped. The now-redundant `role` is dropped (it is
-    // not in ARIA_KEEP). `presentation`/`none` is the exception: it strips an
-    // element's *own* semantics on purpose, so it applies to any element (e.g. a
-    // layout `<table role="presentation">`), promoted by a caller
-    // keep-attribute like the UNWRAPPED_TAGS rule is.
-    match({ name !in DROPPED_TAGS && this["role"]?.lowercase() in PRESENTATION_ROLES }) { event ->
+    // generic containers (the div/span soup of SPAs and design systems, and the
+    // web components replacing it). The promotion matchers are gated to
+    // isGenericContainer so a `role` never overrides a native semantic tag — a
+    // `<form role="search">` stays a form, a `<button role="button">` stays a
+    // button — it only upgrades an element that would otherwise be unwrapped.
+    // The now-redundant `role` is dropped (it is not in ARIA_KEEP).
+    // `presentation`/`none` is the exception: it strips an element's *own*
+    // semantics on purpose, so it applies to any element (e.g. a layout
+    // `<table role="presentation">`), promoted by a caller keep-attribute like
+    // the generic-container rule is.
+    match({ name !in DROPPED_TAGS && explicitRole() in PRESENTATION_ROLES }) { event ->
         val kept = extraKept(event)
         if (promotes(kept)) preserve(event.name, kept) { children() }
         else children()
     }
 
-    // `role="heading"` + `aria-level` → `h1`–`h6` (ARIA's default level is 2).
-    match({ name in UNWRAPPED_TAGS && this["role"]?.lowercase() == "heading" }) { event ->
-        val level = event["aria-level"]?.toIntOrNull()?.coerceIn(1, 6) ?: 2
-        preserve("h$level", preserveAttrs(event, "id")) { children() }
+    // `role="heading"` + `aria-level` → `h1`–`h6` (see [ariaHeadingLevel]).
+    match({ isGenericContainer() && explicitRole() == "heading" }) { event ->
+        preserve("h${event.ariaHeadingLevel()}", preserveAttrs(event, "id")) { children() }
     }
 
     // `role="img"` → image; its accessible name becomes the alt text.
-    match({ name in UNWRAPPED_TAGS && this["role"]?.lowercase() == "img" }) { event ->
+    match({ isGenericContainer() && explicitRole() == "img" }) { event ->
         val attrs = preserveAttrs(event, "id").toMutableMap()
-        event["aria-label"]?.let { attrs["alt"] = it }
+        // accname: `aria-label` (step 2C), else the tooltip `title` (step 2I)
+        (event["aria-label"] ?: event["title"])?.let { attrs["alt"] = it }
         preserve("img", attrs) { /* void — descriptive children collapse to the name */ }
     }
 
@@ -486,8 +491,8 @@ private fun Flow<SemanticEvent>.simplifyHtmlRules(
     // capture sees as laid out. Without the claim it is a labelled region. The
     // `role` survives wherever it tells more than the tag: an alert dialog, or
     // a dialog that is a `<section>`.
-    match({ name in UNWRAPPED_TAGS && this["role"]?.lowercase() in DIALOG_ROLES }) { event ->
-        val role = event["role"]!!.lowercase()
+    match({ isGenericContainer() && explicitRole() in DIALOG_ROLES }) { event ->
+        val role = event.explicitRole()!!
         if (event["aria-modal"]?.lowercase() == "true") {
             val attrs = if (role == "alertdialog") {
                 mapOf("role" to role) + preserveAttrs(event, "id")
@@ -516,14 +521,14 @@ private fun Flow<SemanticEvent>.simplifyHtmlRules(
     }
 
     // `role="separator"` → thematic break (void).
-    match({ name in UNWRAPPED_TAGS && this["role"]?.lowercase() == "separator" }) { event ->
+    match({ isGenericContainer() && explicitRole() == "separator" }) { event ->
         preserve("hr", preserveAttrs(event, "id")) { /* void */ }
     }
 
     // Remaining promotable roles are straight renames to the semantic tag,
     // keeping `id` (+ ARIA name/state via preserveAttrs); children flow through.
-    match({ name in UNWRAPPED_TAGS && this["role"]?.lowercase() in ROLE_TO_TAG }) { event ->
-        val target = ROLE_TO_TAG.getValue(event["role"]!!.lowercase())
+    match({ isGenericContainer() && explicitRole() in ROLE_TO_TAG }) { event ->
+        val target = ROLE_TO_TAG.getValue(event.explicitRole()!!)
         preserve(target, preserveAttrs(event, "id")) { children() }
     }
 
@@ -532,15 +537,16 @@ private fun Flow<SemanticEvent>.simplifyHtmlRules(
     // Not descending (no children()) skips the wrapper and its whole subtree.
     match({ name in DROPPED_TAGS }) { }
 
-    // Unwrap presentational wrappers — unless their keep-attributes promote
-    // them (see `promotes`).
-    match({ name in UNWRAPPED_TAGS }) { event ->
+    // Unwrap presentational wrappers and custom elements — unless their
+    // keep-attributes promote them (see `promotes`).
+    match({ isGenericContainer() }) { event ->
         val kept = extraKept(event)
         if (!promotes(kept)) children()
         // A generic element kept for its ref is a control the page built out
-        // of a `<div>` — Gmail's checkboxes, star toggles and toolbar buttons
-        // carry nothing but `role` and `aria-label`, so without them the agent
-        // reads an empty `<div ref="…">` it cannot tell from any other.
+        // of a `<div>` or a web component — Gmail's checkboxes, star toggles
+        // and toolbar buttons, a Shoelace `<sl-tab>` — carry nothing but
+        // `role` and `aria-label`, so without them the agent reads an empty
+        // `<div ref="…">` it cannot tell from any other.
         else if (AccessibilityAnnotations.REF in kept) {
             preserve(event.name, preserveAttrs(event, "role")) { children() }
         }
@@ -716,6 +722,8 @@ private val ROLE_TO_TAG = mapOf(
     "search" to "search",
     // grouping / block content
     "list" to "ul",
+    // deprecated in ARIA 1.2 as a synonym of `list`
+    "directory" to "ul",
     "listitem" to "li",
     "paragraph" to "p",
     "blockquote" to "blockquote",
@@ -741,6 +749,35 @@ private val DIALOG_SHOWN = mapOf("open" to "")
 private val UNWRAPPED_TAGS = setOf(
     "body", "div", "span", "font", "center", "tt",
 )
+
+/**
+ * Whether a `role` on this element may promote it: an element carrying no
+ * semantics of its own, which would otherwise be unwrapped — a [UNWRAPPED_TAGS]
+ * wrapper, or a custom element (a web component such as Material Web's
+ * `md-list`, whose host carries its semantics only as a `role`), which the
+ * catch-all unwraps. A native semantic tag is never overridden.
+ */
+private fun SemanticEvent.Mark.isGenericContainer(): Boolean =
+    name in UNWRAPPED_TAGS || name.isCustomElementName()
+
+// The shape of a valid custom element name (HTML §4.13.2): a lowercase ASCII
+// letter first and a hyphen somewhere, minus the SVG / MathML names of that
+// shape the spec reserves.
+private fun String.isCustomElementName(): Boolean =
+    isNotEmpty() && this[0] in 'a'..'z' && '-' in this && this !in RESERVED_HYPHENATED_NAMES
+
+private val RESERVED_HYPHENATED_NAMES = setOf(
+    "annotation-xml", "color-profile", "font-face", "font-face-src",
+    "font-face-uri", "font-face-format", "font-face-name", "missing-glyph",
+)
+
+/**
+ * The level of a `role="heading"` element: its `aria-level` where that is an
+ * integer of at least 1 (ARIA leaves an invalid one ignored), clamped to
+ * Markdown's six levels, else ARIA's default level 2.
+ */
+private fun SemanticEvent.Mark.ariaHeadingLevel(): Int =
+    this["aria-level"]?.trim()?.toIntOrNull()?.takeIf { it >= 1 }?.coerceAtMost(6) ?: 2
 
 // Structural HTML5 elements + Markdown-equivalent block content.
 // All get the same treatment: preserve the tag, retain `id` only.

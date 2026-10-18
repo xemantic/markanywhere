@@ -839,6 +839,25 @@ class SimplifyHtmlTest {
     }
 
     @Test
+    fun `should name a role img by its title when it has no aria-label`() = runTest {
+        // given — an initials avatar, whose only name is its `title` (accname
+        // step 2I, the tooltip attribute)
+        val input = semanticEvents(tagged = true) {
+            "x-avatar"("role" to "img", "title" to "Jane Doe") { +"JD" }
+            "span"("role" to "img", "aria-label" to "Rocket", "title" to "Launch") { +"🚀" }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then — aria-label still wins over title
+        output sameAs semanticEvents {
+            "img"("alt" to "Jane Doe") { }
+            "img"("aria-label" to "Rocket", "alt" to "Rocket") { }
+        }
+    }
+
+    @Test
     fun `should promote role separator to a thematic break`() = runTest {
         // when
         val input = semanticEvents(tagged = true) {
@@ -945,6 +964,162 @@ class SimplifyHtmlTest {
         // then — stays nav with id; role and class dropped.
         output sameAs semanticEvents {
             tag("nav", "id" to "main-nav") { +"links" }
+        }
+    }
+
+    @Test
+    fun `should promote by the first token of a role token list`() = runTest {
+        // given — `role` is a whitespace-separated token list (the later tokens
+        // are fallbacks for older readers), in any ASCII case, padded or not
+        val input = semanticEvents(tagged = true) {
+            "div"("role" to "heading presentation", "aria-level" to "3") { +"Fallbacks" }
+            "div"("role" to " LIST\t") {
+                "div"("role" to "listitem\ngroup") { +"Padded" }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "h3" { +"Fallbacks" }
+            "ul" {
+                "li" { +"Padded" }
+            }
+        }
+    }
+
+    @Test
+    fun `DIVERGENCE - should not promote by a known role after an unknown first token`() = runTest {
+        // given — a browser takes the first role token it recognises, so Chrome
+        // reads `role="foo heading"` as a heading; we read only the first
+        // token, so an unknown one leaves the element unpromoted
+        val input = semanticEvents(tagged = true) {
+            "div"("role" to "foo heading", "aria-level" to "3") { +"Unknown first" }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            +"Unknown first"
+        }
+    }
+
+    @Test
+    fun `should unwrap by a presentation role as the first token`() = runTest {
+        // given — the later tokens are fallbacks, never read
+        val input = semanticEvents(tagged = true) {
+            "nav"("role" to "presentation heading") {
+                "p" { +"laid out" }
+            }
+            "div"("role" to "none list") {
+                "div"("role" to "listitem") { +"orphan" }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "p" { +"laid out" }
+            "li" { +"orphan" }
+        }
+    }
+
+    @Test
+    fun `should fall back to h2 for an aria-level below 1 or not an integer`() = runTest {
+        // given — ARIA's `aria-level` is an integer >= 1; an invalid one is
+        // ignored, leaving the heading at its default level 2, while a valid one
+        // deeper than Markdown's six levels is clamped
+        val input = semanticEvents(tagged = true) {
+            "div"("role" to "heading", "aria-level" to " 4 ") { +"padded" }
+            "div"("role" to "heading", "aria-level" to "0") { +"zero" }
+            "div"("role" to "heading", "aria-level" to "-1") { +"negative" }
+            "div"("role" to "heading", "aria-level" to "first") { +"word" }
+            "div"("role" to "heading", "aria-level" to "12") { +"deep" }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "h4" { +"padded" }
+            "h2" { +"zero" }
+            "h2" { +"negative" }
+            "h2" { +"word" }
+            "h6" { +"deep" }
+        }
+    }
+
+    @Test
+    fun `should promote a role on a custom element`() = runTest {
+        // given — a web component is a generic container the catch-all would
+        // unwrap, the modern div soup: Material Web's `md-list` / `md-list-item`
+        // / `md-divider` carry their semantics only as a `role` on the host
+        val input = semanticEvents(tagged = true) {
+            "x-title"("role" to "heading", "aria-level" to "4") { +"Settings" }
+            "md-list"("role" to "list") {
+                "md-list-item"("role" to "listitem") { +"Wi-Fi" }
+                "md-divider"("role" to "separator") { }
+                "md-list-item"("role" to "listitem") { +"Bluetooth" }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "h4" { +"Settings" }
+            "ul" {
+                "li" { +"Wi-Fi" }
+                "hr" { }
+                "li" { +"Bluetooth" }
+            }
+        }
+    }
+
+    @Test
+    fun `should promote the deprecated directory role to a list`() = runTest {
+        // given — ARIA 1.2 deprecates `directory` as a synonym of `list`
+        val input = semanticEvents(tagged = true) {
+            "div"("role" to "directory") {
+                "div"("role" to "listitem") { +"Chapter 1" }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "ul" {
+                "li" { +"Chapter 1" }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep an option of a listbox a control rather than a list item`() = runTest {
+        // given — a listbox is a widget, not a list: its options are what an
+        // agent acts on, so they keep the role saying what they are
+        val input = semanticEvents(tagged = true) {
+            "div"("role" to "listbox") {
+                "div"("role" to "option", AccessibilityAnnotations.REF to "7") { +"Berlin" }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml(keepAttributes = setOf(AccessibilityAnnotations.REF))
+
+        // then
+        output sameAs semanticEvents {
+            tag("div", "role" to "option", AccessibilityAnnotations.REF to "7") { +"Berlin" }
         }
     }
 
