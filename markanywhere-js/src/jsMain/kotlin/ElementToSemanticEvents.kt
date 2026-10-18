@@ -18,9 +18,10 @@ package com.xemantic.markanywhere.js
 
 import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.dump.FormControlState
-import com.xemantic.markanywhere.dump.formControlAttributes
-import com.xemantic.markanywhere.dump.formControlText
+import com.xemantic.markanywhere.dump.captureFormControl
 import com.xemantic.markanywhere.dump.hasLiveFormState
+import com.xemantic.markanywhere.dump.isMaskingTextSecurity
+import com.xemantic.markanywhere.dump.readsMaskedState
 import com.xemantic.markanywhere.flow.SemanticEventScope
 import com.xemantic.markanywhere.flow.semanticEvents
 import kotlinx.coroutines.flow.Flow
@@ -35,7 +36,7 @@ import org.w3c.dom.asList
  * Form controls are captured as they are *now* — the value typed into them,
  * the box ticked, the option chosen — and a control the page marks as secret
  * has its value left out, by the rules `CapturePage` in `markanywhere-browse`
- * applies too (see [formControlAttributes]), so both captures agree.
+ * applies too (see [captureFormControl]), so both captures agree.
  */
 public fun Element.toSemanticEvents(): Flow<SemanticEvent> = semanticEvents(
     tagged = true
@@ -53,12 +54,12 @@ private suspend fun SemanticEventScope.flowElement(
 
     val markupAttributes = element.attributeMap()
 
-    val state = if (hasLiveFormState(tagName)) element.formControlState() else null
-    val attributes = state?.let {
-        formControlAttributes(tagName, markupAttributes, it)
-    } ?: markupAttributes
+    val control = if (hasLiveFormState(tagName)) {
+        captureFormControl(tagName, markupAttributes, element.formControlState(markupAttributes))
+    } else null
+    val attributes = control?.attributes ?: markupAttributes
     // a <textarea>'s children are only the default value from the markup
-    val replacementText = state?.let { formControlText(tagName, markupAttributes, it) }
+    val replacementText = control?.text
 
     tag(name = tagName, attributes) {
         if (replacementText != null) {
@@ -125,17 +126,31 @@ private fun Element.frameDocumentElement(): Element? =
  * realm problem as [asTextOrNull]: a control inside a frame fails that check.
  * The computed style comes from the element's own window for the same reason.
  */
-private fun Element.formControlState(): FormControlState {
+private fun Element.formControlState(attributes: Map<String, String>): FormControlState {
     val control = asDynamic()
-    val value = control.value
     return FormControlState(
-        value = if (jsTypeOf(value) == "string") value.unsafeCast<String>() else null,
-        checked = control.checked == true,
-        selected = control.selected == true,
-        masked = isMasked(),
+        value = stringOrNull(control.value),
+        checked = booleanOrNull(control.checked),
+        selected = booleanOrNull(control.selected),
+        // a computed-style lookup, so only where the capture reads it
+        masked = readsMaskedState(localName, attributes) && isMasked(),
         select = if (localName == "option") enclosingSelect()?.attributeMap() else null,
+        text = when (localName) {
+            "textarea" -> stringOrNull(control.defaultValue)
+            "option" -> stringOrNull(control.text)
+            else -> null
+        },
     )
 }
+
+// Plain functions, not extensions: an extension called on a `dynamic`
+// receiver compiles to a dynamic JS method call of the same name.
+
+/** A JS property [value] as a [String], or `null` when it is none (absent on the element). */
+private fun stringOrNull(value: dynamic): String? = if (jsTypeOf(value) == "string") value.unsafeCast<String>() else null
+
+/** A JS property [value] as a [Boolean], or `null` when it is none (absent on the element). */
+private fun booleanOrNull(value: dynamic): Boolean? = if (jsTypeOf(value) == "boolean") value.unsafeCast<Boolean>() else null
 
 /** The `<select>` this `<option>` belongs to, through an `<optgroup>`, if any. */
 private fun Element.enclosingSelect(): Element? =
@@ -145,17 +160,14 @@ private fun Element.attributeMap(): Map<String, String> =
     attributes.asList().associate { it.name to it.value }
 
 /**
- * Whether this element renders its text masked: a computed
- * `-webkit-text-security` other than `none`. Only text-entry controls are
- * asked, so the style is not computed for every element of the page.
+ * Whether this element renders its text masked, judging its computed
+ * `-webkit-text-security` as the CDP capture does ([isMaskingTextSecurity]).
  */
-private fun Element.isMasked(): Boolean {
-    if (localName != "input" && localName != "textarea") return false
-    val security = ownerDocument?.defaultView
+private fun Element.isMasked(): Boolean = isMaskingTextSecurity(
+    ownerDocument?.defaultView
         ?.getComputedStyle(this)
         ?.getPropertyValue("-webkit-text-security")
-    return !security.isNullOrEmpty() && security != "none"
-}
+)
 
 /**
  * This node as a [Text], or `null` when it is not one.

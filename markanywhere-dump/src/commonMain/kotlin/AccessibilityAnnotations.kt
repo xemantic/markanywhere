@@ -95,7 +95,7 @@ public object AccessibilityAnnotations {
 
     /**
      * Present on a form control holding a secret (a password, a card number, a
-     * one-time code — see [formControlAttributes]) whose value the capture
+     * one-time code — see [captureFormControl]) whose value the capture
      * left out, with value `filled` or `empty`: an agent that typed into the
      * field can tell its typing landed without the dump carrying what was
      * typed. Like [REF] it is meant for the LLM-facing output, so it is not in
