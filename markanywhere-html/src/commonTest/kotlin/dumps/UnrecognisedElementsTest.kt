@@ -192,24 +192,41 @@ class UnrecognisedElementsTest {
         """.trimIndent()
     }
 
+    // One test per dump: each runs the whole pipeline over a full page, and
+    // looping over all of them in one test exceeded mocha's 2 s per-test
+    // timeout on a loaded CI runner.
+
     @Test
-    fun `should not spill vector graphics noise into any dump`() = runTest {
-        // given — every captured page carries inline SVG icons
-        val dumps = listOf(
-            DumpFixtures.bbcNews, DumpFixtures.serpBing, DumpFixtures.serpBrave,
-            DumpFixtures.serpDuckduckgo, DumpFixtures.serpGoogle,
-        )
+    fun `should not spill vector graphics noise into the BBC News dump`() =
+        assertNoVectorGraphicsNoise(DumpFixtures.bbcNews)
 
-        for (dump in dumps) {
-            // when
-            val markdown = dumpFlow(dump).transformHtmlToMarkdown().renderMarkdown()
+    @Test
+    fun `should not spill vector graphics noise into the Bing dump`() =
+        assertNoVectorGraphicsNoise(DumpFixtures.serpBing)
 
-            // then — the catch-all unwrap must not reach inside a dropped <svg>
-            assert("<path" !in markdown)
-            assert("<defs" !in markdown)
-            assert("<symbol" !in markdown)
-            assert("<linearGradient" !in markdown)
-        }
+    @Test
+    fun `should not spill vector graphics noise into the Brave dump`() =
+        assertNoVectorGraphicsNoise(DumpFixtures.serpBrave)
+
+    @Test
+    fun `should not spill vector graphics noise into the DuckDuckGo dump`() =
+        assertNoVectorGraphicsNoise(DumpFixtures.serpDuckduckgo)
+
+    @Test
+    fun `should not spill vector graphics noise into the Google dump`() =
+        assertNoVectorGraphicsNoise(DumpFixtures.serpGoogle)
+
+    private fun assertNoVectorGraphicsNoise(
+        dump: String // given — a captured page carrying inline SVG icons
+    ) = runTest {
+        // when
+        val markdown = dumpFlow(dump).transformHtmlToMarkdown().renderMarkdown()
+
+        // then — the catch-all unwrap must not reach inside a dropped <svg>
+        assert("<path" !in markdown)
+        assert("<defs" !in markdown)
+        assert("<symbol" !in markdown)
+        assert("<linearGradient" !in markdown)
     }
 
 }
