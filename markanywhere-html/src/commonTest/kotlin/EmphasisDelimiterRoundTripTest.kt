@@ -921,6 +921,162 @@ class EmphasisDelimiterRoundTripTest {
         assertMarkdownFixpoint(markdown)
     }
 
+    // --- non-ASCII punctuation around a delimiter (issue #93) ----------------
+    // The parser's flanking rule counts only ASCII punctuation, so the renderer
+    // must classify the chars around a delimiter the same way.
+
+    @Test
+    fun `should round-trip a b element ending in punctuation before a euro sign`() = runTest {
+        // when
+        val markdown = htmlToMarkdown { "p" { "b" { +"Price:" }; +"€5" } }
+        // then
+        markdown sameAs "**Price:**&#8364;5"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip a b element ending in punctuation before a curly quote`() = runTest {
+        // when
+        val markdown = htmlToMarkdown { "p" { "b" { +"Note:" }; +"“x”" } }
+        // then
+        markdown sameAs "**Note:**&#8220;x”"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip a b element ending in a curly quote before a word char`() = runTest {
+        // when
+        val markdown = htmlToMarkdown { "p" { "b" { +"“x”" }; +"y" } }
+        // then
+        markdown sameAs "**“x”**y"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip a b element opening on a curly quote after a word char`() = runTest {
+        // when
+        val markdown = htmlToMarkdown { "p" { +"x"; "b" { +"“y”" } } }
+        // then
+        markdown sameAs "x**“y”**"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip a b element opening on a euro sign after a word char`() = runTest {
+        // when
+        val markdown = htmlToMarkdown { "p" { +"x"; "b" { +"€5" }; +" y" } }
+        // then
+        markdown sameAs "x**€5** y"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip a b element after non-ASCII punctuation`() = runTest {
+        // when
+        val markdown = htmlToMarkdown { "p" { +"«"; "b" { +"x" }; +"»" } }
+        // then
+        markdown sameAs "«**x**»"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    // Pins the renderer's flanking classes to the parser's, which live in
+    // sibling modules with no shared home: for every punctuation, symbol and
+    // separator char after a closer that ends in punctuation, the rendered
+    // Markdown must re-parse to the same strong span.
+    @Test
+    fun `should agree with the parser on every char after a closer ending in punctuation`() = runTest {
+        // given
+        val chars = (Char.MIN_VALUE..Char.MAX_VALUE).filter { it.isFlankingCandidate() }
+        val failures = mutableListOf<String>()
+
+        // when
+        for (c in chars) {
+            val markdown = semanticEvents { "p" { "strong" { +"a:" }; +"${c}b" } }.renderMarkdown()
+            val reparsed = flowOf(markdown).parse().renderMarkdown()
+            if (reparsed != markdown) failures += "U+${c.code.toString(16)}: $markdown -> $reparsed"
+        }
+
+        // then
+        assert(failures.isEmpty())
+    }
+
+    // The other axis of the same pin: every candidate as the last char inside
+    // the span, before a word char, a non-ASCII punctuation char and a
+    // non-ASCII whitespace char after the closer — one test each, as one pass
+    // over every candidate is all a Kotlin/JS test may take within its timeout.
+    @Test
+    fun `should agree with the parser on every char ending the content of a span before a word char`() = runTest {
+        assertContentEndAgreesWithParser(follower = "b")
+    }
+
+    @Test
+    fun `should agree with the parser on every char ending the content of a span before non-ASCII punctuation`() = runTest {
+        assertContentEndAgreesWithParser(follower = "€b")
+    }
+
+    @Test
+    fun `should agree with the parser on every char ending the content of a span before a no-break space`() = runTest {
+        assertContentEndAgreesWithParser(follower = "\u00A0b")
+    }
+
+    private suspend fun assertContentEndAgreesWithParser(follower: String) {
+        // given — `**a<**` re-parses `<**` as the start of an inline tag, an
+        // inline-HTML question, not a flanking one
+        val chars = (Char.MIN_VALUE..Char.MAX_VALUE).filter { it.isFlankingCandidate() && it != '<' }
+        val failures = mutableListOf<String>()
+
+        // when
+        for (c in chars) {
+            val markdown = semanticEvents { "p" { "strong" { +"a$c" }; +follower } }.renderMarkdown()
+            val reparsed = flowOf(markdown).parse().renderMarkdown()
+            if (reparsed != markdown) failures += "U+${c.code.toString(16)}: $markdown -> $reparsed"
+        }
+
+        // then
+        assert(failures.isEmpty())
+    }
+
+    @Test
+    fun `should round-trip a b element ending in a no-break space before a digit`() = runTest {
+        // when
+        val markdown = htmlToMarkdown { "p" { "b" { +"Price:\u00A0" }; +"5" } }
+        // then
+        markdown sameAs "**Price:**\u00A05"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip a strong span ending in a no-break space at the paragraph end`() = runTest {
+        // given
+        val events = semanticEvents { "p" { +"x "; "strong" { +"y\u00A0" } } }
+        // when
+        val markdown = events.renderMarkdown()
+        // then
+        markdown sameAs "x **y**\u00A0"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip a no-break space ending a span before a soft break`() = runTest {
+        assertMarkdownFixpoint("**a**\u00A0\nb")
+    }
+
+    @Test
+    fun `should round-trip a no-break space between two spans`() = runTest {
+        assertMarkdownFixpoint("*a*\u00A0**b**")
+    }
+
+    @Test
+    fun `should round-trip a strong span ending in a tab before a word`() = runTest {
+        // given
+        val events = semanticEvents { "p" { "strong" { +"a:\t" }; +"b" } }
+        // when
+        val markdown = events.renderMarkdown()
+        // then
+        markdown sameAs "**a:**\tb"
+        assertMarkdownFixpoint(markdown)
+    }
+
     @Test
     fun `should round-trip a b element whose trailing space separates it from the next word`() = runTest {
         // when
@@ -1046,4 +1202,21 @@ class EmphasisDelimiterRoundTripTest {
         assert("**" !in markdown)
         assert("<b>ls</b>" in markdown)
     }
+}
+
+// A char that could decide the flanking of a delimiter it follows: Unicode
+// punctuation, symbols and separators, plus the whitespace controls that stay
+// inside a line. Line feed and carriage return end the paragraph instead, and
+// the ASCII chars that open inline syntax of their own (`$b` math, `~b` del,
+// `` `b `` code, …) are left out: whether they are escaped is not a flanking
+// question.
+private fun Char.isFlankingCandidate(): Boolean = this !in "$*\\^_`~" && when (category) {
+    CharCategory.CONNECTOR_PUNCTUATION, CharCategory.DASH_PUNCTUATION,
+    CharCategory.START_PUNCTUATION, CharCategory.END_PUNCTUATION,
+    CharCategory.INITIAL_QUOTE_PUNCTUATION, CharCategory.FINAL_QUOTE_PUNCTUATION,
+    CharCategory.OTHER_PUNCTUATION, CharCategory.MATH_SYMBOL,
+    CharCategory.CURRENCY_SYMBOL, CharCategory.MODIFIER_SYMBOL,
+    CharCategory.OTHER_SYMBOL, CharCategory.SPACE_SEPARATOR,
+    CharCategory.LINE_SEPARATOR, CharCategory.PARAGRAPH_SEPARATOR -> true
+    else -> this == '\t' || this == '\u000B' || this == '\u000C' || this in '\u001C'..'\u001F'
 }
