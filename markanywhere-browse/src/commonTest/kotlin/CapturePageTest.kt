@@ -608,6 +608,88 @@ class CapturePageTest {
     }
 
     /**
+     * Blink names a date, time or number control from the value it displays,
+     * formatted in the browser's locale — `May 2027` for `2027-05`, `987,50`
+     * for `987.50`, in whatever digits the locale writes — so the value string
+     * is not in the name to be cut out. A name holding any of the value's
+     * numbers is withheld instead; one holding none of them is kept, and one
+     * holding the value as written still has it cut out. Issue #123.
+     */
+    @Test
+    fun `should withhold a name holding a secret value Blink formatted for display`() = runTest {
+        // given
+        val page = NamedNodes(
+            Node("INPUT", parent = 1, value = "2027-05", attributes = mapOf("type" to "month", "autocomplete" to "cc-exp")),
+            Node("INPUT", parent = 1, value = "987.50", attributes = mapOf("type" to "number", "autocomplete" to "cc-csc")),
+            Node("INPUT", parent = 1, value = "2027-05-31", attributes = mapOf("type" to "DATE", "autocomplete" to "cc-exp")),
+            Node("BUTTON", parent = 1, attributes = mapOf("aria-labelledby" to "a")),
+            Node("BUTTON", parent = 1, attributes = mapOf("aria-labelledby" to "b")),
+            Node("BUTTON", parent = 1, attributes = mapOf("aria-labelledby" to "c")),
+            Node("BUTTON", parent = 1, attributes = mapOf("aria-labelledby" to "d")),
+            Node("BUTTON", parent = 1, attributes = mapOf("aria-labelledby" to "e")),
+        )
+        val axNames = mapOf(
+            5 to "Expires May 2027 Show month picker",
+            6 to "CVC 987,50",
+            7 to "Expires ٣١/٠٥/٢٠٢٧",
+            8 to "Step 3 of 4",
+            9 to "CVC 987.50",
+        )
+
+        // when
+        val events = page.capture(axNames)
+
+        // then
+        events sameAs page.expected {
+            "input"("type" to "month", "autocomplete" to "cc-exp", REDACTED to "filled", DISPLAY to "block") { }
+            "input"("type" to "number", "autocomplete" to "cc-csc", REDACTED to "filled", DISPLAY to "block") { }
+            "input"("type" to "DATE", "autocomplete" to "cc-exp", REDACTED to "filled", DISPLAY to "block") { }
+            "button"("aria-labelledby" to "a", DISPLAY to "block") { }
+            "button"("aria-labelledby" to "b", DISPLAY to "block") { }
+            "button"("aria-labelledby" to "c", DISPLAY to "block") { }
+            "button"("aria-labelledby" to "d", DISPLAY to "block", "aria-label" to "Step 3 of 4") { }
+            "button"("aria-labelledby" to "e", DISPLAY to "block", "aria-label" to "CVC") { }
+        }
+    }
+
+    /**
+     * Blink names a password field by its mask, a bullet per character, never
+     * by its value (verified in `SecretNameTest`), so a password is no secret
+     * a name can carry and an unrelated name holding the same text is kept.
+     * Blink reads the `type` ASCII case-insensitively but untrimmed: a
+     * `type=" password"` is a text field naming its value, which still counts.
+     * Issue #122.
+     */
+    @Test
+    fun `should not count a password value among the secrets a name can carry`() = runTest {
+        // given
+        val page = NamedNodes(
+            Node("INPUT", parent = 1, value = "1234", attributes = mapOf("type" to "PassWord")),
+            Node("INPUT", parent = 1, value = "5678", attributes = mapOf("type" to " password")),
+            Node("BUTTON", parent = 1, attributes = mapOf("aria-labelledby" to "a")),
+            Node("BUTTON", parent = 1, attributes = mapOf("aria-labelledby" to "b")),
+            Node("BUTTON", parent = 1, attributes = mapOf("aria-labelledby" to "c")),
+        )
+        val axNames = mapOf(
+            4 to "Order 1234",
+            5 to "Password ••••",
+            6 to "Code 5678",
+        )
+
+        // when
+        val events = page.capture(axNames)
+
+        // then
+        events sameAs page.expected {
+            "input"("type" to "PassWord", REDACTED to "filled", DISPLAY to "block") { }
+            "input"("type" to " password", REDACTED to "filled", DISPLAY to "block") { }
+            "button"("aria-labelledby" to "a", DISPLAY to "block", "aria-label" to "Order 1234") { }
+            "button"("aria-labelledby" to "b", DISPLAY to "block", "aria-label" to "Password ••••") { }
+            "button"("aria-labelledby" to "c", DISPLAY to "block", "aria-label" to "Code") { }
+        }
+    }
+
+    /**
      * A name is judged by the same rule as the control itself
      * ([isRedactedControl]): a field that is not laid out has no computed
      * `-webkit-text-security`, so it is not known to be masked and keeps its

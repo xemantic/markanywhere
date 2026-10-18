@@ -47,6 +47,10 @@ private const val TEXT_SECURITY_STYLE = 2
 // the only elements whose value the capture can redact (see isRedactedControl)
 private val REDACTABLE_ELEMENTS = setOf("input", "textarea", "select")
 
+// the input types Blink names by their displayed value, formatted in the
+// browser's locale, rather than by the value string (verified live)
+private val LOCALE_FORMATTED_INPUT_TYPES = setOf("date", "month", "week", "time", "datetime-local", "number")
+
 /**
  * The result of a [capturePage]: the [SemanticEventDump] plus the `ref →
  * backendNodeId` registry that lets [PageSession] resolve a short element ref
@@ -476,13 +480,21 @@ internal class SnapshotDom(
      * own in the name ("Card number 4111…") and is dropped, label text kept;
      * one glued to other text ("Card4111…", or a CVC `123` inside an unrelated
      * `1234`) cannot be told apart from it, so the name is withheld whole.
+     *
+     * A control Blink names by the value it *displays* rather than the value
+     * itself — a date, time or number, formatted in the browser's locale
+     * (`May 2027` for `2027-05`, `987,50` for `987.50`) — cannot be found as
+     * written, and predicting the locale's format would re-implement Blink. So
+     * the name fails closed: it is withheld whole when it holds any number of
+     * such a value ([secretNumbers]), in whatever decimal digits it is written.
      */
     fun withoutSecrets(name: String): String {
-        if (secretTexts.isEmpty()) return name
+        if (secretTexts.isEmpty() && secretNumbers.isEmpty()) return name
         var result = name.stripAndCollapseHtmlWhitespace()
-        if (secretTexts.none { it in result }) return name
+        if (secretTexts.none { it in result } && !result.holdsSecretNumber()) return name
         while (true) {
-            val secret = secretTexts.firstOrNull { it in result } ?: return result
+            val secret = secretTexts.firstOrNull { it in result }
+                ?: return if (result.holdsSecretNumber()) "" else result
             val start = result.indexOf(secret)
             val end = start + secret.length
             if (start > 0 && result[start - 1] != ' ' || end < result.length && result[end] != ' ') return ""
@@ -490,18 +502,33 @@ internal class SnapshotDom(
         }
     }
 
-    /**
-     * The text every [redacted][isRedactedControl] control can lend to an
-     * accessible name, whitespace collapsed as in a computed name, longest
-     * first so a secret containing another is taken out whole: a text box's
-     * value, a select's chosen options by text and `label`.
-     */
-    private val secretTexts: List<String> by lazy {
+    private fun String.holdsSecretNumber(): Boolean =
+        secretNumbers.isNotEmpty() && decimalNumbers().any { it in secretNumbers }
+
+    /** Every [redacted][isRedactedControl] control in the document, with its state. */
+    private val redactedControls: List<Pair<Int, FormControlState>> by lazy {
         nodeType.indices.asSequence()
             // checked first: formState is costly for an <option>, and only these can be redacted
             .filter { isElement(it) && name(it) in REDACTABLE_ELEMENTS }
             .mapNotNull { index -> formState(index)?.let { index to it } }
             .filter { (index, state) -> isRedactedControl(name(index), attributeMap(index), state) }
+            .toList()
+    }
+
+    /**
+     * The text every [redacted][isRedactedControl] control can lend to an
+     * accessible name, whitespace collapsed as in a computed name, longest
+     * first so a secret containing another is taken out whole: a text box's
+     * value, a select's chosen options by text and `label`.
+     *
+     * A `type=password` field lends none: Blink names it by its mask, a bullet
+     * per character, never by its value — markup or typed, along every path
+     * (verified in `SecretNameTest`) — so counting it would only cut or
+     * withhold unrelated names holding the same text.
+     */
+    private val secretTexts: List<String> by lazy {
+        redactedControls.asSequence()
+            .filterNot { (index, _) -> isPasswordField(index) }
             .flatMap { (index, state) ->
                 when (name(index)) {
                     "select" -> descendants(index)
@@ -519,6 +546,30 @@ internal class SnapshotDom(
             .sortedByDescending { it.length }
             .toList()
     }
+
+    /**
+     * The numbers in the value of every redacted control Blink names by its
+     * displayed, locale-formatted value ([LOCALE_FORMATTED_INPUT_TYPES]): the
+     * value's runs of decimal digits, leading zeros dropped, since a locale
+     * may write `5` for `05` (see [decimalNumbers]).
+     */
+    private val secretNumbers: Set<String> by lazy {
+        redactedControls.asSequence()
+            .filter { (index, _) ->
+                name(index) == "input" &&
+                    attributeMap(index)["type"]?.trim()?.lowercase() in LOCALE_FORMATTED_INPUT_TYPES
+            }
+            .flatMap { (index, state) -> (state.value ?: attributeMap(index)["value"].orEmpty()).decimalNumbers() }
+            .toSet()
+    }
+
+    /**
+     * Whether the element is an `<input>` Blink treats as a password field: its
+     * `type` ASCII case-insensitively `password`, untrimmed — Blink does not
+     * trim it, so a `type=" password"` is a text field naming its value.
+     */
+    private fun isPasswordField(index: Int): Boolean =
+        name(index) == "input" && attributeMap(index)["type"]?.equalsAsciiIgnoreCase("password") == true
 
     /**
      * The text captured in place of the element's children — a `<textarea>`'s
@@ -545,6 +596,40 @@ private inline fun <T, R : Any> rareMap(
     index.forEachIndexed { i, node ->
         values.getOrNull(i)?.let(transform)?.let { put(node, it) }
     }
+}
+
+/**
+ * The runs of decimal digits in this text, each written in ASCII digits with
+ * its leading zeros dropped (`0` for a run of zeros alone): any Unicode
+ * decimal digit counts, since a locale may write a formatted date or number
+ * in its own (`٢٠٢٧` for `2027`).
+ */
+private fun String.decimalNumbers(): Sequence<String> = sequence {
+    val run = StringBuilder()
+    suspend fun SequenceScope<String>.flush() {
+        if (run.isNotEmpty()) yield(run.trimStart('0').ifEmpty { "0" }.toString())
+        run.clear()
+    }
+    for (char in this@decimalNumbers) {
+        val digit = char.digitToIntOrNull()
+        if (digit != null) run.append(digit) else flush()
+    }
+    flush()
+}
+
+/**
+ * Whether this text equals the lowercase [lowercase] ASCII-case-insensitively,
+ * as Blink compares an enumerated attribute. Not `equals(ignoreCase = true)`:
+ * that folds Unicode case too, reading `paſſword` (long s) as `password`.
+ */
+private fun String.equalsAsciiIgnoreCase(lowercase: String): Boolean {
+    if (length != lowercase.length) return false
+    for (i in indices) {
+        val char = this[i]
+        val folded = if (char in 'A'..'Z') char + ('a' - 'A') else char
+        if (folded != lowercase[i]) return false
+    }
+    return true
 }
 
 /** The node indexes of a snapshot's boolean / presence rare data. */
