@@ -92,7 +92,12 @@ import kotlinx.coroutines.flow.onEach
  *   `strike` → `del` — unless Markdown cannot express the element there (see
  *   [expressEmphasisInMarkdown])
  * - **Preserve with attribute whitelist**:
- *   - `a` — `href`, `title`, `id`
+ *   - `a` — `href`, `title`, `id`; an `a` with no `href` at all is a
+ *     placeholder, not a link (HTML §4.5.1), and is unwrapped unless the
+ *     capture found it actionable (it carries a kept ref, and stays a link for
+ *     [encodeActionableRefs] to fold the ref into) or a caller keep-attribute
+ *     promotes it (kept as a tag, not a Markdown link). An empty `href=""`
+ *     names the current document and stays a link.
  *   - `img` — `src`, `alt`, `title`, `id`
  *   - `code` — `class` (language hint), `id`
  *   - `ol` — `start`, `id`
@@ -385,7 +390,22 @@ private fun Flow<SemanticEvent>.simplifyHtmlRules(
     // --- tags with custom attribute whitelists (explicit per-tag) -------
 
     match("a") { event ->
-        preserve("a", preserveAttrs(event, "href", "title", "id")) { children() }
+        val kept = extraKept(event)
+        when {
+            event.isHyperlink() ->
+                preserve("a", preserveAttrs(event, "href", "title", "id")) { children() }
+            // A placeholder `<a>` (no `href`) the capture found actionable — a
+            // scripted control: it stays a link, so the ref is folded into its
+            // destination (`[more](ref:5:)`) and the reader can still act on it.
+            AccessibilityAnnotations.REF in kept ->
+                preserve("a", preserveAttrs(event, "title", "id")) { children() }
+            // Kept for a caller's attribute, like an unwrapped `<span>` is — as a
+            // tag, since a Markdown link would claim a destination there is none.
+            promotes(kept) -> tag("a", preserveAttrs(event, "title", "id")) { children() }
+            // Otherwise it is no link at all (tag lists, scripting hooks): only
+            // its content survives.
+            else -> children()
+        }
     }
 
     match("img") { event ->
@@ -794,6 +814,15 @@ private val CDP_CAPTURE_ANNOTATIONS = AccessibilityAnnotations.ALL + Accessibili
  */
 internal fun SemanticEvent.Mark.showsCapture(): Boolean =
     attributes.keys.any { it in CDP_CAPTURE_ANNOTATIONS }
+
+/**
+ * Whether this mark is a hyperlink rather than a placeholder `<a>`: an `<a>`
+ * without an `href` attribute represents a placeholder for where a link might
+ * otherwise have been (HTML §4.5.1) — a tag list, a scripting hook. Only the
+ * attribute's *absence* counts: an empty `href=""` resolves to the current
+ * document and is a real, if useless, link.
+ */
+internal fun SemanticEvent.Mark.isHyperlink(): Boolean = "href" in attributes
 
 // The short LLM-facing name of [AccessibilityAnnotations.REDACTED] on a form
 // control whose secret value the capture left out (`filled` / `empty`).

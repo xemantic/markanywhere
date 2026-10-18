@@ -40,8 +40,8 @@ public final class com/xemantic/markanywhere/html/IconResolutionKt {
 
 public final class com/xemantic/markanywhere/html/LabelActionableElementsKt {
 	public static final field GRAPHIC_PLACEHOLDER_ALT Ljava/lang/String;
-	public static final fun labelActionableElements (Lkotlinx/coroutines/flow/Flow;Lcom/xemantic/markanywhere/html/SvgMode;)Lkotlinx/coroutines/flow/Flow;
-	public static synthetic fun labelActionableElements$default (Lkotlinx/coroutines/flow/Flow;Lcom/xemantic/markanywhere/html/SvgMode;ILjava/lang/Object;)Lkotlinx/coroutines/flow/Flow;
+	public static final fun labelActionableElements (Lkotlinx/coroutines/flow/Flow;Lcom/xemantic/markanywhere/html/SvgMode;Lcom/xemantic/markanywhere/html/RefMode;)Lkotlinx/coroutines/flow/Flow;
+	public static synthetic fun labelActionableElements$default (Lkotlinx/coroutines/flow/Flow;Lcom/xemantic/markanywhere/html/SvgMode;Lcom/xemantic/markanywhere/html/RefMode;ILjava/lang/Object;)Lkotlinx/coroutines/flow/Flow;
 }
 
 public final class com/xemantic/markanywhere/html/RefMode : java/lang/Enum {

@@ -84,6 +84,81 @@ class HtmlToMarkdownTest {
     }
 
     @Test
+    fun `should render an a without href as plain text`() = runTest {
+        // given - the issue #110 reproduction: tag "links" with no href next to
+        // a real one, and an empty href, which still names the current document
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "p" {
+                    +"Tags: "
+                    "a"("class" to "tag") { +"change" }
+                    +" "
+                    "a"("class" to "tag") { +"world" }
+                    +" and a real "
+                    "a"("href" to "/x") { +"link" }
+                    +", even an empty "
+                    "a"("href" to "") { +"one" }
+                    +"."
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then
+        markdown sameAs "Tags: change world and a real [link](/x), even an empty [one]()."
+    }
+
+    @Test
+    fun `should keep an a without href that the capture found actionable`() = runTest {
+        // given - a scripted placeholder exposed as a control, an icon-only one
+        // too, and a decorative one with nothing to act on
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "p" {
+                    "a"("onclick" to "more()", AccessibilityAnnotations.REF to "5") { +"more" }
+                    +" "
+                    "a"("title" to "Close", AccessibilityAnnotations.REF to "6") { "svg" { } }
+                    +" "
+                    "a"("title" to "Star") { "svg" { } }
+                    +"end"
+                }
+            }
+        }
+
+        // when
+        val encoded = page.transformHtmlToMarkdown().renderMarkdown()
+        val stripped = page.transformHtmlToMarkdown(refMode = RefMode.STRIP).renderMarkdown()
+
+        // then - the actionable ones stay links carrying their ref; without refs
+        // they are placeholders like the rest, so only their text survives and
+        // no label is invented for the icon-only one
+        encoded sameAs "[more](ref:5:) [Close](ref:6:) end"
+        stripped sameAs "more end"
+    }
+
+    @Test
+    fun `should not label an a without href whose ref is stripped`() = runTest {
+        // given - an icon-only scripted placeholder the capture found actionable
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "p" {
+                    +"Close "
+                    "a"(AccessibilityAnnotations.REF to "6") { "svg" { } }
+                    +"end"
+                }
+            }
+        }
+
+        // when - STRIP drops the ref, so simplifyHtml unwraps the placeholder
+        val markdown = page.transformHtmlToMarkdown(refMode = RefMode.STRIP).renderMarkdown()
+
+        // then - no placeholder label is left behind with nothing to act on
+        markdown sameAs "Close end"
+    }
+
+    @Test
     fun `should strip actionable refs in STRIP mode`() = runTest {
         // given — both ref surfaces in one hand-built input: a ref-bearing
         // inline link (folds into the `ref:` destination) and a ref-bearing

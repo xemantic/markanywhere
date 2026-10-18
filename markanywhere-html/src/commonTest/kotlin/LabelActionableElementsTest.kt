@@ -284,7 +284,6 @@ class LabelActionableElementsTest {
         assert(arrivals == listOf(4, 4, 4, 4, 4))
     }
 
-
     @Test
     fun `should label a link whose svg carries only a title attribute`() = runTest {
         // given - a `title` attribute names the graphic to a hover, but
@@ -509,6 +508,74 @@ class LabelActionableElementsTest {
             }
             "form"("title" to "Login", AccessibilityAnnotations.REF to "3") { }
             "section"("aria-label" to "News", AccessibilityAnnotations.REF to "4") { }
+        }
+
+        // when
+        val output = input.labelActionableElements()
+
+        // then
+        output sameAs input
+    }
+
+    @Test
+    fun `should not label an a without href since it is no control`() = runTest {
+        // given - an `<a>` with no `href` is a placeholder, not a link, and
+        // simplifyHtml unwraps it: an inserted label would be left behind as
+        // stray text or a `![:svg:]()` with nothing to act on.
+        val input = semanticEvents(tagged = true) {
+            "a"("title" to "Close") { "svg" { } }
+            "a"("class" to "icon") { "svg" { } }
+        }
+
+        // when
+        val output = input.labelActionableElements()
+
+        // then
+        output sameAs input
+    }
+
+    @Test
+    fun `should label an a without href that the capture found actionable`() = runTest {
+        // given - a scripted placeholder the browser exposes as a control (it
+        // carries a ref), which the pipeline keeps actionable
+        val input = semanticEvents(tagged = true) {
+            "a"("title" to "Close", AccessibilityAnnotations.REF to "4") { "svg" { } }
+        }
+
+        // when
+        val output = input.labelActionableElements()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "a"("title" to "Close", AccessibilityAnnotations.REF to "4") {
+                +"Close"
+                "svg" { }
+            }
+        }
+    }
+
+    @Test
+    fun `should not label an a without href whose ref will be stripped`() = runTest {
+        // given - under RefMode.STRIP simplifyHtml drops the ref and unwraps
+        // the placeholder, which would leave an inserted label behind
+        val input = semanticEvents(tagged = true) {
+            "a"(AccessibilityAnnotations.REF to "6") { "svg" { } }
+        }
+
+        // when
+        val output = input.labelActionableElements(refMode = RefMode.STRIP)
+
+        // then
+        output sameAs input
+    }
+
+    @Test
+    fun `should not label an a without href even when its role says it is a control`() = runTest {
+        // given - simplifyHtml unwraps a placeholder `<a>` whatever its role, so
+        // without a kept ref it is no control and an inserted label would be
+        // left behind as stray text
+        val input = semanticEvents(tagged = true) {
+            "a"("role" to "button", "aria-label" to "Close") { "svg" { } }
         }
 
         // when
