@@ -23,6 +23,7 @@ import com.xemantic.markanywhere.html.dumpFlow
 import com.xemantic.markanywhere.html.transformHtmlToMarkdown
 import com.xemantic.markanywhere.parse.parse
 import com.xemantic.markanywhere.render.renderMarkdown
+import com.xemantic.markanywhere.test.divergenceFrom
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -420,52 +421,44 @@ class OpenjurTest {
         val markdown = dumpFlow(DumpFixtures.openjur).transformHtmlToMarkdown().renderMarkdown()
 
         // when
-        val reparsed = flowOf(markdown).parse()
+        val divergence = flowOf(markdown).parse().renderMarkdown().divergenceFrom(markdown)
 
         // then — the round-trip reproduces the pipeline Markdown EXCEPT that
         // re-parsing re-detects GFM §6.9 extended autolinks (the forward pipeline
-        // leaves `www.…` / `http…` as plain text). Asserting the exact diff pins
-        // that down as the *only* divergence: any new round-trip difference (a
-        // regression) changes this message and fails the test. NOTE: keep the
-        // trailing space on the blank ` ` context lines below — `trimMargin`
-        // relies on the `|`, and an editor stripping it would break the match.
-        try {
-            reparsed.renderMarkdown() sameAs markdown
-            error("expected the round-trip to diverge only by autolink re-detection")
-        } catch (e: AssertionError) {
-            e.message sameAs """
-                --- expected
-                +++ actual
-                @@ -194,7 +194,7 @@
-                 
-                 (1) Diese E-Mails beinhalteten an deren jeweiligen Ende jeweils ein werbliches Element:
-                 
-                -XXXXX. Organisiert, denkt mit, erledigt.Nutzen Sie www.XXXXX.de
-                +XXXXX. Organisiert, denkt mit, erledigt.Nutzen Sie [www.XXXXX.de](http://www.XXXXX.de)
-                 
-                 (2) Zwar ist der übrige, weit überwiegende Teil der streitgegenständlichen E-Mails keine Werbung. Dies hat aber nicht zur Folge, dass das werbliche Element von vornherein keine Werbung darstellen könnte. Die streitgegenständlichen E-Mails werden von der Beklagten vielmehr in zweifacher Hinsicht - nämlich für die nicht zu beanstandende Kommunikation im Rest der E-Mails und ganz am Ende für Zwecke der Werbung - genutzt. Nach der Rechtsprechung des BGH ist in solchen Konstellationen für die Annahme, die Nutzung der elektronischen Post sei durch den zulässigen Teil der E-Mail insgesamt gerechtfertigt, "kein Raum" (BGH, Urteil vom 10. Juli 2018 - [VI ZR 225/17](ref:56:/u/2111609.html) -, Rn. 20, juris; Urteil vom 15. Dezember 2015 - [VI ZR 134/15](ref:57:/u/870114.html) -, Rn. 19, juris).
-                 
-                @@ -274,7 +274,7 @@
-                 
-                 (1) Für die Darstellungsweise der Auskunft gelten das Genauigkeitsgebot und das Verständlichkeitsgebot des Art. [12](ref:98:https://dejure.org/gesetze/DSGVO/12.html) Abs. 1 S. 1 DS-GVO (Bäcker in: Kühling/Buchner, DS-GVO, 3. Aufl., Art. 15 Rn. 32; Specht in: Sydow, DS-GVO, 2. Aufl., Art. 15 Rn. 15). Danach sind die Mitteilungen gem. Art. [15](ref:99:https://dejure.org/gesetze/DSGVO/15.html) DS-GVO in präziser, transparenter, verständlicher und leicht zugänglicher Form sowie in einfacher Sprache zu übermitteln. Die Auskunft muss es der betroffenen Person ermöglichen, ihre Betroffenenrechte umfassend auszuüben. Der Verantwortliche muss die Auskunft so aufbereiten und ggf. erläutern, um der betroffenen Person einen Überblick in vertretbarer Zeit und mit vertretbarem Aufwand zu ermöglichen (Bäcker in: Kühling/Buchner, DS-GVO, 3. Aufl., Art. 15 Rn. 32).
-                 
-                -(2) Mit diesen Grundsätzen nicht zu vereinbaren ist eine "Auskunft" durch den Hinweis auf eine umfangreiche Datenschutzerklärung, aus der sich die betroffene Person die gem. Art. [15](ref:100:https://dejure.org/gesetze/DSGVO/15.html) Abs. 1 HS 2 DS-GVO geschuldeten Auskünfte heraussuchen muss. Dies gilt jedenfalls dann, wenn der Verweis auf die Datenschutzerklärung so pauschal erfolgt wie in der E-Mail der Beklagten vom 25. März 2019 ("Weitere Informationen finden Sie im Internet unter www.deutschepost.de/datenschutz").
-                +(2) Mit diesen Grundsätzen nicht zu vereinbaren ist eine "Auskunft" durch den Hinweis auf eine umfangreiche Datenschutzerklärung, aus der sich die betroffene Person die gem. Art. [15](ref:100:https://dejure.org/gesetze/DSGVO/15.html) Abs. 1 HS 2 DS-GVO geschuldeten Auskünfte heraussuchen muss. Dies gilt jedenfalls dann, wenn der Verweis auf die Datenschutzerklärung so pauschal erfolgt wie in der E-Mail der Beklagten vom 25. März 2019 ("Weitere Informationen finden Sie im Internet unter [www.deutschepost.de/datenschutz](http://www.deutschepost.de/datenschutz)").
-                 
-                 bb) Der Anspruch des Klägers gem. Art. [15](ref:101:https://dejure.org/gesetze/DSGVO/15.html) Abs. 1 HS. 2 lit c) DS-GVO, der auch nicht durch die E-Mail vom 25. Juni 2019 (Anlage K 10) erfüllt worden ist, ist erst durch die Mitteilung der Beklagten im Schriftsatz vom 11. Dezember 2019 (dort S. 9, Bl. I/65 d. A.), die der Kläger insoweit als ausreichend akzeptiert, erloschen (§ [362](ref:102:https://dejure.org/gesetze/BGB/362.html) Abs. 1 BGB). Die Klage ist insoweit unbegründet geworden, der Rechtsstreit hat sich in diesem Umfang in der Hauptsache erledigt. Da sich die Beklagte der Teilerledigungserklärung des Klägers auch nicht angeschlossen hat, ist der entsprechende Feststellungsantrag, auf den der Kläger seinen Leistungsantrag zulässigerweise umgestellt hat (§ [264](ref:103:https://dejure.org/gesetze/ZPO/264.html) Nr. 2 ZPO), begründet.
-                 
-                @@ -356,7 +356,7 @@
-                 
-                 b) Gemessen hieran hat die Rechtssache grundsätzliche Bedeutung. Die sich im Streitfall stellenden Rechtsfragen zu § [11](ref:155:https://dejure.org/gesetze/UWG/11.html) UWG sowie zur Frage der Zulässigkeit von werblichen Zusätzen in einer E-Mail in der hier vorliegenden Sachverhaltsgestaltung sind entscheidungserheblich, keineswegs eindeutig zu beantworten und vom Bundesgerichtshof noch nicht entschieden. Gleiches gilt hinsichtlich der Auslegung der DS-GVO, wo zudem eine Vorlage an den EuGH nach Art. [267](ref:156:https://dejure.org/gesetze/AEUV/267.html) AEUV in Betracht kommt (zu Art. [82](ref:157:https://dejure.org/gesetze/DSGVO/82.html) DS-GVO vgl. BVerfG, Stattgebender Kammerbeschluss vom 14. Januar 2021 - [1 BvR 2853/19](ref:158:/u/2320170.html) -, Rn. 20, juris).
-                 
-                -Permalink: https://openjur.de/u/2388450.html (https://oj.is/2388450) 📄 [Volltext](ref:159:/u/2388450.html) 🖨️ [Druckansicht](ref:160:https://openjur.de/u/2388450.print) 📕 [PDF Download](ref:161:https://openjur.de/u/2388450.ppdf) <abbr>🔗</abbr> [Zitate](ref:162:https://openjur.de/u/2388450-quotes.html) 26 <abbr>:reply:</abbr> [Zitiert](ref:163:https://openjur.de/u/2388450-quoted.html) 1 📖 Referenzen 0 ☁️ Schlagworte [⚠️ Problem melden](ref:164:https://openjur.de/u/report/2388450.html)
-                +Permalink: [https://openjur.de/u/2388450.html](https://openjur.de/u/2388450.html) ([https://oj.is/2388450](https://oj.is/2388450)) 📄 [Volltext](ref:159:/u/2388450.html) 🖨️ [Druckansicht](ref:160:https://openjur.de/u/2388450.print) 📕 [PDF Download](ref:161:https://openjur.de/u/2388450.ppdf) <abbr>🔗</abbr> [Zitate](ref:162:https://openjur.de/u/2388450-quotes.html) 26 <abbr>:reply:</abbr> [Zitiert](ref:163:https://openjur.de/u/2388450-quoted.html) 1 📖 Referenzen 0 ☁️ Schlagworte [⚠️ Problem melden](ref:164:https://openjur.de/u/report/2388450.html)
-                 
-                 </main>
-                 <footer>
-                
-            """.trimIndent()
-        }
+        // leaves `www.…` / `http…` as plain text). Pinning the diff pins that down
+        // as the *only* divergence: any new round-trip difference (a regression)
+        // changes it and fails the test, while unrelated line shifts do not.
+        divergence sameAs """
+            --- expected
+            +++ actual
+            @@
+            
+             (1) Diese E-Mails beinhalteten an deren jeweiligen Ende jeweils ein werbliches Element:
+            
+            -XXXXX. Organisiert, denkt mit, erledigt.Nutzen Sie www.XXXXX.de
+            +XXXXX. Organisiert, denkt mit, erledigt.Nutzen Sie [www.XXXXX.de](http://www.XXXXX.de)
+            
+             (2) Zwar ist der übrige, weit überwiegende Teil der streitgegenständlichen E-Mails keine Werbung. Dies hat aber nicht zur Folge, dass das werbliche Element von vornherein keine Werbung darstellen könnte. Die streitgegenständlichen E-Mails werden von der Beklagten vielmehr in zweifacher Hinsicht - nämlich für die nicht zu beanstandende Kommunikation im Rest der E-Mails und ganz am Ende für Zwecke der Werbung - genutzt. Nach der Rechtsprechung des BGH ist in solchen Konstellationen für die Annahme, die Nutzung der elektronischen Post sei durch den zulässigen Teil der E-Mail insgesamt gerechtfertigt, "kein Raum" (BGH, Urteil vom 10. Juli 2018 - [VI ZR 225/17](ref:56:/u/2111609.html) -, Rn. 20, juris; Urteil vom 15. Dezember 2015 - [VI ZR 134/15](ref:57:/u/870114.html) -, Rn. 19, juris).
+            
+            @@
+            
+             (1) Für die Darstellungsweise der Auskunft gelten das Genauigkeitsgebot und das Verständlichkeitsgebot des Art. [12](ref:98:https://dejure.org/gesetze/DSGVO/12.html) Abs. 1 S. 1 DS-GVO (Bäcker in: Kühling/Buchner, DS-GVO, 3. Aufl., Art. 15 Rn. 32; Specht in: Sydow, DS-GVO, 2. Aufl., Art. 15 Rn. 15). Danach sind die Mitteilungen gem. Art. [15](ref:99:https://dejure.org/gesetze/DSGVO/15.html) DS-GVO in präziser, transparenter, verständlicher und leicht zugänglicher Form sowie in einfacher Sprache zu übermitteln. Die Auskunft muss es der betroffenen Person ermöglichen, ihre Betroffenenrechte umfassend auszuüben. Der Verantwortliche muss die Auskunft so aufbereiten und ggf. erläutern, um der betroffenen Person einen Überblick in vertretbarer Zeit und mit vertretbarem Aufwand zu ermöglichen (Bäcker in: Kühling/Buchner, DS-GVO, 3. Aufl., Art. 15 Rn. 32).
+            
+            -(2) Mit diesen Grundsätzen nicht zu vereinbaren ist eine "Auskunft" durch den Hinweis auf eine umfangreiche Datenschutzerklärung, aus der sich die betroffene Person die gem. Art. [15](ref:100:https://dejure.org/gesetze/DSGVO/15.html) Abs. 1 HS 2 DS-GVO geschuldeten Auskünfte heraussuchen muss. Dies gilt jedenfalls dann, wenn der Verweis auf die Datenschutzerklärung so pauschal erfolgt wie in der E-Mail der Beklagten vom 25. März 2019 ("Weitere Informationen finden Sie im Internet unter www.deutschepost.de/datenschutz").
+            +(2) Mit diesen Grundsätzen nicht zu vereinbaren ist eine "Auskunft" durch den Hinweis auf eine umfangreiche Datenschutzerklärung, aus der sich die betroffene Person die gem. Art. [15](ref:100:https://dejure.org/gesetze/DSGVO/15.html) Abs. 1 HS 2 DS-GVO geschuldeten Auskünfte heraussuchen muss. Dies gilt jedenfalls dann, wenn der Verweis auf die Datenschutzerklärung so pauschal erfolgt wie in der E-Mail der Beklagten vom 25. März 2019 ("Weitere Informationen finden Sie im Internet unter [www.deutschepost.de/datenschutz](http://www.deutschepost.de/datenschutz)").
+            
+             bb) Der Anspruch des Klägers gem. Art. [15](ref:101:https://dejure.org/gesetze/DSGVO/15.html) Abs. 1 HS. 2 lit c) DS-GVO, der auch nicht durch die E-Mail vom 25. Juni 2019 (Anlage K 10) erfüllt worden ist, ist erst durch die Mitteilung der Beklagten im Schriftsatz vom 11. Dezember 2019 (dort S. 9, Bl. I/65 d. A.), die der Kläger insoweit als ausreichend akzeptiert, erloschen (§ [362](ref:102:https://dejure.org/gesetze/BGB/362.html) Abs. 1 BGB). Die Klage ist insoweit unbegründet geworden, der Rechtsstreit hat sich in diesem Umfang in der Hauptsache erledigt. Da sich die Beklagte der Teilerledigungserklärung des Klägers auch nicht angeschlossen hat, ist der entsprechende Feststellungsantrag, auf den der Kläger seinen Leistungsantrag zulässigerweise umgestellt hat (§ [264](ref:103:https://dejure.org/gesetze/ZPO/264.html) Nr. 2 ZPO), begründet.
+            
+            @@
+            
+             b) Gemessen hieran hat die Rechtssache grundsätzliche Bedeutung. Die sich im Streitfall stellenden Rechtsfragen zu § [11](ref:155:https://dejure.org/gesetze/UWG/11.html) UWG sowie zur Frage der Zulässigkeit von werblichen Zusätzen in einer E-Mail in der hier vorliegenden Sachverhaltsgestaltung sind entscheidungserheblich, keineswegs eindeutig zu beantworten und vom Bundesgerichtshof noch nicht entschieden. Gleiches gilt hinsichtlich der Auslegung der DS-GVO, wo zudem eine Vorlage an den EuGH nach Art. [267](ref:156:https://dejure.org/gesetze/AEUV/267.html) AEUV in Betracht kommt (zu Art. [82](ref:157:https://dejure.org/gesetze/DSGVO/82.html) DS-GVO vgl. BVerfG, Stattgebender Kammerbeschluss vom 14. Januar 2021 - [1 BvR 2853/19](ref:158:/u/2320170.html) -, Rn. 20, juris).
+            
+            -Permalink: https://openjur.de/u/2388450.html (https://oj.is/2388450) 📄 [Volltext](ref:159:/u/2388450.html) 🖨️ [Druckansicht](ref:160:https://openjur.de/u/2388450.print) 📕 [PDF Download](ref:161:https://openjur.de/u/2388450.ppdf) <abbr>🔗</abbr> [Zitate](ref:162:https://openjur.de/u/2388450-quotes.html) 26 <abbr>:reply:</abbr> [Zitiert](ref:163:https://openjur.de/u/2388450-quoted.html) 1 📖 Referenzen 0 ☁️ Schlagworte [⚠️ Problem melden](ref:164:https://openjur.de/u/report/2388450.html)
+            +Permalink: [https://openjur.de/u/2388450.html](https://openjur.de/u/2388450.html) ([https://oj.is/2388450](https://oj.is/2388450)) 📄 [Volltext](ref:159:/u/2388450.html) 🖨️ [Druckansicht](ref:160:https://openjur.de/u/2388450.print) 📕 [PDF Download](ref:161:https://openjur.de/u/2388450.ppdf) <abbr>🔗</abbr> [Zitate](ref:162:https://openjur.de/u/2388450-quotes.html) 26 <abbr>:reply:</abbr> [Zitiert](ref:163:https://openjur.de/u/2388450-quoted.html) 1 📖 Referenzen 0 ☁️ Schlagworte [⚠️ Problem melden](ref:164:https://openjur.de/u/report/2388450.html)
+            
+             </main>
+             <footer>
+        """.trimIndent()
     }
 
 }
