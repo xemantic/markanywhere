@@ -1152,4 +1152,416 @@ class ApplyAccessibilityTest {
         }
     }
 
+    @Test
+    fun `should separate the content on either side of a dropped invisible element`() = runTest {
+        // given — `visibility:hidden` still lays the element out, so the
+        // browser paints a gap of its width between the two words
+        val input = semanticEvents(tagged = true) {
+            "p"(AccessibilityAnnotations.DISPLAY to "block") {
+                +"Price"
+                "span"(
+                    AccessibilityAnnotations.DISPLAY to "inline",
+                    AccessibilityAnnotations.VISIBILITY to "hidden"
+                ) { +" hidden " }
+                +"5"
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "p"(AccessibilityAnnotations.DISPLAY to "block") {
+                +"Price"
+                +" "
+                +"5"
+            }
+        }
+    }
+
+    @Test
+    fun `should separate the content on either side of invisible whitespace`() = runTest {
+        // given
+        val input = semanticEvents(tagged = true) {
+            "p"(AccessibilityAnnotations.DISPLAY to "block") {
+                +"A"
+                "span"(
+                    AccessibilityAnnotations.DISPLAY to "inline",
+                    AccessibilityAnnotations.VISIBILITY to "hidden"
+                ) { +" " }
+                +"B"
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "p"(AccessibilityAnnotations.DISPLAY to "block") {
+                +"A"
+                +" "
+                +"B"
+            }
+        }
+    }
+
+    @Test
+    fun `should separate the content on either side of a dropped invisible image`() = runTest {
+        // given — an image keeps its box when invisible, text or not
+        val input = semanticEvents(tagged = true) {
+            "p"(AccessibilityAnnotations.DISPLAY to "block") {
+                +"Price"
+                "img"(
+                    "src" to "spinner.gif",
+                    AccessibilityAnnotations.DISPLAY to "inline",
+                    AccessibilityAnnotations.VISIBILITY to "hidden"
+                ) { }
+                +"5"
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "p"(AccessibilityAnnotations.DISPLAY to "block") {
+                +"Price"
+                +" "
+                +"5"
+            }
+        }
+    }
+
+    @Test
+    fun `should separate the inline content around an empty invisible block`() = runTest {
+        // given — a block box breaks the line even when it is empty and
+        // invisible, and no surviving box marks that boundary once it is gone
+        val input = semanticEvents(tagged = true) {
+            "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                "span"(AccessibilityAnnotations.DISPLAY to "inline") { +"Price" }
+                "div"(
+                    AccessibilityAnnotations.DISPLAY to "block",
+                    AccessibilityAnnotations.VISIBILITY to "hidden"
+                ) { }
+                "span"(AccessibilityAnnotations.DISPLAY to "inline") { +"5" }
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                "span"(AccessibilityAnnotations.DISPLAY to "inline") { +"Price" }
+                +" "
+                "span"(AccessibilityAnnotations.DISPLAY to "inline") { +"5" }
+            }
+        }
+    }
+
+    @Test
+    fun `should not separate the content around an empty invisible inline element`() = runTest {
+        // given — an empty inline box has no width, so the browser paints the
+        // two letters as one word
+        val input = semanticEvents(tagged = true) {
+            "p"(AccessibilityAnnotations.DISPLAY to "block") {
+                +"a"
+                "span"(
+                    AccessibilityAnnotations.DISPLAY to "inline",
+                    AccessibilityAnnotations.VISIBILITY to "hidden"
+                ) { }
+                +"b"
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "p"(AccessibilityAnnotations.DISPLAY to "block") {
+                +"a"
+                +"b"
+            }
+        }
+    }
+
+    @Test
+    fun `should not separate a dropped invisible element from the edge of a block`() = runTest {
+        // given — nothing inline precedes the invisible element, so there is
+        // nothing for a gap to separate
+        val input = semanticEvents(tagged = true) {
+            "p"(AccessibilityAnnotations.DISPLAY to "block") {
+                "span"(
+                    AccessibilityAnnotations.DISPLAY to "inline",
+                    AccessibilityAnnotations.VISIBILITY to "hidden"
+                ) { +"Sale" }
+                +"Price "
+                "span"(
+                    AccessibilityAnnotations.DISPLAY to "inline",
+                    AccessibilityAnnotations.VISIBILITY to "hidden"
+                ) { +"old" }
+                +"5"
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then — and a word already followed by whitespace needs no more
+        output sameAs semanticEvents(tagged = true) {
+            "p"(AccessibilityAnnotations.DISPLAY to "block") {
+                +"Price "
+                +"5"
+            }
+        }
+    }
+
+    @Test
+    fun `should separate the invisible text of an element kept for a visible descendant`() = runTest {
+        // given — the invisible text around the visible label still takes its
+        // width on either side of it
+        val input = semanticEvents(tagged = true) {
+            "p"(AccessibilityAnnotations.DISPLAY to "block") {
+                +"Price"
+                "span"(
+                    AccessibilityAnnotations.DISPLAY to "inline",
+                    AccessibilityAnnotations.VISIBILITY to "hidden"
+                ) {
+                    +"was"
+                    "b"(
+                        AccessibilityAnnotations.DISPLAY to "inline",
+                        AccessibilityAnnotations.VISIBILITY to "visible"
+                    ) { +"now" }
+                    +"only"
+                }
+                +"5"
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "p"(AccessibilityAnnotations.DISPLAY to "block") {
+                +"Price"
+                "span"(AccessibilityAnnotations.DISPLAY to "inline") {
+                    +" "
+                    "b"(AccessibilityAnnotations.DISPLAY to "inline") { +"now" }
+                    +" "
+                }
+                +"5"
+            }
+        }
+    }
+
+    @Test
+    fun `should not separate around an element hidden by both display none and visibility hidden`() = runTest {
+        // given — the H5BP / Bootstrap `.hidden { display: none; visibility: hidden }`
+        // lays out no box at all, so the browser shows `Price5`
+        val input = semanticEvents(tagged = true) {
+            "p"(AccessibilityAnnotations.DISPLAY to "block") {
+                +"Price"
+                "span"(AccessibilityAnnotations.DISPLAY to "none", AccessibilityAnnotations.VISIBILITY to "hidden") { +"old" }
+                +"5"
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "p"(AccessibilityAnnotations.DISPLAY to "block") {
+                +"Price"
+                +"5"
+            }
+        }
+    }
+
+    @Test
+    fun `should not separate around display none content inside an invisible element`() = runTest {
+        // given — the invisible span holds nothing but content laying out no box
+        val input = semanticEvents(tagged = true) {
+            "p"(AccessibilityAnnotations.DISPLAY to "block") {
+                +"Price"
+                "span"(AccessibilityAnnotations.DISPLAY to "inline", AccessibilityAnnotations.VISIBILITY to "hidden") {
+                    "b"(AccessibilityAnnotations.DISPLAY to "none") { +"x" }
+                    "img"("src" to "a.png", AccessibilityAnnotations.DISPLAY to "none") { }
+                    "script" { +"track()" }
+                }
+                +"5"
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "p"(AccessibilityAnnotations.DISPLAY to "block") {
+                +"Price"
+                +"5"
+            }
+        }
+    }
+
+    @Test
+    fun `should not separate around an invisible frame laying out no box`() = runTest {
+        // given — a `display:none` frame takes no space, invisible or not
+        val input = semanticEvents(tagged = true) {
+            "p"(AccessibilityAnnotations.DISPLAY to "block") {
+                +"Price"
+                "iframe"("src" to "ad.html", AccessibilityAnnotations.DISPLAY to "none", AccessibilityAnnotations.VISIBILITY to "hidden") { }
+                +"5"
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "p"(AccessibilityAnnotations.DISPLAY to "block") {
+                +"Price"
+                +"5"
+            }
+        }
+    }
+
+    @Test
+    fun `should not separate around an invisible image laying out no box`() = runTest {
+        // given — the display of an image decides before its tag does
+        val input = semanticEvents(tagged = true) {
+            "p"(AccessibilityAnnotations.DISPLAY to "block") {
+                +"foo"
+                "span"(AccessibilityAnnotations.DISPLAY to "inline", AccessibilityAnnotations.VISIBILITY to "hidden") {
+                    "img"("src" to "a.png", AccessibilityAnnotations.DISPLAY to "none", AccessibilityAnnotations.VISIBILITY to "hidden") { }
+                }
+                +"bar"
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "p"(AccessibilityAnnotations.DISPLAY to "block") {
+                +"foo"
+                +"bar"
+            }
+        }
+    }
+
+    @Test
+    fun `should judge the separation by content laying out a box`() = runTest {
+        // given — the whitespace ending the `display:none` span is dropped downstream,
+        // so it does not separate `Price` from the gap of the invisible span
+        val input = semanticEvents(tagged = true) {
+            "p"(AccessibilityAnnotations.DISPLAY to "block") {
+                +"Price"
+                "span"(AccessibilityAnnotations.DISPLAY to "none") { +"USD " }
+                "span"(AccessibilityAnnotations.DISPLAY to "inline", AccessibilityAnnotations.VISIBILITY to "hidden") { +"old" }
+                +"5"
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "p"(AccessibilityAnnotations.DISPLAY to "block") {
+                +"Price"
+                +" "
+                +"5"
+            }
+        }
+    }
+
+    @Test
+    fun `should not separate inside inline code`() = runTest {
+        // given — code is verbatim, so no gap is written into it
+        val input = semanticEvents(tagged = true) {
+            "code"(AccessibilityAnnotations.DISPLAY to "inline") {
+                +"foo"
+                "span"(AccessibilityAnnotations.DISPLAY to "inline", AccessibilityAnnotations.VISIBILITY to "hidden") { +"X" }
+                +"bar"
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "code"(AccessibilityAnnotations.DISPLAY to "inline") {
+                +"foo"
+                +"bar"
+            }
+        }
+    }
+
+    @Test
+    fun `should not separate after a line break`() = runTest {
+        // given — a `<br>` ends the line, whatever its captured display
+        val input = semanticEvents(tagged = true) {
+            "p"(AccessibilityAnnotations.DISPLAY to "block") {
+                +"Line one"
+                "br"(AccessibilityAnnotations.DISPLAY to "inline") { }
+                "span"(AccessibilityAnnotations.DISPLAY to "inline", AccessibilityAnnotations.VISIBILITY to "hidden") { +"x" }
+                +"two"
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "p"(AccessibilityAnnotations.DISPLAY to "block") {
+                +"Line one"
+                "br"(AccessibilityAnnotations.DISPLAY to "inline") { }
+                +"two"
+            }
+        }
+    }
+
+    @Test
+    fun `should write a single gap for nested invisible content held back together`() = runTest {
+        // given — the outer text and the dropped inner element are one gap in a row
+        val input = semanticEvents(tagged = true) {
+            "p"(AccessibilityAnnotations.DISPLAY to "block") {
+                +"Price"
+                "span"(AccessibilityAnnotations.DISPLAY to "inline", AccessibilityAnnotations.VISIBILITY to "hidden") {
+                    +"was"
+                    "span"(AccessibilityAnnotations.DISPLAY to "inline", AccessibilityAnnotations.VISIBILITY to "hidden") { +"old" }
+                    "b"(AccessibilityAnnotations.DISPLAY to "inline", AccessibilityAnnotations.VISIBILITY to "visible") { +"now" }
+                }
+                +"5"
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "p"(AccessibilityAnnotations.DISPLAY to "block") {
+                +"Price"
+                "span"(AccessibilityAnnotations.DISPLAY to "inline") {
+                    +" "
+                    "b"(AccessibilityAnnotations.DISPLAY to "inline") { +"now" }
+                }
+                +"5"
+            }
+        }
+    }
+
 }

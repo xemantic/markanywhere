@@ -744,4 +744,26 @@ class HtmlToMarkdownTest {
         flowOf(markdown).parse().renderMarkdown() sameAs markdown
     }
 
+    @Test
+    fun `should not glue the words around a dropped invisible element`() = runTest {
+        // given — issue #111: `visibility:hidden` keeps the element's box, so
+        // the browser shows a gap where the hidden text was
+        val page = semanticEvents(tagged = true) {
+            "p"(AccessibilityAnnotations.DISPLAY to "block") {
+                +"Price"
+                "span"(
+                    AccessibilityAnnotations.DISPLAY to "inline",
+                    AccessibilityAnnotations.VISIBILITY to "hidden"
+                ) { +" hidden " }
+                +"5"
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then
+        markdown sameAs "Price 5"
+    }
+
 }
