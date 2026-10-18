@@ -743,14 +743,14 @@ class MarkanywhereParserTest {
         }
     }
 
-    // The three tests below exercise the ABORT path of the linkLabelOuter*
-    // snapshots taken in openLinkLabelCapture: a `del`/`mark`/`sup` span opened
-    // *outside* a `[` whose label never closes (no `]`). flushInlineLabelClose
-    // must leave that outer span open (it was open at capture start) — closing it
-    // would leak its `unmark` into the captured label buffer and replay it inside
-    // the aborted brackets, producing a crossed/unrenderable stream. The outer
-    // span instead closes once, balanced, at the block boundary, and the
-    // unresolved `[bar` replays as literal text. (Commit path covered above.)
+    // The three tests below exercise the ABORT path of the label watermark
+    // (linkLabelOuterStackDepth): a `del`/`mark`/`sup` span opened *outside* a `[`
+    // whose label never closes (no `]`). flushInlineLabelClose must leave that
+    // outer span open (it sits below the watermark) — closing it would leak its
+    // `unmark` into the captured label buffer and replay it inside the aborted
+    // brackets, producing a crossed/unrenderable stream. The outer span instead
+    // closes once, balanced, at the block boundary, and the unresolved `[bar`
+    // replays as literal text. (Commit path covered above.)
 
     @Test
     fun `should keep an outer strikethrough open when a link label aborts`() = runTest {

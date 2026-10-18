@@ -2021,7 +2021,7 @@ class Gfm_06_04_Test {
     }
 
     @Test
-    fun `example 446 - DIVERGENCE - paragraph foo`() = runTest {
+    fun `example 446 - paragraph foo`() = runTest {
         // given
         val textFlow = buildString {
             +"foo *\\**\n"
@@ -2033,7 +2033,8 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"foo ***"
+                +"foo "
+                "em" { +"*" }
             }
         }
         // GFM expected:
@@ -2086,7 +2087,7 @@ class Gfm_06_04_Test {
     }
 
     @Test
-    fun `example 449 - DIVERGENCE - paragraph foo`() = runTest {
+    fun `example 449 - paragraph foo`() = runTest {
         // given
         val textFlow = buildString {
             +"foo **\\***\n"
@@ -2098,7 +2099,8 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"foo *****"
+                +"foo "
+                "strong" { +"*" }
             }
         }
         // GFM expected:
@@ -2284,7 +2286,7 @@ class Gfm_06_04_Test {
     }
 
     @Test
-    fun `example 458 - DIVERGENCE - paragraph foo _`() = runTest {
+    fun `example 458 - paragraph foo _`() = runTest {
         // given
         val textFlow = buildString {
             +"foo _\\__\n"
@@ -2296,7 +2298,8 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"foo ___"
+                +"foo "
+                "em" { +"_" }
             }
         }
         // GFM expected:
@@ -2347,7 +2350,7 @@ class Gfm_06_04_Test {
     }
 
     @Test
-    fun `example 461 - DIVERGENCE - paragraph foo _`() = runTest {
+    fun `example 461 - paragraph foo _`() = runTest {
         // given
         val textFlow = buildString {
             +"foo __\\___\n"
@@ -2359,7 +2362,8 @@ class Gfm_06_04_Test {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
-                +"foo _____"
+                +"foo "
+                "strong" { +"_" }
             }
         }
         // GFM expected:

@@ -69,6 +69,17 @@ internal class RedirectingCollector(
 
     val isCapturing: Boolean get() = captureStack.isNotEmpty()
 
+    /**
+     * Where the next captured text will start, as (event index, offset within
+     * that text event). Stays valid until [stopCapture]: captured text is only
+     * ever extended at the end, never rewritten.
+     */
+    fun textPosition(): Pair<Int, Int> {
+        val buf = captureStack.last()
+        val last = buf.lastOrNull()
+        return if (last is Text) (buf.size - 1) to last.text.length else buf.size to 0
+    }
+
     override suspend fun emit(value: SemanticEvent) {
         if (captureStack.isNotEmpty()) {
             val buf = captureStack.last()
@@ -507,6 +518,16 @@ private fun normalizeUrlEscapes(s: String): String {
 
 private val URL_UNSAFE_ASCII = setOf(' ', '"', '<', '>', '[', '\\', ']', '^', '`', '{', '|', '}')
 private val HEX_DIGITS = "0123456789ABCDEF".toCharArray()
+
+/** Delimiters of the spans one run both opens and closes: `del`, `mark`, `sup`. */
+private val TOGGLE_DELIMITERS = setOf('~', '=', '^')
+
+/**
+ * Pending runs that a `\` holds until the escaped char is known, to open a span
+ * there (`*\~*`). A single `~` is not among them: it is far more often literal
+ * (`cd ~\Documents`, `[a~\]b]`).
+ */
+private val ESCAPE_HELD_RUNS = setOf("*", "**", "***", "_", "__", "___", "~~", "==")
 
 /**
  * GFM §6.8 URI-autolink validation: scheme `[A-Za-z][A-Za-z0-9+.-]{1,31}`,
@@ -1308,9 +1329,6 @@ private class ParserState(
 
     // Inline state
     private var code = false
-    private var strikethrough = false
-    private var superscript = false
-    private var highlight = false
     private var math = false
     private var inLink = false
     private var inLinkUrl = false
@@ -1380,25 +1398,41 @@ private class ParserState(
 
     /**
      * Size of [inlineOpenStack] at the moment `[` (or `![`) opened the current
-     * label. On commit/abort, [flushInlineLabelClose] drains down to this
-     * watermark — closing only inline state (em, strong, code, inline HTML)
-     * that was opened *inside* the label, while leaving any outer state alone.
+     * label; 0 outside a label. It is the floor of every inline close: a
+     * delimiter or close tag inside the label can only close a span opened
+     * *inside* it, never one opened before the `[` (whose `unmark` would land in
+     * the captured label buffer and cross the link — issue #58). On
+     * commit/abort, [flushInlineLabelClose] drains down to this watermark.
      */
     private var linkLabelOuterStackDepth = 0
 
     /**
-     * Snapshot of the boolean-tracked inline flags (`del`/`mark`/`sup`) at the
-     * moment `[` (or `![`) opened the current label. Unlike em/strong/HTML — which
-     * live in [inlineOpenStack] and are watermark-scoped by [linkLabelOuterStackDepth]
-     * — these flags have no stack position, so [flushInlineLabelClose] consults this
-     * snapshot to close only the ones opened *inside* the label, leaving a `del`/
-     * `mark`/`sup` opened *before* the `[` alone (otherwise its `unmark` would leak
-     * into the captured label buffer and produce a crossed, unrenderable stream —
-     * e.g. the citation superscript `^[1](url)^`).
+     * A close of spans opened *before* the current label's `[`, found by a
+     * delimiter run (or close tag) inside the label. Whether it may close them
+     * depends on how the label resolves, which is not known yet: if the label
+     * commits as a link, the close would cross the `<a>`, so the run stays the
+     * literal text it was emitted as; if the label aborts to plain text, the
+     * brackets are just text and the run closes the spans after all
+     * (`*foo [bar* baz]` → `<em>foo [bar</em> baz]`, GFM ex 532). The run's
+     * position in the label capture lets [labelEventsForAbort] swap the literal
+     * for the [frames]' `unmark`s.
      */
-    private var linkLabelOuterStrikethrough = false
-    private var linkLabelOuterHighlight = false
-    private var linkLabelOuterSuperscript = false
+    private class DeferredOuterClose(
+        val eventIndex: Int,
+        val textOffset: Int,
+        val literal: String,
+        val frames: List<InlineOpenFrame>
+    )
+
+    private val deferredOuterCloses = mutableListOf<DeferredOuterClose>()
+
+    /**
+     * Frames of [inlineOpenStack] at or above this index and below
+     * [linkLabelOuterStackDepth] are already closed by a [DeferredOuterClose] —
+     * open as far as the stack goes, closed for every further decision in the
+     * label. Equal to [linkLabelOuterStackDepth] when nothing is deferred.
+     */
+    private var deferredOuterCloseFloor = 0
 
     /**
      * True when the next [processInlineCharImpl] call is the *re-process* leg
@@ -1460,19 +1494,21 @@ private class ParserState(
     private var inlineRawSkipClose: String = ""
     private var inlineRawSkipMatch = 0
 
-    // Unified stack of in-flight inline opens — emphasis (`em`/`strong`) and
-    // inline HTML tags — recorded in the order they were emitted. A single
-    // stack is required to preserve LIFO close order across the two: a
-    // `<strong>` opened *inside* an outer `<em>` must close *before* the em,
-    // even when the matching `*` arrives first. Drained top-to-bottom in
-    // `flushInline` so the event stream is *always* balanced — every `mark`
+    // Unified stack of in-flight inline opens — delimiter spans (`em`/`strong`/
+    // `del`/`mark`/`sup`) and inline HTML tags — recorded in the order they were
+    // emitted. A single stack is required to preserve LIFO close order across
+    // all of them: a `<sup>` opened *inside* an outer `<del>` must close *before*
+    // the del, even when the matching `~~` arrives first. Drained top-to-bottom
+    // in `flushInline` so the event stream is *always* balanced — every `mark`
     // pairs with an `unmark`, including for sources that omit the closer
     // (e.g. `*foo` with no closing `*` in the same paragraph) or close tags
-    // out of order.
-    // `delimChar` is the run char that opened an em/strong frame (`*` or `_`),
-    // used by closeLabelLocalEmphasisRun to refuse closing a `*`-opened span with
-    // a `_` run (or vice versa) — `*` and `_` are distinct delimiter types that
-    // never pair (CommonMark §6.2). null for tagged HTML frames.
+    // out of order. (`code` and `math` stay flags: their content is verbatim,
+    // so nothing can open inside them and they are always innermost.)
+    // `delimChar` is the run char that opened a delimiter span (`*`, `_`, `~`,
+    // `=` or `^`), used by closeLabelLocalEmphasisRun to refuse closing a
+    // `*`-opened span with a `_` run (or vice versa) — `*` and `_` are distinct
+    // delimiter types that never pair (CommonMark §6.2). null for tagged HTML
+    // frames.
     private data class InlineOpenFrame(
         val name: String,
         val isTagged: Boolean,
@@ -1480,8 +1516,141 @@ private class ParserState(
     )
     private val inlineOpenStack = ArrayDeque<InlineOpenFrame>()
 
+    /**
+     * Whether an untagged [name] span is open anywhere, inside or outside the
+     * current label. A span closed by a [DeferredOuterClose] still counts: it
+     * stays open if the label commits, so a second one must not open inside it.
+     */
     private fun isInlineOpen(name: String): Boolean =
         inlineOpenStack.any { !it.isTagged && it.name == name }
+
+    /**
+     * Kinds of `del`/`mark`/`sup` force-closed on this line because a span they
+     * sat in closed first (`*a ~~b* c~~`). Their own closer may still follow; it
+     * must stay literal rather than open a new span over text nobody marked.
+     */
+    private val forceClosedSpans = mutableSetOf<String>()
+
+    /**
+     * Index of the topmost frame opened before the current label's `[` (and not
+     * already closed by a [DeferredOuterClose]) matching [name] + [isTagged],
+     * or -1. Always -1 outside a label.
+     */
+    private fun outerFrameIndex(
+        name: String,
+        isTagged: Boolean,
+        nameIgnoreCase: Boolean = false
+    ): Int {
+        for (i in deferredOuterCloseFloor - 1 downTo 0) {
+            val frame = inlineOpenStack[i]
+            if (frame.isTagged == isTagged && frame.name.equals(name, ignoreCase = nameIgnoreCase)) return i
+        }
+        return -1
+    }
+
+    /**
+     * Emit [literal] — a run that would close the frames from the top of the
+     * outer stack down to [target], all opened before the current label's `[` —
+     * and record it as a [DeferredOuterClose]. Only valid while nothing opened
+     * inside the label is still open (the caller checks [canDeferOuterClose]).
+     */
+    private suspend fun SemanticEventScope.deferOuterClose(target: Int, literal: String) {
+        val (eventIndex, textOffset) = redirector.textPosition()
+        val frames = (deferredOuterCloseFloor - 1 downTo target).map { inlineOpenStack[it] }
+        deferredOuterCloses += DeferredOuterClose(eventIndex, textOffset, literal, frames)
+        deferredOuterCloseFloor = target
+        +literal
+    }
+
+    /**
+     * A close of outer frames can only be deferred while no span opened inside
+     * the label is open: on abort its `unmark`s would otherwise land before the
+     * `unmark` of a span nested in them.
+     */
+    private fun canDeferOuterClose(): Boolean =
+        redirector.isCapturing && inlineOpenStack.size == linkLabelOuterStackDepth
+
+    /**
+     * Stop the label capture of a link/image that does not resolve, replaying
+     * every [DeferredOuterClose] as the `unmark`s it stood for, and pop those
+     * frames — the brackets are plain text, so the runs inside them close the
+     * spans opened before the `[` after all.
+     */
+    private fun labelEventsForAbort(): List<SemanticEvent> {
+        val events = if (redirector.isCapturing) redirector.stopCapture().toMutableList() else mutableListOf()
+        fun DeferredOuterClose.unmarks() =
+            frames.map { SemanticEvent.Unmark(it.name, isTagged = it.isTagged) }
+        fun DeferredOuterClose.isInPlace(): Boolean {
+            val text = (events.getOrNull(eventIndex) as? SemanticEvent.Text)?.text ?: return false
+            return text.startsWith(literal, startIndex = textOffset)
+        }
+        if (deferredOuterCloses.all { it.isInPlace() }) {
+            // Latest first, so the positions of the earlier ones stay valid.
+            for (close in deferredOuterCloses.asReversed()) {
+                val text = (events[close.eventIndex] as SemanticEvent.Text).text
+                val end = close.textOffset + close.literal.length
+                val replacement = buildList {
+                    if (close.textOffset > 0) add(SemanticEvent.Text(text.substring(0, close.textOffset)))
+                    addAll(close.unmarks())
+                    if (end < text.length) add(SemanticEvent.Text(text.substring(end)))
+                }
+                events.removeAt(close.eventIndex)
+                events.addAll(close.eventIndex, replacement)
+            }
+        } else {
+            // Never expected; still close the frames — balanced, innermost first.
+            for (close in deferredOuterCloses.asReversed()) events += close.unmarks()
+        }
+        if (deferredOuterCloses.isNotEmpty()) {
+            while (inlineOpenStack.size > deferredOuterCloseFloor) inlineOpenStack.removeLast()
+        }
+        deferredOuterCloses.clear()
+        deferredOuterCloseFloor = 0
+        return events
+    }
+
+    /**
+     * Whether an untagged [name] span is open *and closable from here* — above
+     * the [linkLabelOuterStackDepth] floor, i.e. opened inside the current label
+     * (or anywhere, outside a label).
+     */
+    private fun isInlineClosable(name: String): Boolean {
+        for (i in linkLabelOuterStackDepth until inlineOpenStack.size) {
+            val frame = inlineOpenStack[i]
+            if (!frame.isTagged && frame.name == name) return true
+        }
+        return false
+    }
+
+    /**
+     * Resolve a run that both opens and closes a span of [name] (`del`, `mark`,
+     * `sup`): close the span when it is closable, open one when none is open,
+     * and otherwise — the span is open outside the current link label — emit the
+     * run as [literal] text, deferring the close to a label abort when it can.
+     * A run in closing position ([prev] not whitespace) after a span of [name]
+     * was force-closed on this line is that span's orphaned closer: literal.
+     */
+    private suspend fun SemanticEventScope.toggleInlineSpan(
+        name: String,
+        delimChar: Char,
+        literal: String,
+        prev: Char?
+    ) {
+        val outer = outerFrameIndex(name, isTagged = false)
+        when {
+            isInlineClosable(name) -> closeInlineDownTo(name, isTagged = false)
+            outer >= 0 && canDeferOuterClose() -> deferOuterClose(outer, literal)
+            isInlineOpen(name) -> +literal
+            name in forceClosedSpans && !prev.isFlankWhitespace() -> {
+                forceClosedSpans -= name
+                +literal
+            }
+            else -> {
+                forceClosedSpans -= name
+                openInlineSpan(name, delimChar)
+            }
+        }
+    }
 
     // After resolving a buffered marker (e.g. "*"), the trailing char is left
     // unconsumed so the outer loop's fast-path can coalesce it with subsequent
@@ -1654,42 +1823,57 @@ private class ParserState(
             +runChar.toString().repeat(runLen)
             return
         }
+        // Inside a link label a run may only close a span opened inside the label
+        // (closable), and must not open a second one while the same span is open
+        // outside it (open) — so a lone `*` in `*x [a*b](u) y*` stays literal.
+        // A run that would close a span opened outside the label is emitted as
+        // literal text, but deferred: it closes the span if the label aborts.
         val emOpen = isInlineOpen("em")
         val strongOpen = isInlineOpen("strong")
+        val emClosable = isInlineClosable("em")
+        val strongClosable = isInlineClosable("strong")
+        val emOuter = outerFrameIndex("em", isTagged = false)
+        val strongOuter = outerFrameIndex("strong", isTagged = false)
+        val canDefer = canClose && canDeferOuterClose()
+        val literal = runChar.toString().repeat(runLen)
         when (runLen) {
             1 -> when {
-                canClose && emOpen -> closeInlineDownTo("em", isTagged = false)
-                canOpen && !emOpen -> openInlineEmphasis("em", runChar)
-                else -> +runChar.toString()
+                canClose && emClosable -> closeInlineDownTo("em", isTagged = false)
+                canDefer && emOuter >= 0 -> deferOuterClose(emOuter, literal)
+                canOpen && !emOpen -> openInlineSpan("em", runChar)
+                else -> +literal
             }
             2 -> when {
-                canClose && strongOpen -> closeInlineDownTo("strong", isTagged = false)
-                canOpen && !strongOpen -> openInlineEmphasis("strong", runChar)
-                else -> +runChar.toString().repeat(2)
+                canClose && strongClosable -> closeInlineDownTo("strong", isTagged = false)
+                canDefer && strongOuter >= 0 -> deferOuterClose(strongOuter, literal)
+                canOpen && !strongOpen -> openInlineSpan("strong", runChar)
+                else -> +literal
             }
             else -> when {
-                canClose && strongOpen && emOpen -> {
+                canDefer && emOuter >= 0 && strongOuter >= 0 ->
+                    deferOuterClose(minOf(emOuter, strongOuter), literal)
+                canClose && strongClosable && emClosable -> {
                     // Close the inner first, then the outer — opening order on
                     // the stack tells us which is which.
                     closeInlineDownTo("em", isTagged = false)
                     closeInlineDownTo("strong", isTagged = false)
                 }
-                canClose && strongOpen -> {
+                canClose && strongClosable -> {
                     // 2 of the 3 delimiters close strong; the remaining 1 opens
                     // em if it can, else falls through as literal.
                     closeInlineDownTo("strong", isTagged = false)
-                    if (canOpen) openInlineEmphasis("em", runChar) else +runChar.toString()
+                    if (canOpen && !emOpen) openInlineSpan("em", runChar) else +runChar.toString()
                 }
-                canClose && emOpen -> {
+                canClose && emClosable -> {
                     // 1 of the 3 delimiters closes em; the remaining 2 open
                     // strong if they can, else fall through as literal.
                     closeInlineDownTo("em", isTagged = false)
-                    if (canOpen) openInlineEmphasis("strong", runChar) else +runChar.toString().repeat(2)
+                    if (canOpen && !strongOpen) openInlineSpan("strong", runChar) else +runChar.toString().repeat(2)
                 }
                 canOpen && !strongOpen && !emOpen -> {
                     // ***foo***: outer strong, inner em — closes em first via LIFO.
-                    openInlineEmphasis("strong", runChar)
-                    openInlineEmphasis("em", runChar)
+                    openInlineSpan("strong", runChar)
+                    openInlineSpan("em", runChar)
                 }
                 else -> +runChar.toString().repeat(3)
             }
@@ -1697,18 +1881,21 @@ private class ParserState(
     }
 
     /**
-     * Open an emphasis tag and push it onto [inlineOpenStack].
+     * Open a delimiter span (`em`/`strong`/`del`/`mark`/`sup`) and push it onto
+     * [inlineOpenStack].
      */
-    private suspend fun SemanticEventScope.openInlineEmphasis(name: String, delimChar: Char) {
+    private suspend fun SemanticEventScope.openInlineSpan(name: String, delimChar: Char) {
         mark(name)
         inlineOpenStack.addLast(InlineOpenFrame(name, isTagged = false, delimChar = delimChar))
     }
 
     /**
      * Close down to the topmost frame matching [name] + [isTagged], emitting
-     * `unmark` for every frame along the way (LIFO). Returns false if no
-     * matching frame is found; the caller is responsible for the literal
-     * fallback in that case.
+     * `unmark` for every frame along the way (LIFO). Only frames above the
+     * [linkLabelOuterStackDepth] floor are considered, so nothing inside a link
+     * label closes a span opened before its `[`. Returns false if no matching
+     * frame is found; the caller is responsible for the literal fallback in
+     * that case.
      */
     private suspend fun SemanticEventScope.closeInlineDownTo(
         name: String,
@@ -1720,11 +1907,75 @@ private class ParserState(
                 if (nameIgnoreCase) it.name.equals(name, ignoreCase = true) else it.name == name
                 )
         }
-        if (idx < 0) return false
+        if (idx < linkLabelOuterStackDepth) return false
         while (inlineOpenStack.size > idx) {
             val frame = inlineOpenStack.removeLast()
+            if (inlineOpenStack.size > idx && !frame.isTagged && frame.delimChar in TOGGLE_DELIMITERS) {
+                forceClosedSpans += frame.name
+            }
             unmark(frame.name, isTagged = frame.isTagged)
         }
+        return true
+    }
+
+    /** Whether the pending `~`/`~~`/`==` run in [inlineBuffer] closes a span open in scope. */
+    private fun isPendingSpanCloser(): Boolean = when (inlineBuffer.toString()) {
+        "~", "~~" -> isInlineClosable("del")
+        "==" -> isInlineClosable("mark")
+        else -> false
+    }
+
+    /** Whether the pending `*`/`_` run in [inlineBuffer] closes an em/strong before [next]. */
+    private fun isPendingEmphasisCloserBefore(next: Char): Boolean {
+        val run = inlineBuffer.toString()
+        if (run.isEmpty() || run.length > 3 || run[0] !in "*_" || !run.all { it == run[0] }) return false
+        if (!emphasisFlanking(run[0], runPrevChar, next).second) return false
+        return when (run.length) {
+            1 -> isInlineClosable("em")
+            2 -> isInlineClosable("strong")
+            else -> isInlineClosable("em") || isInlineClosable("strong")
+        }
+    }
+
+    /**
+     * Open the span(s) of a run held by a `\` ([ESCAPE_HELD_RUNS]) now that the
+     * escaped char [next] is known — only as an opener (the `\` already ruled out
+     * a close), and only if no span of that kind is open; false to keep it literal.
+     */
+    private suspend fun SemanticEventScope.openHeldRun(run: String, next: Char): Boolean {
+        val c = run[0]
+        if (c == '~' || c == '=') {
+            val name = if (c == '~') "del" else "mark"
+            if (isInlineOpen(name)) return false
+            forceClosedSpans -= name
+            openInlineSpan(name, c)
+            return true
+        }
+        if (!emphasisFlanking(c, runPrevChar, next).first) return false
+        val names = when (run.length) {
+            1 -> listOf("em")
+            2 -> listOf("strong")
+            else -> listOf("strong", "em")
+        }
+        if (names.any { isInlineOpen(it) }) return false
+        names.forEach { openInlineSpan(it, c) }
+        return true
+    }
+
+    /**
+     * Resolve a pending `*`/`_`/`~`/`==` run in [inlineBuffer] as the main
+     * dispatcher would before [next]; false (buffer untouched) for anything else.
+     */
+    private suspend fun SemanticEventScope.resolvePendingDelimiterRun(next: Char): Boolean {
+        val run = inlineBuffer.toString()
+        when (run) {
+            "*", "**", "***" -> resolveEmphasisRun('*', run.length, next)
+            "_", "__", "___" -> resolveEmphasisRun('_', run.length, next)
+            "~", "~~" -> toggleInlineSpan("del", '~', run, runPrevChar)
+            "==" -> toggleInlineSpan("mark", '=', run, runPrevChar)
+            else -> return false
+        }
+        inlineBuffer.clear()
         return true
     }
 
@@ -2356,6 +2607,11 @@ private class ParserState(
                 // closes the heading with the `\` rendered as literal text
                 // (no `<br/>` — headings are single-line and never continue).
                 if (escaped) {
+                    // A delimiter run held by the `\` is literal before it.
+                    if (inlineBuffer.isNotEmpty()) {
+                        +inlineBuffer.toString()
+                        inlineBuffer.clear()
+                    }
                     +"\\"
                     escaped = false
                 }
@@ -5639,6 +5895,13 @@ private class ParserState(
         // other char the backslash stays literal).
         if (escaped) {
             escaped = false
+            // A delimiter run held by the `\` (see below) opens only before a real
+            // escape (`*\~*`); before anything else it is literal, as is the `\`.
+            if (inlineBuffer.toString() in ESCAPE_HELD_RUNS) {
+                val run = inlineBuffer.toString()
+                inlineBuffer.clear()
+                if (char !in ASCII_PUNCTUATION || !openHeldRun(run, char)) +run
+            }
             // If we are inside an inline HTML tag accumulation, backslashes are literal.
             if (inlineBuffer.startsWith("<")) {
                 inlineBuffer.append(char)
@@ -5711,6 +5974,21 @@ private class ParserState(
                 mark("math")
                 math = true
                 pendingDeferredChar = char
+                return
+            }
+            // A pending delimiter run that *closes* a span resolves against the
+            // `\` (`==a==\* b`), then the `\` is re-delivered to start the escape.
+            // One that would *open* is held until the escaped char is known — the
+            // renderer writes `*\~*` / `~~\*~~` for a span starting with a
+            // delimiter, but a `\` that ends the line (a hard break) or escapes
+            // nothing leaves the run literal (see the `escaped` branch above).
+            if (isPendingSpanCloser() || isPendingEmphasisCloserBefore('\\')) {
+                resolvePendingDelimiterRun(char)
+                pendingDeferredChar = char
+                return
+            }
+            if (inlineBuffer.toString() in ESCAPE_HELD_RUNS) {
+                escaped = true
                 return
             }
             if (inlineBuffer.isNotEmpty()) {
@@ -5879,13 +6157,10 @@ private class ParserState(
         // dispatcher commits the code span open and re-delivers `]` as
         // content (so `[foo``]``](/uri)` etc. behave per spec).
         //
-        // KNOWN DIVERGENCE: a pending non-backtick delimiter run (e.g. `*`)
-        // is flushed as literal text by `flushInlineLabelClose`, NOT routed
-        // through the standard delimiter resolver. Routing it through would
-        // let the inner `*` close an *outer* em that was open before the
-        // label, producing unbalanced events. Spec-correct resolution
-        // requires delimiter scoping (label-internal `*` should only see
-        // label-local frames in `inlineOpenStack`) — out of scope here.
+        // A pending non-backtick delimiter run (e.g. `*`) is resolved by
+        // `flushInlineLabelClose`, NOT routed through the standard delimiter
+        // resolver: it closes a matching span opened inside the label, else it
+        // stays literal — it never closes a span opened before the `[`.
         val backticksPending =
             inlineBuffer.isNotEmpty() && inlineBuffer.all { it == '`' }
         if ((inLink || inImage) && !inLinkRef &&
@@ -6001,10 +6276,17 @@ private class ParserState(
                             // including non-HTML emphasis frames opened *inside* the HTML element
                             // — emitting their balancing `unmark`s LIFO. Orphan close (no matching
                             // open): fall back to literal text rather than emit an unbalanced
-                            // `unmark`.
+                            // `unmark`. Inside a link label, a close tag whose open tag sits
+                            // before the `[` is literal too, deferred to a label abort.
                             val name = close.second.name
                             if (!closeInlineDownTo(name, isTagged = true, nameIgnoreCase = true)) {
-                                +"<${applyBackslashEscapes(content)}>"
+                                val literal = "<${applyBackslashEscapes(content)}>"
+                                val outer = outerFrameIndex(name, isTagged = true, nameIgnoreCase = true)
+                                if (outer >= 0 && canDeferOuterClose()) {
+                                    deferOuterClose(outer, literal)
+                                } else {
+                                    +literal
+                                }
                             }
                         } else {
                             // Fallback: not a valid tag — apply backslash-escape pass to the
@@ -6063,6 +6345,17 @@ private class ParserState(
                 resolveEmphasisRun('*', 1, char)
                 pendingDeferredChar = char
             }
+            // A pending `~`/`==` run that *closes* a span resolves before any
+            // new-char branch below: those flush a pending run as literal text, so
+            // a closing `==` right before a `~` (`~~a ==b==~~`) or a closing `~~`
+            // before a `*` would never close. An *opening* run keeps its original
+            // position below (literal before `` ` ``/`*`, etc.).
+            isPendingSpanCloser() && char != inlineBuffer[0] -> {
+                val run = inlineBuffer.toString()
+                inlineBuffer.clear()
+                toggleInlineSpan(if (run[0] == '~') "del" else "mark", run[0], run, runPrevChar)
+                pendingDeferredChar = char
+            }
             // Backtick run accumulation: keep appending backticks until a non-backtick
             // arrives, at which point the buffer-resolution branch above opens code.
             char == '`' -> {
@@ -6102,24 +6395,12 @@ private class ParserState(
             // Tilde buffer checks (before char == '~')
             inlineBuffer.toString() == "~~" && char != '~' -> {
                 inlineBuffer.clear()
-                if (strikethrough) {
-                    unmark("del")
-                    strikethrough = false
-                } else {
-                    mark("del")
-                    strikethrough = true
-                }
+                toggleInlineSpan("del", '~', "~~", runPrevChar)
                 pendingDeferredChar = char
             }
             inlineBuffer.toString() == "~" && char != '~' -> {
                 inlineBuffer.clear()
-                if (strikethrough) {
-                    unmark("del")
-                    strikethrough = false
-                } else {
-                    mark("del")
-                    strikethrough = true
-                }
+                toggleInlineSpan("del", '~', "~", runPrevChar)
                 pendingDeferredChar = char
             }
             // Now handle new character cases
@@ -6152,24 +6433,12 @@ private class ParserState(
                     +inlineBuffer.toString()
                     inlineBuffer.clear()
                 }
-                if (superscript) {
-                    unmark("sup")
-                    superscript = false
-                } else {
-                    mark("sup")
-                    superscript = true
-                }
+                toggleInlineSpan("sup", '^', "^", prevInlineChar)
             }
             // Equals buffer checks (before char == '=')
             inlineBuffer.toString() == "==" && char != '=' -> {
                 inlineBuffer.clear()
-                if (highlight) {
-                    unmark("mark")
-                    highlight = false
-                } else {
-                    mark("mark")
-                    highlight = true
-                }
+                toggleInlineSpan("mark", '=', "==", runPrevChar)
                 pendingDeferredChar = char
             }
             inlineBuffer.toString() == "=" && char != '=' -> {
@@ -6340,9 +6609,8 @@ private class ParserState(
      */
     private fun openLinkLabelCapture() {
         linkLabelOuterStackDepth = inlineOpenStack.size
-        linkLabelOuterStrikethrough = strikethrough
-        linkLabelOuterHighlight = highlight
-        linkLabelOuterSuperscript = superscript
+        deferredOuterCloseFloor = inlineOpenStack.size
+        deferredOuterCloses.clear()
         linkLabelBracketDepth = 0
         redirector.startCapture()
     }
@@ -6405,41 +6673,28 @@ private class ParserState(
             code = false
             codeRunLength = 0
         }
-        // Close only the boolean-tracked inline state opened *inside* this label
-        // (see [linkLabelOuterSuperscript] et al.). A `del`/`mark`/`sup` opened
-        // before the `[` stays open — its closer arrives after the label — so its
-        // `unmark` is not captured into the label buffer (which would cross the
-        // link nesting and break the stream).
-        if (strikethrough && !linkLabelOuterStrikethrough) {
-            unmark("del"); strikethrough = false
-            // `del`/`mark` resolve their closing run on the *next* char (to size
-            // the run), but at a label's end the `]` is not that char — so the
-            // trailing `~`/`~~`/`=`/`==` (or a longer homogeneous run) sits
-            // unresolved in inlineBuffer. Absorb the *whole* run here, else it
-            // flushes as literal text inside the committed link and grows
-            // *unboundedly* on every round-trip (`[==foo=]` → `[==foo===]` → …;
-            // `[~~del~~~]` → `[~~del~~~~~]` → …). Any trailing dangling delimiter
-            // run here is malformed noise, so dropping it is the round-trip-stable
-            // choice. `sup` resolves eagerly (never buffered), so it needs no guard.
-            val run = inlineBuffer.toString()
-            if (run.isNotEmpty() && run.all { it == '~' }) inlineBuffer.clear()
+        // Math opened inside the label (a `]` inside math is content, so only an
+        // abort reaches here with math open) is innermost: close it before the
+        // label-local spans it sits in.
+        if (math) {
+            if (inlineBuffer.isNotEmpty()) {
+                +inlineBuffer.toString()
+                inlineBuffer.clear()
+            }
+            unmark("math")
+            math = false
         }
-        if (highlight && !linkLabelOuterHighlight) {
-            unmark("mark"); highlight = false
-            val run = inlineBuffer.toString()
-            if (run.isNotEmpty() && run.all { it == '=' }) inlineBuffer.clear()
-        }
-        if (superscript && !linkLabelOuterSuperscript) { unmark("sup"); superscript = false }
         // A pending delimiter run in inlineBuffer that sits in closing position at
-        // the label's end (e.g. the `**` of `[**bold**]`, or the trailing `*` of
-        // an image-in-link label like `[![a](u*)*]`) closes the matching emphasis
-        // frame *opened inside this label* (above the watermark), LIFO and
-        // innermost-first. This is the label-scoped counterpart of the normal
-        // delimiter resolver: it only consults label-local frames, so an inner
-        // closer can never pair with an em/strong opened *before* the `[`. Without
-        // it the closer was emitted as literal text inside the still-open span, so
-        // the span's delimiter run grew by one on every render→parse round-trip
-        // (the unbounded `…)*` → `…)**` instability of the Brave SERP dump).
+        // the label's end (e.g. the `**` of `[**bold**]`, the `==` of
+        // `[==mark==]`, or the trailing `*` of an image-in-link label like
+        // `[![a](u*)*]`) closes the matching span *opened inside this label*
+        // (above the watermark), LIFO and innermost-first. This is the
+        // label-scoped counterpart of the normal delimiter resolver: it only
+        // consults label-local frames, so an inner closer can never pair with a
+        // span opened *before* the `[`. Without it the closer was emitted as
+        // literal text inside the still-open span, so the span's delimiter run
+        // grew by one on every render→parse round-trip (the unbounded `…)*` →
+        // `…)**` instability of the Brave SERP dump).
         closeLabelLocalEmphasisRun()
         // Any leftover run (no matching label-local frame) flushes as literal text
         // — same fallback the rest of the parser uses when a run can't resolve.
@@ -6455,36 +6710,49 @@ private class ParserState(
     }
 
     /**
-     * Consume a trailing emphasis-delimiter run in [inlineBuffer] by closing the
-     * matching label-local frames at the top of [inlineOpenStack] (those above
-     * [linkLabelOuterStackDepth], i.e. opened inside the current label). Each
-     * close pops one frame and removes the delimiter characters it consumed from
-     * the run; matching stops at the first frame the run can't close, leaving the
-     * remainder for the literal-flush fallback. Only `em`/`strong` live on
-     * [inlineOpenStack], so only pure `*`/`_` runs can match — `~`/`=`/`^`
-     * (`del`/`mark`/`sup`) are boolean-flag state closed by the caller before this
-     * runs, so a run of those is left for the literal-flush / buffer-clear path.
+     * Consume a trailing delimiter run in [inlineBuffer] by closing the matching
+     * label-local frames of [inlineOpenStack] (those above
+     * [linkLabelOuterStackDepth], i.e. opened inside the current label).
+     *
+     * A `~` or `=` run closes the label-local `del`/`mark` (and every span opened
+     * inside it, LIFO) and is absorbed *whole*: `del`/`mark` resolve their run on
+     * the *next* char, which `]` is not, so a longer or dangling run (`[==foo=]`,
+     * `[~~del~~~]`) would otherwise flush as literal text inside the committed
+     * link and grow unboundedly on every round-trip — dropping that malformed
+     * trailing delimiter is the round-trip-stable choice. `^` resolves eagerly
+     * and is never buffered.
+     *
+     * A `*` or `_` run closes label-local em/strong frames, topmost first, each
+     * consuming its delimiter characters — and with each, every `del`/`mark`/`sup`
+     * opened inside it (`[**a ~~b**](u)`), as a mid-line close would. Matching
+     * stops at the first em/strong the run can't close, leaving the remainder
+     * for the literal-flush fallback.
      */
     private suspend fun SemanticEventScope.closeLabelLocalEmphasisRun() {
         if (inlineBuffer.isEmpty()) return
         val delim = inlineBuffer[0]
-        if (delim !in "*_" || !inlineBuffer.all { it == delim }) return
-        while (inlineBuffer.isNotEmpty() &&
-            inlineOpenStack.size > linkLabelOuterStackDepth
-        ) {
-            val frame = inlineOpenStack.last()
+        if (!inlineBuffer.all { it == delim }) return
+        if (delim == '~' || delim == '=') {
+            val name = if (delim == '~') "del" else "mark"
+            if (closeInlineDownTo(name, isTagged = false)) inlineBuffer.clear()
+            return
+        }
+        if (delim !in "*_") return
+        while (inlineBuffer.isNotEmpty()) {
+            // Look past the del/mark/sup frames opened inside the em/strong.
+            var index = inlineOpenStack.size - 1
+            while (index >= linkLabelOuterStackDepth && inlineOpenStack[index].let {
+                    !it.isTagged && it.delimChar in TOGGLE_DELIMITERS
+                }
+            ) index--
+            if (index < linkLabelOuterStackDepth) break
+            val frame = inlineOpenStack[index]
             if (frame.isTagged) break
             // `*` and `_` are distinct delimiter types and never pair (CommonMark
             // §6.2): a `_` run must not close a `*`-opened em (or vice versa). Leave
             // the mismatched run for the literal-flush fallback (`[*foo_](u)` keeps
             // the `_` as content → `<em>foo_</em>`, not a silently-dropped closer).
-            // `delimChar` is non-null here: tagged frames (delimChar == null) already
-            // broke above, and every non-tagged frame is pushed via openInlineEmphasis
-            // with a non-null delimChar.
             if (frame.delimChar != delim) break
-            // Only `em`/`strong` live on inlineOpenStack — `del`/`mark`/`sup` are
-            // tracked as boolean flags and never pushed here, so they cannot match.
-            // `delim` is already constrained to `*`/`_` by the guard above.
             val need = when (frame.name) {
                 "em" -> 1
                 "strong" -> 2
@@ -6492,8 +6760,7 @@ private class ParserState(
             }
             if (inlineBuffer.length < need) break
             inlineBuffer.deleteRange(inlineBuffer.length - need, inlineBuffer.length)
-            inlineOpenStack.removeLast()
-            unmark(frame.name)
+            closeInlineDownTo(frame.name, isTagged = false)
         }
     }
 
@@ -6832,7 +7099,7 @@ private class ParserState(
                 } else {
                     // Not resolved — replay label events surrounded by literal
                     // brackets and the reference label as text.
-                    val labelEvents = redirector.stopCapture()
+                    val labelEvents = labelEventsForAbort()
                     val prefix = if (isImage) "!" else ""
                     +"$prefix["
                     redirector.replay(labelEvents)
@@ -6842,7 +7109,7 @@ private class ParserState(
             }
             '[' -> {
                 // Unescaped `[` invalidates the reference label. Replay source.
-                val labelEvents = redirector.stopCapture()
+                val labelEvents = labelEventsForAbort()
                 val prefix = if (inImage) "!" else ""
                 +"$prefix["
                 redirector.replay(labelEvents)
@@ -6913,15 +7180,11 @@ private class ParserState(
         linkEscape = false
         linkLabelTentativeClose = false
         linkLabelOuterStackDepth = 0
+        // A committed label keeps its deferred runs as the literal text they
+        // were emitted as (an aborted one consumed them in labelEventsForAbort).
+        deferredOuterCloses.clear()
+        deferredOuterCloseFloor = 0
         linkLabelBracketDepth = 0
-        // Outer del/mark/sup snapshots taken in openLinkLabelCapture. Cleared here
-        // for an explicit invariant: today openLinkLabelCapture always overwrites
-        // them before flushInlineLabelClose reads them, but resetting keeps a future
-        // abort path that calls flushInlineLabelClose directly from reading a stale
-        // snapshot left by a prior committed link.
-        linkLabelOuterStrikethrough = false
-        linkLabelOuterHighlight = false
-        linkLabelOuterSuperscript = false
     }
 
     /**
@@ -6946,7 +7209,7 @@ private class ParserState(
         // replay is balanced; doing them after `stopCapture` would leak the
         // unmark to the downstream collector before the `[` literal.
         flushInlineLabelClose()
-        val labelEvents = if (redirector.isCapturing) redirector.stopCapture() else emptyList()
+        val labelEvents = labelEventsForAbort()
         +"["
         redirector.replay(labelEvents)
         if (linkLabelTentativeClose || inLinkUrl) {
@@ -6967,7 +7230,7 @@ private class ParserState(
      */
     private suspend fun SemanticEventScope.abortInlineImage() {
         flushInlineLabelClose()
-        val labelEvents = if (redirector.isCapturing) redirector.stopCapture() else emptyList()
+        val labelEvents = labelEventsForAbort()
         +"!["
         redirector.replay(labelEvents)
         if (linkLabelTentativeClose || inLinkUrl) {
@@ -7080,14 +7343,9 @@ private class ParserState(
                 // run (no span open — `foo==`, `foo~~`) is literal text: opening an
                 // empty span here would rewrite `foo==` to `foo====` on the first
                 // render. So close-if-open, else emit the buffer verbatim.
-                "~", "~~" -> when {
-                    strikethrough -> { unmark("del"); strikethrough = false }
-                    else -> +buf
-                }
-                "==" -> when {
-                    highlight -> { unmark("mark"); highlight = false }
-                    else -> +buf
-                }
+                // The close also closes every span opened inside the del/mark first.
+                "~", "~~" -> if (!closeInlineDownTo("del", isTagged = false)) +buf
+                "==" -> if (!closeInlineDownTo("mark", isTagged = false)) +buf
                 else -> +buf
             }
         }
@@ -7095,22 +7353,10 @@ private class ParserState(
             unmark("math")
             math = false
         }
-        if (highlight) {
-            unmark("mark")
-            highlight = false
-        }
-        if (superscript) {
-            unmark("sup")
-            superscript = false
-        }
-        if (strikethrough) {
-            unmark("del")
-            strikethrough = false
-        }
-        // Drain any unclosed inline opens — emphasis (`em`/`strong`) and HTML
-        // tags share a single stack so they pop in *opening order*. A
-        // `<strong>` opened inside an outer `<em>` closes *before* the em
-        // here, never after — required to keep the event stream balanced.
+        // Drain any unclosed inline opens — delimiter spans and HTML tags share
+        // a single stack so they pop in *reverse opening order*. An `<em>`
+        // opened inside an outer `<mark>` closes *before* the mark here, never
+        // after — required to keep the event stream balanced.
         while (inlineOpenStack.isNotEmpty()) {
             val frame = inlineOpenStack.removeLast()
             unmark(frame.name, isTagged = frame.isTagged)
@@ -7124,6 +7370,7 @@ private class ParserState(
         // delimiters at the start of a paragraph are preceded by whitespace.
         prevInlineChar = null
         runPrevChar = null
+        forceClosedSpans.clear()
     }
 
     suspend fun finalize() {
