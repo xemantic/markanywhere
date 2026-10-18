@@ -173,11 +173,14 @@ class WaitUntilLoadedTest {
                 tab.get(testPageUrl("stalled.html"))
 
                 // when
-                paused.isCompleted to tab.waitUntilLoaded(
+                val load = tab.waitUntilLoaded(
                     networkIdleTime = 300.milliseconds,
                     domQuietTime = 300.milliseconds,
                     timeout = 1500.milliseconds,
                 )
+                // read only after the wait: requestPaused arrives asynchronously,
+                // and reading it straight after navigation raced it on slow CI
+                paused.isCompleted to load
             }
         }
 
@@ -199,11 +202,14 @@ class WaitUntilLoadedTest {
                 tab.get(testPageUrl("blocked.html"))
 
                 // when
-                paused.isCompleted to tab.waitUntilLoaded(
+                val load = tab.waitUntilLoaded(
                     networkIdleTime = 300.milliseconds,
                     domQuietTime = 300.milliseconds,
                     timeout = 1500.milliseconds,
                 )
+                // read only after the wait: requestPaused arrives asynchronously,
+                // and reading it straight after navigation raced it on slow CI
+                paused.isCompleted to load
             }
         }
 
