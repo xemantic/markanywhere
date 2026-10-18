@@ -653,11 +653,123 @@ class ApplyAccessibilityTest {
         val output = input.applyAccessibility()
 
         // then — the options survive, and the meaningless display verdict is
-        // dropped rather than passed on to the whitespace normalizer.
+        // replaced by the UA default of the tag before it reaches the operators
+        // downstream.
         output sameAs semanticEvents(tagged = true) {
             "select"("id" to "docselect", AccessibilityAnnotations.DISPLAY to "inline-block") {
-                "option"("value" to "") { +"address" }
-                "option"("value" to "file") { +"file upload" }
+                "option"("value" to "", AccessibilityAnnotations.DISPLAY to "flex") { +"address" }
+                "option"("value" to "file", AccessibilityAnnotations.DISPLAY to "flex") { +"file upload" }
+            }
+        }
+    }
+
+    @Test
+    fun `should read select popup content as the UA default display of its tag`() = runTest {
+        // given — a customizable select's popup: every node below the <select>
+        // reports the no-layout-box `none`, whatever the stylesheet would lay
+        // it out as once the popup opens.
+        val input = semanticEvents(tagged = true) {
+            "select"("id" to "plan", AccessibilityAnnotations.DISPLAY to "inline-block") {
+                "option"("value" to "pro", AccessibilityAnnotations.DISPLAY to "none") {
+                    "div"(AccessibilityAnnotations.DISPLAY to "none") { +"Pro" }
+                    "div"(AccessibilityAnnotations.DISPLAY to "none") {
+                        "span"(AccessibilityAnnotations.DISPLAY to "none") { +"For teams" }
+                        "x-badge"(AccessibilityAnnotations.DISPLAY to "none") { +"new" }
+                        "source"("srcset" to "/pro.webp", AccessibilityAnnotations.DISPLAY to "none") {}
+                    }
+                }
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then — the artifact is replaced by the display the UA stylesheet gives
+        // the tag (an option is a flex container, whose children are left to
+        // be blockified downstream), so the operators downstream separate a
+        // block `<div>` from its sibling instead of reading it as an inline
+        // wrapper; an unknown
+        // element is inline, as in a browser, and one the UA stylesheet never
+        // renders lays out no box, so it reads as `contents` — no boundary to
+        // cross for any operator.
+        output sameAs semanticEvents(tagged = true) {
+            "select"("id" to "plan", AccessibilityAnnotations.DISPLAY to "inline-block") {
+                "option"("value" to "pro", AccessibilityAnnotations.DISPLAY to "flex") {
+                    "div" { +"Pro" }
+                    "div" {
+                        "span"(AccessibilityAnnotations.DISPLAY to "inline") { +"For teams" }
+                        "x-badge"(AccessibilityAnnotations.DISPLAY to "inline") { +"new" }
+                        "source"("srcset" to "/pro.webp", AccessibilityAnnotations.DISPLAY to "contents") {}
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should blockify the direct children of a select popup option`() = runTest {
+        // given — a customizable select lays each <option> out as a flex
+        // container, which blockifies its direct children whatever their tag:
+        // the flag and the label, the star and the plan name are separate boxes.
+        val input = semanticEvents(tagged = true) {
+            "select"("id" to "country", AccessibilityAnnotations.DISPLAY to "inline-block") {
+                "option"("value" to "pl", AccessibilityAnnotations.DISPLAY to "none") {
+                    "img"("src" to "/pl.svg", "alt" to "flag", AccessibilityAnnotations.DISPLAY to "none") {}
+                    "span"(AccessibilityAnnotations.DISPLAY to "none") {
+                        "b"(AccessibilityAnnotations.DISPLAY to "none") { +"Pol" }
+                        +"and"
+                    }
+                    "source"("srcset" to "/pl.webp", AccessibilityAnnotations.DISPLAY to "none") {}
+                }
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then — the option reads as the flex container it is, so its own
+        // children carry no display and are blockified downstream; their
+        // descendants keep the UA default of their tag, and a never-rendered
+        // child still lays out no box.
+        output sameAs semanticEvents(tagged = true) {
+            "select"("id" to "country", AccessibilityAnnotations.DISPLAY to "inline-block") {
+                "option"("value" to "pl", AccessibilityAnnotations.DISPLAY to "flex") {
+                    "img"("src" to "/pl.svg", "alt" to "flag") {}
+                    "span" {
+                        "b"(AccessibilityAnnotations.DISPLAY to "inline") { +"Pol" }
+                        +"and"
+                    }
+                    "source"("srcset" to "/pl.webp", AccessibilityAnnotations.DISPLAY to "contents") {}
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep the genuine display of a select laid out inside a select popup`() = runTest {
+        // given — a JS-built popup holding a select that does lay out a box:
+        // its verdict is genuine, so the popup rewrite must not replace it.
+        val input = semanticEvents(tagged = true) {
+            "select"("id" to "outer", AccessibilityAnnotations.DISPLAY to "inline-block") {
+                "div"(AccessibilityAnnotations.DISPLAY to "none") {
+                    "select"("id" to "inner", AccessibilityAnnotations.DISPLAY to "inline-flex") {
+                        "option"("value" to "a", AccessibilityAnnotations.DISPLAY to "none") { +"Alpha" }
+                    }
+                }
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "select"("id" to "outer", AccessibilityAnnotations.DISPLAY to "inline-block") {
+                "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                    "select"("id" to "inner", AccessibilityAnnotations.DISPLAY to "inline-flex") {
+                        "option"("value" to "a", AccessibilityAnnotations.DISPLAY to "flex") { +"Alpha" }
+                    }
+                }
             }
         }
     }
@@ -679,8 +791,8 @@ class ApplyAccessibilityTest {
         // then
         output sameAs semanticEvents(tagged = true) {
             "select" {
-                "optgroup"("label" to "Fruit") {
-                    "option"("value" to "1") { +"apple" }
+                "optgroup"("label" to "Fruit", AccessibilityAnnotations.DISPLAY to "block") {
+                    "option"("value" to "1", AccessibilityAnnotations.DISPLAY to "flex") { +"apple" }
                 }
             }
         }
@@ -704,7 +816,7 @@ class ApplyAccessibilityTest {
         // then
         output sameAs semanticEvents(tagged = true) {
             "select" {
-                "option"("value" to "3") { +"kept" }
+                "option"("value" to "3", AccessibilityAnnotations.DISPLAY to "flex") { +"kept" }
             }
         }
     }
@@ -754,8 +866,8 @@ class ApplyAccessibilityTest {
         // the options with it
         output sameAs semanticEvents(tagged = true) {
             "select"("id" to "country", AccessibilityAnnotations.DISPLAY to "inline-block") {
-                "div"("class" to "popup") {
-                    "option"("value" to "pl") { +"Poland" }
+                "div"("class" to "popup", AccessibilityAnnotations.DISPLAY to "block") {
+                    "option"("value" to "pl", AccessibilityAnnotations.DISPLAY to "flex") { +"Poland" }
                 }
             }
         }
@@ -780,7 +892,7 @@ class ApplyAccessibilityTest {
         // then
         output sameAs semanticEvents(tagged = true) {
             "select" {
-                "option"("value" to "e") {
+                "option"("value" to "e", AccessibilityAnnotations.DISPLAY to "flex") {
                     "span"("class" to "flag") { +"E" }
                     +" Epsilon"
                 }
@@ -830,7 +942,7 @@ class ApplyAccessibilityTest {
         // then
         output sameAs semanticEvents(tagged = true) {
             "select" {
-                "option"("value" to "a") { +"Alpha" }
+                "option"("value" to "a", AccessibilityAnnotations.DISPLAY to "flex") { +"Alpha" }
             }
         }
     }
@@ -857,7 +969,7 @@ class ApplyAccessibilityTest {
         // then
         output sameAs semanticEvents(tagged = true) {
             "select"("id" to "country", AccessibilityAnnotations.DISPLAY to "inline-block") {
-                "option"("value" to "pl") { +"Poland" }
+                "option"("value" to "pl", AccessibilityAnnotations.DISPLAY to "flex") { +"Poland" }
             }
             +" "
         }
@@ -887,7 +999,7 @@ class ApplyAccessibilityTest {
         // then
         output sameAs semanticEvents(tagged = true) {
             "select" {
-                "option"("value" to "pl") { +"Poland" }
+                "option"("value" to "pl", AccessibilityAnnotations.DISPLAY to "flex") { +"Poland" }
             }
         }
     }
@@ -1000,7 +1112,7 @@ class ApplyAccessibilityTest {
         // then
         output sameAs semanticEvents(tagged = true) {
             "select"("id" to "country", AccessibilityAnnotations.DISPLAY to "inline-block") {
-                "option"("value" to "pl") { +"Poland" }
+                "option"("value" to "pl", AccessibilityAnnotations.DISPLAY to "flex") { +"Poland" }
                 +" "
             }
         }
@@ -1029,12 +1141,13 @@ class ApplyAccessibilityTest {
         val output = input.applyAccessibility()
 
         // then — the nested select survives, and the meaningless `none` is
-        // stripped from it just as it is from every other node in the popup.
+        // replaced by its UA default just as it is on every other node in the
+        // popup.
         output sameAs semanticEvents(tagged = true) {
             "select"("id" to "outer", AccessibilityAnnotations.DISPLAY to "inline-block") {
-                "div" {
-                    "select"("id" to "inner") {
-                        "option"("value" to "a") { +"Alpha" }
+                "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                    "select"("id" to "inner", AccessibilityAnnotations.DISPLAY to "inline") {
+                        "option"("value" to "a", AccessibilityAnnotations.DISPLAY to "flex") { +"Alpha" }
                     }
                 }
             }
@@ -1058,7 +1171,7 @@ class ApplyAccessibilityTest {
         // then
         output sameAs semanticEvents(tagged = true) {
             "select" {
-                "option"("value" to "a") { +"Alpha" }
+                "option"("value" to "a", AccessibilityAnnotations.DISPLAY to "flex") { +"Alpha" }
             }
         }
     }
