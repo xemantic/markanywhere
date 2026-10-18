@@ -58,6 +58,13 @@ private const val DISPLAY_STYLE = 0
 private const val VISIBILITY_STYLE = 1
 private const val TEXT_SECURITY_STYLE = 2
 
+// the elements whose text nodes are no visible text of the page: never
+// rendered, or form controls the capture writes its own text for
+private val NO_SHOWN_TEXT_ELEMENTS = setOf(
+    "script", "noscript", "style", "template",
+    "select", "option", "optgroup", "datalist", "textarea", "input",
+)
+
 // the input types Blink names by their displayed value, formatted in the
 // browser's locale, rather than by the value string (verified live)
 private val LOCALE_FORMATTED_INPUT_TYPES = setOf("date", "month", "week", "time", "datetime-local", "number")
@@ -612,44 +619,161 @@ internal class SnapshotDom(
         formState(index)?.let { captureFormControl(name(index), attributeMap(index), it) }
 
     /**
-     * [name], a name the browser computed for an element, with the value of
-     * every secret control taken out of it — or an empty string when a value
-     * cannot be taken out cleanly.
+     * [name], a name the browser computed for an element, whitespace collapsed
+     * and trimmed, with the value of every secret control that may have
+     * reached it taken out — or an empty string when a value cannot be taken
+     * out cleanly.
      *
      * The accessible-name computation takes a text box's *value* (a select's
      * chosen option) whenever it reaches one, and it reaches one along many
      * paths — `aria-labelledby`, the element's content, its `<label>`s,
      * `aria-owns`, a descendant's own `aria-labelledby`, shadow trees — so
-     * whether a secret *can* reach the name is not judged here; the name is
-     * checked for the secrets themselves instead, which the capture knows
-     * already (see [isRedactedControl]). A secret is then a word run of its
-     * own in the name ("Card number 4111…") and is dropped, label text kept;
+     * whether a secret *can* reach the name is not predicted here: a copy of
+     * that computation leaks along every path it lacks. Blink's own output is
+     * checked instead.
+     *
+     * When the name was built from `aria-labelledby`, Blink reports each
+     * target with the text it lent ([targets]). A target whose text is
+     * exactly — whitespace aside, nothing skipped — the text the dump itself
+     * shows inside it and Blink lends as it is ([shownTexts]) is kept as it
+     * is: a short secret elsewhere on the page (a chosen expiry month `1`) no
+     * longer cuts `Step 1 of 3`. Any other target, and the whole name when
+     * there are no [targets] or they do not add up to it, is checked for every
+     * secret on the page (see [cutSecrets]). Whatever does not line up falls
+     * back to that check, so a mistake costs a label, never a secret.
+     *
+     * The invariant: a kept target can carry a secret only where the page
+     * shows the same characters at the same place *and* Blink lends that shown
+     * text rather than replacing it — so the name says nothing the dump does
+     * not. Every way Blink drops or replaces shown text must therefore be kept
+     * out of [shownTexts], else a visible copy of a value stands in for the
+     * value itself; [showsText] and [lendsShownText] list the ones handled.
+     * Extend them when another turns up.
+     */
+    fun withoutSecrets(name: String, targets: List<Accessibility.AXRelatedNode>?): String {
+        val collapsed = name.stripAndCollapseHtmlWhitespace().trim()
+        if (secretTexts.none { it in collapsed } && !collapsed.holdsSecretNumber()) return collapsed
+        val texts = targets
+            ?.map { it.text.orEmpty() }
+            ?.takeIf { it.joinToString("").withoutWhitespace() == name.withoutWhitespace() }
+            ?: return cutSecrets(name)?.trim().orEmpty()
+        var cut = false
+        val parts = targets.zip(texts) { target, text ->
+            if (spellsShownText(target.backendDOMNodeId, text)) text
+            else (cutSecrets(text) ?: return "").also { if (it != text.stripAndCollapseHtmlWhitespace()) cut = true }
+        }
+        // Blink's own spacing, unless a part of the name was taken out
+        return if (cut) parts.joinToString(" ").stripAndCollapseHtmlWhitespace().trim() else collapsed
+    }
+
+    /**
+     * [text], whitespace collapsed as in a computed name, with every secret of
+     * the page taken out — or `null` when one cannot be: a secret is a word
+     * run of its own ("Card number 4111…") and is dropped, label text kept;
      * one glued to other text ("Card4111…", or a CVC `123` inside an unrelated
-     * `1234`) cannot be told apart from it, so the name is withheld whole.
+     * `1234`) cannot be told apart from it.
      *
      * A control Blink names by the value it *displays* rather than the value
      * itself — a date, time or number, formatted in the browser's locale
      * (`May 2027` for `2027-05`, `987,50` for `987.50`) — cannot be found as
      * written, and predicting the locale's format would re-implement Blink. So
-     * the name fails closed: it is withheld whole when it holds any number of
-     * such a value ([secretNumbers]), in whatever decimal digits it is written.
+     * the text fails closed when it holds any number of such a value
+     * ([secretNumbers]), in whatever decimal digits it is written.
      */
-    fun withoutSecrets(name: String): String {
-        if (secretTexts.isEmpty() && secretNumbers.isEmpty()) return name
-        var result = name.stripAndCollapseHtmlWhitespace()
-        if (secretTexts.none { it in result } && !result.holdsSecretNumber()) return name
+    private fun cutSecrets(text: String): String? {
+        var result = text.stripAndCollapseHtmlWhitespace()
         while (true) {
             val secret = secretTexts.firstOrNull { it in result }
-                ?: return if (result.holdsSecretNumber()) "" else result
+                ?: return result.takeUnless { it.holdsSecretNumber() }
             val start = result.indexOf(secret)
             val end = start + secret.length
-            if (start > 0 && result[start - 1] != ' ' || end < result.length && result[end] != ' ') return ""
+            if (start > 0 && result[start - 1] != ' ' || end < result.length && result[end] != ' ') return null
             result = (result.take(start) + result.drop(end)).stripAndCollapseHtmlWhitespace()
         }
     }
 
     private fun String.holdsSecretNumber(): Boolean =
         secretNumbers.isNotEmpty() && decimalNumbers().any { it in secretNumbers }
+
+    /**
+     * Whether [text], the text Blink reports a target with the backend node id
+     * [target] lent a name, is exactly the target's [shownTexts], whitespace
+     * aside — never for a target that is itself kept out of the visible text
+     * or named from elsewhere, nor for one outside an open `<dialog>`.
+     */
+    private fun spellsShownText(target: Int, text: String): Boolean {
+        val index = nodeIndexes[target]?.takeIf { isElement(it) } ?: return false
+        if (!lendsShownText(index) || ancestors(index).any { isElement(it) && !showsText(it) }) return false
+        if (hasOpenDialog && ancestors(index).none { name(it) == "dialog" && "open" in attributeMap(it) }) return false
+        return shownTexts(index).joinToString("") { it.withoutWhitespace() } == text.withoutWhitespace()
+    }
+
+    /**
+     * The text nodes below the element that the dump shows as visible text and
+     * Blink lends as it is, in the order the walk emits them: laid out and not
+     * `visibility:hidden`, and only below elements that [lendsShownText] — so
+     * no hidden copy, script, option, secret or text Blink replaces can stand
+     * in for a value Blink lent. A shadow tree and a pseudo-element are no
+     * elements of the walk, so their text is not here.
+     */
+    private fun shownTexts(index: Int): Sequence<String> = children[index].asSequence().flatMap { child ->
+        when {
+            isText(child) ->
+                if (child in layoutNodes && visibility[child]?.normalizedVisibility() != "hidden") sequenceOf(text(child))
+                else emptySequence()
+
+            isElement(child) && lendsShownText(child) -> shownTexts(child)
+            else -> emptySequence()
+        }
+    }
+
+    /**
+     * Whether text below the element can be text the dump shows and Blink
+     * lends: not in an `aria-hidden` subtree (the dump drops it downstream,
+     * Blink skips it), not in an `inert` one (Blink skips it), not a secret
+     * control, and none of the elements whose text is no visible text of
+     * theirs ([NO_SHOWN_TEXT_ELEMENTS]).
+     */
+    private fun showsText(index: Int): Boolean {
+        val attributes = attributeMap(index)
+        return name(index) !in NO_SHOWN_TEXT_ELEMENTS &&
+            index !in secretControls &&
+            "inert" !in attributes &&
+            attributes["aria-hidden"].let { it == null || it.equalsAsciiIgnoreCase("false") }
+    }
+
+    /**
+     * Whether Blink lends the shown text of the element, a target or below
+     * one, as it is: it [showsText] and is not named from elsewhere — an
+     * element with its own `aria-labelledby` or `aria-label` lends that name
+     * in place of its content.
+     */
+    private fun lendsShownText(index: Int): Boolean {
+        val attributes = attributeMap(index)
+        return showsText(index) && "aria-labelledby" !in attributes && "aria-label" !in attributes
+    }
+
+    /**
+     * Whether a `<dialog>` is open. A modal one makes the rest of the page
+     * inert, which no attribute records and the snapshot does not tell from a
+     * non-modal one, so then only a target inside an open dialog is kept.
+     */
+    private val hasOpenDialog: Boolean by lazy {
+        nodeType.indices.any { isElement(it) && name(it) == "dialog" && "open" in attributeMap(it) }
+    }
+
+    /** The nodes with a layout object of their own. */
+    private val layoutNodes: Set<Int> by lazy { layout.nodeIndex.toHashSet() }
+
+    /** The node index by backend node id. */
+    private val nodeIndexes: Map<Int, Int> by lazy {
+        backendIds.withIndex().associate { (index, backendId) -> backendId to index }
+    }
+
+    /** The node indexes of the [redacted][isRedactedControl] controls. */
+    private val secretControls: Set<Int> by lazy {
+        secretValues.mapTo(HashSet()) { (index, _) -> index }
+    }
 
     /**
      * Every [redacted][isRedactedControl] control in the document, with the
@@ -767,6 +891,9 @@ private fun String.decimalNumbers(): Sequence<String> = sequence {
     }
     flush()
 }
+
+/** This text with every whitespace character, a non-breaking space included, left out. */
+private fun String.withoutWhitespace(): String = filterNot { it.isWhitespace() }
 
 /**
  * Whether this text equals the lowercase [lowercase] ASCII-case-insensitively,
@@ -917,9 +1044,10 @@ internal class DomEventBuilder(
         if ("aria-label" in this || "aria-labelledby" !in this) return this
         // trim, which strips non-breaking spaces too: a name of them alone
         // would read as a label downstream while showing nothing
-        val computed = element.axNode(dom)?.computedName?.trim()
+        val axNode = element.axNode(dom)
+        val computed = axNode?.computedName?.trim()
         if (computed.isNullOrEmpty()) return this
-        val name = dom.withoutSecrets(computed)
+        val name = dom.withoutSecrets(computed, axNode.labelledByTargets)
         return if (name.isEmpty()) this else this + ("aria-label" to name)
     }
 
@@ -927,6 +1055,17 @@ internal class DomEventBuilder(
 
 internal val Accessibility.AXNode.roleName: String?
     get() = (role?.value as? JsonPrimitive)?.contentOrNull
+
+/**
+ * The targets Blink reports this node's name was built from by
+ * `aria-labelledby`, each with the text it lent the name — or `null` when the
+ * name came from elsewhere (see [SnapshotDom.withoutSecrets]).
+ */
+private val Accessibility.AXNode.labelledByTargets: List<Accessibility.AXRelatedNode>?
+    get() = name?.sources
+        ?.firstOrNull { it.type == Accessibility.AXValueSourceType.RELATEDELEMENT && it.attribute == "aria-labelledby" }
+        ?.takeIf { it.superseded != true && it.invalid != true }
+        ?.attributeValue?.relatedNodes?.takeIf { it.isNotEmpty() }
 
 private val Accessibility.AXNode.computedName: String?
     get() = (name?.value as? JsonPrimitive)?.contentOrNull

@@ -28,7 +28,7 @@ import kotlin.test.Test
  * How real Chrome composes a secret control's value into an accessible name,
  * and what the capture makes of it when it resolves the name of an element
  * labelled with `aria-labelledby` (see `SnapshotDom.withoutSecrets`). Issues
- * #122 and #123.
+ * #120, #122 and #123.
  */
 class SecretNameTest {
 
@@ -139,6 +139,117 @@ class SecretNameTest {
 
         // then
         assert(dump.ariaLabel("b-pw-spaced") == "Code")
+    }
+
+    /**
+     * A short secret on the page — a chosen expiry month `1`, a CVC `123`, the
+     * numbers of a filled expiry date `2027-01-01` — is no reason to cut or
+     * withhold a name Blink spelled from its targets' own text. Issue #120.
+     */
+    @Test
+    fun `should keep a name spelled from its own text whatever short secrets the page holds`() = runTest {
+        val dump = runInBrowser { browser ->
+            // given
+            val tab = openPage(browser)
+
+            // when
+            PageSession(tab).dump()
+        }
+
+        // then
+        assert(dump.ariaLabel("b-step") == "Step 1 of 3")
+        assert(dump.ariaLabel("b-copy") == "\u00A9 2027 Acme")
+        assert(dump.ariaLabel("b-items") == "10 items")
+        // Blink skips the hidden icon text, which the name may leave out
+        assert(dump.ariaLabel("b-cart") == "1 item")
+        assert(dump.ariaLabel("b-step-cvc") == "Step 1 of 3")
+    }
+
+    /**
+     * The paths along which Blink brings a secret into a target's text — a
+     * field the target owns (`aria-owns`), one in its closed shadow tree, one
+     * in a `display:none` target, a secret select inside it — each make the
+     * target's text more than its own, so the secret is still taken out.
+     * Issues #101 and #120.
+     */
+    @Test
+    fun `should take a secret out of a target Blink filled from beyond its own text`() = runTest {
+        val dump = runInBrowser { browser ->
+            // given
+            val tab = openPage(browser)
+
+            // when
+            PageSession(tab).dump()
+        }
+
+        // then
+        assert(dump.ariaLabel("b-owner") == "Code")
+        assert(dump.ariaLabel("b-host") == "Shadow")
+        assert(dump.ariaLabel("b-hidden") == "Hidden")
+        assert(dump.ariaLabel("b-pick") == "Pick")
+    }
+
+    /**
+     * Text a target holds but Blink does not lend — hidden, `aria-hidden`,
+     * `inert`, `<script>`, `<style>`, `<noscript>`, `<template>`, an unselected
+     * option, unslotted light DOM, a duplicate of a hidden copy, the text of an
+     * element named from elsewhere (its own `aria-labelledby`) — can equal the secret
+     * Blink lent from a field, and must not make the target look as though it
+     * spelled the secret from its own text. Issue #120 (code review).
+     */
+    @Test
+    fun `should not mistake a hidden copy of a secret for the target's own text`() = runTest {
+        val dump = runInBrowser { browser ->
+            // given
+            val tab = openPage(browser)
+
+            // when
+            PageSession(tab).dump()
+        }
+
+        // then
+        val leaked = mapOf(
+            "b-m-hidden-copy" to "05",
+            "b-m-none-copy" to "917",
+            "b-m-script" to "638",
+            "b-m-option" to "5556",
+            "b-m-style" to "551177",
+            "b-m-digits" to "8",
+            "b-m-unslotted" to "773",
+            "b-m-order" to "229",
+            "b-m-twice" to "404",
+            "b-m-owner" to "612",
+            "b-m-none-target" to "09",
+            "b-m-noscript" to "371",
+            "b-m-masked" to "hunter",
+            "b-m-keypad" to "1357",
+            "b-m-listbox" to "08",
+            "b-m-inert" to "919",
+            "b-m-nested" to "920",
+            "b-m-nested-two" to "944",
+            "b-m-nested-deep" to "926",
+            "b-m-nested-select" to "07",
+        ).filter { (id, secret) -> dump.ariaLabel(id)?.contains(secret) == true }.keys
+        assert(leaked.isEmpty())
+    }
+
+    /**
+     * Inside an open modal dialog too, an `inert` copy of a secret is text
+     * Blink does not lend. Issue #120 (code review).
+     */
+    @Test
+    fun `should not mistake an inert copy of a secret in a modal dialog for the target's own text`() = runTest {
+        val dump = runInBrowser { browser ->
+            // given
+            val tab = browser.get(testPageUrl("secret-names-modal.html")).also { it.waitUntilLoaded() }
+
+            // when
+            PageSession(tab).dump()
+        }
+
+        // then
+        val label = dump.ariaLabel("b-m-modal")
+        assert(label == null || "943" !in label)
     }
 
     private suspend fun openPage(browser: Browser): Tab =
