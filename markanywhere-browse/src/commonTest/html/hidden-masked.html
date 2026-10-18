@@ -1,0 +1,45 @@
+<!--
+  ~ Copyright 2026 Kazimierz Pogoda / Xemantic
+  ~
+  ~ Licensed under the Apache License, Version 2.0 (the "License");
+  ~ you may not use this file except in compliance with the License.
+  ~ You may obtain a copy of the License at
+  ~
+  ~     https://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+  -->
+
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Hidden masked fields</title>
+    <style>
+        .pin { -webkit-text-security: disc; }
+        .step { display: none; }
+    </style>
+</head>
+<body>
+<span id="pin-label">PIN</span>
+<form>
+<input type="text" id="shown-pin" class="pin" value="1111">
+<div class="step">
+<input type="text" id="step-pin" class="pin" value="2222">
+<input type="text" id="step-name" value="Alice">
+<textarea id="step-note" class="pin">3333</textarea>
+</div>
+<div hidden style="-webkit-text-security: disc">
+<input type="text" id="inherited-pin" value="4444">
+</div>
+<input type="text" id="own-none" class="pin" style="display: none" value="5555">
+<details><summary>More</summary><input type="text" id="details-pin" class="pin" value="6666"></details>
+</form>
+<button id="b-step-pin" aria-labelledby="pin-label step-pin"></button>
+<iframe id="frame" srcdoc="<input type='text' id='frame-pin' style='display: none; -webkit-text-security: disc' value='8888'>"></iframe>
+</body>
+</html>
