@@ -19,7 +19,9 @@ package com.xemantic.markanywhere.render
 import com.xemantic.kotlin.test.assert
 import com.xemantic.kotlin.test.sameAs
 import com.xemantic.kotlin.test.sameAsMarkdown
+import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.flow.semanticEvents
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 
@@ -640,6 +642,204 @@ class MarkdownRenderingTest {
 
             </b>
         """.trimIndent()
+    }
+
+    @Test
+    fun `should put an inline tag wrapping text and a block alone on its line`() = runTest {
+        // given — a `<b>Lead:` line is not a CommonMark HTML block start, so on
+        // re-parse the `<b>` would close at the line end and leave `</b>` orphaned
+        val flow = semanticEvents {
+            "p" { tag("b") { +"Lead:"; "ul" { "li" { +"x" } } } }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            <b>
+
+            Lead:
+
+            - x
+
+            </b>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should separate an inline tag wrapping a block from the text before it`() = runTest {
+        // given
+        val flow = semanticEvents {
+            +"Intro "
+            tag("b") { "ul" { "li" { +"x" } } }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            Intro
+
+            <b>
+
+            - x
+
+            </b>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should separate the text after an inline tag wrapping a block`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "p" {
+                +"Intro "
+                tag("b") { +"Lead:"; "ul" { "li" { +"x" } } }
+                +" tail"
+            }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            Intro
+
+            <b>
+
+            Lead:
+
+            - x
+
+            </b>
+
+            tail
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should keep an inline tag without a block inline`() = runTest {
+        // given — the tag's content is held until its close, which must not
+        // change how an ordinary inline tag renders
+        val flow = semanticEvents {
+            "p" { +"a "; tag("u") { +"b "; tag("kbd") { +"c" } }; +" d" }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "a <u>b <kbd>c</kbd></u> d"
+    }
+
+    @Test
+    fun `should put nested inline tags wrapping a block each alone on its line`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "p" { tag("b") { +"a"; tag("i") { +"b"; "ul" { "li" { +"x" } } } } }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            <b>
+
+            a
+
+            <i>
+
+            b
+
+            - x
+
+            </i>
+            </b>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should keep the indentation inside a raw pre`() = runTest {
+        // given
+        val flow = semanticEvents {
+            tag("pre") { +"\n  indented\n    more\n" }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "<pre>\n  indented\n    more\n</pre>"
+    }
+
+    @Test
+    fun `should keep the indentation inside a raw textarea`() = runTest {
+        // given
+        val flow = semanticEvents {
+            tag("textarea") { +"def f():\n    return 1" }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "<textarea>\n\ndef f():\n    return 1\n\n</textarea>"
+    }
+
+    @Test
+    fun `should keep the indentation inside a raw code`() = runTest {
+        // given
+        val flow = semanticEvents {
+            "p" { tag("code") { +"a\n    b" } }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "<code>a\n    b</code>"
+    }
+
+    @Test
+    fun `should stream custom markup before its closer`() = runTest {
+        // given
+        var renderedBeforeCloser = ""
+        val rendered = StringBuilder()
+        val flow = flow {
+            emit(SemanticEvent.Mark("x:think", isTagged = true))
+            emit(SemanticEvent.Text("pondering"))
+            renderedBeforeCloser = rendered.toString()
+            emit(SemanticEvent.Unmark("x:think", isTagged = true))
+        }
+
+        // when
+        flow.asMarkdown().collect { rendered.append(it) }
+
+        // then
+        assert("pondering" in renderedBeforeCloser)
+    }
+
+    @Test
+    fun `should stream a raw div before its closer`() = runTest {
+        // given
+        var renderedBeforeCloser = ""
+        val rendered = StringBuilder()
+        val flow = flow {
+            emit(SemanticEvent.Mark("div", isTagged = true))
+            emit(SemanticEvent.Text("hello"))
+            renderedBeforeCloser = rendered.toString()
+            emit(SemanticEvent.Unmark("div", isTagged = true))
+        }
+
+        // when
+        flow.asMarkdown().collect { rendered.append(it) }
+
+        // then
+        assert("hello" in renderedBeforeCloser)
     }
 
     @Test

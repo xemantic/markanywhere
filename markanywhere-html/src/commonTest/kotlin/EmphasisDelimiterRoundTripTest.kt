@@ -18,12 +18,14 @@ package com.xemantic.markanywhere.html
 
 import com.xemantic.kotlin.test.assert
 import com.xemantic.kotlin.test.sameAs
+import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.dump.AccessibilityAnnotations
 import com.xemantic.markanywhere.flow.SemanticEventScope
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.parse.parse
 import com.xemantic.markanywhere.render.renderMarkdown
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import org.intellij.lang.annotations.Language
 import kotlin.test.Test
@@ -1101,6 +1103,87 @@ class EmphasisDelimiterRoundTripTest {
         val markdown = htmlToMarkdown { "b" { "p" { +"x "; "b" { +"y" } } } }
         // then
         assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip a b element wrapping text and a list`() = runTest {
+        // when
+        val markdown = htmlToMarkdown { "p" { "b" { +"Lead:"; "ul" { "li" { +"x" } } } } }
+        // then
+        assertMarkdownFixpoint(markdown)
+        assertNoLiteralTag(markdown)
+    }
+
+    @Test
+    fun `should round-trip a b element wrapping a list after text`() = runTest {
+        // when
+        val markdown = htmlToMarkdown { "div" { +"Intro "; "b" { "ul" { "li" { +"x" } } } } }
+        // then
+        assertMarkdownFixpoint(markdown)
+        assertNoLiteralTag(markdown)
+    }
+
+    @Test
+    fun `should round-trip a b element wrapping text and a list inside a sentence`() = runTest {
+        // when
+        val markdown = htmlToMarkdown {
+            "p" { +"Intro "; "b" { +"Lead:"; "ul" { "li" { +"x" } } }; +" tail" }
+        }
+        // then
+        assertMarkdownFixpoint(markdown)
+        assertNoLiteralTag(markdown)
+    }
+
+    @Test
+    fun `should round-trip nested emphasis elements wrapping a list`() = runTest {
+        // when
+        val markdown = htmlToMarkdown {
+            "p" { "b" { +"a"; "i" { +"b"; "ul" { "li" { +"x" } } } } }
+        }
+        // then
+        assertMarkdownFixpoint(markdown)
+        assertNoLiteralTag(markdown)
+    }
+
+    @Test
+    fun `DIVERGENCE - should not round-trip a b element wrapping a list in a list item`() = runTest {
+        // An HTML block inside a list item stays raw text across a blank line
+        // (the parser never sub-parses it, see HtmlBlockInListItemTest), so the
+        // nested list comes back as escaped text — stable from the second render.
+        // when
+        val markdown = htmlToMarkdown {
+            "ul" { "li" { "b" { +"Lead:"; "ul" { "li" { +"x" } } } } }
+        }
+        val reparsed = flowOf(markdown).parse().renderMarkdown()
+        // then
+        markdown sameAs "\n- <b>\n\n  Lead:\n\n  - x\n\n  </b>"
+        reparsed sameAs "- <b>\n  Lead:\n  \\- x\n  </b>"
+        flowOf(reparsed).parse().renderMarkdown() sameAs reparsed
+    }
+
+    @Test
+    fun `DIVERGENCE - should not round-trip a b element wrapping a list in a blockquote`() = runTest {
+        // HTML block detection is suppressed inside a blockquote, so the `<b>`
+        // line re-parses as an empty inline tag and `</b>` as text.
+        // when
+        val markdown = htmlToMarkdown {
+            "blockquote" { "p" { "b" { +"Lead:"; "ul" { "li" { +"x" } } } } }
+        }
+        val reparsed = flowOf(markdown).parse().renderMarkdown()
+        // then
+        markdown sameAs ">\n> <b>\n>\n> Lead:\n>\n> - x\n>\n> </b>"
+        reparsed sameAs "> <b></b>\n>\n> Lead:\n>\n> - x\n>\n> </b>"
+        flowOf(reparsed).parse().renderMarkdown() sameAs reparsed
+    }
+
+    // The raw tag must re-parse as a balanced mark/unmark pair, never as a `<b>`
+    // closed at its line end followed by an orphan `</b>` text.
+    private suspend fun assertNoLiteralTag(markdown: String) {
+        // when
+        val texts = flowOf(markdown).parse().toList()
+            .filterIsInstance<SemanticEvent.Text>().joinToString("") { it.text }
+        // then
+        assert("</b>" !in texts)
     }
 
     @Test

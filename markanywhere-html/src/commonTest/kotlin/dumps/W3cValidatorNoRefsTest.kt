@@ -70,9 +70,9 @@ class W3cValidatorNoRefsTest {
             
             Show <label for="showsource"><input id="showsource" type="checkbox" name="showsource" value="yes">
             source</label><label for="showoutline"><input id="showoutline" type="checkbox" name="showoutline" value="yes">
-             outline</label><label for="showimagereport"><input id="showimagereport" type="checkbox" name="showimagereport" value="yes">
-             image report</label><label for="level"><input id="level" type="checkbox" name="level" value="warning">
-             errors & warnings only</label><input id="show_options" type="button" value="Options…">
+            outline</label><label for="showimagereport"><input id="showimagereport" type="checkbox" name="showimagereport" value="yes">
+            image report</label><label for="level"><input id="level" type="checkbox" name="level" value="warning">
+            errors & warnings only</label><input id="show_options" type="button" value="Options…">
             
             <label id="inputlabel">Check by
             
