@@ -16,9 +16,13 @@
 
 package com.xemantic.markanywhere.html
 
+import com.xemantic.kotlin.test.assert
+import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.dump.AccessibilityAnnotations
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.test.sameAs
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 
@@ -261,6 +265,31 @@ class HtmlWhitespaceNormalizationTest {
             }
             +"Hello"
         }
+    }
+
+    @Test
+    fun `should drop whitespace before an unmatched frontmatter close like before a matched one`() = runTest {
+        // given — a truncated stream whose `frontmatter` open was cut off: the
+        // close has no open-tag verdict to read back, so it falls back to the
+        // element's name, which must still classify the synthetic block as a
+        // block, as its open would
+        val input = flowOf(
+            SemanticEvent.Text("Shop "),
+            SemanticEvent.Unmark("frontmatter"),
+            SemanticEvent.Text("Hello"),
+        )
+
+        // when
+        val output = input.dropHtmlStructuralWhitespace().toList()
+
+        // then — no stray space lands between the front matter and the body
+        assert(
+            output == listOf(
+                SemanticEvent.Text("Shop"),
+                SemanticEvent.Unmark("frontmatter"),
+                SemanticEvent.Text("Hello"),
+            )
+        )
     }
 
     @Test

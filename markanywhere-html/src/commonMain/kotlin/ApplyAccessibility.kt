@@ -298,7 +298,8 @@ private fun Flow<SemanticEvent>.resolveVisibility(): Flow<SemanticEvent> = flow 
  * content not ending in whitespace can, the edge of a line cannot. A [silent]
  * event — content the rule set drops, laying out no box — changes nothing.
  * [opening] is the mark an unmark closes, when known (an unmark carries no
- * display of its own); otherwise its tag's UA default decides.
+ * display of its own); otherwise its name decides, as for a mark with no
+ * display ([isInlineLevel]).
  */
 private fun Boolean.after(
     event: SemanticEvent,
@@ -310,7 +311,7 @@ private fun Boolean.after(
     // label) lays out in a box of its own, starting at its edge
     is Mark -> if (event.name in SPACE_TAKING_ELEMENTS || event.isLineEdge()) false else this
     is Unmark -> when {
-        opening?.isLineEdge() ?: (event.name == "br" || !isInlineByUaDefault(event.name)) -> false
+        opening?.isLineEdge() ?: (event.name == "br" || !isInlineLevel(event.name)) -> false
         // and the closed box is inline content of the flow around it
         event.name in SPACE_TAKING_ELEMENTS -> true
         else -> this
