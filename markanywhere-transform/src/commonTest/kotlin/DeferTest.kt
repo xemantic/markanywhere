@@ -379,16 +379,14 @@ class DeferTest {
 
         // when - a defer block runs at the unmark on a sink scope, where the
         //   subtree has already streamed: a nested defer has nothing left to
-        //   wait for and runs in place, while children() and afterClose()
-        //   stay no-ops as in an afterClose block
+        //   wait for and runs in place, and children() is a no-op
         val transformed = events.transform {
             match("section") {
                 "section" {
                     children()
                     defer {
                         "outer" {
-                            children()                // no-op
-                            afterClose { "never" {} } // no-op
+                            children() // no-op
                             defer { "inner" {} }
                             "after" {}
                         }
@@ -407,6 +405,92 @@ class DeferTest {
                     "after" {}
                 }
             }
+        }
+    }
+
+    @Test
+    fun `should honour an afterClose registered inside a defer block`() = runTest {
+        // given
+        val events = semanticEvents {
+            "section" { +"body" }
+        }
+
+        // when - the defer block runs before the frame's afterClose hooks,
+        //   so an afterClose registered there still has a hook to join
+        val transformed = events.transform {
+            match("section") {
+                afterClose { "first" {} }
+                "section" {
+                    children()
+                    defer {
+                        afterClose { "second" {} }
+                        "lazy" {}
+                    }
+                }
+            }
+            matchText { +it }
+        }
+
+        // then - it runs after the matched close, after the hooks already
+        //   registered
+        transformed sameAs semanticEvents {
+            "section" {
+                +"body"
+                "lazy" {}
+            }
+            "first" {}
+            "second" {}
+        }
+    }
+
+    @Test
+    fun `should run a deferred op appended while the queue drains`() = runTest {
+        // given
+        val events = semanticEvents {
+            "x" { +"t" }
+        }
+
+        // when - a defer block reaches back to the matcher scope and defers
+        //   again while the frame's queue is draining
+        val transformed = events.transform {
+            match("x") {
+                val outer = this
+                "x" {
+                    children()
+                    defer { outer.defer { "late" {} } }
+                }
+            }
+            matchText { +it }
+        }
+
+        // then - the late op joins the end of the queue, after </x>
+        transformed sameAs semanticEvents {
+            "x" { +"t" }
+            "late" {}
+        }
+    }
+
+    @Test
+    fun `should run an afterClose hook appended while the hooks drain`() = runTest {
+        // given
+        val events = semanticEvents {
+            "x" { +"t" }
+        }
+
+        // when - an afterClose hook registers another one on the matcher scope
+        val transformed = events.transform {
+            match("x") {
+                val outer = this
+                "x" { children() }
+                afterClose { outer.afterClose { "late" {} } }
+            }
+            matchText { +it }
+        }
+
+        // then
+        transformed sameAs semanticEvents {
+            "x" { +"t" }
+            "late" {}
         }
     }
 

@@ -107,12 +107,16 @@ public interface MatcherScope {
      * already closed when the block runs, so it joins the deferred queue
      * at its earliest position, as a [defer] before [children] does.
      *
-     * The block keeps the [tagged] / [untagged] default in force at the
-     * call site and runs on a sink scope, like an [afterClose] block:
-     * [children] and [afterClose] are no-ops inside it, and a nested
+     * Unlike an [afterClose] block, which always starts untagged, the
+     * block keeps the [tagged] / [untagged] default in force at the call
+     * site. It runs on a sink scope: [children] is a no-op inside it,
+     * [afterClose] registers a hook that runs after the matched close
+     * (after the hooks already registered), and a nested
      * [defer] — like a [defer] in a [TransformerBuilder.matchText] or
      * [afterClose] block, where there is no subtree left to wait for —
-     * runs [block] in place.
+     * runs [block] in place. A [defer] or deferred emission reaching back
+     * to the matcher scope from inside the block joins the end of the
+     * frame's queue, after the matched close.
      *
      * An exception thrown by [block] propagates to the collector at the
      * unmark. If collection stops before the unmark (cancellation, or a
@@ -223,16 +227,24 @@ internal class TransformerImpl(
 
         val outputScope = this
 
-        // Scope used for text/afterClose/defer contexts where there is no
-        // owning match frame whose lifecycle applies. children()/afterClose
-        // are no-ops, defer runs in place (nothing left to wait for); emits
-        // go straight to the output flow.
-        fun sinkScope(initiallyTagged: Boolean = false): MatcherScope = object : MatcherScope {
+        // The frame whose defer op is running on the sink scope, or null in
+        // text/afterClose contexts — the only place where afterClose still
+        // has a pending hook list to join.
+        var deferringFrame: MatchState? = null
 
-            var defaultTagged = initiallyTagged
+        // Scope used for text/afterClose/defer contexts where there is no
+        // owning match frame whose lifecycle applies. children() is a no-op,
+        // afterClose joins the deferring frame's hooks (a no-op elsewhere),
+        // defer runs in place (nothing left to wait for); emits go straight
+        // to the output flow.
+        val sinkScope: MatcherScope = object : MatcherScope {
+
+            var defaultTagged = false
 
             override fun children(mode: String?) { /* no children */ }
-            override fun afterClose(block: suspend MatcherScope.() -> Unit) { /* no-op */ }
+            override fun afterClose(block: suspend MatcherScope.() -> Unit) {
+                deferringFrame?.afterCloseOps?.add(block)
+            }
             override suspend fun defer(block: suspend MatcherScope.() -> Unit) {
                 block()
             }
@@ -291,8 +303,6 @@ internal class TransformerImpl(
             }
         }
 
-        val defaultSinkScope = sinkScope()
-
         fun matcherScope(state: MatchState): MatcherScope = object : MatcherScope {
 
             var afterChildren = false
@@ -311,7 +321,13 @@ internal class TransformerImpl(
             override suspend fun defer(block: suspend MatcherScope.() -> Unit) {
                 val tagged = defaultTagged
                 state.pendingOps += {
-                    sinkScope(initiallyTagged = tagged).block()
+                    val previous = deferringFrame
+                    deferringFrame = state
+                    try {
+                        if (tagged) sinkScope.tagged(block) else sinkScope.untagged(block)
+                    } finally {
+                        deferringFrame = previous
+                    }
                 }
             }
 
@@ -442,15 +458,20 @@ internal class TransformerImpl(
                         ?: textMatchers.firstOrNull { it.mode == null }
                     // Text survives only via an explicit matchText rule; with
                     // no matching rule it is dropped (no implicit passthrough).
-                    matcher?.block(defaultSinkScope, event.text)
+                    matcher?.block(sinkScope, event.text)
                 }
 
                 is Unmark -> {
                     if (matchStack.isEmpty()) return@collect
                     val state = matchStack.removeLast()
                     if (state.incrementedSkip) skipDepth--
-                    for (op in state.pendingOps) op()
-                    for (op in state.afterCloseOps) op(defaultSinkScope)
+                    // by index: an op may append to either list while it
+                    // drains (a defer block calling afterClose, or reaching
+                    // back to the matcher scope), and late ops run too
+                    var i = 0
+                    while (i < state.pendingOps.size) state.pendingOps[i++]()
+                    i = 0
+                    while (i < state.afterCloseOps.size) state.afterCloseOps[i++](sinkScope)
                 }
 
             }
