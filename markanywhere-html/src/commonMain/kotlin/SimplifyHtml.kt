@@ -762,7 +762,7 @@ internal val CAPTURE_ANNOTATIONS = AccessibilityAnnotations.ALL +
 
 // The annotations only the CDP capture writes. [AccessibilityAnnotations.REDACTED]
 // is not one of them: the in-page JS walker writes it too (the two producers
-// share `formControlAttributes`), while recording no display at all — taking
+// share `captureFormControl`), while recording no display at all — taking
 // it for a capture switched a JS dump's display fallback halfway down the page.
 private val CDP_CAPTURE_ANNOTATIONS = AccessibilityAnnotations.ALL + AccessibilityAnnotations.REF
 

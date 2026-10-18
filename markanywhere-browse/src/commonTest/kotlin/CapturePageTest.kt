@@ -608,6 +608,131 @@ class CapturePageTest {
     }
 
     /**
+     * A secret select left on its placeholder option (`value=""`) holds no
+     * secret — the capture marks it `empty` — so the placeholder's text is not
+     * taken out of a name. Issue #121.
+     */
+    @Test
+    fun `should keep the placeholder option of a secret select in a name`() = runTest {
+        // given
+        val page = NamedNodes(
+            Node("SELECT", parent = 1, attributes = mapOf("autocomplete" to "cc-exp-month")),
+            Node("OPTION", parent = 2, selected = true, laidOut = false, attributes = mapOf("value" to "")),
+            Node("#text", parent = 3, text = "Month"),
+            Node("OPTION", parent = 2, laidOut = false, attributes = mapOf("value" to "01")),
+            Node("#text", parent = 5, text = "01"),
+            Node("BUTTON", parent = 1, attributes = mapOf("aria-labelledby" to "x")),
+        )
+        val axNames = mapOf(7 to "Expiry Month")
+
+        // when
+        val events = page.capture(axNames)
+
+        // then
+        events sameAs page.expected {
+            "select"("autocomplete" to "cc-exp-month", REDACTED to "empty", DISPLAY to "block") {
+                "option"("value" to "", DISPLAY to "none") { +"Month" }
+                "option"("value" to "01", DISPLAY to "none") { +"01" }
+            }
+            "button"("aria-labelledby" to "x", DISPLAY to "block", "aria-label" to "Expiry Month") { }
+        }
+    }
+
+    /**
+     * An option without a `value` submits its text with only HTML (ASCII)
+     * whitespace stripped, so an NBSP option makes the select `filled`, as in
+     * the in-page walker — but an NBSP is no secret to take out of a name,
+     * which would otherwise blank every name holding one.
+     */
+    @Test
+    fun `should judge an NBSP option filled without lending it to a name`() = runTest {
+        // given
+        val page = NamedNodes(
+            Node("SELECT", parent = 1, attributes = mapOf("autocomplete" to "cc-exp-month")),
+            Node("OPTION", parent = 2, selected = true, laidOut = false),
+            Node("#text", parent = 3, text = " "),
+            Node("BUTTON", parent = 1, attributes = mapOf("aria-labelledby" to "x")),
+        )
+        val axNames = mapOf(5 to "Expiry Month")
+
+        // when
+        val events = page.capture(axNames)
+
+        // then
+        events sameAs page.expected {
+            "select"("autocomplete" to "cc-exp-month", REDACTED to "filled", DISPLAY to "block") {
+                "option"(DISPLAY to "none") { +" " }
+            }
+            "button"("aria-labelledby" to "x", DISPLAY to "block", "aria-label" to "Expiry Month") { }
+        }
+    }
+
+    /**
+     * A snapshot without the `inputChecked` / `optionSelected` rare data has
+     * not said which boxes are ticked or options chosen, so the markup's
+     * `checked` / `selected` is kept rather than cleared. Issue #103.
+     */
+    @Test
+    fun `should keep the markup checked and selected when the snapshot omits them`() = runTest {
+        // given
+        val strings = mutableListOf<String>()
+        fun string(value: String): Int =
+            strings.indexOf(value).takeIf { it >= 0 } ?: strings.size.also { strings += value }
+        fun attributes(vararg pairs: Pair<String, String>): List<Int> =
+            pairs.flatMap { (name, value) -> listOf(string(name), string(value)) }
+
+        val names = listOf("HTML", "BODY", "INPUT", "INPUT", "SELECT", "OPTION", "OPTION")
+        val snapshot = DOMSnapshot.CaptureSnapshotReturn(
+            documents = listOf(
+                document(
+                    nodeType = names.map { 1 },
+                    nodeName = names.map(::string),
+                    parentIndex = listOf(-1, 0, 1, 1, 1, 4, 4),
+                    backendNodeId = names.indices.map { it + 1 },
+                    attributes = listOf(
+                        emptyList(),
+                        emptyList(),
+                        attributes("type" to "checkbox", "checked" to ""),
+                        attributes("type" to "radio"),
+                        emptyList(),
+                        attributes("value" to "r"),
+                        attributes("value" to "g", "selected" to ""),
+                    ),
+                    inputChecked = null,
+                    optionSelected = null,
+                    layoutNodeIndex = names.indices.toList(),
+                    layoutStyles = names.map {
+                        listOf("block", "visible", "none").map(::string)
+                    },
+                ),
+            ),
+            strings = strings,
+        )
+
+        // when
+        val events = captureEvents(
+            snapshot = snapshot,
+            axNodes = emptyList(),
+            refAttribute = null,
+            isActionable = { false },
+        ).events
+
+        // then
+        events.asFlow() sameAs semanticEvents(tagged = true) {
+            "html"(DISPLAY to "block") {
+                "body"(DISPLAY to "block") {
+                    "input"("type" to "checkbox", "checked" to "", DISPLAY to "block") { }
+                    "input"("type" to "radio", DISPLAY to "block") { }
+                    "select"(DISPLAY to "block") {
+                        "option"("value" to "r", DISPLAY to "block") { }
+                        "option"("value" to "g", "selected" to "", DISPLAY to "block") { }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
      * Blink names a date, time or number control from the value it displays,
      * formatted in the browser's locale — `May 2027` for `2027-05`, `987,50`
      * for `987.50`, in whatever digits the locale writes — so the value string

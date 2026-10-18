@@ -18,12 +18,17 @@ package com.xemantic.markanywhere.browse
 
 import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.dump.AccessibilityAnnotations
+import com.xemantic.markanywhere.dump.CapturedFormControl
 import com.xemantic.markanywhere.dump.FormControlState
 import com.xemantic.markanywhere.dump.SemanticEventDump
-import com.xemantic.markanywhere.dump.formControlAttributes
-import com.xemantic.markanywhere.dump.formControlText
+import com.xemantic.markanywhere.dump.captureFormControl
 import com.xemantic.markanywhere.dump.hasLiveFormState
+import com.xemantic.markanywhere.dump.inputType
+import com.xemantic.markanywhere.dump.isMaskingTextSecurity
+import com.xemantic.markanywhere.dump.isRedactableElement
 import com.xemantic.markanywhere.dump.isRedactedControl
+import com.xemantic.markanywhere.dump.readsMaskedState
+import com.xemantic.markanywhere.dump.secretValueTexts
 import com.xemantic.markanywhere.html.spec.stripAndCollapseHtmlWhitespace
 import dev.kdriver.cdp.domain.Accessibility
 import dev.kdriver.cdp.domain.DOMSnapshot
@@ -43,9 +48,6 @@ private val COMPUTED_STYLES = listOf("display", "visibility", "-webkit-text-secu
 private const val DISPLAY_STYLE = 0
 private const val VISIBILITY_STYLE = 1
 private const val TEXT_SECURITY_STYLE = 2
-
-// the only elements whose value the capture can redact (see isRedactedControl)
-private val REDACTABLE_ELEMENTS = setOf("input", "textarea", "select")
 
 // the input types Blink names by their displayed value, formatted in the
 // browser's locale, rather than by the value string (verified live)
@@ -84,7 +86,7 @@ internal class PageCapture(
  * Form controls are the one place the walk departs from the markup: a control
  * is captured as it is *now* — the value typed into it, the box ticked, the
  * option chosen — and a control the page marks as secret has its value left
- * out (see [formControlAttributes], shared with the in-page walker of
+ * out (see [captureFormControl], shared with the in-page walker of
  * `markanywhere-js`, so both captures redact alike).
  *
  * @param refAttribute when non-null, a dense document-order ref is stamped on
@@ -402,8 +404,9 @@ internal class SnapshotDom(
     private val textValues: Map<Int, String> = nodes.textValue.let {
         rareMap(it?.index, it?.value) { value -> string(value).orEmpty() }
     }
-    private val checkedInputs: Set<Int> = nodes.inputChecked?.index.toIndexSet()
-    private val selectedOptions: Set<Int> = nodes.optionSelected?.index.toIndexSet()
+    // `null` when the snapshot did not report them: unread, not "none at all"
+    private val checkedInputs: Set<Int>? = nodes.inputChecked?.index?.toSet()
+    private val selectedOptions: Set<Int>? = nodes.optionSelected?.index?.toSet()
 
     /**
      * The live state of a form control (see [FormControlState]), or `null` for
@@ -411,26 +414,58 @@ internal class SnapshotDom(
      */
     fun formState(index: Int): FormControlState? = when (val name = name(index)) {
         "select" -> FormControlState(value = selectedValue(index))
-        "option" -> FormControlState(
-            selected = index in selectedOptions,
-            select = enclosingSelect(index)?.let { attributeMap(it) },
-        )
+        "option" -> optionState(index, select = enclosingSelect(index)?.let { attributeMap(it) })
+        "textarea" -> {
+            val value = inputValues[index] ?: textValues[index]
+            FormControlState(
+                value = value,
+                masked = isMasked(index, attributeMap(index)),
+                // the default text stands in only for a value the snapshot did not report
+                text = if (value == null) textContent(index) else null,
+            )
+        }
 
         else -> if (hasLiveFormState(name)) FormControlState(
             value = inputValues[index] ?: textValues[index],
-            checked = index in checkedInputs,
-            masked = textSecurity[index].let { it != null && it != "none" },
+            checked = checkedInputs?.let { index in it },
+            masked = isMasked(index, attributeMap(index)),
         ) else null
     }
 
     /**
+     * The state of an `<option>` belonging to a select with the attributes
+     * [select], if any — with its [text][FormControlState.text] only when
+     * [withText], since only its [secretValueTexts] read that.
+     */
+    private fun optionState(option: Int, select: Map<String, String>?, withText: Boolean = false) = FormControlState(
+        selected = selectedOptions?.let { option in it },
+        select = select,
+        text = if (withText) textContent(option) else null,
+    )
+
+    /**
+     * Whether the control renders its text masked (see [isMaskingTextSecurity]),
+     * judged only for a control whose capture reads it ([readsMaskedState]).
+     */
+    private fun isMasked(index: Int, attributes: Map<String, String>): Boolean =
+        readsMaskedState(name(index), attributes) && isMaskingTextSecurity(textSecurity[index])
+
+    /**
+     * Whether the `<option>` is selected: as the snapshot reports it, else as
+     * the markup declares it when the snapshot did not report selection.
+     */
+    private fun isSelected(option: Int): Boolean =
+        selectedOptions?.let { option in it } ?: ("selected" in attributeMap(option))
+
+    /**
      * The value of the option a `<select>` has selected — its `value`
-     * attribute, else its text, as the form would submit it — or `null` when
-     * none is.
+     * attribute, else its text with HTML (ASCII) whitespace stripped and
+     * collapsed, as the form would submit it — or `null` when none is. Not
+     * `trim()`: that strips an NBSP too, which the browser submits.
      */
     private fun selectedValue(select: Int): String? =
-        descendants(select).firstOrNull { it in selectedOptions && name(it) == "option" }
-            ?.let { option -> attributeMap(option)["value"] ?: textContent(option).trim() }
+        descendants(select).firstOrNull { name(it) == "option" && isSelected(it) }
+            ?.let { option -> attributeMap(option)["value"] ?: textContent(option).stripAndCollapseHtmlWhitespace() }
 
     /**
      * The text of the node's descendant text nodes whatever their display — an
@@ -456,14 +491,12 @@ internal class SnapshotDom(
     }
 
     /**
-     * The element's attributes as captured: the markup's, with a form
-     * control's live state written over them (see [formControlAttributes]).
+     * The form control as captured (see [captureFormControl]): its attributes
+     * with the live state written over the markup's and the text standing in
+     * for its children — or `null` for an element that is no form control.
      */
-    fun capturedAttributeMap(index: Int): Map<String, String> {
-        val attributes = attributeMap(index)
-        val state = formState(index) ?: return attributes
-        return formControlAttributes(name(index), attributes, state)
-    }
+    fun capturedFormControl(index: Int): CapturedFormControl? =
+        formState(index)?.let { captureFormControl(name(index), attributeMap(index), it) }
 
     /**
      * [name], a name the browser computed for an element, with the value of
@@ -505,14 +538,39 @@ internal class SnapshotDom(
     private fun String.holdsSecretNumber(): Boolean =
         secretNumbers.isNotEmpty() && decimalNumbers().any { it in secretNumbers }
 
-    /** Every [redacted][isRedactedControl] control in the document, with its state. */
-    private val redactedControls: List<Pair<Int, FormControlState>> by lazy {
+    /**
+     * Every [redacted][isRedactedControl] control in the document, with the
+     * texts its value lends (see [secretValueTexts]). A control is judged by
+     * its markup and masking alone before its state is read, so a control that
+     * holds no secret costs no state — a long `<select>` above all, whose
+     * options are walked only when it is secret, and then once.
+     */
+    private val secretValues: List<Pair<Int, List<String>>> by lazy {
         nodeType.indices.asSequence()
-            // checked first: formState is costly for an <option>, and only these can be redacted
-            .filter { isElement(it) && name(it) in REDACTABLE_ELEMENTS }
-            .mapNotNull { index -> formState(index)?.let { index to it } }
-            .filter { (index, state) -> isRedactedControl(name(index), attributeMap(index), state) }
+            // by name first: an <option>, say, costs nothing before it is skipped
+            .filter { isElement(it) && isRedactableElement(name(it)) }
+            .filter {
+                val attributes = attributeMap(it)
+                isRedactedControl(name(it), attributes, FormControlState(masked = isMasked(it, attributes)))
+            }
+            .map { index -> index to secretTextsOf(index) }
             .toList()
+    }
+
+    /**
+     * The [secretValueTexts] of a redacted control — of a `<select>`, those of
+     * its options, which hold its secret: which one is chosen.
+     */
+    private fun secretTextsOf(index: Int): List<String> = when (val name = name(index)) {
+        "select" -> {
+            val select = attributeMap(index)
+            descendants(index)
+                .filter { name(it) == "option" }
+                .flatMap { option -> secretValueTexts("option", attributeMap(option), optionState(option, select, withText = true)) }
+                .toList()
+        }
+
+        else -> secretValueTexts(name, attributeMap(index), formState(index) ?: FormControlState())
     }
 
     /**
@@ -527,19 +585,9 @@ internal class SnapshotDom(
      * withhold unrelated names holding the same text.
      */
     private val secretTexts: List<String> by lazy {
-        redactedControls.asSequence()
+        secretValues.asSequence()
             .filterNot { (index, _) -> isPasswordField(index) }
-            .flatMap { (index, state) ->
-                when (name(index)) {
-                    "select" -> descendants(index)
-                        .filter { it in selectedOptions && name(it) == "option" }
-                        .flatMap { option -> listOfNotNull(textContent(option), attributeMap(option)["label"]) }
-
-                    // the markup's value when the live one could not be read
-                    "textarea" -> sequenceOf(state.value ?: textContent(index))
-                    else -> sequenceOf(state.value ?: attributeMap(index)["value"].orEmpty())
-                }
-            }
+            .flatMap { (_, texts) -> texts }
             .map { it.stripAndCollapseHtmlWhitespace() }
             .filter { it.isNotEmpty() }
             .distinct()
@@ -554,12 +602,11 @@ internal class SnapshotDom(
      * may write `5` for `05` (see [decimalNumbers]).
      */
     private val secretNumbers: Set<String> by lazy {
-        redactedControls.asSequence()
+        secretValues.asSequence()
             .filter { (index, _) ->
-                name(index) == "input" &&
-                    attributeMap(index)["type"]?.trim()?.lowercase() in LOCALE_FORMATTED_INPUT_TYPES
+                name(index) == "input" && inputType(attributeMap(index)) in LOCALE_FORMATTED_INPUT_TYPES
             }
-            .flatMap { (index, state) -> (state.value ?: attributeMap(index)["value"].orEmpty()).decimalNumbers() }
+            .flatMap { (_, texts) -> texts.asSequence().flatMap { it.decimalNumbers() } }
             .toSet()
     }
 
@@ -570,15 +617,6 @@ internal class SnapshotDom(
      */
     private fun isPasswordField(index: Int): Boolean =
         name(index) == "input" && attributeMap(index)["type"]?.equalsAsciiIgnoreCase("password") == true
-
-    /**
-     * The text captured in place of the element's children — a `<textarea>`'s
-     * current value (see [formControlText]) — or `null` to walk the children.
-     */
-    fun replacementText(index: Int): String? {
-        val state = formState(index) ?: return null
-        return formControlText(name(index), attributeMap(index), state)
-    }
 
 }
 
@@ -664,8 +702,10 @@ internal class DomEventBuilder(
      */
     fun walkElement(dom: SnapshotDom, element: Int, annotate: Boolean) {
         val annotated = annotate && dom.name(element) != "head"
-        mark(dom, element, annotated)
-        val replacementText = dom.replacementText(element)
+        // computed once: it gives both the mark's attributes and the content
+        val control = dom.capturedFormControl(element)
+        mark(dom, element, control?.attributes ?: dom.attributeMap(element), annotated)
+        val replacementText = control?.text
         if (replacementText != null) {
             // what the field holds now, not the default text of its markup
             if (replacementText.isNotEmpty()) events += SemanticEvent.Text(replacementText)
@@ -689,7 +729,7 @@ internal class DomEventBuilder(
         unmark(dom, element)
     }
 
-    private fun mark(dom: SnapshotDom, element: Int, annotate: Boolean) {
+    private fun mark(dom: SnapshotDom, element: Int, capturedAttributes: Map<String, String>, annotate: Boolean) {
         val backendNodeId = dom.backendNodeId(element)
         // a dense, document-order ref on every actionable element, recorded so
         // PageSession can resolve it back to a live node for click / type
@@ -697,7 +737,7 @@ internal class DomEventBuilder(
             (++refCounter).toString().also { refs[it] = backendNodeId }
         } else null
         val attributes = buildMap {
-            putAll(dom.capturedAttributeMap(element))
+            putAll(capturedAttributes)
             if (ref != null) put(refAttribute!!, ref)
         }.let { if (annotate) it.withAccessibilityAnnotations(dom, element) else it }
         events += SemanticEvent.Mark(
