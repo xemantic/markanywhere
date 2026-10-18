@@ -956,6 +956,50 @@ class EmphasisDelimiterRoundTripTest {
     }
 
     @Test
+    fun `should round-trip a b element followed by a link whose label is a b element`() = runTest {
+        // when
+        val markdown = htmlToMarkdown {
+            "p" { "b" { +"Price:" }; "a"("href" to "u") { "b" { +"5" } } }
+        }
+        // then
+        markdown sameAs "**Price:**[**5**](u)"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip a b element followed by a b element holding a nested b element`() = runTest {
+        // when
+        val markdown = htmlToMarkdown {
+            "p" { "b" { +"x" }; "b" { +"y"; "b" { +"z" } } }
+        }
+        // then
+        markdown sameAs "**xyz**"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip a b element holding a nested b element followed by a b element`() = runTest {
+        // when
+        val markdown = htmlToMarkdown {
+            "p" { "b" { +"x"; "b" { +"y" } }; "b" { +"z" } }
+        }
+        // then
+        markdown sameAs "**xyz**"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip adjacent b elements nested in a b element inside a link label`() = runTest {
+        // when
+        val markdown = htmlToMarkdown {
+            "p" { "a"("href" to "u") { "b" { +"a"; "b" { +"b" }; "b" { +"c*d" } } } }
+        }
+        // then
+        markdown sameAs "[**abc\\*d**](u)"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
     fun `should round-trip strong spans abutting em spans`() = runTest {
         // when
         val markdown = htmlToMarkdown {

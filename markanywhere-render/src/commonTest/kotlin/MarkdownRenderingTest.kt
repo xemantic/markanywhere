@@ -408,6 +408,81 @@ class MarkdownRenderingTest {
     }
 
     @Test
+    fun `should open a span at the start of a link label after a closer as Markdown`() = runTest {
+        // given — the `[` is written between the closer and the opener, so the
+        // two never form one run
+        val flow = semanticEvents {
+            "p" { "strong" { +"Price:" }; "a"("href" to "u") { "strong" { +"5" } } }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "**Price:**[**5**](u)"
+    }
+
+    @Test
+    fun `should open a span at the start of inline code after a closer as Markdown`() = runTest {
+        // given — the opening backtick is written between the closer and the opener;
+        // emphasis inside a code span is lossy (it re-parses as literal text), so this
+        // pins only that the label opener no longer forces a raw tag, as without a closer
+        val flow = semanticEvents {
+            "p" { "em" { +"a" }; "code" { "em" { +"b" } } }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "*a*`*b*`"
+    }
+
+    @Test
+    fun `should merge a span reopened right after it closed into a nested span of the same kind`() = runTest {
+        // given — the merge restores the outer frame, so the inner span is nested
+        // in it and writes no delimiters of its own
+        val flow = semanticEvents {
+            "p" { "strong" { +"x" }; "strong" { +"y"; "strong" { +"z" } } }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "**xyz**"
+    }
+
+    @Test
+    fun `should merge a span holding a nested span of the same kind into the span reopened after it`() = runTest {
+        // given — the inner span closes without a delimiter, the outer one is
+        // held and merges with the next
+        val flow = semanticEvents {
+            "p" { "strong" { +"x"; "strong" { +"y" } }; "strong" { +"z" } }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "**xyz**"
+    }
+
+    @Test
+    fun `should merge spans reopened inside a span of the same kind`() = runTest {
+        // given — two adjacent nested spans are both transparent
+        val flow = semanticEvents {
+            "p" { "strong" { +"a"; "strong" { +"b" }; "strong" { +"c" }; +"d" } }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "**abcd**"
+    }
+
+    @Test
     fun `should open a span after a closer and a space as Markdown`() = runTest {
         // given — the space keeps the closer and the opener in separate runs
         val flow = semanticEvents {

@@ -226,6 +226,14 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         return block && !(name in HEADING_INLINE_TAGS && onHeadingLine())
     }
 
+    // Starts capturing a label. The capture is written after something that
+    // separates it from the last closer (`[`, a backtick, a table cell's
+    // leading space, or a spilled link's raw `<a …>` tag).
+    fun openLabelBuffer() {
+        labelBuffers.addLast(StringBuilder())
+        closerChar = null
+    }
+
     // Serialize one event of a nested table as raw HTML into the enclosing
     // cell buffer — no newlines (the outer row is a single line), text nodes
     // HTML-escaped, void elements emitted as a bare open tag. The `<table>`
@@ -1059,7 +1067,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                         // Inline code content is captured so the backtick fence
                         // length (and any space padding) can be chosen once the
                         // full content is known — see renderInlineCode.
-                        labelBuffers.addLast(StringBuilder())
+                        openLabelBuffer()
                     }
                     blockStack.addLast(BlockFrame.Code)
                 }
@@ -1073,7 +1081,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                     openInline(event.name, emphasisDelimiter(event.name)!!)
 
                 "a" -> {
-                    labelBuffers.addLast(StringBuilder())
+                    openLabelBuffer()
                     blockStack.addLast(
                         BlockFrame.Link(
                             href = event.attributes["href"] ?: "",
@@ -1142,7 +1150,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                         if (event.name == "th") row.hadHeaderCell = true
                     }
                     out(" ")
-                    labelBuffers.addLast(StringBuilder())
+                    openLabelBuffer()
                     blockStack.addLast(
                         BlockFrame.TableCell(isHeader = event.name == "th", colspan = colspan)
                     )
