@@ -231,7 +231,7 @@ private fun SemanticEvent.Mark.blockBoundary(
         // An element the UA stylesheet never renders (`<script>`, `<style>`, …)
         // lays out no box, so like `contents` it has no boundary to cross.
         null -> when {
-            isInlineByUaDefault() || isNeverRenderedByUaDefault() -> BlockBoundary.INLINE
+            isInlineLevel(name) || isNeverRenderedByUaDefault() -> BlockBoundary.INLINE
             else -> BlockBoundary.SEPARATED_BOX
         }
         // `display: contents` lays out no box of its own, so it has no

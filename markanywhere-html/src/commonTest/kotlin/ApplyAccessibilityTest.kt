@@ -16,9 +16,13 @@
 
 package com.xemantic.markanywhere.html
 
+import com.xemantic.kotlin.test.assert
+import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.dump.AccessibilityAnnotations
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.test.sameAs
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 
@@ -1432,6 +1436,41 @@ class ApplyAccessibilityTest {
                 +"5"
             }
         }
+    }
+
+    @Test
+    fun `should not separate a dropped invisible element from an unmatched frontmatter close`() = runTest {
+        // given — a truncated stream whose `frontmatter` open was cut off: the
+        // close has no open mark to read its display from, so it falls back to
+        // the element's name, which must still classify the synthetic block as
+        // the edge of a line, as its open would
+        val input = flowOf(
+            SemanticEvent.Text("Shop"),
+            SemanticEvent.Unmark("frontmatter"),
+            SemanticEvent.Mark(
+                "span",
+                isTagged = true,
+                attributes = mapOf(
+                    AccessibilityAnnotations.DISPLAY to "inline",
+                    AccessibilityAnnotations.VISIBILITY to "hidden"
+                )
+            ),
+            SemanticEvent.Text("Sale"),
+            SemanticEvent.Unmark("span", isTagged = true),
+            SemanticEvent.Text("Hello"),
+        )
+
+        // when
+        val output = input.applyAccessibility().toList()
+
+        // then — the invisible element starts a line, so it paints no gap
+        // (the rule set drops the orphan close itself)
+        assert(
+            output == listOf(
+                SemanticEvent.Text("Shop"),
+                SemanticEvent.Text("Hello"),
+            )
+        )
     }
 
     @Test

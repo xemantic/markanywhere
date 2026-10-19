@@ -213,6 +213,28 @@ class SeparateUnwrappedBlocksTest {
     }
 
     @Test
+    fun `should read an uncaptured frontmatter as a block like the whitespace normalizer does`() = runTest {
+        // given — the synthetic `frontmatter` is no HTML element, so a
+        // browser would lay the unknown tag out inline; it is document
+        // metadata standing apart from the body, and every operator judging
+        // an element by its name alone must read it as a block
+        val input = semanticEvents {
+            "frontmatter" { +"Shop" }
+            +"Hello"
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" { +"Shop" }
+            +" "
+            +"Hello"
+        }
+    }
+
+    @Test
     fun `should separate the lines of a span the capture recorded as a block`() = runTest {
         // given — a rich editor's `<span style="display: block">` per line
         val input = semanticEvents(tagged = true) {
