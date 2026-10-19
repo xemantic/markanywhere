@@ -96,9 +96,9 @@ import kotlinx.coroutines.flow.flow
  * Between two inline content tokens not separated by a paragraph a separator
  * is injected **iff**, since the previous token, we crossed:
  * - a **separated box** — a block-level box ([AccessibilityAnnotations.DISPLAY]
- *   neither `inline*` nor `contents`; when absent, either the stream was
- *   never captured and the UA default of the tag is assumed, or it is a dump
- *   captured before every display was recorded, where none is) that is *not* a
+ *   neither `inline*` nor `contents`, read through [CapturedDisplayReader]:
+ *   an absent one is the UA default of the tag, or — in an unmarked dump
+ *   captured before every display was recorded — none) that is *not* a
  *   surviving block, i.e. one whose
  *   boundary vanishes when [simplifyHtml] unwraps it (`<div>`, blockified
  *   `<span>`, the empty divider `<div>`); **and**
@@ -147,11 +147,11 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
     val openControls = ArrayDeque<Int>()
     var controlSerial = 0
     var previousTokenControl = 0
-    // Whether the stream was captured, as far as it has been read (see
-    // [showsCapture]). An old dump left the `block` of its `<html>`, `<body>`
-    // and leading wrappers out, so those still read as their tag's UA default
-    // — a `<div>`'s `block`, wrong only for a leading `display: contents` one.
-    var captured = false
+    // What each element's display is, the same reading every operator makes.
+    // An old unmarked dump left the `block` of its `<html>`, `<body>` and
+    // leading wrappers out, so those still read as their tag's UA default —
+    // a `<div>`'s `block`, wrong only for a leading `display: contents` one.
+    val displays = CapturedDisplayReader()
 
     // The path since the last inline content token, by depth (a frame's
     // level is its depth in the stack, 1-based): the shallowest depth it
@@ -311,8 +311,8 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
             is Mark -> {
                 val parent = stack.lastOrNull()
                 val parentIsFlexGrid = parent?.isFlexGridContainer == true
-                if (!captured && event.showsCapture()) captured = true
-                val boundary = event.blockBoundary(parentIsFlexGrid, captured)
+                val display = displays.open(event)
+                val boundary = event.blockBoundary(parentIsFlexGrid, display)
                 // The held paragraph ends at a block starting directly in its
                 // anchor, and cannot hold one starting deeper inside its run.
                 if (paragraphDepth >= 0) {
@@ -330,19 +330,18 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
                     if (control) separateAdjacentControl()
                 }
                 val opensPreserve = event.isPreserveRegion()
-                val display = event[AccessibilityAnnotations.DISPLAY]
                 stack.addLast(
                     BlockBoundaryFrame(
                         boundary = boundary,
                         opensPreserve = opensPreserve,
                         // `display: contents` lays out no box, so its children
                         // are laid out by its parent's display.
-                        isFlexGridContainer = if (display == "contents") parentIsFlexGrid
-                        else event.isFlexGridContainer(),
+                        isFlexGridContainer = if (display == CapturedDisplay.Known("contents")) parentIsFlexGrid
+                        else display.isFlexGridContainer(),
                         control = control,
                         rendersAsBlock = event.rendersAsBlock(),
                         allowsParagraph = (parent?.allowsParagraph ?: true) &&
-                            event.mayHoldParagraph(captured)
+                            event.mayHoldParagraph(display)
                     )
                 )
                 if (preserveDepth == 0 && event.name == "img") {
@@ -354,6 +353,7 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
                 if (opensPreserve) preserveDepth++
             }
             is Unmark -> {
+                displays.close()
                 releaseHeldMarks()
                 if (paragraphDepth >= 0 && stack.size == paragraphDepth) release(wrap = true)
                 val level = stack.size
@@ -419,7 +419,7 @@ private class BlockBoundaryFrame(
 
 private fun SemanticEvent.Mark.blockBoundary(
     parentIsFlexGrid: Boolean,
-    captured: Boolean
+    display: CapturedDisplay
 ): BlockBoundary = when {
     // A surviving block ([simplifyHtml] keeps it) already gives block separation.
     name in LINK_BLOCK_CONTENT_TAGS -> BlockBoundary.SURVIVING_BLOCK
@@ -429,38 +429,40 @@ private fun SemanticEvent.Mark.blockBoundary(
     // of one image) is not split, even though the placeholder has no display
     // annotation and would otherwise read as a block box.
     name == "img" -> BlockBoundary.INLINE
-    else -> when (val display = this[AccessibilityAnnotations.DISPLAY]) {
+    else -> when (display) {
         // The direct children of a flex/grid container are blockified whatever
         // their tag.
-        null if parentIsFlexGrid -> BlockBoundary.SIDE_BY_SIDE_BOX
-        // An absent annotation in a captured stream is a dump captured before
-        // every display was recorded, when both a plain `block` and a
+        !is Known if parentIsFlexGrid -> BlockBoundary.SIDE_BY_SIDE_BOX
+        // An absent annotation in an unmarked dump captured before every
+        // display was recorded, when both a plain `block` and a
         // `display: contents` were left out — no boundary can be told apart,
         // so none is crossed (a `contents` wrapper split `US$5`).
-        null if captured -> BlockBoundary.INLINE
-        // Never captured: the UA stylesheet's default is assumed, read the same
+        Unrecorded -> BlockBoundary.INLINE
+        // Not recorded: the UA stylesheet's default is assumed, read the same
         // way the whitespace normalizer reads it — a `<div>` is a block (the
         // `<div>` per line a rich-text editor writes, `Hi,<div>there</div>`),
         // while a hand-built stream's `<a>`/`<strong>`/`<i>` must not over-split.
         // An element the UA stylesheet never renders (`<script>`, `<style>`, …)
         // lays out no box, so like `contents` it has no boundary to cross.
-        null -> when {
+        UaDefault -> when {
             isInlineLevel(name) || isNeverRenderedByUaDefault() -> BlockBoundary.INLINE
             else -> BlockBoundary.STACKED_BOX
         }
-        // `display: contents` lays out no box of its own, so it has no
-        // boundary to cross — its children's display is what separates.
-        "contents" -> BlockBoundary.INLINE
-        "inline" -> BlockBoundary.INLINE
-        // The cells of a CSS table sit beside each other; its rows stack.
-        "table-cell" -> BlockBoundary.SIDE_BY_SIDE_BOX
-        // A block-level box ([simplifyHtml] unwraps `<div>`/`<span>`): its
-        // boundary vanishes on flatten. An atomic inline box (`inline-block`,
-        // `inline-flex`, …) stays in the inline flow, beside its siblings.
-        else -> when {
-            display.startsWith("inline") -> BlockBoundary.INLINE_BOX
-            parentIsFlexGrid -> BlockBoundary.SIDE_BY_SIDE_BOX
-            else -> BlockBoundary.STACKED_BOX
+        is Known -> when (val value = display.value) {
+            // `display: contents` lays out no box of its own, so it has no
+            // boundary to cross — its children's display is what separates.
+            "contents" -> BlockBoundary.INLINE
+            "inline" -> BlockBoundary.INLINE
+            // The cells of a CSS table sit beside each other; its rows stack.
+            "table-cell" -> BlockBoundary.SIDE_BY_SIDE_BOX
+            // A block-level box ([simplifyHtml] unwraps `<div>`/`<span>`): its
+            // boundary vanishes on flatten. An atomic inline box (`inline-block`,
+            // `inline-flex`, …) stays in the inline flow, beside its siblings.
+            else -> when {
+                value.startsWith("inline") -> BlockBoundary.INLINE_BOX
+                parentIsFlexGrid -> BlockBoundary.SIDE_BY_SIDE_BOX
+                else -> BlockBoundary.STACKED_BOX
+            }
         }
     }
 }
@@ -469,7 +471,7 @@ private fun SemanticEvent.Mark.blockBoundary(
  * Whether a paragraph may open directly inside this element, as far as the
  * element itself is concerned (its ancestors must allow one too).
  */
-private fun SemanticEvent.Mark.mayHoldParagraph(captured: Boolean): Boolean = when {
+private fun SemanticEvent.Mark.mayHoldParagraph(display: CapturedDisplay): Boolean = when {
     name in PHRASING_HOSTS -> false
     // A control's content is its label, and a ref-bearing element is kept
     // as a tag whose content the agent reads as one thing.
@@ -480,13 +482,15 @@ private fun SemanticEvent.Mark.mayHoldParagraph(captured: Boolean): Boolean = wh
     // display the page gave it (Bootstrap's `.d-block`). Only the generic
     // wrappers and custom elements are unwrapped.
     isInlineByUaDefault() && name !in UNWRAPPED_INLINE_WRAPPERS && '-' !in name -> false
-    else -> when (val display = this[AccessibilityAnnotations.DISPLAY]) {
+    else -> when (display) {
         // A block or a `contents` wrapper, which defers to its parent.
-        null if captured -> true
-        null -> !isInlineLevel(name) && !isNeverRenderedByUaDefault()
-        "contents" -> true
-        "none" -> false
-        else -> !display.startsWith("inline")
+        Unrecorded -> true
+        UaDefault -> !isInlineLevel(name) && !isNeverRenderedByUaDefault()
+        is Known -> when (display.value) {
+            "contents" -> true
+            "none" -> false
+            else -> !display.value.startsWith("inline")
+        }
     }
 }
 
@@ -533,11 +537,9 @@ private val BLOCK_ROLES = setOf(
 )
 
 // A flex / grid container blockifies its direct children, so an unannotated
-// child of one is a separated box.
-private fun SemanticEvent.Mark.isFlexGridContainer(): Boolean {
-    val display = this[AccessibilityAnnotations.DISPLAY] ?: return false
-    return "flex" in display || "grid" in display
-}
+// child of one is a separated box. An absent display is never a flex container.
+private fun CapturedDisplay.isFlexGridContainer(): Boolean =
+    this is Known && ("flex" in value || "grid" in value)
 
 private fun SemanticEvent.Mark.isPreserveRegion(): Boolean =
     isTagged && name in WHITESPACE_PRESERVE_TAGS

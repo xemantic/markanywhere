@@ -83,6 +83,7 @@ public fun Flow<SemanticEvent>.dropHtmlStructuralWhitespace(): Flow<SemanticEven
     // Per open element, whether it is inline-level (so a closing tag can read
     // back its open-tag verdict — Unmark carries no attributes).
     val inlineStack = ArrayDeque<Boolean>()
+    val displays = CapturedDisplayReader()
 
     // Resolve a buffered whitespace run now that its right neighbour is known:
     // keep a single collapsed space if inline content flanks both sides, else
@@ -119,15 +120,14 @@ public fun Flow<SemanticEvent>.dropHtmlStructuralWhitespace(): Flow<SemanticEven
             }
 
             is Mark -> {
-                val inline = event.isInlineLevel()
+                val inline = event.isInlineLevel(displays.open(event))
                 resolvePending(rightQualifies = inline)
-                // Strip the display annotation we consumed so it can't leak into
-                // the rendered output.
+                // Strip the display annotation we consumed (and the capture
+                // format saying how to read it) so it can't leak into the
+                // rendered output.
                 emit(
-                    if (AccessibilityAnnotations.DISPLAY in event.attributes)
-                        event.copy(
-                            attributes = event.attributes - AccessibilityAnnotations.DISPLAY
-                        )
+                    if (CONSUMED_ANNOTATIONS.any { it in event.attributes })
+                        event.copy(attributes = event.attributes - CONSUMED_ANNOTATIONS)
                     else event
                 )
                 depth++
@@ -139,6 +139,7 @@ public fun Flow<SemanticEvent>.dropHtmlStructuralWhitespace(): Flow<SemanticEven
             }
 
             is Unmark -> {
+                displays.close()
                 if (depth == preserveFrom) preserveFrom = -1
                 depth--
                 // The closing tag reads back its open-tag inline verdict.
@@ -191,20 +192,39 @@ private fun SemanticEvent.Mark.isPreserveRegion(): Boolean =
 // this honours CSS overrides a tag-name set can't see (`<span style=display:block>`).
 // `contents` lays out no box of its own, so it is no boundary either: whitespace
 // touching it belongs to the inline flow around it.
-// When no display annotation is present (synthetic / Markdown-native streams) the
-// element's name decides ([isInlineLevel]).
-internal fun SemanticEvent.Mark.isInlineLevel(): Boolean =
+// The display is read through [CapturedDisplayReader], like every operator
+// reads it. When none is known (synthetic / Markdown-native streams, the
+// elements `simplifyHtml` synthesizes, or an unmarked dump that left a `block`
+// out) the element's name decides ([isInlineLevel]).
+private fun SemanticEvent.Mark.isInlineLevel(display: CapturedDisplay): Boolean =
     // Markdown emphasis / an inline code span renders inline whatever CSS
     // displayed it as (a blockified flex item `<strong>`): only its tag-ness
-    // is decided upstream, by `expressEmphasisInMarkdown`. The rule never
-    // reaches `applyAccessibility`, which reads the browser's layout: it runs
-    // before `simplifyHtml`, so its marks are still the captured, tagged
+    // is decided upstream, by `expressEmphasisInMarkdown`. The rule makes no
+    // difference to `applyAccessibility`, which reads the browser's layout: it
+    // runs before `simplifyHtml`, so its marks are still the captured, tagged
     // elements, and an untagged emphasis there has an inline UA default anyway.
     if (!isTagged && name in MARKDOWN_INLINE_SPANS) true
-    else when (val display = this[AccessibilityAnnotations.DISPLAY]) {
-        null -> isInlineLevel(name)
-        "contents" -> true
-        else -> display.startsWith("inline")
+    else when (display) {
+        is Known -> display.value == "contents" || display.value.startsWith("inline")
+        UaDefault, Unrecorded -> isInlineLevel(name)
     }
 
 private val MARKDOWN_INLINE_SPANS = MARKDOWN_EMPHASIS + "code"
+
+/**
+ * The same verdict read from this element's own annotation alone, an absent
+ * one meaning the UA default — the raw read `applyAccessibility`'s visibility
+ * gap takes (see [CapturedDisplay]). A layout capture leaves a display out
+ * only below a `none` root — a subtree that operator drops, or a `<select>`'s
+ * popup, whose content its tags read best — and on the laid-out parts of an
+ * `<svg>`, whose names are all inline by default, which the region implies.
+ */
+internal fun SemanticEvent.Mark.isInlineLevel(): Boolean {
+    val display: CapturedDisplay = when (val recorded = this[AccessibilityAnnotations.DISPLAY]) {
+        null -> UaDefault
+        else -> CapturedDisplay.Known(recorded)
+    }
+    return isInlineLevel(display)
+}
+
+private val CONSUMED_ANNOTATIONS = setOf(AccessibilityAnnotations.DISPLAY, AccessibilityAnnotations.CAPTURE)

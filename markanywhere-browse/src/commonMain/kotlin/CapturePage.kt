@@ -18,10 +18,13 @@ package com.xemantic.markanywhere.browse
 
 import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.dump.AccessibilityAnnotations
+import com.xemantic.markanywhere.dump.CaptureFormat
 import com.xemantic.markanywhere.dump.CapturedFormControl
 import com.xemantic.markanywhere.dump.FormControlState
 import com.xemantic.markanywhere.dump.SemanticEventDump
+import com.xemantic.markanywhere.dump.UnrecordedDisplay
 import com.xemantic.markanywhere.dump.captureFormControl
+import com.xemantic.markanywhere.dump.displayToRecord
 import com.xemantic.markanywhere.dump.hasLiveFormState
 import com.xemantic.markanywhere.dump.inputType
 import com.xemantic.markanywhere.dump.isMaskingTextSecurity
@@ -29,6 +32,9 @@ import com.xemantic.markanywhere.dump.isRedactableElement
 import com.xemantic.markanywhere.dump.isRedactedControl
 import com.xemantic.markanywhere.dump.readsMaskedState
 import com.xemantic.markanywhere.dump.secretValueTexts
+import com.xemantic.markanywhere.dump.unrecordedDisplayOfChildren
+import com.xemantic.markanywhere.dump.withCaptureFormat
+import com.xemantic.markanywhere.dump.withoutCaptureAnnotations
 import com.xemantic.markanywhere.html.spec.stripAndCollapseHtmlWhitespace
 import dev.kdriver.cdp.domain.Accessibility
 import dev.kdriver.cdp.domain.DOMSnapshot
@@ -231,7 +237,7 @@ internal suspend fun captureEvents(
         refAttribute = refAttribute,
         isActionable = isActionable
     )
-    builder.walkElement(dom, dom.htmlIndex, annotate = true)
+    builder.walkRoot(dom, dom.htmlIndex)
     return builder
 }
 
@@ -418,6 +424,11 @@ internal class SnapshotDom(
 
     fun backendNodeId(index: Int): Int = backendIds[index]
 
+    /**
+     * The element's markup attributes, minus any `data-markanywhere-*` the
+     * page authored itself ([withoutCaptureAnnotations]) — only the capture
+     * may write those, and it adds its own afterwards.
+     */
     fun attributeMap(index: Int): Map<String, String> {
         val flat = attributes[index]
         return buildMap {
@@ -427,15 +438,16 @@ internal class SnapshotDom(
                     string(flat[i + 1]).orEmpty()
                 )
             }
-        }
+        }.withoutCaptureAnnotations()
     }
 
     /**
      * The value to record for [AccessibilityAnnotations.DISPLAY] — recorded on
-     * every element, so that a stream without it can only mean one that was
-     * never captured: the computed `display` when the element is laid out (the
-     * plain `block` default included), `contents` when it lays out no box of
-     * its own while a descendant does (`display:contents`, whose box is
+     * every element outside the regions the [CaptureFormat.LAYOUT] format
+     * leaves out (see [unrecordedDisplayOfChildren]): the computed `display`
+     * when the element is laid out (the plain `block` default included),
+     * `contents` when it lays out no box of its own while a descendant does
+     * (`display:contents`, whose box is
      * transparent — its children's display is what matters), and `none` when
      * nothing in its subtree is laid out (`display:none`).
      */
@@ -456,9 +468,16 @@ internal class SnapshotDom(
      * the element inherits: `hidden` set on the element itself, or `visible`
      * set back under a hidden ancestor. Without such text nothing of the
      * element's own is painted, so its value does not matter.
+     *
+     * An element whose display is not recorded ([displayRecorded] `false`,
+     * the parts of an `<svg>` — see [unrecordedDisplayOfChildren]) follows
+     * the box-less rule even when laid out: a reader cannot tell it has a box
+     * of its own, so it inherits its parent's verdict unless one is recorded.
      */
-    fun visibilityAnnotation(index: Int): String? {
-        visibility[index]?.let { return if (it.normalizedVisibility() == "hidden") "hidden" else null }
+    fun visibilityAnnotation(index: Int, displayRecorded: Boolean = true): String? {
+        if (displayRecorded) visibility[index]?.let {
+            return if (it.normalizedVisibility() == "hidden") "hidden" else null
+        }
         val own = visibilities.own[index] ?: return null
         val inherited = parentIndex?.getOrNull(index)?.let { visibilities.resolved.getOrNull(it) } ?: "visible"
         return if (own == inherited) null else own
@@ -932,6 +951,15 @@ internal class DomEventBuilder(
     private var refCounter = 0
 
     /**
+     * Walks the document root [element] as the root of the stream, stamping
+     * its mark with the [CaptureFormat.LAYOUT] marker — a frame's document
+     * nested below belongs to the same capture and carries none.
+     */
+    fun walkRoot(dom: SnapshotDom, element: Int) {
+        walkElement(dom, element, annotate = true, unrecorded = null, root = true)
+    }
+
+    /**
      * Walks [element] and its whole subtree, emitting a `mark` / children /
      * `unmark` triple per element and a `text` event per text node — nothing is
      * dropped. When [annotate] is `true` each `mark` is enriched with the
@@ -939,12 +967,28 @@ internal class DomEventBuilder(
      * the `<head>` subtree turns annotation off for itself and its descendants,
      * since it computes to `display:none` wholesale and annotating it would let
      * a downstream filter drop the `<title>` / `<meta>` provenance.
+     *
+     * [unrecorded] is the region of the [CaptureFormat.LAYOUT] format the
+     * element sits in, where its display is left out (see
+     * [unrecordedDisplayOfChildren]) — carried into a frame's document too,
+     * which a frame below a `display:none` root does not lay out either.
      */
-    fun walkElement(dom: SnapshotDom, element: Int, annotate: Boolean) {
+    private fun walkElement(
+        dom: SnapshotDom,
+        element: Int,
+        annotate: Boolean,
+        unrecorded: UnrecordedDisplay?,
+        root: Boolean = false,
+    ) {
         val annotated = annotate && dom.name(element) != "head"
         // computed once: it gives both the mark's attributes and the content
         val control = dom.capturedFormControl(element)
-        mark(dom, element, control?.attributes ?: dom.attributeMap(element), annotated)
+        val display = if (annotated) displayToRecord(dom.displayAnnotation(element), unrecorded) else null
+        val childrenUnrecorded = unrecordedDisplayOfChildren(dom.name(element), display, unrecorded)
+        mark(
+            dom, element, control?.attributes ?: dom.attributeMap(element),
+            annotate = annotated, display = display, root = root
+        )
         val replacementText = control?.text
         if (replacementText != null) {
             // what the field holds now, not the default text of its markup
@@ -952,7 +996,7 @@ internal class DomEventBuilder(
         } else dom.children[element].forEach { child ->
             when {
                 dom.isText(child) -> events += SemanticEvent.Text(dom.text(child))
-                dom.isElement(child) -> walkElement(dom, child, annotated)
+                dom.isElement(child) -> walkElement(dom, child, annotated, childrenUnrecorded)
             }
         }
         // A frame's document is nested inside the element that embeds it, the
@@ -964,12 +1008,19 @@ internal class DomEventBuilder(
         // cross-origin frame has no document here at all (see documentIndex).
         dom.contentDocumentIndex(element)?.let { contentIndex ->
             val content = documents(contentIndex)
-            content.htmlIndexOrNull?.let { walkElement(content, it, annotated) }
+            content.htmlIndexOrNull?.let { walkElement(content, it, annotated, childrenUnrecorded) }
         }
         unmark(dom, element)
     }
 
-    private fun mark(dom: SnapshotDom, element: Int, capturedAttributes: Map<String, String>, annotate: Boolean) {
+    private fun mark(
+        dom: SnapshotDom,
+        element: Int,
+        capturedAttributes: Map<String, String>,
+        annotate: Boolean,
+        display: String?,
+        root: Boolean,
+    ) {
         val backendNodeId = dom.backendNodeId(element)
         // a dense, document-order ref on every actionable element, recorded so
         // PageSession can resolve it back to a live node for click / type
@@ -979,7 +1030,8 @@ internal class DomEventBuilder(
         val attributes = buildMap {
             putAll(capturedAttributes)
             if (ref != null) put(refAttribute!!, ref)
-        }.let { if (annotate) it.withAccessibilityAnnotations(dom, element) else it }
+        }.let { if (annotate) it.withAccessibilityAnnotations(dom, element, display) else it }
+            .let { if (root) it.withCaptureFormat(CaptureFormat.LAYOUT) else it }
         events += SemanticEvent.Mark(
             name = dom.name(element),
             isTagged = true,
@@ -1004,10 +1056,16 @@ internal class DomEventBuilder(
      * property of a rendered-hidden element, and a resolved accessible name. An
      * explicit `aria-hidden` is left untouched — it is already a real DOM
      * attribute the consumer can read directly.
+     *
+     * [display] is the display to record, `null` where the format leaves it
+     * out; an element without one has its `visibility` recorded only where it
+     * differs from what it inherits, the rule a box-less element follows
+     * (see [SnapshotDom.visibilityAnnotation]).
      */
     private fun Map<String, String>.withAccessibilityAnnotations(
         dom: SnapshotDom,
-        element: Int
+        element: Int,
+        display: String?,
     ): Map<String, String> {
         val result = LinkedHashMap(this)
         if (dom.name(element) == "table") {
@@ -1015,8 +1073,8 @@ internal class DomEventBuilder(
                 result[AccessibilityAnnotations.ROLE] = it
             }
         }
-        result[AccessibilityAnnotations.DISPLAY] = dom.displayAnnotation(element)
-        dom.visibilityAnnotation(element)?.let {
+        if (display != null) result[AccessibilityAnnotations.DISPLAY] = display
+        dom.visibilityAnnotation(element, displayRecorded = display != null)?.let {
             result[AccessibilityAnnotations.VISIBILITY] = it
         }
         // Blink's own decorative-image verdict: an <img> kept out of the

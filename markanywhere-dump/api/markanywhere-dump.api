@@ -1,4 +1,5 @@
 public final class com/xemantic/markanywhere/dump/AccessibilityAnnotations {
+	public static final field CAPTURE Ljava/lang/String;
 	public static final field DISPLAY Ljava/lang/String;
 	public static final field IGNORED Ljava/lang/String;
 	public static final field INSTANCE Lcom/xemantic/markanywhere/dump/AccessibilityAnnotations;
@@ -7,6 +8,26 @@ public final class com/xemantic/markanywhere/dump/AccessibilityAnnotations {
 	public static final field ROLE Ljava/lang/String;
 	public static final field VISIBILITY Ljava/lang/String;
 	public final fun getALL ()Ljava/util/Set;
+}
+
+public final class com/xemantic/markanywhere/dump/CaptureFormat : java/lang/Enum {
+	public static final field Companion Lcom/xemantic/markanywhere/dump/CaptureFormat$Companion;
+	public static final field LAYOUT Lcom/xemantic/markanywhere/dump/CaptureFormat;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public final fun getMarker ()Ljava/lang/String;
+	public static fun valueOf (Ljava/lang/String;)Lcom/xemantic/markanywhere/dump/CaptureFormat;
+	public static fun values ()[Lcom/xemantic/markanywhere/dump/CaptureFormat;
+}
+
+public final class com/xemantic/markanywhere/dump/CaptureFormat$Companion {
+	public final fun of (Ljava/lang/String;)Lcom/xemantic/markanywhere/dump/CaptureFormat;
+}
+
+public final class com/xemantic/markanywhere/dump/CaptureFormatKt {
+	public static final fun displayToRecord (Ljava/lang/String;Lcom/xemantic/markanywhere/dump/UnrecordedDisplay;)Ljava/lang/String;
+	public static final fun unrecordedDisplayOfChildren (Ljava/lang/String;Ljava/lang/String;Lcom/xemantic/markanywhere/dump/UnrecordedDisplay;)Lcom/xemantic/markanywhere/dump/UnrecordedDisplay;
+	public static final fun withCaptureFormat (Ljava/util/Map;Lcom/xemantic/markanywhere/dump/CaptureFormat;)Ljava/util/Map;
+	public static final fun withoutCaptureAnnotations (Ljava/util/Map;)Ljava/util/Map;
 }
 
 public final class com/xemantic/markanywhere/dump/CapturedFormControl {
@@ -67,5 +88,13 @@ public final synthetic class com/xemantic/markanywhere/dump/SemanticEventDump$$s
 
 public final class com/xemantic/markanywhere/dump/SemanticEventDump$Companion {
 	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/xemantic/markanywhere/dump/UnrecordedDisplay : java/lang/Enum {
+	public static final field GRAPHIC Lcom/xemantic/markanywhere/dump/UnrecordedDisplay;
+	public static final field NO_BOX Lcom/xemantic/markanywhere/dump/UnrecordedDisplay;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/xemantic/markanywhere/dump/UnrecordedDisplay;
+	public static fun values ()[Lcom/xemantic/markanywhere/dump/UnrecordedDisplay;
 }
 

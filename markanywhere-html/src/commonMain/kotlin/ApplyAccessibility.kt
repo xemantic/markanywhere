@@ -109,7 +109,8 @@ public fun TransformerBuilder.applyAccessibility() {
  *
  * The capture records `visibility` for every element that lays out a box, so
  * an inherited `hidden` is on each such descendant. One that lays out none
- * (`display: contents`, `display: none`) carries a verdict only where its own
+ * (`display: contents`, `display: none`) — or whose box the capture does not
+ * record (the parts of an `<svg>`) — carries a verdict only where its own
  * value differs from the one it inherits (`hidden`, or `visible` again), and
  * otherwise inherits its parent's — as does a descendant with no recorded
  * display at all (a hand-built stream, or a dump captured before every display

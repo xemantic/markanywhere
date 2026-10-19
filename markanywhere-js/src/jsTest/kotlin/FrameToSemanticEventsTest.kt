@@ -18,6 +18,7 @@ package com.xemantic.markanywhere.js
 
 import com.xemantic.kotlin.test.assert
 import com.xemantic.markanywhere.SemanticEvent
+import com.xemantic.markanywhere.dump.AccessibilityAnnotations
 import kotlinx.browser.document
 import kotlinx.browser.window
 import kotlinx.coroutines.flow.toList
@@ -56,6 +57,21 @@ class FrameToSemanticEventsTest {
         assert(names.indexOf("inside") < names.indexOf("</iframe>"))
         // and the frame's own document root came with it
         assert(names.indexOf("<iframe>") < names.indexOf("<html>"))
+    }
+
+    @Test
+    fun `should stamp no capture format on the walk`() = runTest {
+        // given - the walk records no layout, which is what an unmarked
+        // stream already means once no page-authored annotation can make it
+        // look like a layout capture; a marker would only leak into the DOM
+        // or HTML the events are rendered back into
+        loadFrame("""<iframe id="m" srcdoc="&lt;p&gt;x&lt;/p&gt;"></iframe>""")
+
+        // when
+        val marks = document.body!!.toSemanticEvents().toList().filterIsInstance<SemanticEvent.Mark>()
+
+        // then
+        assert(marks.none { AccessibilityAnnotations.CAPTURE in it.attributes })
     }
 
     @Test
