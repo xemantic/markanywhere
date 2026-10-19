@@ -198,11 +198,20 @@ private fun SemanticEvent.Mark.isPreserveRegion(): Boolean =
 // HTML element at all: a browser would lay an unknown tag out inline, but it
 // is document metadata standing apart from the body, so it is a block.
 internal fun SemanticEvent.Mark.isInlineLevel(): Boolean =
-    when (val display = this[AccessibilityAnnotations.DISPLAY]) {
+    // Markdown emphasis / an inline code span renders inline whatever CSS
+    // displayed it as (a blockified flex item `<strong>`): only its tag-ness
+    // is decided upstream, by `expressEmphasisInMarkdown`. The rule never
+    // reaches `applyAccessibility`, which reads the browser's layout: it runs
+    // before `simplifyHtml`, so its marks are still the captured, tagged
+    // elements, and an untagged emphasis there has an inline UA default anyway.
+    if (!isTagged && name in MARKDOWN_INLINE_SPANS) true
+    else when (val display = this[AccessibilityAnnotations.DISPLAY]) {
         null -> name != "frontmatter" && isInlineByUaDefault()
         "contents" -> true
         else -> display.startsWith("inline")
     }
+
+private val MARKDOWN_INLINE_SPANS = MARKDOWN_EMPHASIS + "code"
 
 /**
  * Whether the UA stylesheet lays this element out inline — the one fallback
