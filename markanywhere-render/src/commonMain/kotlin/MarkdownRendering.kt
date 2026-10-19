@@ -19,6 +19,7 @@ package com.xemantic.markanywhere.render
 import com.xemantic.kotlin.core.text.joinToString
 import com.xemantic.kotlin.core.text.unaryPlus
 import com.xemantic.markanywhere.SemanticEvent
+import com.xemantic.markanywhere.html.spec.HTML_RAW_TEXT_ELEMENTS
 import com.xemantic.markanywhere.html.spec.HTML_VOID_ELEMENTS
 import com.xemantic.markanywhere.yaml.YamlWriter
 import kotlinx.coroutines.flow.Flow
@@ -647,12 +648,25 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                 // (see flushPendingSpaces / pendingSpaces): they are emitted
                 // only if real content follows on this line, dropped otherwise.
                 // Inside an emphasis span any trailing whitespace is held, so
-                // the span's closer can precede it (see pendingWhitespace).
-                val inSpan = enclosingSpanDelimiter() != null
+                // the span's closer can precede it (see pendingWhitespace) —
+                // but not inside a raw verbatim tag, whose text is kept as
+                // written (as is its indentation, see below).
+                val verbatim = blockStack.any { frame -> frame is TaggedInline && frame.verbatim }
+                val inSpan = !verbatim && enclosingSpanDelimiter() != null
                 val contentEnd = if (inSpan) {
                     part.indexOfLast { !it.isFlankWhitespace() } + 1
                 } else part.indexOfLast { it != ' ' } + 1
-                val original = part.substring(0, contentEnd)
+                // Leading spaces on a fresh Markdown line are stripped by the
+                // parser (and four would open an indented code block), e.g. the
+                // ` tail` after a block-level raw tag closes mid-paragraph. Not
+                // inside a raw verbatim tag (`<pre>`, `<textarea>`, …), whose
+                // indentation is content.
+                val original = part.substring(0, contentEnd).let {
+                    // Only ASCII spaces: whitespace held as content (NBSP and
+                    // other `Zs`, see pendingWhitespace) is never trimmed.
+                    if (atLineStart && freshBlockLine && blockMarkerEscapingAllowed() && !verbatim) it.trimStart(' ')
+                    else it
+                }
                 if (original.isNotEmpty()) {
                     flushPendingSpaces()
                     if (atLineStart) out(buildPrefix(consumeMarker = true))
@@ -752,7 +766,20 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
     // catch-all. Splits block-level semantic / form tags onto their own
     // line, and treats HTML void elements as self-closing (no children,
     // no closing tag emitted on the matching Unmark).
-    fun handleRawOpen(event: SemanticEvent.Mark) {
+    fun handleRawOpen(event: SemanticEvent.Mark, wrapsBlock: Boolean = false) {
+        // An inline tag found to wrap a block (see heldRawInline) opens like a
+        // block-level tag: alone on its line, at a block boundary. Only then is
+        // it a CommonMark HTML-block start — `<b>Lead:` or `Intro <b>` is not,
+        // so on re-parse the `<b>` would close at the line end and leave its
+        // `</b>` orphaned. Its content and a deferred paragraph follow it.
+        if (wrapsBlock) {
+            separateBeforeBlockTag()
+            writeTag(event.renderOpenTag())
+            ensureLineStart()
+            lastBlock = BLOCK_TAG
+            blockStack.addLast(BlockFrame.TaggedInline(block = true))
+            return
+        }
         // A deferred non-list paragraph whose first content is a raw tag starts
         // now (as beforeContent does for text): the paragraph's separation and
         // prefix are emitted and atLineStart clears. This also keeps an inline
@@ -786,7 +813,11 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         }
         if (!inLabel()) lastBlock = if (blockLevelTag) BLOCK_TAG else BLOCK_MARKDOWN
         blockStack.addLast(
-            if (isVoid) BlockFrame.SelfClosed else BlockFrame.TaggedInline(block = blockLevelTag)
+            if (isVoid) BlockFrame.SelfClosed
+            else BlockFrame.TaggedInline(
+                block = blockLevelTag,
+                verbatim = event.name in VERBATIM_RAW_TAGS
+            )
         )
     }
 
@@ -822,7 +853,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         atLineStart = true
     }
 
-    collect { incoming ->
+    suspend fun process(incoming: SemanticEvent, wrapsBlock: Boolean = false) {
         var event = incoming
 
         // Inside a front matter block the events are YAML metadata, not
@@ -835,7 +866,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                 frontmatter = null
             } else {
                 yaml.collect(event)
-                return@collect
+                return
             }
         }
 
@@ -846,7 +877,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
             if (event is Mark && !event.isTagged && emphasisDelimiter(event.name) == pendingClose.delimiter) {
                 pendingInlineClose = null
                 blockStack.addLast(pendingClose)
-                return@collect
+                return
             }
             val remainder = closePendingInline(event)
             if (remainder != null) event = SemanticEvent.Text(remainder)
@@ -884,7 +915,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
             (event is Mark && event.name == "table" && inLabel())
         ) {
             serializeHtmlTableEvent(event)
-            return@collect
+            return
         }
 
         // If a block-level mark arrives while any `<a>` is still buffering
@@ -913,18 +944,19 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         // boundary (atLineStart with a pending separator) emit the blank line
         // so the next Markdown block parses correctly after the raw HTML.
         if (event is Mark && event.isTagged) {
-            handleRawOpen(event)
+            handleRawOpen(event, wrapsBlock)
             flush()
-            return@collect
+            return
         }
         if (event is Unmark && event.isTagged) {
             val frame = blockStack.lastOrNull()
             if (frame is BlockFrame.SelfClosed) {
                 blockStack.removeLast()
                 flush()
-                return@collect
+                return
             }
-            // The close mirrors its own open (see rendersAsBlockTag).
+            // The close mirrors its own open (see rendersAsBlockTag, and
+            // handleRawOpen's wrapsBlock, which forces block).
             val blockTagged = if (frame is TaggedInline) frame.block
                 else rendersAsBlockTag(event.name)
             if (blockTagged) {
@@ -950,7 +982,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                 endBlock()
             }
             flush()
-            return@collect
+            return
         }
 
         when (event) {
@@ -1221,7 +1253,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                     )
                 }
 
-                else -> handleRawOpen(event)
+                else -> handleRawOpen(event, wrapsBlock)
             }
 
             is Unmark -> {
@@ -1341,7 +1373,8 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                         if (frame is BlockFrame.SelfClosed) {
                             // void element — no closing tag
                         } else {
-                            // The close mirrors its own open (see rendersAsBlockTag).
+                            // The close mirrors its own open (see rendersAsBlockTag,
+                            // and handleRawOpen's wrapsBlock, which forces block).
                             val blockTagged = if (frame is TaggedInline) frame.block
                                 else rendersAsBlockTag(event.name)
                             if (blockTagged) {
@@ -1362,6 +1395,69 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         }
 
         flush()
+    }
+
+    // An inline raw tag (a `<b>` kept a tag because it wraps a list) cannot know
+    // at its open whether a block follows inside it, and once `<b>Lead:` is
+    // written the tag can no longer be moved onto a line of its own. So its
+    // events are held and replayed: as they came when the tag closes first, or
+    // with the tag opened alone on its line (handleRawOpen's `wrapsBlock`) when
+    // a block arrives inside it. The held content is re-rendered in its new
+    // position, so it is escaped for where it lands. The hold ends at the tag's
+    // close or at the first block inside it, whichever comes first, and covers
+    // only the phrasing tags in HELD_RAW_INLINE_TAGS — never a `div`, a table or
+    // custom markup (`<x:think>`), which stream as they arrive. A tag inside a
+    // heading is not held: a heading is one line, which a block tag would break
+    // either way.
+    var heldRawInline: MutableList<SemanticEvent>? = null
+    var heldRawInlineDepth = 0
+
+    fun holdsRawInline(event: SemanticEvent): Boolean =
+        event is Mark && frontmatter == null && htmlTableDepth == 0
+            && !inLabel() && !inPreCode
+            && (event.isTagged || event.name !in MARKDOWN_NATIVE_MARK_NAMES)
+            && event.name in HELD_RAW_INLINE_TAGS
+            && blockStack.none { it == BlockFrame.Heading }
+
+    suspend fun route(event: SemanticEvent) {
+        val held = heldRawInline
+        if (held == null) {
+            if (holdsRawInline(event)) {
+                heldRawInline = mutableListOf(event)
+                heldRawInlineDepth = 1
+            } else {
+                process(event)
+            }
+            return
+        }
+        if (event is Mark && event.name in MARKDOWN_BLOCK_CONTENT_TAGS) {
+            heldRawInline = null
+            process(held.first(), wrapsBlock = true)
+            for (i in 1 until held.size) route(held[i])
+            route(event)
+            return
+        }
+        held += event
+        when (event) {
+            is Mark -> heldRawInlineDepth++
+            is Unmark -> heldRawInlineDepth--
+            is Text -> {}
+        }
+        if (heldRawInlineDepth == 0) {
+            heldRawInline = null
+            process(held.first())
+            for (i in 1 until held.size) route(held[i])
+        }
+    }
+
+    collect { route(it) }
+
+    // An inline raw tag left open by an unbalanced stream.
+    while (true) {
+        val held = heldRawInline ?: break
+        heldRawInline = null
+        process(held.first())
+        for (i in 1 until held.size) route(held[i])
     }
 
     // A stream ending on an emphasis close (no enclosing block) still owes it,
@@ -1416,9 +1512,12 @@ private sealed interface BlockFrame {
         var rawInline: Boolean = false
     ) : BlockFrame
     data object SelfClosed : BlockFrame
-    // A raw HTML tag, transparent to the inline context around it; [block] when
-    // its tags render as a block-level raw tag on lines of their own.
-    class TaggedInline(val block: Boolean = false) : BlockFrame
+    // A raw HTML tag, transparent to the inline context around it.
+    // `block`: its tags render as a block-level raw tag on lines of their own —
+    // decided once at the open (rendersAsBlockTag, or forced by handleRawOpen's
+    // `wrapsBlock` when it wraps a block); every close mirrors it.
+    // `verbatim`: a raw tag whose text is kept as written (see VERBATIM_RAW_TAGS).
+    class TaggedInline(val block: Boolean = false, val verbatim: Boolean = false) : BlockFrame
     data object Frontmatter : BlockFrame
     class Table(var columnCount: Int = 0, var headerEmitted: Boolean = false) : BlockFrame
     class TableSection(val name: String) : BlockFrame
@@ -1436,6 +1535,20 @@ private sealed interface BlockFrame {
 // HTML. (`li`, `tr`, `thead`, `tbody`, `th`, `td` only appear inside a
 // block parent that already triggered the spill — listing them here is
 // belt-and-braces.)
+// Phrasing tags held by the renderer until their close or the first block
+// inside them (see heldRawInline): the emphasis `expressEmphasisInMarkdown`
+// keeps as a raw tag when it wraps a block, and its inline siblings. Only tags
+// a reader expects to be short — never a block-capable wrapper or custom
+// markup, whose content must stream.
+private val HELD_RAW_INLINE_TAGS = setOf(
+    "b", "i", "em", "strong", "s", "strike", "del", "u", "mark",
+    "small", "sub", "sup", "ins", "q", "cite",
+)
+
+// Raw tags whose text content, indentation included, is kept as written.
+private val VERBATIM_RAW_TAGS = setOf("pre", "textarea", "code", "listing", "xmp", "plaintext") +
+    HTML_RAW_TEXT_ELEMENTS
+
 private val BLOCK_LEVEL_MARK_NAMES = setOf(
     "h1", "h2", "h3", "h4", "h5", "h6",
     "p", "hr", "blockquote",

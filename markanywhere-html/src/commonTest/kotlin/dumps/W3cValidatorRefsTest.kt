@@ -72,9 +72,9 @@ class W3cValidatorRefsTest {
             
             Show <label for="showsource"><input id="showsource" type="checkbox" name="showsource" value="yes" ref="2">
             source</label><label for="showoutline"><input id="showoutline" type="checkbox" name="showoutline" value="yes" ref="3">
-             outline</label><label for="showimagereport"><input id="showimagereport" type="checkbox" name="showimagereport" value="yes" ref="4">
-             image report</label><label for="level"><input id="level" type="checkbox" name="level" value="warning" ref="5">
-             errors & warnings only</label><input id="show_options" type="button" value="Options…" ref="6">
+            outline</label><label for="showimagereport"><input id="showimagereport" type="checkbox" name="showimagereport" value="yes" ref="4">
+            image report</label><label for="level"><input id="level" type="checkbox" name="level" value="warning" ref="5">
+            errors & warnings only</label><input id="show_options" type="button" value="Options…" ref="6">
             
             <label id="inputlabel">Check by
             
@@ -119,7 +119,7 @@ class W3cValidatorRefsTest {
 
         // then — re-parsing does NOT reproduce the pipeline Markdown verbatim. The
         // form's interleaved `<label>`/`<input>` re-nests on re-parse (the parser
-        // auto-closes the labels and strips the leading spaces it added) — the same
+        // auto-closes the labels) — the same
         // class of inline-HTML divergence the SERP dumps carry. Asserting the exact
         // diff pins it down: any new round-trip difference (a regression) changes
         // it and fails the test, while unrelated line shifts do not.
@@ -132,15 +132,12 @@ class W3cValidatorRefsTest {
              Show <label for="showsource"><input id="showsource" type="checkbox" name="showsource" value="yes" ref="2">
             +</label>
              source</label><label for="showoutline"><input id="showoutline" type="checkbox" name="showoutline" value="yes" ref="3">
-            - outline</label><label for="showimagereport"><input id="showimagereport" type="checkbox" name="showimagereport" value="yes" ref="4">
-            - image report</label><label for="level"><input id="level" type="checkbox" name="level" value="warning" ref="5">
-            - errors & warnings only</label><input id="show_options" type="button" value="Options…" ref="6">
             +</label>
-            +outline</label><label for="showimagereport"><input id="showimagereport" type="checkbox" name="showimagereport" value="yes" ref="4">
+             outline</label><label for="showimagereport"><input id="showimagereport" type="checkbox" name="showimagereport" value="yes" ref="4">
             +</label>
-            +image report</label><label for="level"><input id="level" type="checkbox" name="level" value="warning" ref="5">
+             image report</label><label for="level"><input id="level" type="checkbox" name="level" value="warning" ref="5">
             +</label>
-            +errors & warnings only</label><input id="show_options" type="button" value="Options…" ref="6">
+             errors & warnings only</label><input id="show_options" type="button" value="Options…" ref="6">
             
             -<label id="inputlabel">Check by
             +<label id="inputlabel">Check by</label>
