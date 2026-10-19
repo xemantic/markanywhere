@@ -106,7 +106,7 @@ internal fun Flow<SemanticEvent>.expressEmphasisInMarkdown(): Flow<SemanticEvent
                 is Text -> {}
             }
             if (bufferDepth == 0) drainBuffer()
-        } else if (event is SemanticEvent.Mark && codeDepth == 0 && event.awaitsBlockTest()) {
+        } else if (event is Mark && codeDepth == 0 && event.awaitsBlockTest()) {
             buffer += event
             bufferDepth = 1
         } else {

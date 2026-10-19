@@ -194,7 +194,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                 // colliding top-level name.
                 is BlockFrame.List -> {
                     val next = blockStack.getOrNull(i + 1)
-                    val pending = (next as? BlockFrame.ListItem)?.pendingMarker
+                    val pending = (next as? ListItem)?.pendingMarker
                     if (consumeMarker && pending != null) {
                         sb.append(pending)
                         next.pendingMarker = null
@@ -226,7 +226,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
             when (val frame = blockStack[i]) {
                 is Inline, is Link -> continue
                 is TaggedInline -> if (frame.block) return false
-                else -> return frame == BlockFrame.Heading
+                else -> return frame == Heading
             }
         }
         return false
@@ -620,7 +620,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
     fun holdBlankText(text: String) {
         for (c in text) when {
             c == ' ' -> pendingSpaces++
-            c.category == CharCategory.SPACE_SEPARATOR && !inLabel() -> {
+            c.category == SPACE_SEPARATOR && !inLabel() -> {
                 pendingWhitespace += " ".repeat(pendingSpaces) + c
                 pendingSpaces = 0
             }
@@ -713,7 +713,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
     // ends the line (the item's own close separates), at top level it is a
     // block like any other.
     fun closeList() {
-        val nestedInItem = blockStack.lastOrNull() is BlockFrame.ListItem
+        val nestedInItem = blockStack.lastOrNull() is ListItem
         if (nestedInItem) {
             ensureLineStart()
             pendingBlockSeparator = false
@@ -731,7 +731,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
     fun spillActiveLinks() {
         for (i in blockStack.indices.reversed()) {
             val frame = blockStack[i]
-            if (frame !is BlockFrame.Link || frame.rawMode) continue
+            if (frame !is Link || frame.rawMode) continue
             val labelText = labelBuffers.removeLast().toString()
             val openTag = renderOpenTag("a", frame.attributes)
             // Once this link's label buffer is popped, the *next* spill writes
@@ -898,7 +898,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         // Content written straight into a list item, with no `p` around it,
         // is the item's first child: a `p` after it is a block of its own, not
         // the text that opens the item's line (else `- LabelDescription`).
-        val openItem = blockStack.lastOrNull() as? BlockFrame.ListItem
+        val openItem = blockStack.lastOrNull() as? ListItem
         if (openItem != null && openItem.firstChild &&
             ((event is Text && event.text.isNotBlank()) ||
                 (event is Mark && event.name != "p" && event.name != "caption"))
@@ -922,7 +922,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         // a label, spill the affected links to raw HTML before dispatching.
         if (event is Mark
             && (event.name in BLOCK_LEVEL_MARK_NAMES || event.name in BLOCK_TAGGED_ELEMENTS)
-            && blockStack.any { it is BlockFrame.Link && !it.rawMode }
+            && blockStack.any { it is Link && !it.rawMode }
         ) {
             spillActiveLinks()
         }
@@ -950,7 +950,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         }
         if (event is Unmark && event.isTagged) {
             val frame = blockStack.lastOrNull()
-            if (frame is BlockFrame.SelfClosed) {
+            if (frame is SelfClosed) {
                 blockStack.removeLast()
                 flush()
                 return
@@ -967,7 +967,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
             } else {
                 writeRaw("</${event.name}>")
             }
-            if (frame is BlockFrame.TaggedInline) {
+            if (frame is TaggedInline) {
                 blockStack.removeLast()
             }
             // If the closing tag returned us to a block-level context
@@ -977,7 +977,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
             // no `p` frame around it, so the item's paragraph goes on (text
             // after the tag stays on its line, a `<br>` stays a hard break).
             if (!blockTagged && !inLabel() && blockStack.none { it.isInline() } &&
-                blockStack.lastOrNull() !is BlockFrame.ListItem
+                blockStack.lastOrNull() !is ListItem
             ) {
                 endBlock()
             }
@@ -1035,7 +1035,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                     out("---\n")
                     atLineStart = true
                     pendingBlockSeparator = false
-                    blockStack.addLast(BlockFrame.Frontmatter)
+                    blockStack.addLast(Frontmatter)
                     frontmatter = YamlWriter { out(it) }
                 }
 
@@ -1050,7 +1050,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                     // The separating space is deferred so an empty heading
                     // renders as bare `#` (see consumeHeadingSpace).
                     headingSpacePending = true
-                    blockStack.addLast(BlockFrame.Heading)
+                    blockStack.addLast(Heading)
                 }
 
                 // A `<caption>` has no GFM equivalent, so it degrades to the
@@ -1059,7 +1059,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                     // Inside a list item awaiting its first content, the `p`
                     // becomes inline — the item marker already opens the line.
                     val parent = blockStack.lastOrNull()
-                    if (parent is BlockFrame.ListItem && parent.firstChild) {
+                    if (parent is ListItem && parent.firstChild) {
                         parent.firstChild = false
                         blockStack.addLast(BlockFrame.Paragraph(suppressClose = true))
                     } else {
@@ -1067,7 +1067,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                         // marker line starts on a line of its own — as an
                         // indented continuation, the same shape a second `p`
                         // in an item takes (see the two-paragraph item test).
-                        if (parent is BlockFrame.ListItem && !atLineStart && !inLabel()) ensureLineStart()
+                        if (parent is ListItem && !atLineStart && !inLabel()) ensureLineStart()
                         // Loose inline text still open on the current line is a
                         // block of its own (`A<p>B</p>` is two blocks in HTML), so
                         // the paragraph needs a blank line, not the bare newline
@@ -1087,27 +1087,27 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                     freshBlockLine = false
                     lineStartDigits = false
                     endBlock()
-                    blockStack.addLast(BlockFrame.SelfClosed)
+                    blockStack.addLast(SelfClosed)
                 }
 
                 "blockquote" -> {
                     ensureBlankLine()
-                    blockStack.addLast(BlockFrame.Blockquote)
+                    blockStack.addLast(Blockquote)
                 }
 
                 "ul" -> {
-                    val nested = blockStack.lastOrNull() is BlockFrame.ListItem
+                    val nested = blockStack.lastOrNull() is ListItem
                     if (nested) {
-                        (blockStack.last() as BlockFrame.ListItem).firstChild = false
+                        (blockStack.last() as ListItem).firstChild = false
                         ensureLineStart()
                     } else ensureBlankLine()
                     blockStack.addLast(BlockFrame.List(ordered = false))
                 }
 
                 "ol" -> {
-                    val nested = blockStack.lastOrNull() is BlockFrame.ListItem
+                    val nested = blockStack.lastOrNull() is ListItem
                     if (nested) {
-                        (blockStack.last() as BlockFrame.ListItem).firstChild = false
+                        (blockStack.last() as ListItem).firstChild = false
                         ensureLineStart()
                     } else ensureBlankLine()
                     val start = event.attributes["start"]?.toIntOrNull() ?: 1
@@ -1126,7 +1126,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                     val list = blockStack.lastOrNull() as? BlockFrame.List
                         ?: BlockFrame.List(ordered = false, synthetic = true).also {
                             val parent = blockStack.lastOrNull()
-                            if (parent is BlockFrame.ListItem) {
+                            if (parent is ListItem) {
                                 parent.firstChild = false
                                 ensureLineStart()
                             } else ensureBlankLine()
@@ -1142,11 +1142,11 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
 
                 "pre" -> {
                     startBlock()
-                    blockStack.addLast(BlockFrame.Pre)
+                    blockStack.addLast(Pre)
                 }
 
                 "code" -> {
-                    if (blockStack.lastOrNull() is BlockFrame.Pre) {
+                    if (blockStack.lastOrNull() is Pre) {
                         val lang = event.attributes["class"]
                             ?.removePrefix("language-")
                             ?: ""
@@ -1166,7 +1166,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                         // full content is known — see renderInlineCode.
                         openLabelBuffer()
                     }
-                    blockStack.addLast(BlockFrame.Code)
+                    blockStack.addLast(Code)
                 }
 
                 // Opening an emphasis frame can only *set* a bit in the mask, never
@@ -1205,12 +1205,12 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                         freshBlockLine = false
                         lineStartDigits = false
                     }
-                    blockStack.addLast(BlockFrame.SelfClosed)
+                    blockStack.addLast(SelfClosed)
                 }
 
                 "br" -> {
                     pendingHardBreak = true
-                    blockStack.addLast(BlockFrame.SelfClosed)
+                    blockStack.addLast(SelfClosed)
                 }
 
                 "table" -> {
@@ -1239,8 +1239,8 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                     // columns (rendered as the content plus N-1 empty cells).
                     val colspan = event.attributes["colspan"]
                         ?.toIntOrNull()?.coerceAtLeast(1) ?: 1
-                    val row = blockStack.lastOrNull { it is BlockFrame.TableRow }
-                        as? BlockFrame.TableRow
+                    val row = blockStack.lastOrNull { it is TableRow }
+                        as? TableRow
                     if (row != null) {
                         if (row.buffer.isEmpty()) out("|")
                         row.cellCount += colspan
@@ -1277,7 +1277,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                             // Deferred paragraph that never received content —
                             // a no-op (it emitted nothing, so nothing to close).
                             pendingParagraph -> pendingParagraph = false
-                            (frame as BlockFrame.Paragraph).suppressClose -> {
+                            (frame as Paragraph).suppressClose -> {
                                 // first-content paragraph in a list item — leave
                                 // pendingBlockSeparator alone so the list-item
                                 // line just ends.
@@ -1311,7 +1311,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                         // Opened as a tag, where a delimiter would have joined
                         // the closer before it (see openInline).
                         frame is TaggedInline -> writeRaw("</${event.name}>")
-                        frame !is BlockFrame.Inline -> error("<${event.name}> closed over $frame")
+                        frame !is Inline -> error("<${event.name}> closed over $frame")
                         // A transparent (nested) span wrote no delimiter.
                         frame.delimiter.isEmpty() -> {}
                         // `^a^^b^` re-parses as the two spans it is (a `^`
@@ -1322,7 +1322,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                     }
 
                     "a" -> {
-                        val link = frame as BlockFrame.Link
+                        val link = frame as Link
                         if (link.rawInline) {
                             // Spilled inline on a heading's line — close it there.
                             writeRaw("</a>")
@@ -1350,9 +1350,9 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
 
                     "tr" -> {
                         rowCapture = null
-                        val table = blockStack.lastOrNull { it is BlockFrame.Table }
-                            as? BlockFrame.Table
-                        emitTableRow(frame as BlockFrame.TableRow, table)
+                        val table = blockStack.lastOrNull { it is Table }
+                            as? Table
+                        emitTableRow(frame as TableRow, table)
                     }
 
                     "th", "td" -> {
@@ -1366,11 +1366,11 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                         out(content.replace("|", "\\|"))
                         out(" |")
                         // Empty padding cells for a colspan > 1.
-                        repeat((frame as BlockFrame.TableCell).colspan - 1) { out("  |") }
+                        repeat((frame as TableCell).colspan - 1) { out("  |") }
                     }
 
                     else -> {
-                        if (frame is BlockFrame.SelfClosed) {
+                        if (frame is SelfClosed) {
                             // void element — no closing tag
                         } else {
                             // The close mirrors its own open (see rendersAsBlockTag,
@@ -1417,7 +1417,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
             && !inLabel() && !inPreCode
             && (event.isTagged || event.name !in MARKDOWN_NATIVE_MARK_NAMES)
             && event.name in HELD_RAW_INLINE_TAGS
-            && blockStack.none { it == BlockFrame.Heading }
+            && blockStack.none { it == Heading }
 
     suspend fun route(event: SemanticEvent) {
         val held = heldRawInline
@@ -1794,7 +1794,7 @@ private fun emphasisDelimiter(name: String): String? = when (name) {
 // `markanywhere-html`.
 private fun Char.isFlankWhitespace(): Boolean =
     this == '\t' || this == '\n' || this == '\u000C' || this == '\r' ||
-        category == CharCategory.SPACE_SEPARATOR
+        category == SPACE_SEPARATOR
 
 private fun Char.isFlankPunctuation(): Boolean =
     this in '!'..'/' || this in ':'..'@' || this in '['..'`' || this in '{'..'~'
