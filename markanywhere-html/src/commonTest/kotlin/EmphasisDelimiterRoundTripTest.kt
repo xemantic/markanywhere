@@ -82,7 +82,7 @@ class EmphasisDelimiterRoundTripTest {
 
     @Test
     fun `should round-trip mark spanning a whole link label`() = runTest {
-        // `mark` (`==`) is a boolean-flagged span whose closer resolves on the next
+        // `mark` (`==`) is a span whose closer resolves on the next
         // char — but at a label's end the `]` is not that char, so the closing `==`
         // leaked into the committed link as literal content (`<mark>mark</mark>==`)
         // and grew on every round-trip. flushInlineLabelClose must consume it.
@@ -125,8 +125,7 @@ class EmphasisDelimiterRoundTripTest {
         // grow the run on round-trip — the renderer's escapeActiveInlineDelimiters
         // backslash-escapes it (it sits inside a label-local span), so re-parse keeps
         // it literal. This pins that two-sided defense (parser break + renderer
-        // escape) against the PR #57 review's "grows by one every round-trip" concern,
-        // which only holds for an *outer* (unescaped) em — the separate issue #58.
+        // escape) against the PR #57 review's "grows by one every round-trip" concern.
         // when
         val once = flowOf("[_a *b* c_](u)").parse().renderMarkdown()
         val twice = flowOf(once).parse().renderMarkdown()
@@ -195,10 +194,9 @@ class EmphasisDelimiterRoundTripTest {
 
     @Test
     fun `should round-trip del wrapping a link whose label text contains a tilde`() = runTest {
-        // `del`/`mark`/`sup` are parser boolean flags, NOT scoped by the label
-        // watermark — so a matching delimiter in the *label text* of a wrapped link
-        // closes the OUTER span on re-parse (a crossed stream that crashes the
-        // renderer). The renderer must escape against the outer del/mark/sup too.
+        // The renderer escapes label text against an outer del/mark/sup too. The
+        // parser no longer lets such a delimiter close the outer span (issue #58),
+        // so this is defense in depth that keeps the output unambiguous.
         // when
         val markdown = semanticEvents {
             "p" { "del" { "a"("href" to "u") { +"foo~bar" } } }
@@ -228,6 +226,127 @@ class EmphasisDelimiterRoundTripTest {
         // then
         markdown sameAs "^[foo\\^bar](u)^"
         assertMarkdownFixpoint(markdown)
+    }
+
+    // Issue #58: hand-written Markdown whose link label holds a delimiter matching
+    // an emphasis span opened before the `[` used to parse into a crossed stream
+    // that crashed the renderer. The parser keeps the label delimiter literal.
+
+    @Test
+    fun `should round-trip emphasis wrapping a link whose label text contains an asterisk`() = runTest {
+        // given
+        val markdown = "*x [a*b](u) y*"
+        // when
+        val once = flowOf(markdown).parse().renderMarkdown()
+        val twice = flowOf(once).parse().renderMarkdown()
+        // then
+        once sameAs markdown
+        twice sameAs once
+    }
+
+    @Test
+    fun `should render del wrapping a link whose label text contains an unescaped tilde`() = runTest {
+        // when
+        val once = flowOf("~~[foo~bar](u)~~").parse().renderMarkdown()
+        val twice = flowOf(once).parse().renderMarkdown()
+        // then
+        once sameAs "~~[foo\\~bar](u)~~"
+        twice sameAs once
+    }
+
+    @Test
+    fun `should render mark wrapping a link whose label text contains an unescaped equals pair`() = runTest {
+        // when
+        val once = flowOf("==[foo==bar](u)==").parse().renderMarkdown()
+        val twice = flowOf(once).parse().renderMarkdown()
+        // then
+        once sameAs "==[foo\\=\\=bar](u)=="
+        twice sameAs once
+    }
+
+    @Test
+    fun `should render superscript wrapping a link whose label text contains an unescaped caret`() = runTest {
+        // when
+        val once = flowOf("^[foo^bar](u)^").parse().renderMarkdown()
+        val twice = flowOf(once).parse().renderMarkdown()
+        // then
+        once sameAs "^[foo\\^bar](u)^"
+        twice sameAs once
+    }
+
+    // Issues #60 and #62: a span opened inside a del/mark/sup closes before it,
+    // so the renderer writes each closing delimiter for the span it belongs to.
+
+    @Test
+    fun `should render a sup left open inside a del`() = runTest {
+        // when
+        val once = flowOf("~~foo ^bar~~").parse().renderMarkdown()
+        // then
+        once sameAs "~~foo ^bar^~~"
+        assertMarkdownFixpoint(once)
+    }
+
+    @Test
+    fun `should render an em left open inside a del`() = runTest {
+        // when
+        val once = flowOf("~~a *b~~").parse().renderMarkdown()
+        // then
+        once sameAs "~~a *b*~~"
+        assertMarkdownFixpoint(once)
+    }
+
+    @Test
+    fun `should round-trip a mark closed right before the closer of its del`() = runTest {
+        // when
+        val once = flowOf("~~a ==b~~ c").parse().renderMarkdown()
+        // then
+        once sameAs "~~a ==b==~~ c"
+        assertMarkdownFixpoint(once)
+    }
+
+    @Test
+    fun `should round-trip a strong wrapping a del in a link label`() = runTest {
+        // when
+        val once = flowOf("[**a ~~b**](u)").parse().renderMarkdown()
+        // then
+        once sameAs "[**a ~~b~~**](u)"
+        assertMarkdownFixpoint(once)
+    }
+
+    @Test
+    fun `should round-trip carets in a link label inside a sup`() = runTest {
+        // when
+        val once = flowOf("^a [b^ c^](u)^").parse().renderMarkdown()
+        // then
+        once sameAs "^a [b\\^ c\\^](u)^"
+        assertMarkdownFixpoint(once)
+    }
+
+    @Test
+    fun `should round-trip tilde pairs in a link label inside a del`() = runTest {
+        // when
+        val once = flowOf("~~a [~~b~~ c](u)~~").parse().renderMarkdown()
+        // then
+        once sameAs "~~a [\\~\\~b\\~\\~ c](u)~~"
+        assertMarkdownFixpoint(once)
+    }
+
+    @Test
+    fun `should round-trip a tilde before an escaped bracket in a link label`() = runTest {
+        // when
+        val once = flowOf("[a~\\]b](u)").parse().renderMarkdown()
+        val twice = flowOf(once).parse().renderMarkdown()
+        // then
+        twice sameAs once
+    }
+
+    @Test
+    fun `should render an em left open inside a mark`() = runTest {
+        // when
+        val once = flowOf("==a*b").parse().renderMarkdown()
+        // then
+        once sameAs "==a*b*=="
+        assertMarkdownFixpoint(once)
     }
 
     @Test
@@ -493,7 +612,7 @@ class EmphasisDelimiterRoundTripTest {
         // `~` is a cross-type delimiter inside a label-local span, so the
         // label-internal mask (firstOpaqueFrame is `Inline` → all four delimiter
         // bits) escapes it. The OUTER del below the Link is also covered, via the
-        // `activeDelimiterMask and outerBooleanDelimiters` term —
+        // `activeDelimiterMask and delMarkSupDelimiters` term —
         // refreshActiveDelimiters scans the WHOLE stack, so it still sees the del
         // beneath the Link + em (locked separately by the del-wrapping-a-link test).
         // when
@@ -518,10 +637,9 @@ class EmphasisDelimiterRoundTripTest {
     // --- Cross-type delimiter escaping ----------------------------------------
     //
     // A literal delimiter of a DIFFERENT type than the open span (`~` inside
-    // `<mark>`, `*` inside `<del>`, …) must also be escaped: the parser tracks
-    // em/strong on a stack but del/mark/sup as boolean flags, so the two never
-    // co-close, and an unescaped cross-type delimiter opens a new span that
-    // crosses the enclosing closer on re-parse (the run grows every round-trip).
+    // `<mark>`, `*` inside `<del>`, …) must also be escaped: an unescaped
+    // cross-type delimiter opens a new span on re-parse, which the enclosing
+    // closer then force-closes, restructuring the content every round-trip.
     // Escaping the open span's OWN delimiter (covered above) is not enough —
     // every delimiter type must be escaped whenever any span is open.
 
@@ -546,8 +664,8 @@ class EmphasisDelimiterRoundTripTest {
 
     @Test
     fun `should round-trip mark whose content contains a literal asterisk`() = runTest {
-        // `*` inside a boolean-flag span — the case a mask of
-        // `activeDelimiterMask or outerBooleanDelimiters` (the `~`/`=`/`^` bits only)
+        // `*` inside a del/mark/sup span — the case a mask of
+        // `activeDelimiterMask or delMarkSupDelimiters` (the `~`/`=`/`^` bits only)
         // would MISS, since it never sets the `*` bit when only mark/del/sup is open.
         // when
         val markdown = semanticEvents { "p" { "mark" { +"a*b" } } }.renderMarkdown()
@@ -576,7 +694,7 @@ class EmphasisDelimiterRoundTripTest {
 
     @Test
     fun `should round-trip del whose content contains a literal asterisk`() = runTest {
-        // `*` inside del — another case the `or outerBooleanDelimiters` mask misses.
+        // `*` inside del — another case the `or delMarkSupDelimiters` mask misses.
         // when
         val markdown = semanticEvents { "p" { "del" { +"a*b" } } }.renderMarkdown()
         // then
@@ -613,7 +731,7 @@ class EmphasisDelimiterRoundTripTest {
 
     @Test
     fun `should round-trip superscript whose content contains a literal asterisk`() = runTest {
-        // `*` inside sup — the third boolean-flag span the narrow mask would miss.
+        // `*` inside sup — the third del/mark/sup span the narrow mask would miss.
         // when
         val markdown = semanticEvents { "p" { "sup" { +"a*b" } } }.renderMarkdown()
         // then

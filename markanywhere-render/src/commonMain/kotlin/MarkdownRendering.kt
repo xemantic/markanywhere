@@ -356,9 +356,9 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
     // any emphasis span is open — not only the open span's own delimiter. A literal
     // delimiter inside the content would otherwise re-pair against the span's own
     // closing run (`…)*` → `…)**` → `…)***`, the unbounded Brave SERP instability),
-    // OR — cross-type — open a brand-new span that crosses the enclosing closer on
-    // re-parse (`==a~b==`: the lone `~` opens a del the `==` mark-closer cannot
-    // co-close, since del/mark/sup are boolean flags while em/strong use a stack).
+    // OR — cross-type — open a brand-new span on re-parse that restructures the
+    // content (`==a~b==`: the lone `~` opens a del inside the mark, which the `==`
+    // closer then force-closes, giving `<mark>a<del>b</del></mark>`).
     // Suppressed inside verbatim `pre`/`code`, where a backslash is literal text.
     fun escapeActiveInlineDelimiters(text: String): String {
         if (inPreCode || text.isEmpty()) return text
@@ -374,15 +374,12 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         //      label-scoped close only resolves a delimiter at the very label end;
         //      plus
         //  (b) OUTER `del`/`mark`/`sup` (the `~`/`=`/`^` bits of the full mask).
-        //      Those are parser *boolean flags*, NOT scoped by
-        //      `linkLabelOuterStackDepth`, so a matching delimiter in label text
-        //      closes the OUTER span on re-parse — a crossed/unbalanced stream that
-        //      crashes the renderer (`~~[foo~bar](u)~~`). em/strong (`*`) ARE
-        //      watermark-scoped, so an inner `*` can't close an outer em — exclude
-        //      its bit (the residual outer-em crossing is a separate parser
-        //      limitation, issue #58; escaping `*` here would contradict the
-        //      watermark — see "should not escape label content against emphasis
-        //      opened outside the label").
+        //      The parser scopes every span by `linkLabelOuterStackDepth`, so a
+        //      matching delimiter in label text can no longer close the OUTER span
+        //      (issue #58) — this escape is defense in depth that keeps the output
+        //      unambiguous (`~~[foo\~bar](u)~~`). The `*` bit is left out, so an
+        //      inner `*` stays unescaped against an outer em — see "should not
+        //      escape label content against emphasis opened outside the label".
         val mask = if (inLabel()) {
             // One reversed-stack scan, reused for both the inline-code guard and the
             // label-internal `Inline` check — the opaque frame is at most one of
@@ -396,7 +393,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
             // needed below.)
             if (opaqueFrame is Code) return text
             (if (opaqueFrame is Inline) allInlineDelimiters else 0) or
-                (activeDelimiterMask and outerBooleanDelimiters)
+                (activeDelimiterMask and delMarkSupDelimiters)
         } else if (activeDelimiterMask != 0) allInlineDelimiters
         else 0
         // Fast path: nothing to escape when no emphasis span is open AND we are not
@@ -1533,17 +1530,15 @@ private fun delimiterBit(c: Char): Int = when (c) {
     else -> 0
 }
 
-// `~`/`=`/`^` bits — the parser *boolean-flag* delimiters (del/mark/sup), which
-// are NOT watermark-scoped, so they must be escaped against an outer span inside
-// a label. Excludes the `*` bit (em/strong are watermark-scoped). Constant —
-// computed once per stream, not per text event.
-private val outerBooleanDelimiters = delimiterBit('~') or delimiterBit('=') or delimiterBit('^')
+// `~`/`=`/`^` bits — the del/mark/sup delimiters, escaped against an outer span
+// inside a label as defense in depth (the parser no longer lets them close it).
+// Excludes the `*` bit. Constant — computed once per stream, not per text event.
+private val delMarkSupDelimiters = delimiterBit('~') or delimiterBit('=') or delimiterBit('^')
 
 // All four inline-emphasis delimiter bits (`*`/`~`/`=`/`^`). When ANY emphasis
 // span is open, a literal delimiter of ANY type in the content (not just the
-// open span's own char) can open a *new* span on re-parse that crosses the
-// enclosing closer: the parser tracks em/strong on a stack but del/mark/sup as
-// boolean flags, so the two never co-close — `==a~b==` re-parses to a crossed
-// mark/del stream, `~~a*b~~` to a crossed del/em stream. So a single open span
-// means escape all four, not just its own delimiter.
-private val allInlineDelimiters = delimiterBit('*') or outerBooleanDelimiters
+// open span's own char) can open a *new* span on re-parse that restructures the
+// content — `==a~b==` re-parses to `<mark>a<del>b</del></mark>`, `~~a*b~~` to
+// `<del>a<em>b</em></del>`. So a single open span means escape all four, not
+// just its own delimiter.
+private val allInlineDelimiters = delimiterBit('*') or delMarkSupDelimiters
