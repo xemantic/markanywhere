@@ -116,6 +116,28 @@ abstract class XmlParserTest {
     }
 
     @Test
+    fun `should put namespace declarations ahead of the other attributes`() = runTest {
+        // when — a namespace-aware parser reports declarations apart from the
+        // attributes, so the contract orders them first
+        val events = parse("""<a b="1" xmlns="u" c="2" xmlns:p="v"/>""").toList()
+
+        // then
+        val attributes = events.filterIsInstance<SemanticEvent.Mark>().single().attributes
+        assert(attributes.keys.toList() == listOf("xmlns", "xmlns:p", "b", "c"))
+    }
+
+    @Test
+    fun `should read names written in a script with combining marks`() = runTest {
+        // when — U+093E, the second character, is a spacing combining mark
+        val events = parse("<नाम लेख=\"x\">y</नाम>")
+
+        // then
+        events sameAs semanticEvents(tagged = true) {
+            "नाम"("लेख" to "x") { +"y" }
+        }
+    }
+
+    @Test
     fun `should decode predefined entities and character references`() = runTest {
         // when
         val events = parse(
@@ -138,6 +160,24 @@ abstract class XmlParserTest {
         // then
         events sameAs semanticEvents(tagged = true) {
             "a" { +"😀😀" }
+        }
+    }
+
+    @Test
+    fun `should stop at a character reference XML does not allow`() = runTest {
+        // given — an uppercase X, and digits which are digits only to Unicode
+        val references = listOf("&#X41;", "&#\u0661\u0662\u0663;", "&#x\uFF21;")
+
+        references.forEach { reference ->
+            // when
+            val events = parse("<a>$reference</a>").toList()
+
+            // then
+            events should {
+                have(markNames() == listOf("a"))
+                have(textContent() == "")
+                have(isBalanced())
+            }
         }
     }
 
@@ -213,6 +253,46 @@ abstract class XmlParserTest {
         // then
         events sameAs semanticEvents(tagged = true) {
             "a" { +"text" }
+        }
+    }
+
+    @Test
+    fun `should skip a DOCTYPE whose internal subset holds quotes in a comment and an instruction`() = runTest {
+        // when — the apostrophes open no literal, so the DOCTYPE still ends
+        val events = parse(
+            """<!DOCTYPE a [<!-- don't --><?pi it's ?>]><a>text</a>"""
+        )
+
+        // then
+        events sameAs semanticEvents(tagged = true) {
+            "a" { +"text" }
+        }
+    }
+
+    @Test
+    fun `should drop whitespace outside the root element`() = runTest {
+        // when — the line breaks after the declaration and at the end of the
+        // file are not character data of any element
+        val events = parse("<?xml version=\"1.0\"?>\n<!-- c -->\n<a> </a>\n")
+
+        // then
+        events sameAs semanticEvents(tagged = true) {
+            "a" { +" " }
+        }
+    }
+
+    @Test
+    fun `should drop whitespace outside the root element arriving one character at a time`() = runTest {
+        // given
+        val xml = "\n \n<a>x</a>\n\n"
+
+        // when
+        val events = parser.parse(xml.map { char -> char.toString() }.asFlow())
+            .mergeAdjacentText()
+
+        // then
+        events sameAs semanticEvents(tagged = true) {
+            "a" { +"x" }
         }
     }
 

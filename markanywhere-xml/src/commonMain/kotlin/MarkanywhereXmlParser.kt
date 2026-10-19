@@ -19,7 +19,9 @@ package com.xemantic.markanywhere.xml
 import com.xemantic.markanywhere.SemanticEvent
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.FlowCollector
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.takeWhile
 
 /**
  * The hand-written multiplatform [XmlParser] — the engine which needs no
@@ -59,11 +61,10 @@ import kotlinx.coroutines.flow.flow
  *   here nor, deliberately, in `StaxXmlParser` — so nothing beyond the five
  *   predefined entities can be resolved, and guessing at HTML's names would
  *   invent content the document does not declare.
- * - A **name character** is approximated as a letter, a digit, `_`, `:`, `-`,
- *   `.` or `·`, instead of enumerating the Unicode ranges of the XML
- *   production. This accepts every name in practical use, and additionally
- *   accepts a few exotic ones XML would reject — an error the contract lets us
- *   read past rather than a construct we misread.
+ * - **Names** follow the XML 1.0 fifth-edition productions, whose ranges are
+ *   broader than the older tables some platform parsers still apply — a name
+ *   one of those rejects is an error the contract lets us read past.
+ *   Surrogate halves are judged one at a time, so an unpaired one is accepted.
  */
 public class MarkanywhereXmlParser : XmlParser {
 
@@ -71,27 +72,21 @@ public class MarkanywhereXmlParser : XmlParser {
         chunks: Flow<String>
     ): Flow<SemanticEvent> = flow {
         val document = XmlDocumentReader(collector = this)
-        try {
-            chunks.collect { chunk ->
+        // Once malformed input has ended the read, draining the rest of the
+        // source would be pointless, and a source which never ends would never
+        // let the marks left open be closed. `takeWhile` ends the collection
+        // with an exception owned by this very collection, so a parse whose
+        // source is another parse never mistakes the other's abort for its own.
+        chunks
+            .takeWhile { chunk ->
                 document.read(chunk)
-                if (document.isStopped) throw EndOfRead
+                !document.isStopped
             }
-        } catch (_: EndOfRead) {
-            // Malformed input ended the read before the source ended. Draining
-            // the rest would be pointless, and a source which never ends would
-            // never let the marks left open be closed.
-        }
+            .collect()
         document.closeOpenElements()
     }
 
 }
-
-/**
- * Thrown to leave [Flow.collect] once the read is over, the way
- * `kotlinx.coroutines` itself ends a collection early. Caught immediately at
- * its only call site, so it never escapes the parser.
- */
-private object EndOfRead : Throwable(null, null)
 
 /**
  * The state machine reading one document into [collector], one character at a
@@ -146,6 +141,12 @@ private class XmlDocumentReader(
     /** Whether the DOCTYPE being skipped stands in its internal subset. */
     private var inInternalSubset = false
 
+    /** The comment or processing instruction of the internal subset being skipped. */
+    private var subsetMarkup: SubsetMarkup = NONE
+
+    /** What has been read of a `<!--` or `<?` opener in the internal subset. */
+    private val subsetOpening = StringBuilder()
+
     /** Set by a carriage return, so that the line feed of a CRLF is not read twice. */
     private var skipLineFeed = false
 
@@ -166,7 +167,10 @@ private class XmlDocumentReader(
             }
             process(char)
         }
-        flushText()
+        // Whitespace outside every element is held rather than flushed: only
+        // what follows it tells whether it is the prolog or epilog whitespace
+        // dropped below, or the start of text a fragment carries.
+        if (!isOutsideElementsWhitespace()) flushText()
     }
 
     /**
@@ -340,6 +344,8 @@ private class XmlDocumentReader(
             read.length == 1 && char.isXmlNameStart() -> {
                 doctypeQuote = null
                 inInternalSubset = false
+                subsetMarkup = NONE
+                subsetOpening.clear()
                 state = DOCTYPE
             }
             else -> stop()
@@ -374,17 +380,67 @@ private class XmlDocumentReader(
      * Skips a DOCTYPE declaration, which the event model cannot carry.
      *
      * Its terminating `>` is found rather than assumed: a system literal may
-     * hold one, and so may the internal subset.
+     * hold one, and so may the internal subset — whose comments and processing
+     * instructions are skipped whole, since a quote, `]` or `>` inside one is
+     * neither a literal nor the end of anything.
      */
     private fun readDoctype(char: Char) {
-        val quote = doctypeQuote
-        when {
-            quote != null -> if (char == quote) doctypeQuote = null
-            char == '"' || char == '\'' -> doctypeQuote = char
-            char == '[' -> inInternalSubset = true
-            char == ']' -> inInternalSubset = false
-            char == '>' && !inInternalSubset -> state = CONTENT
+        when (subsetMarkup) {
+            COMMENT -> when {
+                char == '-' -> repeats++
+                char == '>' && repeats >= 2 -> subsetMarkup = NONE
+                else -> repeats = 0
+            }
+            PROCESSING_INSTRUCTION -> when {
+                char == '?' -> questionMark = true
+                char == '>' && questionMark -> subsetMarkup = NONE
+                else -> questionMark = false
+            }
+            NONE -> readDoctypeDeclaration(char)
         }
+    }
+
+    private fun readDoctypeDeclaration(char: Char) {
+        val quote = doctypeQuote
+        if (quote != null) {
+            if (char == quote) doctypeQuote = null
+            return
+        }
+        if (inInternalSubset && startsSubsetMarkup(char)) return
+        when (char) {
+            '"', '\'' -> doctypeQuote = char
+            '[' -> inInternalSubset = true
+            ']' -> inInternalSubset = false
+            '>' -> if (!inInternalSubset) state = CONTENT
+        }
+    }
+
+    /**
+     * Follows a `<!--` or `<?` opener in the internal subset, entering the
+     * comment or processing instruction it starts once complete.
+     */
+    private fun startsSubsetMarkup(char: Char): Boolean {
+        if (char == '<') {
+            subsetOpening.clear()
+            subsetOpening.append(char)
+            return false
+        }
+        if (subsetOpening.isEmpty()) return false
+        subsetOpening.append(char)
+        val read = subsetOpening.toString()
+        val markup: SubsetMarkup = when (read) {
+            "<?" -> PROCESSING_INSTRUCTION
+            COMMENT_OPENING -> COMMENT
+            else -> {
+                if (!COMMENT_OPENING.startsWith(read)) subsetOpening.clear()
+                return false
+            }
+        }
+        subsetOpening.clear()
+        repeats = 0
+        questionMark = false
+        subsetMarkup = markup
+        return true
     }
 
     private fun startReference(inAttribute: Boolean) {
@@ -422,6 +478,18 @@ private class XmlDocumentReader(
         state = ATTRIBUTE_END
     }
 
+    /**
+     * The attributes read, namespace declarations first — the order the
+     * [XmlParser] contract prescribes, each group otherwise in document order.
+     */
+    private fun orderedAttributes(): Map<String, String> {
+        if (attributes.keys.none { it.isNamespaceDeclaration() }) return attributes.toMap()
+        val (declarations, others) = attributes.entries.partition {
+            it.key.isNamespaceDeclaration()
+        }
+        return (declarations + others).associate { it.key to it.value }
+    }
+
     private suspend fun startElement(isEmpty: Boolean) {
         val name = elementName.toString()
         flushText()
@@ -429,7 +497,7 @@ private class XmlDocumentReader(
             SemanticEvent.Mark(
                 name = name,
                 isTagged = true,
-                attributes = attributes.toMap()
+                attributes = orderedAttributes()
             )
         )
         if (isEmpty) {
@@ -462,11 +530,23 @@ private class XmlDocumentReader(
         skipLineFeed = true
     }
 
+    /**
+     * Emits the text read since the last event — except whitespace standing
+     * outside every element, which is dropped: the line breaks around the root
+     * element of a file are not character data, and StAX does not report them
+     * either. Text outside any element which is not all whitespace is kept,
+     * since a fragment may carry it.
+     */
     private suspend fun flushText() {
         if (text.isEmpty()) return
-        collector.emit(SemanticEvent.Text(text.toString()))
+        if (!isOutsideElementsWhitespace()) {
+            collector.emit(SemanticEvent.Text(text.toString()))
+        }
         text.clear()
     }
+
+    private fun isOutsideElementsWhitespace(): Boolean =
+        open.isEmpty() && text.all { it.isXmlWhitespace() }
 
     /** Ends the read, keeping everything understood up to this point. */
     private suspend fun stop() {
@@ -501,7 +581,16 @@ private enum class ReaderState {
     DOCTYPE
 }
 
+/** A comment or processing instruction inside a DOCTYPE's internal subset. */
+private enum class SubsetMarkup {
+    NONE,
+    COMMENT,
+    PROCESSING_INSTRUCTION
+}
+
 private const val CDATA_OPENING = "[CDATA["
+
+private const val COMMENT_OPENING = "<!--"
 
 /** The only entities a document needs no DTD to use. */
 private val PREDEFINED_ENTITIES = mapOf(
@@ -517,9 +606,12 @@ private val PREDEFINED_ENTITIES = mapOf(
  * `null` when it refers to no character XML allows.
  */
 private fun decodeCharacterReference(body: String): String? {
-    val isHex = (body.length > 1) && ((body[1] == 'x') || (body[1] == 'X'))
+    // Only a lowercase `x`, and only ASCII digits: `toIntOrNull` would also
+    // take any Unicode digit, Arabic-Indic or fullwidth, which XML does not.
+    val isHex = body.startsWith("#x")
     val digits = body.substring(if (isHex) 2 else 1)
     if (digits.isEmpty()) return null
+    if (!digits.all { if (isHex) it.isAsciiHexDigit() else it.isAsciiDigit() }) return null
     val code = digits.toIntOrNull(radix = if (isHex) 16 else 10) ?: return null
     if (!isXmlCharacter(code)) return null
     if (code <= 0xFFFF) return code.toChar().toString()
@@ -537,11 +629,41 @@ private fun isXmlCharacter(code: Int): Boolean =
         (code in 0xE000..0xFFFD) ||
         (code in 0x10000..0x10FFFF)
 
+private fun String.isNamespaceDeclaration(): Boolean =
+    (this == "xmlns") || startsWith("xmlns:")
+
+private fun Char.isAsciiDigit(): Boolean = this in '0'..'9'
+
+private fun Char.isAsciiHexDigit(): Boolean =
+    isAsciiDigit() || (this in 'a'..'f') || (this in 'A'..'F')
+
 private fun Char.isXmlWhitespace(): Boolean =
     (this == ' ') || (this == '\t') || (this == '\n') || (this == '\r')
 
+/**
+ * The `NameStartChar` production of XML 1.0 (fifth edition). A character above
+ * the basic plane arrives as a surrogate pair, read one half at a time, so both
+ * halves of the production's `[#x10000-#xEFFFF]` range are accepted.
+ */
 private fun Char.isXmlNameStart(): Boolean =
-    isLetter() || (this == '_') || (this == ':')
+    (this in 'a'..'z') || (this in 'A'..'Z') || (this == '_') || (this == ':') ||
+        (this in '\u00C0'..'\u00D6') ||
+        (this in '\u00D8'..'\u00F6') ||
+        (this in '\u00F8'..'\u02FF') ||
+        (this in '\u0370'..'\u037D') ||
+        (this in '\u037F'..'\u1FFF') ||
+        (this in '\u200C'..'\u200D') ||
+        (this in '\u2070'..'\u218F') ||
+        (this in '\u2C00'..'\u2FEF') ||
+        (this in '\u3001'..'\uD7FF') ||
+        (this in '\uF900'..'\uFDCF') ||
+        (this in '\uFDF0'..'\uFFFD') ||
+        (this in '\uD800'..'\uDB7F') ||
+        (this in '\uDC00'..'\uDFFF')
 
+/** The `NameChar` production of XML 1.0 (fifth edition). */
 private fun Char.isXmlNameChar(): Boolean =
-    isXmlNameStart() || isDigit() || (this == '-') || (this == '.') || (this == '·')
+    isXmlNameStart() || (this in '0'..'9') || (this == '-') || (this == '.') ||
+        (this == '\u00B7') ||
+        (this in '\u0300'..'\u036F') ||
+        (this in '\u203F'..'\u2040')

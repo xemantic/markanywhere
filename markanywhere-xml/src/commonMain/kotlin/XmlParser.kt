@@ -40,12 +40,13 @@ import kotlinx.coroutines.flow.flowOf
  *   namespace URI); case is preserved, XML being case-sensitive. There is no
  *   distinction between `<a/>` and `<a></a>` — both are a mark immediately
  *   followed by its unmark, and it is up to a serializer to pick a form.
- * - **Attributes** → [SemanticEvent.Mark.attributes], in document order, with
- *   entity references expanded and values normalized per the XML
- *   specification. Namespace declarations (`xmlns`, `xmlns:*`) are ordinary
- *   attributes here — a namespace-aware implementation must re-add the ones it
- *   consumed, ahead of the element's other attributes, so that no source
- *   information is lost.
+ * - **Attributes** → [SemanticEvent.Mark.attributes], with entity references
+ *   expanded and values normalized per the XML specification. Namespace
+ *   declarations (`xmlns`, `xmlns:*`) are ordinary attributes here, so that no
+ *   source information is lost, but they come **first**, followed by the other
+ *   attributes — each group in document order. A namespace-aware engine
+ *   reports declarations apart from the attributes, so their interleaving
+ *   with them is the one thing no implementation can be relied on to keep.
  * - **Character data, CDATA sections, character and entity references** →
  *   [SemanticEvent.Text]. The boundaries of a CDATA section are **not**
  *   preserved: `<![CDATA[a < b]]>` and `a &lt; b` produce the same event, so a
@@ -54,6 +55,9 @@ import kotlinx.coroutines.flow.flowOf
  *   both of which treat a CDATA section as ordinary character data.
  * - **Comments, processing instructions, the XML declaration and the DOCTYPE**
  *   are dropped — the three-variant event model has no way to carry them.
+ * - **Whitespace outside every element** — the line breaks around the root
+ *   element of a file — is dropped, as it is not character data of any
+ *   element.
  *
  * ## Text granularity
  *

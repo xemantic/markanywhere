@@ -18,10 +18,13 @@ package com.xemantic.markanywhere.xml
 
 import com.xemantic.kotlin.test.have
 import com.xemantic.kotlin.test.should
+import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.test.sameAs
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -54,6 +57,25 @@ class MarkanywhereXmlParserTest : XmlParserTest() {
         // then
         events should {
             have(markNames() == listOf("a"))
+            have(isBalanced())
+        }
+    }
+
+    @Test
+    fun `should stop reading XML parsed out of another parse without disturbing it`() = runTest {
+        // given — the inner document escapes a malformed one, as an RSS
+        // description escapes its HTML, and every inner event reaches the outer
+        // parser as a chunk
+        val inner = MarkanywhereXmlParser().parse(flowOf("<a>&lt;b&gt;&lt;/c&gt;</a>"))
+            .map { event -> (event as? SemanticEvent.Text)?.text ?: "" }
+
+        // when — the outer read stops at `</c>`, while the inner one is still
+        // emitting: its abort must end the inner parse too, not be caught there
+        val events = parser.parse(inner).toList()
+
+        // then
+        events should {
+            have(markNames() == listOf("b"))
             have(isBalanced())
         }
     }
@@ -115,6 +137,22 @@ class MarkanywhereXmlParserTest : XmlParserTest() {
         // then
         events sameAs semanticEvents(tagged = true) {
             "a" { +"x]" }
+        }
+    }
+
+    @Test
+    fun `should skip a DOCTYPE whose internal subset holds brackets in a comment and an instruction`() = runTest {
+        // when — a `]` followed by `>` inside a comment or an instruction ends
+        // nothing. The JDK's StAX, with DTD support off, ends the DOCTYPE at the
+        // first such pair and rejects the rest as content in the prolog, which
+        // is why this is asserted here rather than in the shared suite.
+        val events = parse(
+            """<!DOCTYPE a [<!-- ] > --><?pi ] >?>]><a>text</a>"""
+        )
+
+        // then
+        events sameAs semanticEvents(tagged = true) {
+            "a" { +"text" }
         }
     }
 

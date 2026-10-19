@@ -41,7 +41,8 @@ import javax.xml.stream.XMLStreamReader
  * StAX is a *pull* parser reading from a blocking [Reader], which inverts the
  * control flow of a [Flow]-driven pipeline: it wants to ask for the next
  * characters, while a flow wants to hand them over. The two are bridged by
- * running the pull loop on [Dispatchers.IO] against a [Reader] blocking on a
+ * running the pull loop on a dedicated view of [Dispatchers.IO] against a
+ * [Reader] blocking on a
  * [Channel] which a coroutine fills from [parse]'s chunks. Parsing is
  * therefore genuinely incremental — an element is reported as soon as its tag
  * has been read, however much of the document is still to come — and memory
@@ -75,7 +76,7 @@ public class StaxXmlParser(
         }
         val collector = FlowCollector<SemanticEvent> { event -> send(event) }
         try {
-            withContext(Dispatchers.IO) {
+            withContext(PULL_DISPATCHER) {
                 collector.readDocument(ChannelReader(source))
             }
         } finally {
@@ -134,6 +135,11 @@ public class StaxXmlParser(
         } catch (_: XMLStreamException) {
             // Not well-formed: stop reading here. The contract forbids throwing,
             // and the balancing below keeps the truncated stream renderable.
+        } catch (e: RuntimeException) {
+            // A provider reporting an error lazily — Woodstox's
+            // `WstxLazyException` from `getText()` — wraps it in an unchecked
+            // exception; anything else, cancellation included, is not ours.
+            if (e.cause !is XMLStreamException) throw e
         } finally {
             try {
                 reader?.close()
@@ -158,7 +164,7 @@ public class StaxXmlParser(
  * arrives — the adapter which lets a pull parser read from a [Flow].
  *
  * It may only ever be read on a thread allowed to block, hence the
- * [Dispatchers.IO] confinement at its single call site. A closed or cancelled
+ * [PULL_DISPATCHER] confinement at its single call site. A closed or cancelled
  * channel reads as end of input, so a parse ends when its source does.
  */
 private class ChannelReader(
@@ -200,6 +206,18 @@ private class ChannelReader(
 }
 
 /**
+ * Where the pull loops run, each parking its thread for the whole parse.
+ *
+ * A view of [Dispatchers.IO] rather than the dispatcher itself: the parked
+ * threads must not count against the shared pool's limit, or as many
+ * concurrent parses as it has threads — 64 by default — would leave none for
+ * the sources they wait on, whenever those read on [Dispatchers.IO] too. The
+ * view is unbounded for the same reason: a parse whose source is another parse
+ * needs a second thread while holding the first.
+ */
+private val PULL_DISPATCHER = Dispatchers.IO.limitedParallelism(Int.MAX_VALUE)
+
+/**
  * The qualified name of the current element, prefix included — StAX reports
  * the prefix and the local name separately, while the event model keeps the
  * name as written.
@@ -235,12 +253,16 @@ private fun XMLStreamReader.readAttributes(): Map<String, String> {
 }
 
 /**
- * An [XMLInputFactory] configured for the [XmlParser] contract: adjacent
- * character data and CDATA sections coalesced into a single text event, and
- * every door to an external resource shut.
+ * The JDK's own [XMLInputFactory], configured for the [XmlParser] contract:
+ * adjacent character data and CDATA sections coalesced into a single text
+ * event, and every door to an external resource shut.
+ *
+ * `newDefaultFactory`, not `newInstance`: the latter picks whichever StAX
+ * provider is on the classpath (Woodstox, say, which Jackson XML brings in), and
+ * would silently swap the reference engine for another.
  */
 public fun defaultXmlInputFactory(): XMLInputFactory =
-    XMLInputFactory.newInstance().apply {
+    XMLInputFactory.newDefaultFactory().apply {
         setProperty(XMLInputFactory.IS_COALESCING, true)
         setProperty(XMLInputFactory.SUPPORT_DTD, false)
         setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false)

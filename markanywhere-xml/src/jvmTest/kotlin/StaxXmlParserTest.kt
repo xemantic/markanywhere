@@ -16,6 +16,21 @@
 
 package com.xemantic.markanywhere.xml
 
+import com.xemantic.kotlin.test.assert
+import com.xemantic.markanywhere.flow.mergeAdjacentText
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
+import javax.xml.stream.XMLInputFactory
+import kotlin.test.Test
+import kotlin.time.Duration.Companion.seconds
+
 /**
  * Runs the whole [XmlParserTest] conformance suite against the JDK's StAX
  * implementation.
@@ -23,5 +38,37 @@ package com.xemantic.markanywhere.xml
 class StaxXmlParserTest : XmlParserTest() {
 
     override val parser: XmlParser = StaxXmlParser()
+
+    @Test
+    fun `should not starve sources read on the IO dispatcher`() = runTest(timeout = 30.seconds) {
+        // given — more concurrent parses than Dispatchers.IO has threads, each
+        // reading a source which itself needs an IO thread to go on
+        val parses = 200
+        val source = flow {
+            emit("<a>")
+            delay(200)
+            emit("x</a>")
+        }.flowOn(Dispatchers.IO)
+
+        // when — a parked pull loop occupying an IO thread would leave no
+        // thread for any source to resume on
+        val results = withContext(Dispatchers.Default) {
+            List(parses) {
+                async { parser.parse(source).mergeAdjacentText().toList() }
+            }.awaitAll()
+        }
+
+        // then
+        assert(results.all { it.markNames() == listOf("a") && it.isBalanced() })
+    }
+
+    @Test
+    fun `should default to the JDK StAX implementation`() {
+        // when
+        val factory = defaultXmlInputFactory()
+
+        // then — not whichever provider happens to be on the classpath
+        assert(factory.javaClass == XMLInputFactory.newDefaultFactory().javaClass)
+    }
 
 }
