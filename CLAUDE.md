@@ -634,6 +634,8 @@ If the fix is bounded (one inline construct, one or two lines of lookahead), it'
 - When such a `trimIndent()` golden string contains a literal `$` (e.g. captured page text like `$60bn`), use a **multi-dollar string literal** — `markdown sameAsMarkdown $$"""…"""` (Kotlin 2.2+, stable) — so every single `$` is unconditionally literal.
   Do NOT rely on "a `$` followed by a non-identifier char (digit, space, punctuation) is already literal": that rule is fragile — it silently breaks the moment the captured content shifts to `$word`, `$_x`, or `${…}` (e.g. a re-capture of a live page), turning a golden string into an interpolation that fails to compile or, worse, substitutes a value.
   Pick the dollar count one greater than the longest `$`-run in the body (`$$` for isolated `$`, `$$$` if the text itself contains `$$`), mirroring the `toLiteral()` baker in `markanywhere-html/build.gradle.kts`.
+- A round-trip that knowingly diverges is pinned with `actual.divergenceFrom(expected) sameAs """…"""` (`markanywhere-test`), never by catching `sameAs`'s `AssertionError` and pinning its raw message (issue #64): the raw diff's `@@ -18,12 +18,16 @@` line numbers move with any unrelated change above the hunk, and an `error()` after the `sameAs` is not an `AssertionError`, so a fixed divergence surfaced as a test error instead of a failure.
+  Write hunk headers in the golden as a bare `@@` and blank *context* lines as empty lines; a whitespace-only `-`/`+` line keeps its trailing whitespace.
 
 ## Anti-patterns to avoid
 
