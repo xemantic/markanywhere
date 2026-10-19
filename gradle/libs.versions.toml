@@ -13,6 +13,7 @@ jetbrainsAnnotations = "26.1.0"
 asm = "9.10.1"
 slf4j = "2.0.19"
 logback = "1.6.3"
+kotlinxBenchmark = "0.5.0"
 # plugins
 versionCatalogUpdatePlugin = "1.1.1"
 dokkaPlugin = "2.2.0"
@@ -34,6 +35,7 @@ xemantic-kotlin-core = { module = "com.xemantic.kotlin:xemantic-kotlin-core", ve
 kdriver-core = { module = "dev.kdriver:core", version.ref = "kdriver" }
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
 logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
+kotlinx-benchmark-runtime = { module = "org.jetbrains.kotlinx:kotlinx-benchmark-runtime", version.ref = "kotlinxBenchmark" }
 # build-logic plugins
 kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
 kotlin-power-assert = { module = "org.jetbrains.kotlin:kotlin-power-assert", version.ref = "kotlin" }
@@ -50,3 +52,5 @@ jreleaser = { id = "org.jreleaser", version.ref = "jreleaserPlugin" }
 kotlinx-binary-compatibility-validator = { id = "org.jetbrains.kotlinx.binary-compatibility-validator", version.ref = "binaryCompatibilityValidatorPlugin" }
 xemantic-conventions = { id = "com.xemantic.gradle.xemantic-conventions", version.ref = "xemanticConventionsPlugin" }
 kotlin-plugin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+kotlin-plugin-allopen = { id = "org.jetbrains.kotlin.plugin.allopen", version.ref = "kotlin" }
+kotlinx-benchmark = { id = "org.jetbrains.kotlinx.benchmark", version.ref = "kotlinxBenchmark" }
