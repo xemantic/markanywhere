@@ -841,4 +841,25 @@ class HtmlToMarkdownTest {
         markdown sameAs "Price 5"
     }
 
+    @Test
+    fun `should label a link whose only image is an inline data uri`() = runTest {
+        // given - an icon-only link whose icon is a base64 image: dropping the
+        // payload must not leave an empty `[![]()](/x)` behind
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "a"("href" to "/x") { "img"("src" to "data:image/png;base64,iVBORw0KGgo=") { } }
+                +" "
+                "a"("href" to "/y", "aria-label" to "Settings") {
+                    "img"("src" to "data:image/png;base64,iVBORw0KGgo=") { }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown(refMode = RefMode.STRIP).renderMarkdown()
+
+        // then
+        markdown sameAs "[![$GRAPHIC_PLACEHOLDER_ALT]()](/x) [Settings](/y)"
+    }
+
 }

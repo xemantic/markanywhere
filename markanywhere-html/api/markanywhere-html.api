@@ -57,6 +57,11 @@ public final class com/xemantic/markanywhere/html/ResolveInlineGraphicsKt {
 	public static final fun resolveInlineGraphics (Lkotlinx/coroutines/flow/Flow;)Lkotlinx/coroutines/flow/Flow;
 }
 
+public final class com/xemantic/markanywhere/html/ResolveLazyImagesKt {
+	public static final fun resolveLazyImages (Lkotlinx/coroutines/flow/Flow;Lcom/xemantic/markanywhere/html/SvgMode;)Lkotlinx/coroutines/flow/Flow;
+	public static synthetic fun resolveLazyImages$default (Lkotlinx/coroutines/flow/Flow;Lcom/xemantic/markanywhere/html/SvgMode;ILjava/lang/Object;)Lkotlinx/coroutines/flow/Flow;
+}
+
 public final class com/xemantic/markanywhere/html/SeparateUnwrappedBlocksKt {
 	public static final fun separateUnwrappedBlocks (Lkotlinx/coroutines/flow/Flow;)Lkotlinx/coroutines/flow/Flow;
 }

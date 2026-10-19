@@ -585,4 +585,48 @@ class LabelActionableElementsTest {
         output sameAs input
     }
 
+    @Test
+    fun `should mark an unnamed image that vanishes for want of a src`() = runTest {
+        // given - resolveLazyImages drops a nameless <img> whose only src is a
+        // `data:` URI, so like a nameless <svg> it leaves the link empty
+        val input = semanticEvents(tagged = true) {
+            "a"("href" to "/x") { "img"("src" to "data:image/png;base64,iVBORw0KGgo=") { } }
+            "a"("href" to "/y") { "img" { } }
+        }
+
+        // when
+        val output = input.labelActionableElements()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "a"("href" to "/x") {
+                "img"("alt" to GRAPHIC_PLACEHOLDER_ALT) { }
+                "img"("src" to "data:image/png;base64,iVBORw0KGgo=") { }
+            }
+            "a"("href" to "/y") {
+                "img"("alt" to GRAPHIC_PLACEHOLDER_ALT) { }
+                "img" { }
+            }
+        }
+    }
+
+    @Test
+    fun `should not mark an unnamed lazy image that resolves to a real src`() = runTest {
+        // given - the placeholder is replaced by the picture's source downstream
+        val input = semanticEvents(tagged = true) {
+            "a"("href" to "/x") {
+                "picture" {
+                    "source"("srcset" to "cat.webp") { }
+                    "img"("src" to "data:image/gif;base64,R0lGODlhAQABAAAAACw=") { }
+                }
+            }
+        }
+
+        // when
+        val output = input.labelActionableElements()
+
+        // then
+        output sameAs input
+    }
+
 }
