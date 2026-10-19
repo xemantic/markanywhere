@@ -27,7 +27,7 @@ class CaptureFormatTest {
         val layout = CaptureFormat.of("layout-3")
 
         // then
-        assert(layout == CaptureFormat.LAYOUT)
+        assert(layout == LAYOUT)
     }
 
     @Test
@@ -47,7 +47,7 @@ class CaptureFormatTest {
     @Test
     fun `should stamp the marker on the root attributes`() {
         // when
-        val attributes = mapOf("lang" to "en").withCaptureFormat(CaptureFormat.LAYOUT)
+        val attributes = mapOf("lang" to "en").withCaptureFormat(LAYOUT)
 
         // then
         assert(attributes == mapOf("lang" to "en", AccessibilityAnnotations.CAPTURE to "layout-3"))
@@ -57,35 +57,34 @@ class CaptureFormatTest {
     fun `should leave the display of every descendant of a display none root unrecorded`() {
         // when
         val belowRoot = unrecordedDisplayOfChildren(name = "div", display = "none", inherited = null)
-        val belowDescendant = unrecordedDisplayOfChildren(name = "svg", display = null, inherited = UnrecordedDisplay.NO_BOX)
+        val belowDescendant = unrecordedDisplayOfChildren(name = "svg", display = null, inherited = NO_BOX)
         val belowForeignObject = unrecordedDisplayOfChildren(
-            name = "foreignObject", display = null, inherited = UnrecordedDisplay.NO_BOX
+            name = "foreignObject", display = null, inherited = NO_BOX
         )
 
         // then - nothing below lays out a box, the graphic and its HTML included
-        assert(belowRoot == UnrecordedDisplay.NO_BOX)
-        assert(belowDescendant == UnrecordedDisplay.NO_BOX)
-        assert(belowForeignObject == UnrecordedDisplay.NO_BOX)
+        assert(belowRoot == NO_BOX)
+        assert(belowDescendant == NO_BOX)
+        assert(belowForeignObject == NO_BOX)
     }
 
     @Test
     fun `should leave the display inside an svg unrecorded up to a foreignObject`() {
         // when
         val belowSvg = unrecordedDisplayOfChildren(name = "svg", display = "inline", inherited = null)
-        val belowGroup = unrecordedDisplayOfChildren(name = "g", display = null, inherited = UnrecordedDisplay.GRAPHIC)
-        val belowNestedSvg = unrecordedDisplayOfChildren(name = "svg", display = null, inherited = UnrecordedDisplay.GRAPHIC)
+        val belowGroup = unrecordedDisplayOfChildren(name = "g", display = null, inherited = GRAPHIC)
+        val belowNestedSvg = unrecordedDisplayOfChildren(name = "svg", display = null, inherited = GRAPHIC)
         val belowForeignObject = unrecordedDisplayOfChildren(
-            name = "foreignObject", display = null, inherited = UnrecordedDisplay.GRAPHIC
+            name = "foreignObject", display = null, inherited = GRAPHIC
         )
 
         // then - a foreignObject's children are HTML laid out by CSS again
-        assert(belowSvg == UnrecordedDisplay.GRAPHIC)
+        assert(belowSvg == GRAPHIC)
         assert(
-            unrecordedDisplayOfChildren(name = "g", display = "none", inherited = UnrecordedDisplay.GRAPHIC) ==
-                    UnrecordedDisplay.NO_BOX
+            unrecordedDisplayOfChildren(name = "g", display = "none", inherited = GRAPHIC) == NO_BOX
         )
-        assert(belowGroup == UnrecordedDisplay.GRAPHIC)
-        assert(belowNestedSvg == UnrecordedDisplay.GRAPHIC)
+        assert(belowGroup == GRAPHIC)
+        assert(belowNestedSvg == GRAPHIC)
         assert(belowForeignObject == null)
     }
 
@@ -99,7 +98,7 @@ class CaptureFormatTest {
         // then - a display:none svg is a display:none root first
         assert(belowBlock == null)
         assert(belowContents == null)
-        assert(belowHiddenSvg == UnrecordedDisplay.NO_BOX)
+        assert(belowHiddenSvg == NO_BOX)
     }
 
     @Test
@@ -114,9 +113,9 @@ class CaptureFormatTest {
     @Test
     fun `should record only a none inside an svg`() {
         // when
-        val laidOut = displayToRecord(display = "inline", inherited = UnrecordedDisplay.GRAPHIC)
-        val contents = displayToRecord(display = "contents", inherited = UnrecordedDisplay.GRAPHIC)
-        val hidden = displayToRecord(display = "none", inherited = UnrecordedDisplay.GRAPHIC)
+        val laidOut = displayToRecord(display = "inline", inherited = GRAPHIC)
+        val contents = displayToRecord(display = "contents", inherited = GRAPHIC)
+        val hidden = displayToRecord(display = "none", inherited = GRAPHIC)
 
         // then - a part laying out nothing (a display:none group, a title, a
         // symbol's content, an HTML child the svg never renders) is still
@@ -129,7 +128,7 @@ class CaptureFormatTest {
     @Test
     fun `should record no display below a display none root`() {
         // when
-        val recorded = displayToRecord(display = "none", inherited = UnrecordedDisplay.NO_BOX)
+        val recorded = displayToRecord(display = "none", inherited = NO_BOX)
 
         // then
         assert(recorded == null)

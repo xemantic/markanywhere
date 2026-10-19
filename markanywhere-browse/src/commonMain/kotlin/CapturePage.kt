@@ -1031,7 +1031,7 @@ internal class DomEventBuilder(
             putAll(capturedAttributes)
             if (ref != null) put(refAttribute!!, ref)
         }.let { if (annotate) it.withAccessibilityAnnotations(dom, element, display) else it }
-            .let { if (root) it.withCaptureFormat(CaptureFormat.LAYOUT) else it }
+            .let { if (root) it.withCaptureFormat(LAYOUT) else it }
         events += SemanticEvent.Mark(
             name = dom.name(element),
             isTagged = true,
