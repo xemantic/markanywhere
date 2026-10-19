@@ -466,6 +466,173 @@ class ApplyAccessibilityTest {
     }
 
     @Test
+    fun `should drop a subtree hidden via the hidden attribute in an uncaptured stream`() = runTest {
+        // given — no display verdict was captured, so the attribute is the only
+        // signal; any value but `until-found` is the hidden state.
+        val input = semanticEvents(tagged = true) {
+            "div" {
+                "div"("hidden" to "") { +"secret" }
+                "p"("hidden" to "hidden") { "span" { +"also secret" } }
+                "p"("hidden" to "bogus") { +"invalid value hides too" }
+                "p" { +"visible" }
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "div" {
+                "p" { +"visible" }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep content hidden until found`() = runTest {
+        // given — `hidden="until-found"` content is findable (find-in-page,
+        // fragment navigation reveal it), so it is still page content.
+        val input = semanticEvents(tagged = true) {
+            "div" {
+                "div"("hidden" to "until-found") { +"findable" }
+                "div"("hidden" to "UNTIL-FOUND") { +"case-insensitive" }
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "div" {
+                "div"("hidden" to "until-found") { +"findable" }
+                "div"("hidden" to "UNTIL-FOUND") { +"case-insensitive" }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep a hidden attribute overridden by a captured display`() = runTest {
+        // given — `[hidden]` is only a UA stylesheet rule, which author CSS can
+        // override (Bootstrap's `d-flex` is `display:flex !important`): the
+        // captured display is Blink's verdict and the element is on screen.
+        val input = semanticEvents(tagged = true) {
+            "div" {
+                "div"("hidden" to "", "class" to "d-flex", AccessibilityAnnotations.DISPLAY to "flex") {
+                    +"shown"
+                }
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "div" {
+                "div"("hidden" to "", "class" to "d-flex", AccessibilityAnnotations.DISPLAY to "flex") {
+                    +"shown"
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should drop a hidden element carrying an actionable ref`() = runTest {
+        // given — a control that is not rendered cannot be acted on, so its ref
+        // goes with it.
+        val input = semanticEvents(tagged = true) {
+            "div" {
+                "button"("hidden" to "", AccessibilityAnnotations.REF to "7") { +"Hidden action" }
+                "button"(AccessibilityAnnotations.REF to "8") { +"Visible action" }
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "div" {
+                "button"(AccessibilityAnnotations.REF to "8") { +"Visible action" }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep a head element carrying the hidden attribute`() = runTest {
+        // given — the capture leaves the whole <head> unannotated, so the
+        // attribute would otherwise read as the only verdict, and the title is
+        // the front matter's source; metadata is not rendered either way.
+        val input = semanticEvents(tagged = true) {
+            "html"(AccessibilityAnnotations.DISPLAY to "block") {
+                "head" {
+                    "title"("hidden" to "") { +"Page Title" }
+                    "meta"("name" to "description", "content" to "d", "hidden" to "") { }
+                }
+                "body"(AccessibilityAnnotations.DISPLAY to "block") { +"content" }
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "html"(AccessibilityAnnotations.DISPLAY to "block") {
+                "head" {
+                    "title"("hidden" to "") { +"Page Title" }
+                    "meta"("name" to "description", "content" to "d", "hidden" to "") { }
+                }
+                "body"(AccessibilityAnnotations.DISPLAY to "block") { +"content" }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep a document root carrying the hidden attribute`() = runTest {
+        // given — an uncaptured `<html hidden>` / `<body hidden>` (an
+        // anti-flicker idiom revealed by script) must not empty the document,
+        // and a `<head hidden>` must not lose the title the front matter needs.
+        val input = semanticEvents(tagged = true) {
+            "html"("hidden" to "") {
+                "head"("hidden" to "") { "title" { +"T" } }
+                "body"("hidden" to "") { +"content" }
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "html"("hidden" to "") {
+                "head"("hidden" to "") { "title" { +"T" } }
+                "body"("hidden" to "") { +"content" }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep inert content`() = runTest {
+        // given — inert content is still painted: a sighted user reads it, only
+        // cannot interact with it (the capture already withholds refs, as Blink
+        // reports inert nodes accessibility-ignored).
+        val input = semanticEvents(tagged = true) {
+            "div"("inert" to "") { +"behind the modal" }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "div"("inert" to "") { +"behind the modal" }
+        }
+    }
+
+    @Test
     fun `should unwrap a layout table promoting its content`() = runTest {
         // given
         val input = semanticEvents(tagged = true) {
@@ -601,6 +768,34 @@ class ApplyAccessibilityTest {
             "table" {
                 "tr" { "td" { +"cell" } }
             }
+        }
+    }
+
+    @Test
+    fun `should drop hidden content inside an unwrapped layout table`() = runTest {
+        // given — a hidden row and a hidden element in a cell, reached in
+        // layout-table mode, whose wildcard would otherwise shadow the rule.
+        val input = semanticEvents(tagged = true) {
+            "table"(AccessibilityAnnotations.ROLE to "none") {
+                "tr"("hidden" to "") {
+                    "td" { +"hidden row" }
+                }
+                "tr" {
+                    "td" {
+                        "span"("hidden" to "") { +"hidden span" }
+                        +"cell"
+                    }
+                }
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            +"cell"
+            +" "
         }
     }
 
@@ -821,6 +1016,119 @@ class ApplyAccessibilityTest {
         output sameAs semanticEvents(tagged = true) {
             "select" {
                 "option"("value" to "3", AccessibilityAnnotations.DISPLAY to "flex") { +"kept" }
+            }
+        }
+    }
+
+    @Test
+    fun `should drop an option hidden via the hidden attribute inside a select`() = runTest {
+        // given — a captured closed select: the select is laid out, and inside
+        // the popup the captured `none` is an artifact on every option, so the
+        // author's `hidden` attribute is the signal that tells a hidden option
+        // apart.
+        val input = semanticEvents(tagged = true) {
+            "select"("name" to "c", AccessibilityAnnotations.DISPLAY to "inline-block") {
+                "option"("value" to "0", "hidden" to "", AccessibilityAnnotations.DISPLAY to "none") {
+                    +"Retired"
+                }
+                "option"("value" to "1", AccessibilityAnnotations.DISPLAY to "none") { +"One" }
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "select"("name" to "c", AccessibilityAnnotations.DISPLAY to "inline-block") {
+                "option"("value" to "1", AccessibilityAnnotations.DISPLAY to "flex") { +"One" }
+            }
+        }
+    }
+
+    @Test
+    fun `should drop a hidden direct child of an option inside a select`() = runTest {
+        // given — a customizable select's option with a description the author
+        // hid via the `hidden` attribute: the popup's captured `none` is an
+        // artifact on the option's children too, so the attribute is still the
+        // signal there.
+        val input = semanticEvents(tagged = true) {
+            "select"("name" to "c", AccessibilityAnnotations.DISPLAY to "inline-block") {
+                "option"("value" to "1", AccessibilityAnnotations.DISPLAY to "none") {
+                    "div"(AccessibilityAnnotations.DISPLAY to "none") { +"One" }
+                    "div"("hidden" to "", AccessibilityAnnotations.DISPLAY to "none") { +"Secret" }
+                }
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "select"("name" to "c", AccessibilityAnnotations.DISPLAY to "inline-block") {
+                "option"("value" to "1", AccessibilityAnnotations.DISPLAY to "flex") {
+                    "div" { +"One" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep a selected hidden placeholder option`() = runTest {
+        // given — the common `selected disabled hidden` placeholder: hidden from
+        // the open list, but it is the select's current value, so dropping it
+        // would make the select appear to have "One" chosen.
+        val input = semanticEvents(tagged = true) {
+            "select"("name" to "c", AccessibilityAnnotations.DISPLAY to "inline-block") {
+                "option"(
+                    "value" to "",
+                    "selected" to "",
+                    "disabled" to "",
+                    "hidden" to "",
+                    AccessibilityAnnotations.DISPLAY to "none"
+                ) { +"Choose…" }
+                "option"("value" to "1", AccessibilityAnnotations.DISPLAY to "none") { +"One" }
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "select"("name" to "c", AccessibilityAnnotations.DISPLAY to "inline-block") {
+                "option"(
+                    "value" to "", "selected" to "", "disabled" to "", "hidden" to "",
+                    AccessibilityAnnotations.DISPLAY to "flex"
+                ) { +"Choose…" }
+                "option"("value" to "1", AccessibilityAnnotations.DISPLAY to "flex") { +"One" }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep a hidden listbox option laid out by CSS`() = runTest {
+        // given — a listbox (`size`/`multiple`) lays its options out, so a
+        // captured display other than `none` is Blink's genuine verdict, and
+        // it overrides the attribute here just as outside a select.
+        val input = semanticEvents(tagged = true) {
+            "select"("size" to "3", AccessibilityAnnotations.DISPLAY to "inline-block") {
+                "option"("value" to "1", "hidden" to "", AccessibilityAnnotations.DISPLAY to "block") {
+                    +"Shown by CSS"
+                }
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "select"("size" to "3", AccessibilityAnnotations.DISPLAY to "inline-block") {
+                "option"("value" to "1", "hidden" to "", AccessibilityAnnotations.DISPLAY to "block") {
+                    +"Shown by CSS"
+                }
             }
         }
     }
@@ -1117,6 +1425,36 @@ class ApplyAccessibilityTest {
         output sameAs semanticEvents(tagged = true) {
             "select"("id" to "country", AccessibilityAnnotations.DISPLAY to "inline-block") {
                 "option"("value" to "pl", AccessibilityAnnotations.DISPLAY to "flex") { +"Poland" }
+                +" "
+            }
+        }
+    }
+
+    @Test
+    fun `should drop hidden content inside a layout table in a select popup`() = runTest {
+        // given
+        val input = semanticEvents(tagged = true) {
+            "select" {
+                "table"(AccessibilityAnnotations.ROLE to "none", AccessibilityAnnotations.DISPLAY to "none") {
+                    "tr"(AccessibilityAnnotations.DISPLAY to "none") {
+                        "td"(AccessibilityAnnotations.DISPLAY to "none") {
+                            "option"("value" to "0", "hidden" to "", AccessibilityAnnotations.DISPLAY to "none") {
+                                +"Hidden"
+                            }
+                            "option"("value" to "1", AccessibilityAnnotations.DISPLAY to "none") { +"One" }
+                        }
+                    }
+                }
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "select" {
+                "option"("value" to "1", AccessibilityAnnotations.DISPLAY to "flex") { +"One" }
                 +" "
             }
         }

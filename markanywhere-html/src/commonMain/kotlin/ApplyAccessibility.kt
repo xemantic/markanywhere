@@ -36,7 +36,14 @@ import kotlinx.coroutines.flow.flow
  *   together with its whole subtree. Inside a `<select>` the `display:none`
  *   half of that rule is suspended — the popup lays out no box for any of its
  *   content, which the capture cannot tell apart from real hiding (see
- *   [SELECT_CONTENT_MODE]).
+ *   [SELECT_CONTENT_MODE]). So is an element in the `hidden` attribute's
+ *   hidden state (not `until-found`) wherever no captured display verdict
+ *   speaks for it (see [isHiddenByAttribute]).
+ * - **Keep `inert` content** — a deliberate policy choice departing from the
+ *   screen-reader model this operator otherwise follows: a screen reader does
+ *   not expose inert content, but it is still painted, so a sighted user (and
+ *   an agent reading the page for one) sees it. Its non-interactivity is
+ *   already in the capture, which gives inert controls no actionable refs.
  * - **Drop invisible content, not its visible descendants** — the text of an
  *   element with [AccessibilityAnnotations.VISIBILITY] `= hidden`
  *   (`visibility:hidden`) is dropped, and the element itself only when nothing
@@ -155,6 +162,8 @@ private fun Flow<SemanticEvent>.resolveVisibility(): Flow<SemanticEvent> = flow 
         // inside a `<select>`'s popup, where `display:none` is an artifact
         // (see [SELECT_CONTENT_MODE])
         val inPopup: Boolean,
+        // inside the `<head>`, where the rule set ignores the `hidden` attribute
+        val inHead: Boolean,
         // inside verbatim text, where no gap is written
         val verbatim: Boolean,
     ) {
@@ -240,7 +249,9 @@ private fun Flow<SemanticEvent>.resolveVisibility(): Flow<SemanticEvent> = flow 
                 val invisible = event.isInvisible(parentInvisible = parent?.invisible == true)
                 val inPopup = (parent?.mark?.name == "select" || parent?.inPopup == true)
                         && event.hasNoLayoutBox()
-                val silent = parent?.silent == true || event.isDroppedContent(honourDisplayNone = !inPopup)
+                val inHead = parent?.inHead == true || event.name == "head"
+                val silent = parent?.silent == true
+                        || event.isDroppedContent(insideSelect = inPopup, insideHead = inHead)
                 if (invisible && event.name in FRAME_TAGS) {
                     // a frame keeps its box like any replaced element
                     if (!silent && event.takesSpaceWhenEmpty()) separate(parent)
@@ -254,7 +265,8 @@ private fun Flow<SemanticEvent>.resolveVisibility(): Flow<SemanticEvent> = flow 
                     mark, invisible, emitted = false,
                     silent = silent,
                     inPopup = inPopup,
-                    verbatim = parent?.verbatim == true || event.name in VERBATIM_TAGS,
+                    inHead = inHead,
+                    verbatim =parent?.verbatim == true || event.name in VERBATIM_TAGS,
                 )
                 if (!invisible || (parent?.emitted == true && event.isTableStructure(parent.mark.name))) {
                     if (parent != null && !parent.emitted) emitHeldBack()
@@ -328,9 +340,9 @@ private fun SemanticEvent.Mark.isLineEdge(): Boolean = name == "br" || !isInline
  * Whether the rule set drops this element with its subtree, or the browser
  * lays no box out for it: either way it takes no space and is no content.
  */
-private fun SemanticEvent.Mark.isDroppedContent(honourDisplayNone: Boolean): Boolean =
+private fun SemanticEvent.Mark.isDroppedContent(insideSelect: Boolean, insideHead: Boolean): Boolean =
     name in NEVER_RENDERED_TAGS
-        || isHidden(honourDisplayNone)
+        || isHidden(insideSelect = insideSelect, insideHead = insideHead)
         || (name == "img" && isAxIgnoredImage())
 
 /** Elements whose text is verbatim, so no gap is written into it. */
@@ -515,6 +527,12 @@ private fun TransformerBuilder.accessibilityRuleSet() {
     match("*") { event -> passThrough(event) }
     matchText { +it }
 
+    // --- inside the <head> ----------------------------------------------
+
+    accessibilityRules(mode = HEAD_MODE, insideHead = true)
+    match("*", mode = HEAD_MODE) { event -> passThrough(event, childMode = HEAD_MODE) }
+    matchText(mode = HEAD_MODE) { +it }
+
     // --- inside an unwrapped layout table -------------------------------
 
     // once outside a <select>, once inside one: the popup artifact is
@@ -610,7 +628,8 @@ private fun TransformerBuilder.layoutTableRules(
  */
 private fun TransformerBuilder.accessibilityRules(
     mode: String? = null,
-    insideSelect: Boolean = false
+    insideSelect: Boolean = false,
+    insideHead: Boolean = false
 ) {
 
     // never rendered content: <script>, <style>, … carry no display verdict of
@@ -622,7 +641,7 @@ private fun TransformerBuilder.accessibilityRules(
     // <select> the `display:none` half of the verdict is suspended — the popup
     // lays out no box for any of its content (see [SELECT_CONTENT_MODE]).
     match(
-        { isHidden(honourDisplayNone = !insideSelect) },
+        { isHidden(insideSelect = insideSelect, insideHead = insideHead) },
         mode = mode
     ) { /* drop */ }
 
@@ -652,9 +671,25 @@ private fun TransformerBuilder.accessibilityRules(
             insidePopup = insideSelect && event.hasNoLayoutBox()
         )
     }
+
+    // the document metadata: descended in [HEAD_MODE], where the `hidden`
+    // attribute is not consulted (see [isHiddenByAttribute]).
+    match({ name == "head" }, mode = mode) { event ->
+        passThrough(event, childMode = HEAD_MODE)
+    }
 }
 
 private const val LAYOUT_TABLE_MODE = "layoutTable"
+
+/**
+ * The mode the `<head>`'s descendants are transformed in: the same rules,
+ * except that the `hidden` attribute is not consulted. Metadata is never
+ * rendered, so the attribute hides nothing a reader sees, while the capture
+ * leaves the whole `<head>` unannotated — the attribute would otherwise read
+ * as the only verdict, and a `<title hidden>` would cost the page its title
+ * and front matter.
+ */
+private const val HEAD_MODE = "head"
 
 /**
  * [LAYOUT_TABLE_MODE] for a layout table reached inside a `<select>`: the
@@ -683,7 +718,10 @@ private const val LAYOUT_TABLE_IN_SELECT_MODE = "layoutTableInSelect"
  * [passThrough], [uaDefaultDisplay]), while everything else still
  * applies: `aria-hidden` is an author signal and still hides (as does
  * `visibility:hidden`, resolved before any mode — see [resolveVisibility]),
- * [NEVER_RENDERED_TAGS] are still dropped, and a hidden `<select>` never
+ * the `hidden` attribute hides wherever the annotation is that artifact — it
+ * is then the one signal telling a hidden option apart, though a `selected`
+ * placeholder is kept and a genuine layout verdict wins (see
+ * [isHiddenByAttribute]) — [NEVER_RENDERED_TAGS] are still dropped, and a hidden `<select>` never
  * enters this mode at all — the hidden-subtree rule matches first and takes its
  * whole subtree with it.
  *
@@ -742,9 +780,56 @@ private val TABLE_STRUCTURAL_TAGS = setOf(
  */
 private val DATA_TABLE_ROLES = setOf("table", "grid", "treegrid")
 
-private fun SemanticEvent.Mark.isHidden(honourDisplayNone: Boolean = true): Boolean =
+private fun SemanticEvent.Mark.isHidden(insideSelect: Boolean, insideHead: Boolean): Boolean =
     this["aria-hidden"]?.equals("true", ignoreCase = true) == true
-        || (honourDisplayNone && this[AccessibilityAnnotations.DISPLAY] == "none")
+        || (!insideSelect && this[AccessibilityAnnotations.DISPLAY] == "none")
+        || (!insideHead && isHiddenByAttribute(insideSelect))
+
+/**
+ * Whether the `hidden` attribute is this element's verdict: it is in the
+ * attribute's hidden state (see [hasHiddenAttribute]) and no captured display
+ * speaks for it.
+ *
+ * The attribute hides only through the UA stylesheet's `[hidden] {
+ * display: none }`, which author CSS can override (Bootstrap's `d-flex` is
+ * `display: flex !important`), so a captured display wins: `none` already
+ * hides the element, any other value means Blink laid it out. That leaves an
+ * uncaptured stream (no [AccessibilityAnnotations.DISPLAY] at all), and inside
+ * a `<select>`'s popup a captured `none`, which is the artifact there (see
+ * [SELECT_CONTENT_MODE]) — the attribute is then the one signal telling a
+ * hidden option apart. A genuine layout verdict in a select (a listbox's
+ * options, a customizable select's `<button>` face) wins as anywhere else.
+ *
+ * Never consulted for:
+ * - a `selected` `<option>` — the common `selected disabled hidden`
+ *   placeholder is hidden from the open list, but it is the select's current
+ *   value, and dropping it would show another option as chosen;
+ * - the document root `<html>` / `<body>` — an anti-flicker `hidden` revealed
+ *   by script must not empty the whole document; and
+ * - anything in the `<head>` ([HEAD_MODE]), which the caller checks.
+ */
+private fun SemanticEvent.Mark.isHiddenByAttribute(insideSelect: Boolean): Boolean {
+    if (!hasHiddenAttribute() || name in DOCUMENT_ROOT_TAGS) return false
+    if (name == "option" && "selected" in attributes) return false
+    return when (this[AccessibilityAnnotations.DISPLAY]) {
+        null -> true
+        "none" -> insideSelect
+        else -> false
+    }
+}
+
+private val DOCUMENT_ROOT_TAGS = setOf("html", "head", "body")
+
+/**
+ * Whether this element is in the HTML `hidden` attribute's *hidden* state:
+ * the attribute is present with any value but `until-found` (ASCII
+ * case-insensitive) — the *hidden until found* state, whose content
+ * find-in-page and fragment navigation reveal, so it is still page content.
+ */
+private fun SemanticEvent.Mark.hasHiddenAttribute(): Boolean {
+    val value = this["hidden"] ?: return false
+    return !value.equals("until-found", ignoreCase = true)
+}
 
 /**
  * Whether this element renders invisible: its own recorded `visibility`
