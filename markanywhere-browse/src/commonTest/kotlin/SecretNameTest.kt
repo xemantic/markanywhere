@@ -16,7 +16,8 @@
 
 package com.xemantic.markanywhere.browse
 
-import com.xemantic.kotlin.test.assert
+import com.xemantic.kotlin.test.have
+import com.xemantic.kotlin.test.should
 import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.dump.SemanticEventDump
 import dev.kdriver.core.browser.Browser
@@ -28,7 +29,7 @@ import kotlin.test.Test
  * How real Chrome composes a secret control's value into an accessible name,
  * and what the capture makes of it when it resolves the name of an element
  * labelled with `aria-labelledby` (see `SnapshotDom.withoutSecrets`). Issues
- * #122 and #123.
+ * #120, #122 and #123.
  */
 class SecretNameTest {
 
@@ -48,8 +49,10 @@ class SecretNameTest {
         }
 
         // then
-        assert(dump.ariaLabel("b-card-nbsp") == "Card number")
-        assert(dump.ariaLabel("b-card-tabs") == "Card number")
+        dump should {
+            have(ariaLabel("b-card-nbsp") == "Card number")
+            have(ariaLabel("b-card-tabs") == "Card number")
+        }
     }
 
     /**
@@ -69,12 +72,14 @@ class SecretNameTest {
         }
 
         // then
-        listOf("b-exp-month", "b-exp-date", "b-exp-week", "b-exp-local", "b-otp-time").forEach { id ->
-            assert(dump.ariaLabel(id) == null)
+        dump should {
+            listOf("b-exp-month", "b-exp-date", "b-exp-week", "b-exp-local", "b-otp-time").forEach { id ->
+                have(ariaLabel(id) == null)
+            }
+            // a locale with a decimal point names it as written, one with a decimal comma does not
+            val number = ariaLabel("b-csc-number")
+            have(number == null || number == "Expires")
         }
-        // a locale with a decimal point names it as written, one with a decimal comma does not
-        val number = dump.ariaLabel("b-csc-number")
-        assert(number == null || number == "Expires")
     }
 
     /**
@@ -93,8 +98,10 @@ class SecretNameTest {
         }
 
         // then
-        assert(dump.ariaLabel("b-csc-thousand") == "Expires")
-        assert(dump.ariaLabel("b-card-million") == "Expires")
+        dump should {
+            have(ariaLabel("b-csc-thousand") == "Expires")
+            have(ariaLabel("b-card-million") == "Expires")
+        }
     }
 
     /**
@@ -116,10 +123,12 @@ class SecretNameTest {
 
         // then
         val bullets = "••••"
-        assert(dump.ariaLabel("b-pw") == "Password $bullets")
-        assert(dump.ariaLabel("b-pw-direct") == "Order 1234 $bullets")
-        assert(dump.ariaLabel("b-pw-typed") == "Password $bullets $bullets")
-        assert(dump.ariaLabel("b-order") == "Order 1234")
+        dump should {
+            have(ariaLabel("b-pw") == "Password $bullets")
+            have(ariaLabel("b-pw-direct") == "Order 1234 $bullets")
+            have(ariaLabel("b-pw-typed") == "Password $bullets $bullets")
+            have(ariaLabel("b-order") == "Order 1234")
+        }
     }
 
     /**
@@ -138,7 +147,128 @@ class SecretNameTest {
         }
 
         // then
-        assert(dump.ariaLabel("b-pw-spaced") == "Code")
+        dump should {
+            have(ariaLabel("b-pw-spaced") == "Code")
+        }
+    }
+
+    /**
+     * A short secret on the page — a chosen expiry month `1`, a CVC `123`, the
+     * numbers of a filled expiry date `2027-01-01` — is no reason to cut or
+     * withhold a name Blink spelled from its targets' own text. Issue #120.
+     */
+    @Test
+    fun `should keep a name spelled from its own text whatever short secrets the page holds`() = runTest {
+        val dump = runInBrowser { browser ->
+            // given
+            val tab = openPage(browser)
+
+            // when
+            PageSession(tab).dump()
+        }
+
+        // then
+        dump should {
+            have(ariaLabel("b-step") == "Step 1 of 3")
+            have(ariaLabel("b-copy") == "\u00A9 2027 Acme")
+            have(ariaLabel("b-items") == "10 items")
+            // Blink skips the hidden icon text, which the name may leave out
+            have(ariaLabel("b-cart") == "1 item")
+            have(ariaLabel("b-step-cvc") == "Step 1 of 3")
+        }
+    }
+
+    /**
+     * The paths along which Blink brings a secret into a target's text — a
+     * field the target owns (`aria-owns`), one in its closed shadow tree, one
+     * in a `display:none` target, a secret select inside it — each make the
+     * target's text more than its own, so the secret is still taken out.
+     * Issues #101 and #120.
+     */
+    @Test
+    fun `should take a secret out of a target Blink filled from beyond its own text`() = runTest {
+        val dump = runInBrowser { browser ->
+            // given
+            val tab = openPage(browser)
+
+            // when
+            PageSession(tab).dump()
+        }
+
+        // then
+        dump should {
+            have(ariaLabel("b-owner") == "Code")
+            have(ariaLabel("b-host") == "Shadow")
+            have(ariaLabel("b-hidden") == "Hidden")
+            have(ariaLabel("b-pick") == "Pick")
+        }
+    }
+
+    /**
+     * Text a target holds but Blink does not lend — hidden, `aria-hidden`,
+     * `inert`, `<script>`, `<style>`, `<noscript>`, `<template>`, an unselected
+     * option, unslotted light DOM, a duplicate of a hidden copy, the text of an
+     * element named from elsewhere (its own `aria-labelledby`) — can equal the secret
+     * Blink lent from a field, and must not make the target look as though it
+     * spelled the secret from its own text. Issue #120 (code review).
+     */
+    @Test
+    fun `should not mistake a hidden copy of a secret for the target's own text`() = runTest {
+        val dump = runInBrowser { browser ->
+            // given
+            val tab = openPage(browser)
+
+            // when
+            PageSession(tab).dump()
+        }
+
+        // then
+        dump should {
+            val leaked = mapOf(
+                "b-m-hidden-copy" to "05",
+                "b-m-none-copy" to "917",
+                "b-m-script" to "638",
+                "b-m-option" to "5556",
+                "b-m-style" to "551177",
+                "b-m-digits" to "8",
+                "b-m-unslotted" to "773",
+                "b-m-order" to "229",
+                "b-m-twice" to "404",
+                "b-m-owner" to "612",
+                "b-m-none-target" to "09",
+                "b-m-noscript" to "371",
+                "b-m-masked" to "hunter",
+                "b-m-keypad" to "1357",
+                "b-m-listbox" to "08",
+                "b-m-inert" to "919",
+                "b-m-nested" to "920",
+                "b-m-nested-two" to "944",
+                "b-m-nested-deep" to "926",
+                "b-m-nested-select" to "07",
+            ).filter { (id, secret) -> ariaLabel(id)?.contains(secret) == true }.keys
+            have(leaked.isEmpty())
+        }
+    }
+
+    /**
+     * Inside an open modal dialog too, an `inert` copy of a secret is text
+     * Blink does not lend. Issue #120 (code review).
+     */
+    @Test
+    fun `should not mistake an inert copy of a secret in a modal dialog for the target's own text`() = runTest {
+        val dump = runInBrowser { browser ->
+            // given
+            val tab = browser.get(testPageUrl("secret-names-modal.html")).also { it.waitUntilLoaded() }
+
+            // when
+            PageSession(tab).dump()
+        }
+
+        // then
+        dump should {
+            val label = ariaLabel("b-m-modal")
+            have(label == null || "943" !in label)
+        }
     }
 
     private suspend fun openPage(browser: Browser): Tab =

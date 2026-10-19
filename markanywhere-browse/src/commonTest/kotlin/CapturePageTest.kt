@@ -28,6 +28,7 @@ import dev.kdriver.cdp.domain.Accessibility
 import dev.kdriver.cdp.domain.DOMSnapshot
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.asFlow
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -871,6 +872,65 @@ class CapturePageTest {
     }
 
     /**
+     * A target Blink reports having spelled from its own text — the text the
+     * dump carries anyway — lends the name no secret, so a short secret
+     * elsewhere on the page (a chosen expiry month `1`, a CVC `123`, the
+     * numbers of a filled expiry date) neither cuts nor withholds it. Issue #120.
+     */
+    @Test
+    fun `should keep a name spelled from the text of its targets whatever secrets the page holds`() = runTest {
+        // given
+        val page = NamedNodes(
+            Node("SELECT", parent = 1, attributes = mapOf("autocomplete" to "cc-exp-month")),
+            Node("OPTION", parent = 2, selected = true, laidOut = false),
+            Node("#text", parent = 3, text = "1"),
+            Node("INPUT", parent = 1, value = "123", attributes = mapOf("autocomplete" to "cc-csc")),
+            Node("INPUT", parent = 1, value = "2027-01-01", attributes = mapOf("type" to "date", "autocomplete" to "cc-exp")),
+            Node("SPAN", parent = 1, attributes = mapOf("id" to "step")),
+            Node("#text", parent = 7, text = "Step "),
+            Node("B", parent = 7),
+            Node("#text", parent = 9, text = "1"),
+            Node("#text", parent = 7, text = " of 3"),
+            Node("SPAN", parent = 1, attributes = mapOf("id" to "copy")),
+            Node("#text", parent = 12, text = "© 2027 Acme, 123\n  Main St"),
+            Node("BUTTON", parent = 1, attributes = mapOf("aria-labelledby" to "step")),
+            Node("BUTTON", parent = 1, attributes = mapOf("aria-labelledby" to "step copy")),
+        )
+        val axNames = mapOf(
+            14 to "Step 1 of 3",
+            15 to "Step 1 of 3 © 2027 Acme, 123 Main St",
+        )
+        val labelledBy = mapOf(
+            14 to listOf(7 to "Step 1 of 3"),
+            15 to listOf(7 to "Step 1 of 3", 12 to "© 2027 Acme, 123 Main St"),
+        )
+
+        // when
+        val events = page.capture(axNames, labelledBy)
+
+        // then
+        events sameAs page.expected {
+            "select"("autocomplete" to "cc-exp-month", REDACTED to "filled", DISPLAY to "block") {
+                "option"(DISPLAY to "none") { +"1" }
+            }
+            "input"("autocomplete" to "cc-csc", REDACTED to "filled", DISPLAY to "block") { }
+            "input"("type" to "date", "autocomplete" to "cc-exp", REDACTED to "filled", DISPLAY to "block") { }
+            "span"("id" to "step", DISPLAY to "block") {
+                +"Step "
+                "b"(DISPLAY to "block") { +"1" }
+                +" of 3"
+            }
+            "span"("id" to "copy", DISPLAY to "block") { +"© 2027 Acme, 123\n  Main St" }
+            "button"("aria-labelledby" to "step", DISPLAY to "block", "aria-label" to "Step 1 of 3") { }
+            "button"(
+                "aria-labelledby" to "step copy",
+                DISPLAY to "block",
+                "aria-label" to "Step 1 of 3 © 2027 Acme, 123 Main St"
+            ) { }
+        }
+    }
+
+    /**
      * The page answers the text-security lookup with a string; anything else —
      * `undefined` from a page that overrides `getComputedStyle` or
      * `getPropertyValue`, a number, an object — leaves the masking unknown,
@@ -922,6 +982,66 @@ class CapturePageTest {
     }
 
     /**
+     * A target whose text Blink built from more than its own text nodes — a
+     * secret field among the targets, one it owns (`aria-owns`), a secret
+     * select inside it, or an option of a secret select — is checked for every
+     * secret on the page as before, while the targets that spell their own
+     * text keep theirs. Issue #120.
+     */
+    @Test
+    fun `should check a target for secrets when Blink did not spell it from its own text`() = runTest {
+        // given
+        val page = NamedNodes(
+            Node("SPAN", parent = 1, attributes = mapOf("id" to "lbl")),
+            Node("#text", parent = 2, text = "Code 123"),
+            Node("INPUT", parent = 1, value = "123", attributes = mapOf("id" to "cvc", "autocomplete" to "cc-csc")),
+            Node("SPAN", parent = 1, attributes = mapOf("id" to "own", "aria-owns" to "cvc")),
+            Node("#text", parent = 5, text = "Own"),
+            Node("SPAN", parent = 1, attributes = mapOf("id" to "pick")),
+            Node("#text", parent = 7, text = "Pick "),
+            Node("SELECT", parent = 7, attributes = mapOf("autocomplete" to "cc-exp-month")),
+            Node("OPTION", parent = 9, laidOut = false, attributes = mapOf("id" to "o1")),
+            Node("#text", parent = 10, text = "01"),
+            Node("OPTION", parent = 9, selected = true, laidOut = false),
+            Node("#text", parent = 12, text = "02"),
+            Node("BUTTON", parent = 1, attributes = mapOf("aria-labelledby" to "lbl cvc")),
+            Node("BUTTON", parent = 1, attributes = mapOf("aria-labelledby" to "own")),
+            Node("BUTTON", parent = 1, attributes = mapOf("aria-labelledby" to "pick")),
+            Node("BUTTON", parent = 1, attributes = mapOf("aria-labelledby" to "o1")),
+        )
+        val axNames = mapOf(14 to "Code 123 123", 15 to "Own 123", 16 to "Pick 02", 17 to "01")
+        val labelledBy = mapOf(
+            14 to listOf(2 to "Code 123", 4 to "123"),
+            15 to listOf(5 to "Own 123"),
+            16 to listOf(7 to "Pick 02"),
+            17 to listOf(10 to "01"),
+        )
+
+        // when
+        val events = page.capture(axNames, labelledBy)
+
+        // then - the first button keeps its label's own "123", the owned and
+        // chosen secrets are cut, and an option of a secret select is judged
+        // as its select (its "01" is no secret: "02" is chosen)
+        events sameAs page.expected {
+            "span"("id" to "lbl", DISPLAY to "block") { +"Code 123" }
+            "input"("id" to "cvc", "autocomplete" to "cc-csc", REDACTED to "filled", DISPLAY to "block") { }
+            "span"("id" to "own", "aria-owns" to "cvc", DISPLAY to "block") { +"Own" }
+            "span"("id" to "pick", DISPLAY to "block") {
+                +"Pick "
+                "select"("autocomplete" to "cc-exp-month", REDACTED to "filled", DISPLAY to "block") {
+                    "option"("id" to "o1", DISPLAY to "none") { +"01" }
+                    "option"(DISPLAY to "none") { +"02" }
+                }
+            }
+            "button"("aria-labelledby" to "lbl cvc", DISPLAY to "block", "aria-label" to "Code 123") { }
+            "button"("aria-labelledby" to "own", DISPLAY to "block", "aria-label" to "Own") { }
+            "button"("aria-labelledby" to "pick", DISPLAY to "block", "aria-label" to "Pick") { }
+            "button"("aria-labelledby" to "o1", DISPLAY to "block", "aria-label" to "01") { }
+        }
+    }
+
+    /**
      * Only a control whose masking the capture reads ([readsMaskedState]), the
      * snapshot carries no style for — one not laid out — and whose capture
      * the answer can change is asked about: a password or a field with a
@@ -951,8 +1071,196 @@ class CapturePageTest {
     }
 
     /**
+     * Text a target holds but the dump does not show as visible text — inside
+     * an `aria-hidden` subtree, not laid out, in a `<script>`, among the
+     * options of a `<select>` — can equal the secret Blink lent from a field,
+     * so it is not the target's own: the target is checked for every secret.
+     * Issue #120.
+     */
+    @Test
+    fun `should not count text the dump does not show among a target's own`() = runTest {
+        // given
+        val page = NamedNodes(
+            Node("DIV", parent = 1, attributes = mapOf("id" to "a")),
+            Node("#text", parent = 2, text = "CVC "),
+            Node("INPUT", parent = 2, value = "917", attributes = mapOf("autocomplete" to "cc-csc")),
+            Node("SPAN", parent = 2, attributes = mapOf("aria-hidden" to "true")),
+            Node("#text", parent = 5, text = "917"),
+            Node("DIV", parent = 1, attributes = mapOf("id" to "b")),
+            Node("#text", parent = 7, text = "Code "),
+            Node("INPUT", parent = 7, value = "638", attributes = mapOf("autocomplete" to "cc-csc")),
+            Node("SCRIPT", parent = 7),
+            Node("#text", parent = 10, text = "638"),
+            Node("DIV", parent = 1, attributes = mapOf("id" to "c")),
+            Node("#text", parent = 12, text = "PIN "),
+            Node("INPUT", parent = 12, value = "13", attributes = mapOf("autocomplete" to "one-time-code")),
+            Node("SPAN", parent = 12, laidOut = false),
+            Node("#text", parent = 15, text = "13"),
+            Node("DIV", parent = 1, attributes = mapOf("id" to "d")),
+            Node("#text", parent = 17, text = "Card "),
+            Node("SELECT", parent = 17),
+            Node("OPTION", parent = 19, selected = true),
+            Node("#text", parent = 20, text = "A"),
+            Node("OPTION", parent = 19),
+            Node("#text", parent = 22, text = "5556"),
+            Node("INPUT", parent = 17, value = "5556", attributes = mapOf("autocomplete" to "cc-number")),
+            Node("BUTTON", parent = 1, attributes = mapOf("aria-labelledby" to "a")),
+            Node("BUTTON", parent = 1, attributes = mapOf("aria-labelledby" to "b")),
+            Node("BUTTON", parent = 1, attributes = mapOf("aria-labelledby" to "c")),
+            Node("BUTTON", parent = 1, attributes = mapOf("aria-labelledby" to "d")),
+        )
+        val axNames = mapOf(25 to "CVC 917", 26 to "Code 638", 27 to "PIN 13", 28 to "Card A 5556")
+        val labelledBy = mapOf(
+            25 to listOf(2 to "CVC 917"),
+            26 to listOf(7 to "Code 638"),
+            27 to listOf(12 to "PIN 13"),
+            28 to listOf(17 to "Card A 5556"),
+        )
+
+        // when
+        val labels = page.capture(axNames, labelledBy).toList()
+            .filterIsInstance<SemanticEvent.Mark>()
+            .filter { it.name == "button" }
+            .map { it["aria-label"] }
+
+        // then
+        assert(labels == listOf("CVC", "Code", "PIN", "Card A"))
+    }
+
+    /**
+     * Shown text Blink replaces rather than lends — inside an `inert` subtree,
+     * or of an element named from elsewhere (its own `aria-labelledby` or
+     * `aria-label`) — is not a target's own either, so a copy of a secret there
+     * does not keep the name. Issue #120.
+     */
+    @Test
+    fun `should not count text Blink replaces among a target's own`() = runTest {
+        // given
+        val page = NamedNodes(
+            Node("DIV", parent = 1, attributes = mapOf("id" to "a")),
+            Node("#text", parent = 2, text = "Code "),
+            Node("INPUT", parent = 2, value = "919", attributes = mapOf("id" to "f", "autocomplete" to "cc-csc")),
+            Node("SPAN", parent = 2, attributes = mapOf("inert" to "")),
+            Node("#text", parent = 5, text = "919"),
+            Node("DIV", parent = 1, attributes = mapOf("id" to "b")),
+            Node("#text", parent = 7, text = "Code "),
+            Node("SPAN", parent = 7, attributes = mapOf("aria-labelledby" to "f")),
+            Node("#text", parent = 9, text = "919"),
+            Node("DIV", parent = 1, attributes = mapOf("id" to "c")),
+            Node("#text", parent = 11, text = "Code "),
+            Node("SPAN", parent = 11, attributes = mapOf("aria-label" to "919")),
+            Node("#text", parent = 13, text = "919"),
+            Node("BUTTON", parent = 1, attributes = mapOf("aria-labelledby" to "a")),
+            Node("BUTTON", parent = 1, attributes = mapOf("aria-labelledby" to "b")),
+            Node("BUTTON", parent = 1, attributes = mapOf("aria-labelledby" to "c")),
+        )
+        val axNames = mapOf(15 to "Code 919", 16 to "Code 919", 17 to "Code 919")
+        val labelledBy = mapOf(
+            15 to listOf(2 to "Code 919"),
+            16 to listOf(7 to "Code 919"),
+            17 to listOf(11 to "Code 919"),
+        )
+
+        // when
+        val labels = page.capture(axNames, labelledBy).toList()
+            .filterIsInstance<SemanticEvent.Mark>()
+            .filter { it.name == "button" }
+            .map { it["aria-label"] }
+
+        // then
+        assert(labels == listOf("Code", "Code", "Code"))
+    }
+
+    /**
+     * A name left with nothing but non-breaking spaces once a secret is taken
+     * out shows nothing, so it is not resolved into an `aria-label`.
+     */
+    @Test
+    fun `should not resolve a name left with non-breaking spaces alone`() = runTest {
+        // given
+        val page = NamedNodes(
+            Node("SPAN", parent = 1, attributes = mapOf("id" to "a")),
+            Node("#text", parent = 2, text = "\u00A0"),
+            Node("INPUT", parent = 1, value = "123", attributes = mapOf("id" to "cvc", "autocomplete" to "cc-csc")),
+            Node("BUTTON", parent = 1, attributes = mapOf("aria-labelledby" to "a cvc")),
+        )
+        val axNames = mapOf(5 to "\u00A0 123")
+        val labelledBy = mapOf(5 to listOf(2 to "\u00A0", 4 to "123"))
+
+        // when
+        val events = page.capture(axNames, labelledBy)
+
+        // then
+        events sameAs page.expected {
+            "span"("id" to "a", DISPLAY to "block") { +"\u00A0" }
+            "input"("id" to "cvc", "autocomplete" to "cc-csc", REDACTED to "filled", DISPLAY to "block") { }
+            "button"("aria-labelledby" to "a cvc", DISPLAY to "block") { }
+        }
+    }
+
+    /**
+     * When the targets Blink reports do not add up to the name it computed,
+     * nothing tells which part of the name came from where, so the whole name
+     * is checked for every secret on the page. Issue #120.
+     */
+    @Test
+    fun `should check the whole name when its targets do not add up to it`() = runTest {
+        // given
+        val page = NamedNodes(
+            Node("INPUT", parent = 1, value = "123", attributes = mapOf("autocomplete" to "cc-csc")),
+            Node("SPAN", parent = 1, attributes = mapOf("id" to "lbl")),
+            Node("#text", parent = 3, text = "Code"),
+            Node("BUTTON", parent = 1, attributes = mapOf("aria-labelledby" to "lbl")),
+        )
+        val axNames = mapOf(5 to "Code 123")
+        val labelledBy = mapOf(5 to listOf(3 to "Code"))
+
+        // when
+        val events = page.capture(axNames, labelledBy)
+
+        // then
+        events sameAs page.expected {
+            "input"("autocomplete" to "cc-csc", REDACTED to "filled", DISPLAY to "block") { }
+            "span"("id" to "lbl", DISPLAY to "block") { +"Code" }
+            "button"("aria-labelledby" to "lbl", DISPLAY to "block", "aria-label" to "Code") { }
+        }
+    }
+
+    /**
+     * A resolved name is always whitespace-collapsed — whether or not a secret
+     * was taken out of it — so the same label renders the same whatever the
+     * form state elsewhere on the page. Issue #125.
+     */
+    @Test
+    fun `should collapse the whitespace of a resolved name whether or not a secret was taken out`() = runTest {
+        // given
+        val page = NamedNodes(
+            Node("BUTTON", parent = 1, attributes = mapOf("aria-labelledby" to "a")),
+        )
+        val withSecret = NamedNodes(
+            Node("INPUT", parent = 1, value = "123", attributes = mapOf("autocomplete" to "cc-csc")),
+            Node("BUTTON", parent = 1, attributes = mapOf("aria-labelledby" to "a")),
+            Node("BUTTON", parent = 1, attributes = mapOf("aria-labelledby" to "b")),
+        )
+
+        // when
+        val events = page.capture(mapOf(2 to "Pay\t\n now"))
+        val secretEvents = withSecret.capture(mapOf(3 to "Pay\t\n now", 4 to "Pay\t\n now 123"))
+
+        // then
+        events sameAs page.expected {
+            "button"("aria-labelledby" to "a", DISPLAY to "block", "aria-label" to "Pay now") { }
+        }
+        secretEvents sameAs withSecret.expected {
+            "input"("autocomplete" to "cc-csc", REDACTED to "filled", DISPLAY to "block") { }
+            "button"("aria-labelledby" to "a", DISPLAY to "block", "aria-label" to "Pay now") { }
+            "button"("aria-labelledby" to "b", DISPLAY to "block", "aria-label" to "Pay now") { }
+        }
+    }
+
+    /**
      * A computed name is trimmed as the browser reported it — non-breaking
-     * spaces at its edges included — and otherwise kept as it is.
+     * spaces at its edges included — and its whitespace collapsed (issue #125).
      */
     @Test
     fun `should trim a computed name`() = runTest {
@@ -1023,11 +1331,14 @@ class CapturePageTest {
 
         /**
          * Captures the page, Blink's computed name of each node given by node
-         * index in [axNames], the controls the page reported masked though not
-         * laid out answered by [maskedControls].
+         * index in [axNames] and, in [labelledBy], the `aria-labelledby`
+         * targets Blink reports the name was built from — each a target node
+         * index and the text it lent — the controls the page reported masked
+         * though not laid out answered by [maskedControls].
          */
         suspend fun capture(
             axNames: Map<Int, String>,
+            labelledBy: Map<Int, List<Pair<Int, String>>> = emptyMap(),
             maskedControls: suspend (List<Int>) -> Set<Int> = { emptySet() },
         ): Flow<SemanticEvent> {
             val axNodes = axNames.map { (index, name) ->
@@ -1037,7 +1348,21 @@ class CapturePageTest {
                     ignored = false,
                     name = Accessibility.AXValue(
                         type = Accessibility.AXValueType.COMPUTEDSTRING,
-                        value = JsonPrimitive(name)
+                        value = JsonPrimitive(name),
+                        sources = labelledBy[index]?.let { targets ->
+                            listOf(
+                                Accessibility.AXValueSource(
+                                    type = Accessibility.AXValueSourceType.RELATEDELEMENT,
+                                    attribute = "aria-labelledby",
+                                    attributeValue = Accessibility.AXValue(
+                                        type = Accessibility.AXValueType.IDREFLIST,
+                                        relatedNodes = targets.map { (target, text) ->
+                                            Accessibility.AXRelatedNode(backendDOMNodeId = target + 1, text = text)
+                                        }
+                                    )
+                                )
+                            )
+                        }
                     ),
                     backendDOMNodeId = backendNodeId,
                 )
@@ -1056,7 +1381,12 @@ class CapturePageTest {
             val strings = mutableListOf<String>()
             fun string(value: String): Int =
                 strings.indexOf(value).takeIf { it >= 0 } ?: strings.size.also { strings += value }
-            val laidOut = nodes.indices.filter { !nodes[it].name.startsWith("#") && nodes[it].laidOut }
+            // a text node is laid out with its parent element, as Blink lays it out
+            val laidOut = nodes.indices.filter { index ->
+                val node = nodes[index]
+                if (node.name == "#text") nodes.getOrNull(node.parent)?.let { it.laidOut && !it.name.startsWith("#") } == true
+                else !node.name.startsWith("#") && node.laidOut
+            }
             val values = nodes.indices.filter { nodes[it].value != null }
             val selected = nodes.indices.filter { nodes[it].selected }
             val snapshot = DOMSnapshot.CaptureSnapshotReturn(
