@@ -44,16 +44,26 @@ public object AccessibilityAnnotations {
     public const val ROLE: String = "data-markanywhere-role"
 
     /**
-     * The element's computed `display`, recorded on every element — so a
-     * consumer can tell inline-level content (`inline`, `inline-block`, …),
-     * whose flanking whitespace is a rendered separator, from block-level
-     * content, whose flanking whitespace is structural, and a stream lacking
-     * the annotation can only be one that was never captured (dumps captured
-     * before this left the plain `block` default out). Two values describe an
-     * element laying out no box: `contents` (`display:contents` — the box is
-     * transparent and its children's display is what counts) and `none`
-     * (`display:none`, nothing in the subtree rendered) — hidden, drop the
-     * subtree.
+     * The format of the capture, stamped on the root mark of the stream alone
+     * (the `<html>` of a page) — what an *absent* [DISPLAY] means anywhere in
+     * it depends on it. See [CaptureFormat] for the values, and an unmarked
+     * stream.
+     */
+    public const val CAPTURE: String = "data-markanywhere-capture"
+
+    /**
+     * The element's computed `display`, so a consumer can tell inline-level
+     * content (`inline`, `inline-block`, …), whose flanking whitespace is a
+     * rendered separator, from block-level content, whose flanking whitespace
+     * is structural. Two values describe an element laying out no box:
+     * `contents` (`display:contents` — the box is transparent and its
+     * children's display is what counts) and `none` (`display:none`, nothing
+     * in the subtree rendered) — hidden, drop the subtree.
+     *
+     * Which elements carry it, and so what its absence means, is set by the
+     * stream's [CAPTURE] format — in a [CaptureFormat.LAYOUT] capture every
+     * HTML element outside the two regions [unrecordedDisplayOfChildren]
+     * names, the plain `block` default included.
      */
     public const val DISPLAY: String = "data-markanywhere-display"
 

@@ -22,6 +22,7 @@ import com.xemantic.markanywhere.dump.captureFormControl
 import com.xemantic.markanywhere.dump.hasLiveFormState
 import com.xemantic.markanywhere.dump.isMaskingTextSecurity
 import com.xemantic.markanywhere.dump.readsMaskedState
+import com.xemantic.markanywhere.dump.withoutCaptureAnnotations
 import com.xemantic.markanywhere.flow.SemanticEventScope
 import com.xemantic.markanywhere.flow.semanticEvents
 import kotlinx.coroutines.flow.Flow
@@ -37,6 +38,12 @@ import org.w3c.dom.asList
  * the box ticked, the option chosen — and a control the page marks as secret
  * has its value left out, by the rules `CapturePage` in `markanywhere-browse`
  * applies too (see [captureFormControl]), so both captures agree.
+ *
+ * The walk records no layout and stamps no capture format: unmarked, the
+ * stream reads as never captured — every element by the UA default of its
+ * tag — since it carries no annotation only the CDP capture writes, the
+ * page's own `data-markanywhere-*` attributes being dropped
+ * ([withoutCaptureAnnotations]).
  */
 public fun Element.toSemanticEvents(): Flow<SemanticEvent> = semanticEvents(
     tagged = true
@@ -156,8 +163,9 @@ private fun booleanOrNull(value: dynamic): Boolean? = if (jsTypeOf(value) == "bo
 private fun Element.enclosingSelect(): Element? =
     closest("select, datalist")?.takeIf { it.localName == "select" }
 
+/** The element's attributes, minus the `data-markanywhere-*` ones only a producer may write. */
 private fun Element.attributeMap(): Map<String, String> =
-    attributes.asList().associate { it.name to it.value }
+    attributes.asList().associate { it.name to it.value }.withoutCaptureAnnotations()
 
 /**
  * Whether this element renders its text masked, judging its computed

@@ -45,7 +45,7 @@ class PageSessionTest {
 
         // then
         dump.events.asFlow() sameAs semanticEvents(tagged = true) {
-            "html"("lang" to "en", "data-markanywhere-display" to "block") {
+            "html"("lang" to "en", "data-markanywhere-display" to "block", "data-markanywhere-capture" to "layout-3") {
                 "head" {
                     +"\n    "
                     "title" {
@@ -94,7 +94,7 @@ class PageSessionTest {
 
         // then
         dump.events.asFlow() sameAs semanticEvents(tagged = true) {
-            "html"("lang" to "en", "data-markanywhere-display" to "block") {
+            "html"("lang" to "en", "data-markanywhere-display" to "block", "data-markanywhere-capture" to "layout-3") {
                 "head" {
                     +"\n    "
                     "meta"("charset" to "utf-8") { }
@@ -349,7 +349,7 @@ class PageSessionTest {
 
         // then
         dump.events.asFlow() sameAs semanticEvents(tagged = true) {
-            "html"("lang" to "en", "data-markanywhere-display" to "block") {
+            "html"("lang" to "en", "data-markanywhere-display" to "block", "data-markanywhere-capture" to "layout-3") {
                 "head" {
                     +"\n    "
                     "meta"("charset" to "utf-8") { }

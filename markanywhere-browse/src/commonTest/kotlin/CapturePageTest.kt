@@ -18,6 +18,7 @@ package com.xemantic.markanywhere.browse
 
 import com.xemantic.kotlin.test.assert
 import com.xemantic.markanywhere.SemanticEvent
+import com.xemantic.markanywhere.dump.AccessibilityAnnotations.CAPTURE
 import com.xemantic.markanywhere.dump.AccessibilityAnnotations.DISPLAY
 import com.xemantic.markanywhere.dump.AccessibilityAnnotations.REDACTED
 import com.xemantic.markanywhere.dump.AccessibilityAnnotations.VISIBILITY
@@ -132,7 +133,7 @@ class CapturePageTest {
 
         // then
         events.asFlow() sameAs semanticEvents(tagged = true) {
-            "html"(DISPLAY to "block") {
+            "html"(DISPLAY to "block", CAPTURE to "layout-3") {
                 "body"(DISPLAY to "block") {
                     "div"(DISPLAY to "block") {
                         "span"(DISPLAY to "contents") { +"US" }
@@ -199,7 +200,7 @@ class CapturePageTest {
 
         // then
         events.asFlow() sameAs semanticEvents(tagged = true) {
-            "html"(DISPLAY to "block") {
+            "html"(DISPLAY to "block", CAPTURE to "layout-3") {
                 "body"(DISPLAY to "block") {
                     "span"(DISPLAY to "contents", VISIBILITY to "hidden") { +"secret" }
                     "div"(DISPLAY to "block", VISIBILITY to "hidden") {
@@ -262,10 +263,210 @@ class CapturePageTest {
 
         // then
         events.asFlow() sameAs semanticEvents(tagged = true) {
-            "html"(DISPLAY to "block") {
+            "html"(DISPLAY to "block", CAPTURE to "layout-3") {
                 "body"(DISPLAY to "block") {
                     "div"(DISPLAY to "block", VISIBILITY to "hidden") { +"collapsed" }
                     "span"(DISPLAY to "contents", VISIBILITY to "hidden") { +"contents" }
+                }
+            }
+        }
+    }
+
+    /**
+     * Below an element recorded `none` nothing lays out a box, so the capture
+     * leaves every descendant unannotated — a reader of the `layout-3` format
+     * reads each of them as `none` too, without the stream repeating it.
+     */
+    @Test
+    fun `should not record a display below a display none root`() = runTest {
+        // given
+        val page = NamedNodes(
+            Node("DIV", parent = 1, laidOut = false),
+            Node("SPAN", parent = 2, laidOut = false),
+            Node("#text", parent = 3, text = "hidden"),
+            Node("P", parent = 1),
+        )
+
+        // when
+        val events = page.capture(axNames = emptyMap())
+
+        // then
+        events sameAs page.expected {
+            "div"(DISPLAY to "none") {
+                "span" { +"hidden" }
+            }
+            "p"(DISPLAY to "block") { }
+        }
+    }
+
+    /**
+     * The parts of an `<svg>` are not CSS boxes, so the capture leaves the
+     * display of a laid-out part out — until a `<foreignObject>`, whose
+     * children are HTML laid out by CSS again. A part laying out nothing is
+     * still recorded `none`: a `display:none` group, a `<title>`, an HTML
+     * child the svg never renders — each hidden, and dropped downstream with
+     * its subtree, whose own displays are then left out.
+     */
+    @Test
+    fun `should record only the parts laying out nothing inside an svg up to its foreignObject`() = runTest {
+        // given
+        val page = NamedNodes(
+            Node("svg", parent = 1, display = "inline"),
+            Node("g", parent = 2, display = "inline"),
+            Node("path", parent = 3, display = "inline"),
+            Node("foreignObject", parent = 2, display = "inline"),
+            Node("DIV", parent = 5),
+            Node("#text", parent = 6, text = "label"),
+            Node("g", parent = 2, laidOut = false),
+            Node("title", parent = 8, laidOut = false),
+            Node("#text", parent = 9, text = "hidden"),
+            Node("DIV", parent = 2, laidOut = false),
+            Node("#text", parent = 11, text = "unrendered"),
+        )
+
+        // when
+        val events = page.capture(axNames = emptyMap())
+
+        // then
+        events sameAs page.expected {
+            "svg"(DISPLAY to "inline") {
+                "g" { "path" { } }
+                "foreignObject" {
+                    "div"(DISPLAY to "block") { +"label" }
+                }
+                "g"(DISPLAY to "none") {
+                    "title" { +"hidden" }
+                }
+                "div"(DISPLAY to "none") { +"unrendered" }
+            }
+        }
+    }
+
+    /**
+     * A page writing the capture's own annotations into its markup would be
+     * believed downstream — a faked display inside an svg would read as a
+     * box of its own and escape its hidden parent's verdict, a faked ref
+     * would name another element — so the capture drops every page-authored
+     * `data-markanywhere-*` attribute before recording its own.
+     */
+    @Test
+    fun `should drop capture annotations the page authored`() = runTest {
+        // given
+        val page = NamedNodes(
+            Node("svg", parent = 1, display = "inline", visibility = "hidden"),
+            Node("text", parent = 2, display = "inline", visibility = "hidden", attributes = mapOf(
+                DISPLAY to "inline",
+                "data-markanywhere-ref" to "9",
+                "data-markanywhere-capture" to "layout-3",
+                "class" to "label",
+            )),
+            Node("#text", parent = 3, text = "spoof"),
+        )
+
+        // when
+        val events = page.capture(axNames = emptyMap())
+
+        // then
+        events sameAs page.expected {
+            "svg"(DISPLAY to "inline", VISIBILITY to "hidden") {
+                "text"("class" to "label") { +"spoof" }
+            }
+        }
+    }
+
+    /**
+     * Inside an `<svg>`, where no display is recorded, a part's `visibility`
+     * is recorded only where it differs from the one it inherits — the rule a
+     * box-less element follows — so a reader inheriting the verdict of a part
+     * without a recorded box still sees one set back to `visible`.
+     */
+    @Test
+    fun `should record the visibility inside an svg only where it changes`() = runTest {
+        // given
+        val page = NamedNodes(
+            Node("svg", parent = 1, display = "inline", visibility = "hidden"),
+            Node("g", parent = 2, display = "inline", visibility = "hidden"),
+            Node("path", parent = 3, display = "inline", visibility = "hidden"),
+            Node("g", parent = 2, display = "inline", visibility = "visible"),
+        )
+
+        // when
+        val events = page.capture(axNames = emptyMap())
+
+        // then
+        events sameAs page.expected {
+            "svg"(DISPLAY to "inline", VISIBILITY to "hidden") {
+                "g" { "path" { } }
+                "g"(VISIBILITY to "visible") { }
+            }
+        }
+    }
+
+    /**
+     * The format marker is stamped on the root of the stream alone, the main
+     * document's `<html>` — a frame's document nested in it belongs to the
+     * same capture — and a frame below a `display:none` root is part of the
+     * subtree laying out no box, so its document is left unannotated too.
+     */
+    @Test
+    fun `should stamp the capture format on the main document root only`() = runTest {
+        // given
+        val strings = listOf("HTML", "BODY", "IFRAME", "DIV", "block", "visible", "none")
+        val snapshot = DOMSnapshot.CaptureSnapshotReturn(
+            documents = listOf(
+                document(
+                    nodeType = listOf(1, 1, 1, 1, 1),
+                    nodeName = listOf(0, 1, 2, 3, 2),
+                    parentIndex = listOf(-1, 0, 1, 1, 3),
+                    backendNodeId = listOf(1, 2, 3, 4, 5),
+                    attributes = List(5) { emptyList() },
+                    contentDocumentIndex = DOMSnapshot.RareIntegerData(
+                        index = listOf(2, 4),
+                        value = listOf(1, 2)
+                    ),
+                    layoutNodeIndex = listOf(0, 1, 2),
+                    layoutStyles = List(3) { listOf(4, 5, 6) },
+                ),
+                document(
+                    nodeType = listOf(1, 1),
+                    nodeName = listOf(0, 1),
+                    parentIndex = listOf(-1, 0),
+                    backendNodeId = listOf(6, 7),
+                    attributes = List(2) { emptyList() },
+                    layoutNodeIndex = listOf(0, 1),
+                    layoutStyles = List(2) { listOf(4, 5, 6) },
+                ),
+                document(
+                    nodeType = listOf(1, 1),
+                    nodeName = listOf(0, 1),
+                    parentIndex = listOf(-1, 0),
+                    backendNodeId = listOf(8, 9),
+                    attributes = List(2) { emptyList() },
+                ),
+            ),
+            strings = strings,
+        )
+
+        // when
+        val events = captureEvents(
+            snapshot = snapshot,
+            axNodes = emptyList(),
+            refAttribute = null,
+            isActionable = { false },
+        ).events
+
+        // then
+        events.asFlow() sameAs semanticEvents(tagged = true) {
+            "html"(DISPLAY to "block", CAPTURE to "layout-3") {
+                "body"(DISPLAY to "block") {
+                    "iframe"(DISPLAY to "block") {
+                        "html"(DISPLAY to "block") { "body"(DISPLAY to "block") { } }
+                    }
+                    "div"(DISPLAY to "none") {
+                        "iframe" {
+                            "html" { "body" { } }
+                        }
+                    }
                 }
             }
         }
@@ -342,7 +543,7 @@ class CapturePageTest {
 
         // then
         events.asFlow() sameAs semanticEvents(tagged = true) {
-            "html"(DISPLAY to "block") {
+            "html"(DISPLAY to "block", CAPTURE to "layout-3") {
                 "body"(DISPLAY to "block") {
                     "input"("type" to "text", "value" to "Alice", DISPLAY to "block") { }
                     "input"("type" to "password", REDACTED to "filled", DISPLAY to "block") { }
@@ -410,7 +611,7 @@ class CapturePageTest {
 
         // then
         events.asFlow() sameAs semanticEvents(tagged = true) {
-            "html"(DISPLAY to "block") {
+            "html"(DISPLAY to "block", CAPTURE to "layout-3") {
                 "body"(DISPLAY to "block") {
                     "select"("autocomplete" to "cc-exp-month", REDACTED to "filled", DISPLAY to "block") {
                         "option"("value" to "", DISPLAY to "block") { }
@@ -722,7 +923,7 @@ class CapturePageTest {
 
         // then
         events.asFlow() sameAs semanticEvents(tagged = true) {
-            "html"(DISPLAY to "block") {
+            "html"(DISPLAY to "block", CAPTURE to "layout-3") {
                 "body"(DISPLAY to "block") {
                     "input"("type" to "checkbox", "checked" to "", DISPLAY to "block") { }
                     "input"("type" to "radio", DISPLAY to "block") { }
@@ -1319,6 +1520,7 @@ class CapturePageTest {
         val value: String? = null,
         val laidOut: Boolean = true,
         val display: String = "block",
+        val visibility: String = "visible",
         val masked: Boolean = false,
         val selected: Boolean = false,
         val textSecurityReported: Boolean = true,
@@ -1416,7 +1618,7 @@ class CapturePageTest {
                             val node = nodes[it]
                             listOfNotNull(
                                 node.display,
-                                "visible",
+                                node.visibility,
                                 if (!node.textSecurityReported) null else if (node.masked) "disc" else "none"
                             ).map(::string)
                         },
@@ -1430,7 +1632,7 @@ class CapturePageTest {
         fun expected(
             body: suspend SemanticEventScope.() -> Unit
         ): Flow<SemanticEvent> = semanticEvents(tagged = true) {
-            "html"(DISPLAY to "block") { "body"(DISPLAY to "block") { body() } }
+            "html"(DISPLAY to "block", CAPTURE to "layout-3") { "body"(DISPLAY to "block") { body() } }
         }
 
     }

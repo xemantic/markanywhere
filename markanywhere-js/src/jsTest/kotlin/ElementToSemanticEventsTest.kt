@@ -1146,4 +1146,23 @@ class ElementToSemanticEventsTest {
         }
     }
 
+    @Test
+    fun `should drop capture annotations the page authored`() = runTest {
+        // given - only a producer may write them: a faked ref or display would
+        // be believed downstream, and a ref would make the walk read as a
+        // layout capture
+        document.body!!.innerHTML =
+            """<p data-markanywhere-ref="1" data-markanywhere-display="block" data-x="kept">Hi</p>"""
+
+        // when
+        val events = document.body!!.toSemanticEvents()
+
+        // then
+        events sameAs semanticEvents(tagged = true) {
+            "body" {
+                "p"("data-x" to "kept") { +"Hi" }
+            }
+        }
+    }
+
 }
