@@ -222,6 +222,7 @@ Rules are tried in registration order with the first match winning, which is why
 
 Because the rule sets are plain extension functions, they compose — `transform { demoteHeadings(); emphasizeToStrong(); passthrough() }`.
 The block also runs per collection, so stateful rule sets stay correct when a flow is collected more than once: a sequence counter, text captured for an `afterClose { … }` summary emitted once the subtree closes, or a mode-scoped sub-pipeline (`children(mode = "capture")` routing a subtree to its own set of rules).
+Where `afterClose { … }` lands after the matched mark's close, `defer { … }` runs at the same moment but splices its output into the deferred stream at the call's position — e.g. a table of contents collected from the headings, emitted as an `aside` between `</main>` and `</body>`.
 The same machinery normalizes HTML down to Markdown (`simplifyHtml()` in `markanywhere-html`), redacts spans, or routes a tagged block to a separate sink.
 
 > Backed by the first test in [`TransformerTest`](markanywhere-transform/src/commonTest/kotlin/TransformerTest.kt) — `should transform the README example`.
