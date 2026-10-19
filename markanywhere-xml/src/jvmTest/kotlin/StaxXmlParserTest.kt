@@ -100,6 +100,29 @@ class StaxXmlParserTest : XmlParserTest() {
     }
 
     @Test
+    fun `should not unmark an element whose attributes the provider failed to report`() = runTest {
+        // given — a provider reporting an error lazily, from an accessor
+        val failing = StaxXmlParser(
+            factory = object : DelegatingXmlInputFactory() {
+                override fun createXMLStreamReader(reader: Reader): XMLStreamReader =
+                    object : StreamReaderDelegate(delegate.createXMLStreamReader(reader)) {
+                        override fun getAttributeValue(index: Int): String =
+                            throw IllegalStateException("lazy error")
+                    }
+            }
+        )
+
+        // when
+        val events = failing.parse("""<a><b x="1"/></a>""").toList()
+
+        // then — `b` was never marked, so it must not be unmarked either
+        events should {
+            have(markNames() == listOf("a"))
+            have(isBalanced())
+        }
+    }
+
+    @Test
     fun `should default to the JDK StAX implementation`() {
         // when
         val factory = defaultXmlInputFactory()

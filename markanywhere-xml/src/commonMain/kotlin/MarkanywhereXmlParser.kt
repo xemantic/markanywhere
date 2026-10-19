@@ -104,7 +104,7 @@ private class XmlDocumentReader(
     var isStopped: Boolean = false
         private set
 
-    private var state = ReaderState.CONTENT
+    private var state: ReaderState = CONTENT
 
     /**
      * The names of the elements whose mark was emitted but not yet unmarked,
@@ -148,14 +148,20 @@ private class XmlDocumentReader(
     /** Whether the DOCTYPE being skipped stands in its internal subset. */
     private var inInternalSubset = false
 
-    /** The comment or processing instruction of the internal subset being skipped. */
-    private var subsetMarkup: SubsetMarkup = NONE
+    /**
+     * The [COMMENT] or [PROCESSING_INSTRUCTION] of the internal subset being
+     * skipped, if any.
+     */
+    private var subsetMarkup: ReaderState? = null
 
     /** What has been read of a `<!--` or `<?` opener in the internal subset. */
     private val subsetOpening = StringBuilder()
 
     /** Set by a carriage return, so that the line feed of a CRLF is not read twice. */
     private var skipLineFeed = false
+
+    /** Whether no character has been read yet, so a byte order mark is due. */
+    private var atStart = true
 
     /**
      * Reads [chunk], emitting every event it completes.
@@ -168,6 +174,12 @@ private class XmlDocumentReader(
     suspend fun read(chunk: String) {
         for (char in chunk) {
             if (isStopped) return
+            if (atStart) {
+                atStart = false
+                // Skipped per the XmlParser contract: a UTF-8 file decoded the
+                // usual way keeps its BOM, which is no character data.
+                if (char == '\uFEFF') continue
+            }
             if (skipLineFeed) {
                 skipLineFeed = false
                 if (char == '\n') continue
@@ -207,7 +219,7 @@ private class XmlDocumentReader(
     private suspend fun process(char: Char) {
         when (state) {
             CONTENT -> when (char) {
-                '<' -> state = MARKUP
+                '<' -> startMarkup()
                 '&' -> startReference(inAttribute = false)
                 '\r' -> appendLineFeed()
                 else -> appendText(char)
@@ -339,12 +351,15 @@ private class XmlDocumentReader(
             }
             CDATA_OPENING.startsWith(read) -> if (read == CDATA_OPENING) {
                 repeats = 0
+                // Character data even where it is all whitespace, so never
+                // dropped as the layout outside every element.
+                textHasContent = true
                 state = CDATA
             }
             read.length == 1 && char.isXmlNameStart() -> {
                 doctypeQuote = null
                 inInternalSubset = false
-                subsetMarkup = NONE
+                subsetMarkup = null
                 subsetOpening.clear()
                 state = DOCTYPE
             }
@@ -386,9 +401,9 @@ private class XmlDocumentReader(
      */
     private fun readDoctype(char: Char) {
         when (subsetMarkup) {
-            COMMENT -> if (endsComment(char)) subsetMarkup = NONE
-            PROCESSING_INSTRUCTION -> if (endsInstruction(char)) subsetMarkup = NONE
-            NONE -> readDoctypeDeclaration(char)
+            COMMENT -> if (endsComment(char)) subsetMarkup = null
+            PROCESSING_INSTRUCTION -> if (endsInstruction(char)) subsetMarkup = null
+            else -> readDoctypeDeclaration(char)
         }
     }
 
@@ -446,7 +461,7 @@ private class XmlDocumentReader(
         if (subsetOpening.isEmpty()) return false
         subsetOpening.append(char)
         val read = subsetOpening.toString()
-        val markup: SubsetMarkup = when (read) {
+        val markup: ReaderState = when (read) {
             "<?" -> PROCESSING_INSTRUCTION
             COMMENT_OPENING -> COMMENT
             else -> {
@@ -487,6 +502,8 @@ private class XmlDocumentReader(
             state = ATTRIBUTE_VALUE
         } else {
             resolved.forEach { appendText(it) }
+            // A reference to whitespace is character data all the same.
+            textHasContent = true
             state = CONTENT
         }
     }
@@ -496,18 +513,6 @@ private class XmlDocumentReader(
         state = ATTRIBUTE_END
     }
 
-    /**
-     * The attributes read, namespace declarations first — the order the
-     * [XmlParser] contract prescribes, each group otherwise in document order.
-     */
-    private fun orderedAttributes(): Map<String, String> {
-        if (attributes.keys.none { it.isNamespaceDeclaration() }) return attributes.toMap()
-        val (declarations, others) = attributes.entries.partition {
-            it.key.isNamespaceDeclaration()
-        }
-        return (declarations + others).associate { it.key to it.value }
-    }
-
     private suspend fun startElement(isEmpty: Boolean) {
         val name = elementName.toString()
         flushText()
@@ -515,7 +520,7 @@ private class XmlDocumentReader(
             SemanticEvent.Mark(
                 name = name,
                 isTagged = true,
-                attributes = orderedAttributes()
+                attributes = attributes.toMap()
             )
         )
         if (isEmpty) {
@@ -542,6 +547,19 @@ private class XmlDocumentReader(
         collector.emit(SemanticEvent.Unmark(name = name, isTagged = true))
         textHasContent = false
         state = CONTENT
+    }
+
+    /**
+     * Enters markup. Outside every element the text read so far ends here, so
+     * that the whitespace between this markup and the next is judged on its
+     * own — dropped as layout even after text a fragment carries.
+     */
+    private suspend fun startMarkup() {
+        if (open.isEmpty()) {
+            flushText()
+            textHasContent = false
+        }
+        state = MARKUP
     }
 
     private fun appendText(char: Char) {
@@ -606,13 +624,6 @@ private enum class ReaderState {
     DOCTYPE
 }
 
-/** A comment or processing instruction inside a DOCTYPE's internal subset. */
-private enum class SubsetMarkup {
-    NONE,
-    COMMENT,
-    PROCESSING_INSTRUCTION
-}
-
 private const val CDATA_OPENING = "[CDATA["
 
 private const val COMMENT_OPENING = "<!--"
@@ -662,9 +673,6 @@ private fun isXmlCharacter(code: Int): Boolean =
 private fun Char.isXmlCharacter(): Boolean =
     (this == '\t') || (this == '\n') || (this == '\r') ||
         (this in '\u0020'..'\uFFFD')
-
-private fun String.isNamespaceDeclaration(): Boolean =
-    (this == "xmlns") || startsWith("xmlns:")
 
 private fun Char.isAsciiDigit(): Boolean = this in '0'..'9'
 

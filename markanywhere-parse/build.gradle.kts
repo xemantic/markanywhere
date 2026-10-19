@@ -16,6 +16,7 @@
 
 import com.xemantic.markanywhere.buildlogic.allTargets
 import com.xemantic.markanywhere.buildlogic.appendKotlinEscaped
+import com.xemantic.markanywhere.buildlogic.currentYear
 import com.xemantic.markanywhere.buildlogic.licenseHeader
 import groovy.json.JsonSlurper
 import java.net.URI
@@ -94,8 +95,10 @@ val generateNamedEntities = tasks.register("generateNamedEntities") {
     val cacheFile = namedEntitiesCacheFile
     val outFile = namedEntitiesSourceFile
     val copyrightDir = copyrightProfileDir
+    val year = providers.currentYear()
 
     inputs.property("url", url)
+    inputs.property("year", year)
     inputs.files(fileTree(copyrightDir) { include("*.xml") })
         .withPropertyName("copyrightProfiles")
     outputs.file(outFile)
@@ -123,7 +126,7 @@ val generateNamedEntities = tasks.register("generateNamedEntities") {
             .toList()
 
         val kotlin = StringBuilder().apply {
-            append(licenseHeader(copyrightDir.asFile, outFile.asFile))
+            append(licenseHeader(copyrightDir.asFile, outFile.asFile, year.get()))
             append(
                 """
                 |// Auto-generated from $url. Do not edit by hand.

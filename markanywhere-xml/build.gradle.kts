@@ -61,7 +61,6 @@ kotlin {
                 implementation(libs.kotlinx.coroutines.test)
                 implementation(libs.kotlin.test)
                 implementation(libs.xemantic.kotlin.test)
-                implementation(libs.xemantic.kotlin.core)
             }
         }
 

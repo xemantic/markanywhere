@@ -16,6 +16,10 @@
 
 package com.xemantic.markanywhere.buildlogic
 
+import org.gradle.api.provider.Provider
+import org.gradle.api.provider.ProviderFactory
+import org.gradle.api.provider.ValueSource
+import org.gradle.api.provider.ValueSourceParameters
 import java.io.File
 import java.time.Year
 
@@ -26,17 +30,21 @@ import java.time.Year
  * exactly the notice the IDE's copyright autosave would stamp on it, and a
  * regeneration shows up as a pure data diff instead of a header churn.
  *
+ * The current [year] is a parameter rather than read from the clock here, so
+ * that a task can declare it as an input (see [currentYear]) — otherwise the
+ * task stays up to date across a new year and keeps the old header.
+ *
  * Lives here, and not in the build script which uses it, for the same
  * configuration cache reason as [fixturePropertyName].
  */
-fun licenseHeader(copyrightDir: File, existing: File): String {
+fun licenseHeader(copyrightDir: File, existing: File, year: Int): String {
     val notice = defaultCopyrightNotice(copyrightDir)
     val body = notice
         // The profile's `$originalComment.match("Copyright (\d+)", 1, "-")$today.year`
         // year expression, evaluated the way the IDE evaluates it: keep the year
         // already present in the file being rewritten, extending it to a range
         // once the current year moves on.
-        .replace(YEAR_EXPRESSION_REGEX) { copyrightYears(existing) }
+        .replace(YEAR_EXPRESSION_REGEX) { copyrightYears(existing, year) }
     return buildString {
         append("/*\n")
         body.lineSequence().forEach { line ->
@@ -68,8 +76,19 @@ private fun defaultCopyrightNotice(copyrightDir: File): String {
     }
 }
 
-private fun copyrightYears(existing: File): String {
-    val thisYear = Year.now().value.toString()
+/**
+ * The current year, as a task input [licenseHeader] needs — a [ValueSource], so
+ * that the configuration cache reads the clock again on reuse instead of
+ * replaying the year it was stored in.
+ */
+fun ProviderFactory.currentYear(): Provider<Int> = of(CurrentYear::class.java) {}
+
+abstract class CurrentYear : ValueSource<Int, ValueSourceParameters.None> {
+    override fun obtain(): Int = Year.now().value
+}
+
+private fun copyrightYears(existing: File, year: Int): String {
+    val thisYear = year.toString()
     val firstYear = existing
         .takeIf { it.exists() }
         ?.let { Regex("""Copyright (\d+)""").find(it.readText())?.groupValues?.get(1) }

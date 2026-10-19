@@ -655,11 +655,7 @@ If the fix is bounded (one inline construct, one or two lines of lookahead), it'
   Suite assertions compare **after `mergeAdjacentText()`** — text-run splitting is implementation-defined.
   A new test belongs in the shared suite **only when both engines pass it** — run `:markanywhere-xml:jvmTest` first, or one engine's behaviour silently becomes the contract.
   Behaviour the contract leaves open lives in the subclass instead: how much of a structurally invalid document is still read (several roots, text outside the root, a repeated attribute — `MarkanywhereXmlParser` reads on where StAX rejects), and how much of the text run an error interrupts survives.
-  JDK-StAX specifics to know before treating a difference as a bug:
-  (1) a namespace-aware reader **consumes `xmlns`/`xmlns:*`** and reports them apart from the attributes, so they are re-added — and, since their interleaving with the attributes is lost, the contract puts declarations first;
-  (2) it fails the **whole text run** it was scanning when an error occurs inside it (a literal U+0000, a truncated document's trailing text) — and with `IS_COALESCING = true` it also lost the text before an error in the *next* construct (`text ` of `text &nbsp;`), which is why the default factory does not coalesce;
-  (3) `SUPPORT_DTD = false` **skips** a DOCTYPE rather than rejecting the document, which matches the contract;
-  (4) it **drops whitespace in the prolog and epilog**, so `MarkanywhereXmlParser` drops whitespace-only text outside every element too.
+  Before treating a difference as a bug, read the JDK-StAX specifics on `StaxXmlParser` and `defaultXmlInputFactory`; one is written nowhere in the source: the JDK reader fails the **whole text run** it was scanning when an error occurs inside it (a literal U+0000, a truncated document's trailing text), so the engines legitimately disagree on how much of an interrupted run survives.
 
 ## Test conventions
 

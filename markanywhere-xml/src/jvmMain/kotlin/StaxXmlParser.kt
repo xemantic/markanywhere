@@ -105,15 +105,15 @@ public class StaxXmlParser(
             while (reader.hasNext()) {
                 when (reader.next()) {
                     XMLStreamConstants.START_ELEMENT -> {
-                        val name = reader.elementName()
-                        open.addLast(name)
-                        emit(
-                            SemanticEvent.Mark(
-                                name = name,
-                                isTagged = true,
-                                attributes = reader.readAttributes()
-                            )
+                        val mark = SemanticEvent.Mark(
+                            name = reader.elementName(),
+                            isTagged = true,
+                            attributes = reader.readAttributes()
                         )
+                        emit(mark)
+                        // Only now, as reading the attributes may still have
+                        // failed: an element never marked must not be unmarked.
+                        open.addLast(mark.name)
                     }
                     XMLStreamConstants.END_ELEMENT -> {
                         emit(
@@ -176,6 +176,9 @@ private class ChannelReader(
     private var chunk: String? = null
     private var position = 0
 
+    /** Whether no character has been read yet, so a byte order mark is due. */
+    private var atStart = true
+
     override fun read(buffer: CharArray, offset: Int, length: Int): Int {
         if (length == 0) return 0
         val current = awaitChunk() ?: return -1
@@ -201,9 +204,14 @@ private class ChannelReader(
                 runBlocking { chunks.receiveCatching() }
             }
             val next = received.getOrNull() ?: return null
-            if (next.isNotEmpty()) {
+            if (next.isEmpty()) continue
+            // A leading byte order mark is skipped, per the XmlParser
+            // contract — the JDK's reader would take it for content in the prolog.
+            val start = if (atStart && next[0] == BYTE_ORDER_MARK) 1 else 0
+            atStart = false
+            if (start < next.length) {
                 chunk = next
-                position = 0
+                position = start
             }
         }
         return chunk
@@ -214,6 +222,8 @@ private class ChannelReader(
     }
 
 }
+
+private const val BYTE_ORDER_MARK = '\uFEFF'
 
 /**
  * Where the pull loops run, each parking its thread for the whole parse.
@@ -228,43 +238,40 @@ private class ChannelReader(
 private val PULL_DISPATCHER = Dispatchers.IO.limitedParallelism(Int.MAX_VALUE)
 
 /**
- * The qualified name of the current element, prefix included — StAX reports
- * the prefix and the local name separately, while the event model keeps the
- * name as written.
+ * The qualified name of the current element as written. A reader that is not
+ * namespace-aware keeps the prefix in the local name of an element, so the
+ * prefix is joined back only for a provider which reports it apart.
  */
 private fun XMLStreamReader.elementName(): String =
-    if (prefix.isNullOrEmpty()) localName else "$prefix:$localName"
+    qualifiedName(prefix, localName)
 
 /**
- * The attributes of the current element, namespace declarations first.
- *
- * A namespace-aware StAX reader consumes `xmlns` / `xmlns:*` declarations and
- * reports them apart from the attributes, so they have to be put back to keep
- * the event stream a faithful record of the source.
+ * The attributes of the current element in document order, `xmlns` / `xmlns:*`
+ * declarations among them — a reader that is not namespace-aware reports them
+ * as ordinary attributes. The JDK's still splits the prefix off an attribute
+ * name, which is why it is joined back.
  */
 private fun XMLStreamReader.readAttributes(): Map<String, String> {
-    if (namespaceCount == 0 && attributeCount == 0) return emptyMap()
-    val attributes = LinkedHashMap<String, String>(namespaceCount + attributeCount)
-    for (i in 0 until namespaceCount) {
-        val prefix = getNamespacePrefix(i)
-        val name = if (prefix.isNullOrEmpty()) "xmlns" else "xmlns:$prefix"
-        attributes[name] = getNamespaceURI(i) ?: ""
-    }
+    if (attributeCount == 0) return emptyMap()
+    val attributes = LinkedHashMap<String, String>(attributeCount)
     for (i in 0 until attributeCount) {
-        val prefix = getAttributePrefix(i)
-        val name = if (prefix.isNullOrEmpty()) {
-            getAttributeLocalName(i)
-        } else {
-            "$prefix:${getAttributeLocalName(i)}"
-        }
-        attributes[name] = getAttributeValue(i)
+        attributes[qualifiedName(getAttributePrefix(i), getAttributeLocalName(i))] =
+            getAttributeValue(i)
     }
     return attributes
 }
 
+private fun qualifiedName(prefix: String?, localName: String): String =
+    if (prefix.isNullOrEmpty()) localName else "$prefix:$localName"
+
 /**
  * The JDK's own [XMLInputFactory], configured for the [XmlParser] contract,
  * with every door to an external resource shut.
+ *
+ * Namespace processing is off: the contract keeps qualified names as written
+ * and declarations as attributes, and a namespace-aware reader would reject a
+ * fragment using a prefix it does not declare — an RSS item without its feed's
+ * `xmlns:dc`, say.
  *
  * Text is not coalesced — the contract leaves its granularity open — because a
  * coalescing reader discards the character data it has read when an error
@@ -276,6 +283,7 @@ private fun XMLStreamReader.readAttributes(): Map<String, String> {
  */
 public fun defaultXmlInputFactory(): XMLInputFactory =
     XMLInputFactory.newDefaultFactory().apply {
+        setProperty(XMLInputFactory.IS_NAMESPACE_AWARE, false)
         setProperty(XMLInputFactory.IS_COALESCING, false)
         setProperty(XMLInputFactory.SUPPORT_DTD, false)
         setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false)

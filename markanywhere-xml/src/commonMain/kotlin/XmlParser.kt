@@ -41,12 +41,11 @@ import kotlinx.coroutines.flow.flowOf
  *   distinction between `<a/>` and `<a></a>` — both are a mark immediately
  *   followed by its unmark, and it is up to a serializer to pick a form.
  * - **Attributes** → [SemanticEvent.Mark.attributes], with entity references
- *   expanded and values normalized per the XML specification. Namespace
- *   declarations (`xmlns`, `xmlns:*`) are ordinary attributes here, so that no
- *   source information is lost, but they come **first**, followed by the other
- *   attributes — each group in document order. A namespace-aware engine
- *   reports declarations apart from the attributes, so their interleaving
- *   with them is the one thing no implementation can be relied on to keep.
+ *   expanded and values normalized per the XML specification, in document
+ *   order. Namespaces are not processed: declarations (`xmlns`, `xmlns:*`)
+ *   are ordinary attributes, so that no source information is lost, and a
+ *   prefix nothing declares is no error — a fragment cut out of a larger
+ *   document often uses one.
  * - **Character data, CDATA sections, character and entity references** →
  *   [SemanticEvent.Text]. The boundaries of a CDATA section are **not**
  *   preserved: `<![CDATA[a < b]]>` and `a &lt; b` produce the same event, so a
@@ -56,8 +55,10 @@ import kotlinx.coroutines.flow.flowOf
  * - **Comments, processing instructions, the XML declaration and the DOCTYPE**
  *   are dropped — the three-variant event model has no way to carry them.
  * - **Whitespace outside every element** — the line breaks around the root
- *   element of a file — is dropped, as it is not character data of any
- *   element.
+ *   element of a file, or any other run of whitespace standing between two
+ *   pieces of markup there — is dropped, as it is not character data of any
+ *   element. A character reference or a CDATA section is character data
+ *   even when it holds only whitespace.
  *
  * ## Text granularity
  *
@@ -80,7 +81,8 @@ import kotlinx.coroutines.flow.flowOf
  *
  * The input is already-decoded text, so the encoding declaration of an XML
  * declaration cannot influence decoding — byte-level detection (BOM sniffing,
- * `encoding="…"`) is the caller's responsibility, and out of scope here.
+ * `encoding="…"`) is the caller's responsibility, and out of scope here. A
+ * byte order mark (U+FEFF) the decoder kept as the first character is skipped.
  */
 public interface XmlParser {
 

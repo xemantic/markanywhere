@@ -101,6 +101,32 @@ class MarkanywhereXmlParserTest : XmlParserTest() {
     }
 
     @Test
+    fun `should drop whitespace between markup outside any element after text`() = runTest {
+        // when — the line break after the comment stands between markup, like
+        // the prolog's, although text was read before it
+        val events = parse("x\n<!-- c -->\n<a/>\n<!-- d -->\n")
+
+        // then
+        events sameAs semanticEvents(tagged = true) {
+            +"x\n"
+            "a" { }
+        }
+    }
+
+    @Test
+    fun `should keep whitespace written as character data outside any element`() = runTest {
+        // when — a reference or a CDATA section is character data, not layout
+        val events = parse("&#32;<a/><![CDATA[ ]]>")
+
+        // then
+        events sameAs semanticEvents(tagged = true) {
+            +" "
+            "a" { }
+            +" "
+        }
+    }
+
+    @Test
     fun `should keep the text read before a literal character XML does not allow`() = runTest {
         // when
         val events = parse("<a>x\u0000y</a>")

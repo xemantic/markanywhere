@@ -116,14 +116,13 @@ abstract class XmlParserTest {
     }
 
     @Test
-    fun `should put namespace declarations ahead of the other attributes`() = runTest {
-        // when — a namespace-aware parser reports declarations apart from the
-        // attributes, so the contract orders them first
+    fun `should keep namespace declarations among the attributes in document order`() = runTest {
+        // when — a declaration is an ordinary attribute here, so it keeps its place
         val events = parse("""<a b="1" xmlns="u" c="2" xmlns:p="v"/>""").toList()
 
         // then
         val attributes = events.filterIsInstance<SemanticEvent.Mark>().single().attributes
-        assert(attributes.keys.toList() == listOf("xmlns", "xmlns:p", "b", "c"))
+        assert(attributes.keys.toList() == listOf("b", "xmlns", "c", "xmlns:p"))
     }
 
     @Test
@@ -220,6 +219,19 @@ abstract class XmlParserTest {
     }
 
     @Test
+    fun `should read prefixes a fragment does not declare`() = runTest {
+        // when — an RSS item cut out of its feed, without the feed's xmlns:dc
+        val events = parse("""<item q:id="1"><dc:creator>x</dc:creator></item>""")
+
+        // then
+        events sameAs semanticEvents(tagged = true) {
+            "item"("q:id" to "1") {
+                "dc:creator" { +"x" }
+            }
+        }
+    }
+
+    @Test
     fun `should keep a default namespace declaration`() = runTest {
         // when
         val events = parse("""<html xmlns="http://www.w3.org/1999/xhtml"><br/></html>""")
@@ -293,6 +305,21 @@ abstract class XmlParserTest {
         // then
         events sameAs semanticEvents(tagged = true) {
             "a" { +"x" }
+        }
+    }
+
+    @Test
+    fun `should skip a leading byte order mark`() = runTest {
+        // when — a UTF-8 file decoded the usual way keeps its BOM as U+FEFF
+        val whole = parse("\uFEFF<?xml version=\"1.0\"?>\n<a/>")
+        val chunked = parser.parse(flowOf("\uFEFF", "<a>\uFEFF</a>")).mergeAdjacentText()
+
+        // then — only the one at the very start is skipped
+        whole sameAs semanticEvents(tagged = true) {
+            "a" { }
+        }
+        chunked sameAs semanticEvents(tagged = true) {
+            "a" { +"\uFEFF" }
         }
     }
 
