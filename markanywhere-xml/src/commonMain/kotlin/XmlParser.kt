@@ -29,7 +29,7 @@ import kotlinx.coroutines.flow.flowOf
  * the two compared for conformance and throughput. Every
  * implementation is expected to honour the contract below, so a document
  * parsed by one is indistinguishable from the same document parsed by another
- * (after [com.xemantic.markanywhere.flow.mergeAdjacentText], see *Text* below).
+ * (after `mergeAdjacentText()` of `markanywhere-flow`, see *Text* below).
  *
  * ## Mapping of XML constructs onto semantic events
  *
@@ -65,7 +65,7 @@ import kotlinx.coroutines.flow.flowOf
  * Consecutive [SemanticEvent.Text] events may be split at arbitrary
  * boundaries — a chunk boundary, an expanded entity, the end of a CDATA
  * section — and the split points are implementation-specific. Apply
- * [com.xemantic.markanywhere.flow.mergeAdjacentText] when maximal text runs
+ * `mergeAdjacentText()` (`markanywhere-flow`) when maximal text runs
  * matter, in particular when comparing the output of two implementations.
  *
  * ## Well-formedness

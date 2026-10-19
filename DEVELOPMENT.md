@@ -58,7 +58,7 @@ They live in the `jvmBenchmark` source set, a JVM compilation of their own, so n
 ./gradlew :markanywhere-xml:benchmark
 ```
 
-The full run takes a few minutes.
+The full run takes about ten minutes: 12 parameter combinations, each measured in 3 forks.
 For a quick check that the benchmarks still run, use the `smoke` configuration, which has few iterations and wide error bars:
 
 ```shell

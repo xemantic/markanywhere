@@ -44,7 +44,7 @@ kotlin {
         commonMain {
             dependencies {
                 api(project(":markanywhere-api"))
-                api(project(":markanywhere-flow"))
+                api(libs.kotlinx.coroutines.core)
             }
         }
 
@@ -57,6 +57,7 @@ kotlin {
 
         commonTest {
             dependencies {
+                implementation(project(":markanywhere-flow"))
                 implementation(project(":markanywhere-test"))
                 implementation(libs.kotlinx.coroutines.test)
                 implementation(libs.kotlin.test)

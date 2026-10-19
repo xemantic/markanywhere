@@ -479,8 +479,12 @@ abstract class XmlParserTest {
 
     @Test
     fun `should stop at a literal character XML does not allow`() = runTest {
-        // given — control characters and the two noncharacters of the basic plane
-        val characters = listOf('\u0000', '\u0001', '\u000B', '\u001F', '\uFFFE', '\uFFFF')
+        // given — control characters, the two noncharacters of the basic
+        // plane, and a surrogate half standing without its pair
+        val characters = listOf(
+            '\u0000', '\u0001', '\u000B', '\u001F', '\uFFFE', '\uFFFF',
+            '\uD800', '\uDBFF', '\uDC00', '\uDFFF'
+        )
 
         characters.forEach { character ->
             // when
@@ -508,6 +512,29 @@ abstract class XmlParserTest {
         // then
         events sameAs semanticEvents(tagged = true) {
             "a"("b" to "😀") { +"😀" }
+        }
+    }
+
+    @Test
+    fun `should read a surrogate pair split across chunks`() = runTest {
+        // when — the chunk boundary falls between the two halves
+        val events = parser.parse(flowOf("<a b=\"\uD83D", "\uDE00\">\uD83D", "\uDE00</a>"))
+            .mergeAdjacentText()
+
+        // then
+        events sameAs semanticEvents(tagged = true) {
+            "a"("b" to "😀") { +"😀" }
+        }
+    }
+
+    @Test
+    fun `should read a character reference written with leading zeros`() = runTest {
+        // when
+        val events = parse("<a>&#x0000000041;&#0000000066;</a>")
+
+        // then
+        events sameAs semanticEvents(tagged = true) {
+            "a" { +"AB" }
         }
     }
 

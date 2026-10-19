@@ -17,27 +17,22 @@
 package com.xemantic.markanywhere.xml
 
 import com.xemantic.markanywhere.SemanticEvent
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.channelFlow
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withContext
 import java.io.Reader
 import javax.xml.stream.XMLInputFactory
 import javax.xml.stream.XMLStreamConstants
-import javax.xml.stream.XMLStreamException
 import javax.xml.stream.XMLStreamReader
 
 /**
  * An [XmlParser] backed by the JDK's StAX implementation
  * (`javax.xml.stream`), serving as the reference against which a hand-written
  * multiplatform parser can be measured — both for conformance (it runs the
- * same [XmlParserTest] suite) and for throughput.
+ * same `XmlParserTest` conformance suite) and for throughput.
  *
  * StAX is a *pull* parser reading from a blocking [Reader], which inverts the
  * control flow of a [Flow]-driven pipeline: it wants to ask for the next
@@ -50,8 +45,9 @@ import javax.xml.stream.XMLStreamReader
  * stays bounded by the channel rather than by the document.
  *
  * What that costs, and what a native implementation would save: a thread
- * parked in [runBlocking] for the whole parse, a queue hop per read, and a
- * second coroutine to feed it. The JDK ships no non-blocking XML parser; a
+ * held by the pull loop for the whole parse — blocked in [runBlocking]
+ * whenever the parser has read every chunk buffered so far — a queue hop per
+ * chunk, and a second coroutine to feed it. The JDK ships no non-blocking XML parser; a
  * push-mode one (Aalto's `AsyncXMLStreamReader`, say) would free the parked
  * thread at the price of a dependency.
  *

@@ -10,7 +10,7 @@ XML source → `Flow<SemanticEvent>`, through an `XmlParser` contract that more 
 val events: Flow<SemanticEvent> = chunks.parseXml(MarkanywhereXmlParser())
 ```
 
-Elements become tagged `mark` / `unmark` events under their qualified name, attributes stay on the mark (namespace declarations first), and character data, CDATA sections and references become `text`.
+Elements become tagged `mark` / `unmark` events under their qualified name, attributes stay on the mark in document order (namespace declarations among them, as ordinary attributes), and character data, CDATA sections and references become `text`.
 Comments, processing instructions, the XML declaration and the DOCTYPE are dropped.
 The full mapping, and what happens to malformed input, is in the KDoc of `XmlParser`.
 

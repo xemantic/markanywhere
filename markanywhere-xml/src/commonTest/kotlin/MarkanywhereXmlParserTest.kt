@@ -16,12 +16,14 @@
 
 package com.xemantic.markanywhere.xml
 
+import com.xemantic.kotlin.test.assert
 import com.xemantic.kotlin.test.have
 import com.xemantic.kotlin.test.should
 import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.flow.mergeAdjacentText
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.test.sameAs
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.toList
@@ -124,6 +126,53 @@ class MarkanywhereXmlParserTest : XmlParserTest() {
             "a" { }
             +" "
         }
+    }
+
+    @Test
+    fun `should drop whitespace after a CDATA section outside any element`() = runTest {
+        // when — the line break after the section stands between markup, as
+        // it would after a comment
+        val betweenElements = parse("<a/><![CDATA[]]>\n<b/>")
+        val atEnd = parse("<a/><![CDATA[x]]>\n")
+
+        // then
+        betweenElements sameAs semanticEvents(tagged = true) {
+            "a" { }
+            "b" { }
+        }
+        atEnd sameAs semanticEvents(tagged = true) {
+            "a" { }
+            +"x"
+        }
+    }
+
+    @Test
+    fun `should stop reading a reference longer than any which resolves`() = runTest {
+        // given — a source which never ends the reference it started
+        val endless = flow {
+            emit("<a>x&")
+            repeat(1_000) { emit("b") }
+            error("the reference was read to the end")
+        }
+
+        // when
+        val events = parser.parse(endless).mergeAdjacentText()
+
+        // then
+        events sameAs semanticEvents(tagged = true) {
+            "a" { +"x" }
+        }
+    }
+
+    @Test
+    fun `should bound the whitespace held outside any element`() = runTest {
+        // when — only what follows the run tells whether it is layout
+        val events = parse("<a/>" + " ".repeat(100_000) + "y").toList()
+
+        // then — truncated, yet still separating the text from the element
+        val text = (events.last() as SemanticEvent.Text).text
+        assert(text.length < 100_000)
+        assert(text.startsWith(" ") && text.endsWith(" y"))
     }
 
     @Test
