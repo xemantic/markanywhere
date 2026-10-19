@@ -289,6 +289,151 @@ class HtmlToMarkdownTest {
     }
 
     @Test
+    fun `should separate the block content of a customizable select option`() = runTest {
+        // given — a customizable select whose option lays its name and
+        // description out as two block <div>s: the popup lives outside the
+        // layout tree, so the capture annotates both `display: none` and
+        // records no inter-tag whitespace between them.
+        val page = semanticEvents(tagged = true) {
+            "html"(AccessibilityAnnotations.DISPLAY to "block") {
+                "body"(AccessibilityAnnotations.DISPLAY to "block") {
+                    "select"(
+                        "id" to "plan",
+                        AccessibilityAnnotations.REF to "1",
+                        AccessibilityAnnotations.DISPLAY to "inline-block"
+                    ) {
+                        "option"("value" to "pro", AccessibilityAnnotations.DISPLAY to "none") {
+                            "div"(AccessibilityAnnotations.DISPLAY to "none") { +"Pro" }
+                            "div"(AccessibilityAnnotations.DISPLAY to "none") { +"For teams" }
+                        }
+                    }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then — the name and the description stay two words, not `ProFor teams`
+        markdown sameAsMarkdown """
+            <select id="plan" ref="1">
+            <option value="pro">
+            
+            Pro For teams
+            
+            </option>
+            </select>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should separate the flex items of a customizable select option`() = runTest {
+        // given — a customizable select lays its <option> out as a flex container, so
+        // two <span>s side by side are two boxes, not one word.
+        val page = semanticEvents(tagged = true) {
+            "html"(AccessibilityAnnotations.DISPLAY to "block") {
+                "body"(AccessibilityAnnotations.DISPLAY to "block") {
+                    "select"(
+                        "id" to "plan",
+                        AccessibilityAnnotations.REF to "1",
+                        AccessibilityAnnotations.DISPLAY to "inline-block"
+                    ) {
+                        "option"("value" to "pro", AccessibilityAnnotations.DISPLAY to "none") {
+                            "span"(AccessibilityAnnotations.DISPLAY to "none") { +"★" }
+                            "span"(AccessibilityAnnotations.DISPLAY to "none") { +"Pro" }
+                        }
+                    }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            <select id="plan" ref="1">
+            <option value="pro">
+            
+            ★ Pro
+            
+            </option>
+            </select>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should separate an image from the label of a customizable select option`() = runTest {
+        // given — a flag image and its label as flex items of the option.
+        val page = semanticEvents(tagged = true) {
+            "html"(AccessibilityAnnotations.DISPLAY to "block") {
+                "body"(AccessibilityAnnotations.DISPLAY to "block") {
+                    "select"(
+                        "id" to "plan",
+                        AccessibilityAnnotations.REF to "1",
+                        AccessibilityAnnotations.DISPLAY to "inline-block"
+                    ) {
+                        "option"("value" to "pro", AccessibilityAnnotations.DISPLAY to "none") {
+                            "img"("src" to "/pl.svg", "alt" to "flag", AccessibilityAnnotations.DISPLAY to "none") {}
+                            "span"(AccessibilityAnnotations.DISPLAY to "none") { +"Poland" }
+                        }
+                    }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            <select id="plan" ref="1">
+            <option value="pro">
+            
+            ![flag](/pl.svg) Poland
+            
+            </option>
+            </select>
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should keep the space after emphasis in a customizable select option`() = runTest {
+        // given — an emphasised flex item followed by text that carries its own space:
+        // blockifying the item must not lose the separator.
+        val page = semanticEvents(tagged = true) {
+            "html"(AccessibilityAnnotations.DISPLAY to "block") {
+                "body"(AccessibilityAnnotations.DISPLAY to "block") {
+                    "select"(
+                        "id" to "plan",
+                        AccessibilityAnnotations.REF to "1",
+                        AccessibilityAnnotations.DISPLAY to "inline-block"
+                    ) {
+                        "option"("value" to "pro", AccessibilityAnnotations.DISPLAY to "none") {
+                            "strong"(AccessibilityAnnotations.DISPLAY to "none") { +"PL" }
+                            +" Poland"
+                        }
+                    }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            <select id="plan" ref="1">
+            <option value="pro">
+            
+            **PL** Poland
+            
+            </option>
+            </select>
+        """.trimIndent()
+    }
+
+    @Test
     fun `should render the options of a select nested behind a wrapper`() = runTest {
         // given — the event shape a real Chrome capture produces when a <div>
         // sits between <select> and <option> (Chrome's parser keeps one, the

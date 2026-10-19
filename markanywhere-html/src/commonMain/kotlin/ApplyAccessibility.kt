@@ -396,9 +396,20 @@ private fun TransformerBuilder.accessibilityRuleSet() {
 
     // everything else — options, optgroups, the wrappers between them, an
     // option's own inline markup — flows through, and the meaningless `none`
-    // is stripped.
+    // is replaced by the UA default display of the tag.
     match("*", mode = SELECT_CONTENT_MODE) { event -> passThroughSelectContent(event) }
     matchText(mode = SELECT_CONTENT_MODE) { +it }
+
+    // --- the direct children of an <option> in a <select>'s popup --------
+
+    accessibilityRules(mode = OPTION_CONTENT_MODE, insideSelect = true)
+
+    // the same, but a customizable select lays the option out as a flex
+    // container, which blockifies these children (see [OPTION_CONTENT_MODE]).
+    match("*", mode = OPTION_CONTENT_MODE) { event ->
+        passThroughSelectContent(event, blockified = true)
+    }
+    matchText(mode = OPTION_CONTENT_MODE) { +it }
 }
 
 /**
@@ -503,9 +514,9 @@ private fun TransformerBuilder.accessibilityRules(
         passThrough(
             event,
             childMode = SELECT_CONTENT_MODE,
-            // the select's own verdict is genuine unless it sits in a popup
-            // itself (a <select> nested in a JS-built select subtree)
-            insidePopup = insideSelect
+            // the select's own verdict is genuine unless it is the popup's
+            // artifact itself (a <select> nested in a JS-built select subtree)
+            insidePopup = insideSelect && event.hasNoLayoutBox()
         )
     }
 }
@@ -535,7 +546,8 @@ private const val LAYOUT_TABLE_IN_SELECT_MODE = "layoutTableInSelect"
  * JS-built DOM can nest anything), and an option's own inline markup alike.
  *
  * So in this mode the `display:none` drop is suspended and the meaningless
- * annotation is stripped (see [passThrough]), while everything else still
+ * annotation is replaced by the UA default display of the tag (see
+ * [passThrough], [uaDefaultDisplay]), while everything else still
  * applies: `aria-hidden` is an author signal and still hides (as does
  * `visibility:hidden`, resolved before any mode — see [resolveVisibility]),
  * [NEVER_RENDERED_TAGS] are still dropped, and a hidden `<select>` never
@@ -554,6 +566,23 @@ private const val LAYOUT_TABLE_IN_SELECT_MODE = "layoutTableInSelect"
  * the verdict dropped every option of every real page's `<select>`.
  */
 private const val SELECT_CONTENT_MODE = "selectContent"
+
+/**
+ * [SELECT_CONTENT_MODE] for the direct children of an `<option>` in the
+ * popup. A customizable select lays each option out as a flex container, and
+ * a flex container blockifies its children: the flag `<img>` and the label
+ * `<span>`, or the `★` and the plan name, are separate boxes, not one word.
+ *
+ * The option therefore reads as `flex` and these children carry **no**
+ * display (see [uaDefaultDisplay]): `separateUnwrappedBlocks` blockifies an
+ * unannotated child of a flex container already, while the whitespace
+ * normalizer reads the child by its tag. Writing `block` on the child instead
+ * would make the normalizer drop the whitespace beside an element that still
+ * renders inline in Markdown (`<strong>PL</strong> Poland` → `**PL**Poland`,
+ * and likewise next to an `<img>`). Their own descendants are back in
+ * [SELECT_CONTENT_MODE].
+ */
+private const val OPTION_CONTENT_MODE = "optionContent"
 
 /**
  * Tags that are never rendered content, so they are dropped regardless of the
@@ -641,51 +670,98 @@ private fun SemanticEvent.Mark.isLayoutTable(): Boolean {
  * artifact still covers it.
  *
  * Only [hasNoLayoutBox] — the verdict the popup produces — keeps the exemption
- * alive: the annotation is meaningless there, so it is stripped and the subtree
- * descends in [SELECT_CONTENT_MODE]. Anything else means the browser did lay a
+ * alive: the annotation is meaningless there, so it is replaced by the tag's
+ * UA default display ([uaDefaultDisplay]) and the subtree descends in
+ * [SELECT_CONTENT_MODE]. Anything else means the browser did lay a
  * box out, so the artifact is over and the subtree is judged in the default
  * mode again, where `display:none` hides as usual — the rendered `<button>`
  * face of a customizable select, most of all, and equally a laid-out listbox
  * `<option>`.
  */
 private suspend fun MatcherScope.passThroughSelectContent(
-    event: SemanticEvent.Mark
+    event: SemanticEvent.Mark,
+    blockified: Boolean = false
 ) {
     val insidePopup = event.hasNoLayoutBox()
     passThrough(
         event,
-        childMode = if (insidePopup) SELECT_CONTENT_MODE else null,
-        insidePopup = insidePopup
+        childMode = when {
+            !insidePopup -> null
+            event.name == "option" -> OPTION_CONTENT_MODE
+            else -> SELECT_CONTENT_MODE
+        },
+        insidePopup = insidePopup,
+        blockified = blockified
     )
 }
 
 /**
  * Re-emits [event] verbatim, descending in [childMode]. The role / visibility
  * annotations this operator consumed are stripped, but [AccessibilityAnnotations.DISPLAY]
- * is deliberately preserved so the downstream whitespace normalizer can gate on
- * the browser's computed block/inline verdict; it strips the annotation itself.
+ * is deliberately preserved so the downstream operators (`separateUnwrappedBlocks`,
+ * the whitespace normalizer) can gate on the browser's computed block/inline
+ * verdict; the normalizer strips the annotation itself.
+ *
  * The exception is a `none` on an element sitting in a `<select>`'s popup
- * ([insidePopup]), an artifact of the popup living outside the layout tree —
- * dropped here so the gating falls back to the tag-name heuristic instead of
- * reading it. Any other value is genuine (the rendered `<button>` face of a
- * customizable select) and survives.
+ * ([insidePopup]), an artifact of the popup living outside the layout tree. It
+ * is replaced by the display the UA stylesheet gives the tag
+ * ([uaDefaultDisplay]), not merely dropped: in a captured stream an absent
+ * display reads as "crosses no boundary" (a dump captured before every display
+ * was recorded), so a customizable select's
+ * `<option><div>Name</div><div>Desc</div></option>` merged into `NameDesc`
+ * once `simplifyHtml` unwrapped the divs. [insidePopup] is set only for such
+ * an element ([hasNoLayoutBox]); any other value is genuine (the rendered
+ * `<button>` face of a customizable select) and survives. [blockified] says
+ * the element is a flex item of a popup option (see [OPTION_CONTENT_MODE]).
  */
 private suspend fun MatcherScope.passThrough(
     event: SemanticEvent.Mark,
     childMode: String? = null,
-    insidePopup: Boolean = false
+    insidePopup: Boolean = false,
+    blockified: Boolean = false
 ) {
-    val attributes = event.attributes.filterKeys {
+    val kept = event.attributes.filterKeys {
         it != AccessibilityAnnotations.ROLE &&
             it != AccessibilityAnnotations.VISIBILITY &&
             it != AccessibilityAnnotations.IGNORED
-    }.filterNot {
-        insidePopup &&
-            it.key == AccessibilityAnnotations.DISPLAY && it.value == "none"
     }
+    val attributes =
+        if (insidePopup) {
+            when (val display = event.uaDefaultDisplay(blockified)) {
+                null -> kept - AccessibilityAnnotations.DISPLAY
+                else -> kept + (AccessibilityAnnotations.DISPLAY to display)
+            }
+        } else kept
     if (event.isTagged) {
         tag(event.name, attributes) { children(childMode) }
     } else {
         event.name(attributes) { children(childMode) }
     }
+}
+
+/**
+ * The display the UA stylesheet lays this element out with, read the same way
+ * every downstream operator reads an element it has no captured display for
+ * ([isInlineByUaDefault]) — `inline`, or `block` for any non-inline box
+ * (`block`, `list-item`, the `table-*` family; the operators downstream tell
+ * only inline from not). An `<option>` is `flex`, as a customizable select
+ * lays it out, and a [blockified] child of one gets `null` — no annotation,
+ * so its flex parent blockifies it (see [OPTION_CONTENT_MODE]). An element the
+ * stylesheet never renders ([isNeverRenderedByUaDefault]) lays out no box, so
+ * it reads as `contents`: no boundary to cross, for `separateUnwrappedBlocks`
+ * and the whitespace normalizer alike.
+ *
+ * It stands in for a `<select>`'s popup content, whose captured `none` says
+ * nothing about how the popup lays it out (see [SELECT_CONTENT_MODE]). The
+ * real popup stylesheet is unknowable from the capture — the tag's default is
+ * the one reading every operator can agree on, and it keeps a block `<div>`
+ * separated from its sibling while an inline `<span>` or an unknown element
+ * stays in the flow of its text.
+ */
+private fun SemanticEvent.Mark.uaDefaultDisplay(blockified: Boolean): String? = when {
+    isNeverRenderedByUaDefault() -> "contents"
+    blockified -> null
+    name == "option" -> "flex"
+    isInlineByUaDefault() -> "inline"
+    else -> "block"
 }
