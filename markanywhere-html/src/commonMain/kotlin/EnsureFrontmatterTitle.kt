@@ -34,11 +34,11 @@ import kotlinx.coroutines.flow.Flow
  * `entry` marks with `key="title"` in any ASCII letter case, and one holding
  * scalar text with visible content is usable — entries holding a nested
  * structure, an empty collection, `null` or blank text are not, as there.
- * A verbatim line defining a title key (a YAML shape outside the parsed
- * subset, such as a multi-line quoted scalar) is a title entry too, one whose
- * value only the front matter readers know. Each title entry spans the
- * indented verbatim lines continuing it, so dropping one drops them too,
- * rather than leaving them to continue the entry before it.
+ * A title entry the YAML parser kept as source (`type=verbatim`: a value
+ * outside the parsed subset, such as a multi-line quoted scalar) is one
+ * whose value only the front matter readers know. The parser puts every
+ * line of a value inside its entry, so text outside any entry belongs to
+ * none, and dropping an entry drops its whole value.
  *
  * Whenever a title comes out, the frontmatter holds exactly one title entry,
  * spelled `title`: every front matter reader then reads the same title —
@@ -64,7 +64,7 @@ import kotlinx.coroutines.flow.Flow
  * Two shapes are left without a title:
  *
  * - A title entry holding a nested structure (localized titles, say) or kept
- *   as a verbatim line is no title for [wrapInHtmlDocument], but it is
+ *   as source is no title for [wrapInHtmlDocument], but it is
  *   content: no title is derived and no title entry respelled. Of the other title entries only the usable
  *   one [wrapInHtmlDocument] picks is kept, as spelled, so readers may
  *   disagree on the title as they did on the input; the empty ones (`null`,
@@ -106,6 +106,9 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
     val titleSlots = mutableListOf<FrontMatterEntry>()
     // the one of them wrapInHtmlDocument reads the title from, if any
     var read: FrontMatterEntry? = null
+    // whether the held frontmatter's body, as it came, opens with a verbatim
+    // line — known once it closes
+    var openedWithVerbatimLine = false
     val reader = FrontMatterEntryReader { entry ->
         if (entry.key.asciiLowercase() == "title") {
             titleSlots += entry
@@ -208,8 +211,8 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
         prepended: List<SemanticEvent> = emptyList()
     ) {
         frontmatterEvents?.let { held ->
-            val leavesVerbatimLineFirst = opensWithVerbatimLine(rewrite, prepended)
-                && !opensWithVerbatimLine(emptyMap(), emptyList())
+            val leavesVerbatimLineFirst = !openedWithVerbatimLine
+                && opensWithVerbatimLine(rewrite, prepended)
             val body = heldBody(if (leavesVerbatimLineFirst) keepingFirstSlot(rewrite) else rewrite, prepended)
             val empty = body.none {
                 it is Mark || (it is Text && !it.text.isHtmlBlank())
@@ -260,6 +263,7 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
 
     // decides, once the frontmatter closes, whether it holds a usable title
     suspend fun judgeFrontmatter() {
+        openedWithVerbatimLine = opensWithVerbatimLine(emptyMap(), emptyList())
         val usable = read
         state = when {
             // a nested or verbatim title is content, not ours to replace or
@@ -343,7 +347,13 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
         // judged like a closed one, an entry left open included, as
         // wrapInHtmlDocument reads it
         InFrontmatter -> {
-            reader.finish()
+            // closed first, so the span of an entry left open ends in its
+            // unmark wherever the entry moves
+            val held = frontmatterEvents!!
+            for (closer in held.closers()) {
+                held += closer
+                reader.read(closer)
+            }
             judgeFrontmatter()
             if (state == AwaitingHeading) flushWithReadTitleOnly()
         }
@@ -360,20 +370,30 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
 private fun SemanticEvent.showsNothing(): Boolean = this is Text && !isMetadataValue(text)
 
 // Whether this title entry holds a title [wrapInHtmlDocument] cannot read,
-// though front matter readers do: a nested structure or a verbatim line.
+// though front matter readers do: a nested structure or a value kept as
+// source.
 private val FrontMatterEntry.isUnreadable: Boolean get() = hasChildren || isVerbatim
 
-// These events with an unmark appended for every mark left open, innermost
-// first.
+// These events with an unmark appended for every mark left open.
 private fun List<SemanticEvent>.closed(): List<SemanticEvent> {
-    val open = ArrayDeque<SemanticEvent.Mark>()
+    val closers = closers()
+    return if (closers.isEmpty()) this else this + closers
+}
+
+// An unmark for every mark these events leave open, innermost first. An
+// unmark closes the innermost open mark of its name — one of no open mark's
+// name (a crossed upstream stream) closes nothing.
+private fun List<SemanticEvent>.closers(): List<SemanticEvent> {
+    val open = mutableListOf<SemanticEvent.Mark>()
     for (event in this) when (event) {
-        is Mark -> open.addLast(event)
-        is Unmark -> open.removeLastOrNull()
+        is Mark -> open += event
+        is Unmark -> {
+            val i = open.indexOfLast { it.name == event.name }
+            if (i >= 0) open.removeAt(i)
+        }
         else -> {}
     }
-    return if (open.isEmpty()) this
-    else this + open.reversed().map { SemanticEvent.Unmark(it.name, it.isTagged) }
+    return open.asReversed().map { SemanticEvent.Unmark(it.name, it.isTagged) }
 }
 
 private enum class State {

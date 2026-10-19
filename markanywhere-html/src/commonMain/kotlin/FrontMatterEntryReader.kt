@@ -18,7 +18,7 @@ package com.xemantic.markanywhere.html
 
 import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.html.spec.isHtmlBlank
-import com.xemantic.markanywhere.yaml.yamlKeyLineKeyOrNull
+import com.xemantic.markanywhere.yaml.YAML_VERBATIM_TYPE
 
 // Whether this event opens the frontmatter that is the page's metadata, the
 // `preceding` events being all the stream held before it: an untagged
@@ -38,39 +38,38 @@ internal fun SemanticEvent.isFrontmatterMark(): Boolean =
 // from opening the stream: text of HTML whitespace (an NBSP is content).
 internal fun SemanticEvent.mayPrecedeFrontmatter(): Boolean = this is Text && text.isHtmlBlank()
 
-// A top-level front matter `entry`: its key as spelled, `type`, text, whether
-// it holds nested marks, and the span of its events among those read — the
-// indented verbatim lines continuing it included, so dropping the span drops
-// them too, rather than leaving them to continue the entry before it. An
-// entry whose value is unknown is [isVerbatim], never head metadata, yet it
-// holds the key for readers: a verbatim line defining a key (one outside the
-// YAML subset, such as a multi-line quoted scalar), an entry continued by
-// indented verbatim lines (readers join them into the value), and one
-// holding indented verbatim lines under a bare `key:`.
+// A top-level front matter `entry`: its key as spelled, `type`, text,
+// whether it holds nested marks, and the span of its events among those
+// read. An entry the YAML parser kept as source (`type=verbatim`, a value
+// outside its subset) [isVerbatim]: its value is unknown, so it is never
+// head metadata, yet it holds the key for readers.
 internal class FrontMatterEntry(
     val key: String,
     val type: String?,
     val text: String,
     val hasChildren: Boolean,
-    val isVerbatim: Boolean,
     val start: Int,
     val end: Int
 ) {
 
+    // Whether its value is unknown: kept as YAML source by the parser.
+    val isVerbatim: Boolean get() = type == YAML_VERBATIM_TYPE
+
     // Whether it holds head metadata: scalar text with visible content —
-    // not a nested structure, an empty collection, `null`, blank text or a
-    // verbatim line.
+    // not a value kept as source, a nested structure, an empty collection,
+    // `null` or blank text.
     val isHeadMetadata: Boolean =
-        !hasChildren && !isVerbatim && isScalarEntryType(type) && isMetadataValue(text)
+        !isVerbatim && !hasChildren && isScalarEntryType(type) && isMetadataValue(text)
 
 }
 
 // Reads the top-level entries of a `frontmatter` subtree, reporting each to
-// `onEntry` once its span is known: when the next top-level entry or verbatim
-// line opens, or the frontmatter closes. The one reader of front matter as
-// head metadata — wrapInHtmlDocument turns the entries into `<head>`,
+// `onEntry` once its unmark is read. The one reader of front matter as head
+// metadata — wrapInHtmlDocument turns the entries into `<head>`,
 // ensureFrontmatterTitle judges the title entries among them, and the two
-// must agree on both.
+// must agree on both. Text outside any entry (a line outside the YAML subset
+// that is no entry) is no part of any entry: the YAML parser puts every
+// line of an entry's value inside its mark.
 internal class FrontMatterEntryReader(
     private val onEntry: (FrontMatterEntry) -> Unit
 ) {
@@ -81,11 +80,7 @@ internal class FrontMatterEntryReader(
     private var open: SemanticEvent.Mark? = null
     private var openStart = 0
     private var openHasChildren = false
-    private var openIsVerbatim = false
     private val openText = StringBuilder()
-
-    // the last top-level entry read, held until its span is known
-    private var pending: FrontMatterEntry? = null
 
     // Whether the root is a sequence: a top-level `item` was read.
     var isSequence: Boolean = false
@@ -99,34 +94,19 @@ internal class FrontMatterEntryReader(
             is Mark -> {
                 depth++
                 if (depth == 2) {
-                    reportPending()
                     if (event.name == "item") isSequence = true
                     open = if (event.name == "entry" && event["key"] != null) event else null
                     openStart = index
                     openHasChildren = false
-                    openIsVerbatim = false
                     openText.clear()
                 } else if (depth > 2) {
                     openHasChildren = true
                 }
             }
-            is Text -> when (depth) {
-                1 -> readVerbatimLine(event.text)
-                2 -> {
-                    // the YAML parser strips a scalar's indentation, never
-                    // a verbatim line's, which also keeps its `\n`
-                    if (event.text.startsWithIndentation() && event.text.endsWith('\n')) {
-                        openIsVerbatim = true
-                    }
-                    openText.append(event.text)
-                }
-            }
+            is Text -> if (depth == 2) openText.append(event.text)
             is Unmark -> {
                 if (--depth == 1) closeEntry()
-                if (depth == 0) {
-                    reportPending()
-                    return true
-                }
+                if (depth == 0) return true
             }
         }
         return false
@@ -136,61 +116,22 @@ internal class FrontMatterEntryReader(
     // upstream contract) — its text is complete by then.
     fun finish() {
         closeEntry()
-        reportPending()
-    }
-
-    // A verbatim line (text outside any entry, as the YAML parser emits a
-    // line outside its subset): an indented one continues the entry before
-    // it, one at the margin ends it, and defines an entry itself when it
-    // opens with a key. A blank line decides nothing.
-    private fun readVerbatimLine(text: String) {
-        if (text.isHtmlBlank()) return
-        val entry = pending
-        if (text.startsWithIndentation()) {
-            if (entry != null) pending = entry.continuedTo(index)
-            return
-        }
-        reportPending()
-        pending = yamlKeyLineKeyOrNull(text.substringBefore('\n'))?.let { key ->
-            FrontMatterEntry(
-                key = key,
-                type = null,
-                text = "",
-                hasChildren = false,
-                isVerbatim = true,
-                start = index,
-                end = index
-            )
-        }
     }
 
     private fun closeEntry() {
         open?.let {
             open = null
-            pending = FrontMatterEntry(
-                key = it["key"]!!,
-                type = it["type"],
-                text = openText.toString(),
-                hasChildren = openHasChildren,
-                isVerbatim = openIsVerbatim,
-                start = openStart,
-                end = index
+            onEntry(
+                FrontMatterEntry(
+                    key = it["key"]!!,
+                    type = it["type"],
+                    text = openText.toString(),
+                    hasChildren = openHasChildren,
+                    start = openStart,
+                    end = index
+                )
             )
         }
     }
 
-    private fun reportPending() {
-        pending?.let {
-            pending = null
-            onEntry(it)
-        }
-    }
-
 }
-
-// The entry continued by the verbatim line ending at [end]: its value is
-// no longer known.
-private fun FrontMatterEntry.continuedTo(end: Int) =
-    FrontMatterEntry(key, type, text, hasChildren, isVerbatim = true, start, end)
-
-private fun String.startsWithIndentation() = startsWith(' ') || startsWith('\t')

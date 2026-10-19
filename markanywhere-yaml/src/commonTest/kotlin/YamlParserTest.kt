@@ -34,10 +34,11 @@ import kotlin.test.Test
  * scalar value is the text inside, a mapping is nested `entry` marks, a
  * sequence is nested `item` marks. A non-string scalar carries a `type`
  * attribute (`bool`, `int`, `float`, `null`, `timestamp`); an empty flow
- * collection carries `type=seq` / `type=map`. A line the YAML subset does
- * not understand survives verbatim as a text child of the container it
- * sits in (with its `\n`), so nothing is ever lost and the parser never
- * throws.
+ * collection carries `type=seq` / `type=map`. An entry or item whose value
+ * the YAML subset does not understand carries `type=verbatim`, its text the
+ * value's source; any other line the subset does not understand survives
+ * verbatim as a text child of the container it sits in (with its `\n`), so
+ * nothing is ever lost and the parser never throws.
  */
 class YamlParserTest {
 
@@ -251,11 +252,10 @@ class YamlParserTest {
         // when
         val parsed = textFlow.parseYaml()
 
-        // then — the deeper line is not a nested value of `title` (a scalar),
-        // so it survives verbatim
+        // then — the deeper line is no nested value of `title` (a scalar)
+        // but a continuation the readers refuse, so the value is verbatim
         parsed.mergeAdjacentText() sameAs semanticEvents {
-            "entry"("key" to "title") { +"x" }
-            +"  author: y\n"
+            "entry"("key" to "title", "type" to "verbatim") { +" x\n  author: y\n" }
         }
     }
 
@@ -1027,7 +1027,7 @@ class YamlParserTest {
     @Test
     fun `should read a hash after a tab as a comment in a flow sequence`() = runTest {
         // given — the comment leaves the sequence unterminated, which every
-        // reader refuses, so the line is outside the subset
+        // reader refuses, so the value is outside the subset
         val textFlow = "title: x\ntags: [a\t#b]\n".chunkedRandomly().asFlow()
 
         // when
@@ -1036,7 +1036,7 @@ class YamlParserTest {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "entry"("key" to "title") { +"x" }
-            +"tags: [a\t#b]\n"
+            "entry"("key" to "tags", "type" to "verbatim") { +" [a\t#b]\n" }
         }
     }
 
@@ -1059,7 +1059,7 @@ class YamlParserTest {
     @Test
     fun `should read a hash after a space as a comment in a flow mapping key`() = runTest {
         // given — the comment leaves the mapping unterminated, which every
-        // reader refuses, so the line is outside the subset
+        // reader refuses, so the value is outside the subset
         val textFlow = "title: x\ngeo: {a #b: c}\n".chunkedRandomly().asFlow()
 
         // when
@@ -1068,7 +1068,7 @@ class YamlParserTest {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "entry"("key" to "title") { +"x" }
-            +"geo: {a #b: c}\n"
+            "entry"("key" to "geo", "type" to "verbatim") { +" {a #b: c}\n" }
         }
     }
 
@@ -1078,7 +1078,7 @@ class YamlParserTest {
         // followed by `,` / `[` / `]` / `{` / `}`: PyYAML reads a mapping
         // (`[{draft: null}, x]`), Psych refuses the line, go-yaml v2 reads
         // the colon as content (`"draft:"`), so no single reading is right and
-        // the line is kept as written; a colon followed by anything else is
+        // each value is kept as written; a colon followed by anything else is
         // content for all three
         val textFlow = """
             title: x
@@ -1097,7 +1097,12 @@ class YamlParserTest {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "entry"("key" to "title") { +"x" }
-            +"tags: [draft:, x]\none: [a:]\ngeo: {a:[1, 2]}\nnested: {a:{b: 1}}\nempty: {a:, b: 1}\nlast: {a:}\n"
+            "entry"("key" to "tags", "type" to "verbatim") { +" [draft:, x]\n" }
+            "entry"("key" to "one", "type" to "verbatim") { +" [a:]\n" }
+            "entry"("key" to "geo", "type" to "verbatim") { +" {a:[1, 2]}\n" }
+            "entry"("key" to "nested", "type" to "verbatim") { +" {a:{b: 1}}\n" }
+            "entry"("key" to "empty", "type" to "verbatim") { +" {a:, b: 1}\n" }
+            "entry"("key" to "last", "type" to "verbatim") { +" {a:}\n" }
             "entry"("key" to "time") {
                 "item" { +"a:b" }
             }
@@ -1107,7 +1112,7 @@ class YamlParserTest {
     @Test
     fun `should keep a block scalar header with a hash right after it verbatim`() = runTest {
         // given — Psych and go-yaml v2 read `|-#x` as a header and a comment,
-        // but PyYAML refuses it, so the line is outside the subset; with
+        // but PyYAML refuses it, so the value is outside the subset; with
         // whitespace before the `#` every reader takes the comment
         val textFlow = "a: |-#x\nb: | #y\n  z\n".chunkedRandomly().asFlow()
 
@@ -1116,7 +1121,7 @@ class YamlParserTest {
 
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
-            +"a: |-#x\n"
+            "entry"("key" to "a", "type" to "verbatim") { +" |-#x\n" }
             "entry"("key" to "b") { +"z\n" }
         }
     }
@@ -1125,8 +1130,9 @@ class YamlParserTest {
     fun `DIVERGENCE - should keep an unrecognised line verbatim`() = runTest {
         // given — a complex key, a multi-line flow sequence, an unterminated
         // quote, a `key:value` without a space and a tab-indented line are
-        // outside the subset; each line survives verbatim (with its newline)
-        // in the container it sits in
+        // outside the subset; a line that is no entry survives verbatim (with
+        // its newline) in the container it sits in, an entry whose value is
+        // outside the subset keeps that value's source, every line of it
         val textFlow = (
             """
             title: x
@@ -1134,9 +1140,8 @@ class YamlParserTest {
             : value
             tags: [a,
               b]
-            quoted: "unterminated
             key:value
-            """.trimIndent() + "\n\ttabbed: x\n"
+            """.trimIndent() + "\n\ttabbed: x\nquoted: \"unterminated\nnext: x\n"
         ).chunkedRandomly().asFlow()
 
         // when
@@ -1145,7 +1150,11 @@ class YamlParserTest {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "entry"("key" to "title") { +"x" }
-            +"? complex\n: value\ntags: [a,\n  b]\nquoted: \"unterminated\nkey:value\n\ttabbed: x\n"
+            +"? complex\n: value\n"
+            "entry"("key" to "tags", "type" to "verbatim") { +" [a,\n  b]\n" }
+            +"key:value\n\ttabbed: x\n"
+            // a quote left open runs to the end of the document
+            "entry"("key" to "quoted", "type" to "verbatim") { +" \"unterminated\nnext: x\n" }
         }
     }
 
@@ -1267,6 +1276,313 @@ class YamlParserTest {
         // then
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "entry"("key" to "desc") { +"a\n  b\n\nc\n" }
+        }
+    }
+
+    // --- values of unknown shape (type=verbatim) ---------------------------
+
+    @Test
+    fun `DIVERGENCE - should mark a plain scalar continued on indented lines as verbatim`() = runTest {
+        // given — the readers join the lines into one value (`A long title`),
+        // which the subset does not parse, so the entry's value is unknown:
+        // it keeps the source after `key:`, the continuation line included
+        val textFlow = """
+            title: A long
+              title
+            b: 1
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parseYaml()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "entry"("key" to "title", "type" to "verbatim") { +" A long\n  title\n" }
+            "entry"("key" to "b", "type" to "int") { +"1" }
+        }
+    }
+
+    @Test
+    fun `DIVERGENCE - should mark a bare key holding a line outside the subset as verbatim`() = runTest {
+        // given — PyYAML reads a mapping in the flow sequence, Psych refuses
+        // it, go-yaml v2 reads `a:` as a string
+        val textFlow = """
+            title:
+              [a:, b]
+            b: 1
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parseYaml()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "entry"("key" to "title", "type" to "verbatim") { +"\n  [a:, b]\n" }
+            "entry"("key" to "b", "type" to "int") { +"1" }
+        }
+    }
+
+    @Test
+    fun `DIVERGENCE - should mark a bare key holding indented plain lines as verbatim`() = runTest {
+        // given — the readers read `first line second`
+        val textFlow = """
+            description:
+              first line
+              second
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parseYaml()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "entry"("key" to "description", "type" to "verbatim") { +"\n  first line\n  second\n" }
+        }
+    }
+
+    @Test
+    fun `DIVERGENCE - should mark a key whose value is outside the subset as verbatim`() = runTest {
+        // given — a multi-line quoted scalar; its empty line and the line
+        // shaped like a comment are content for the readers (`a\n# c b`)
+        val textFlow = "t: \"a\n\n# c\n  b\"\nz: 1\n".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parseYaml()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "entry"("key" to "t", "type" to "verbatim") { +" \"a\n\n# c\n  b\"\n" }
+            "entry"("key" to "z", "type" to "int") { +"1" }
+        }
+    }
+
+    @Test
+    fun `DIVERGENCE - should mark a scalar continued past an empty line as verbatim`() = runTest {
+        // given — the readers read `a\nb`: the empty line is part of the value
+        val textFlow = "t: a\n\n  b\nz: 1\n".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parseYaml()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "entry"("key" to "t", "type" to "verbatim") { +" a\n\n  b\n" }
+            "entry"("key" to "z", "type" to "int") { +"1" }
+        }
+    }
+
+    @Test
+    fun `should mark a block scalar followed by a more indented line as verbatim`() = runTest {
+        // given — a line between the key's and the content's indentation
+        // ends the block scalar, and the readers refuse it
+        val textFlow = "t: |\n  x\n c\nz: 1\n".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parseYaml()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "entry"("key" to "t", "type" to "verbatim") { +" |\n  x\n c\n" }
+            "entry"("key" to "z", "type" to "int") { +"1" }
+        }
+    }
+
+    @Test
+    fun `DIVERGENCE - should mark a sequence item continued on indented lines as verbatim`() = runTest {
+        // given — the readers read `a b`, and `v x` for the compact entry
+        val textFlow = """
+            - a
+              b
+            - k: v
+               x
+            - c
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parseYaml()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "item"("type" to "verbatim") { +" a\n  b\n" }
+            "item" {
+                "entry"("key" to "k", "type" to "verbatim") { +" v\n x\n" }
+            }
+            "item" { +"c" }
+        }
+    }
+
+    @Test
+    fun `DIVERGENCE - should keep the lines of a verbatim value indented relative to its key`() = runTest {
+        // given — a nested entry continued one column deeper than its key:
+        // the source's own indentation is removed up to the key's column, so
+        // the writer can re-indent the entry without losing the continuation
+        val textFlow = "a:\n b: A\n  x\n".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parseYaml()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "entry"("key" to "a") {
+                "entry"("key" to "b", "type" to "verbatim") { +" A\n x\n" }
+            }
+        }
+    }
+
+    @Test
+    fun `should not hold a scalar entry past the end of the document`() = runTest {
+        // given — the last entry is held for one line to see whether it is
+        // continued; finish commits it
+        val parsed = flow {
+            val parser = YamlParser(this)
+            parser.line("a: 1")
+            parser.line("")
+            parser.finish()
+        }
+
+        // when
+        val events = parsed.mergeAdjacentText()
+
+        // then
+        events sameAs semanticEvents {
+            "entry"("key" to "a", "type" to "int") { +"1" }
+        }
+    }
+
+    @Test
+    fun `should keep a line outside the subset indented relative to its container`() = runTest {
+        // given — a line that is no entry, at the indentation of the entries
+        // around it, which need not be the writer's two spaces; the parser
+        // removes that indentation so the writer can re-indent the line
+        // along with its container
+        val nested = "p:\n    a: 1\n    ? x\n".chunkedRandomly().asFlow()
+        val indentedRoot = "  a: 1\n  ? x\n".chunkedRandomly().asFlow()
+
+        // when
+        val parsedNested = nested.parseYaml()
+        val parsedIndentedRoot = indentedRoot.parseYaml()
+
+        // then
+        parsedNested.mergeAdjacentText() sameAs semanticEvents {
+            "entry"("key" to "p") {
+                "entry"("key" to "a", "type" to "int") { +"1" }
+                +"? x\n"
+            }
+        }
+        parsedIndentedRoot.mergeAdjacentText() sameAs semanticEvents {
+            "entry"("key" to "a", "type" to "int") { +"1" }
+            +"? x\n"
+        }
+    }
+
+    @Test
+    fun `DIVERGENCE - should keep a quoted or flow value open below its key as source`() = runTest {
+        // given — an open quote or flow collection continues on any line
+        // until it closes, whatever its indentation: the readers read
+        // `x author: y`, `[a, b]`, `[a, "b, ]"]` and `x y`
+        val textFlow = """
+            title: "x
+            author: y"
+            tags: [a,
+            b]
+            more: [a, "b,
+            ]"]
+            nested:
+              t: 'x
+            y'
+              m: 1
+            z: 1
+        """.trimIndent().chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parseYaml()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "entry"("key" to "title", "type" to "verbatim") { +" \"x\nauthor: y\"\n" }
+            "entry"("key" to "tags", "type" to "verbatim") { +" [a,\nb]\n" }
+            "entry"("key" to "more", "type" to "verbatim") { +" [a, \"b,\n]\"]\n" }
+            "entry"("key" to "nested") {
+                "entry"("key" to "t", "type" to "verbatim") { +" 'x\ny'\n" }
+                "entry"("key" to "m", "type" to "int") { +"1" }
+            }
+            "entry"("key" to "z", "type" to "int") { +"1" }
+        }
+    }
+
+    @Test
+    fun `DIVERGENCE - should keep an unclosed quote as source up to the end of the document`() = runTest {
+        // given
+        val textFlow = "title: \"x\nauthor: y\n".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parseYaml()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "entry"("key" to "title", "type" to "verbatim") { +" \"x\nauthor: y\n" }
+        }
+    }
+
+    @Test
+    fun `DIVERGENCE - should keep a compact entry outside the subset as an entry of its item`() = runTest {
+        // given — the compact form the writer writes for an item holding a
+        // mapping; the readers read `[{k: "x y", m: 1}]`
+        val textFlow = "- k: \"x\n    y\"\n  m: 1\n".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parseYaml()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "item" {
+                "entry"("key" to "k", "type" to "verbatim") { +" \"x\n  y\"\n" }
+                "entry"("key" to "m", "type" to "int") { +"1" }
+            }
+        }
+    }
+
+    /**
+     * PyYAML refuses a line less indented than an indented root, Psych and
+     * go-yaml v2 read the document up to it (`{a: 1}`): the parser keeps
+     * that line and everything after it as text at the root, with its own
+     * indentation, and reads no entry the readers do not see. The cost: the
+     * writer writes the root at column 0, so the rendered text no longer
+     * sits below the root and re-parses as entries — the fixpoint is lost,
+     * but only for a document the readers refuse or cut short (never a
+     * front matter, whose root is at column 0).
+     */
+    @Test
+    fun `DIVERGENCE - should keep the rest of the document as text after a line less indented than the root`() = runTest {
+        // given
+        val textFlow = "  a: 1\n  ? x\nb: 2\n  c: 3\n".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parseYaml()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "entry"("key" to "a", "type" to "int") { +"1" }
+            +"? x\nb: 2\n  c: 3\n"
+        }
+    }
+
+    @Test
+    fun `should end a flow collection whose colon starts no node`() = runTest {
+        // given — a colon not followed by whitespace, the end of the line or
+        // a flow indicator is content of a plain scalar (`x:"y`), so the
+        // quote after it opens nothing; the readers read
+        // `{a: ['x:"y', b], c: 2, d: 3}`
+        val textFlow = "a: [x:\"y,\nb]\nc: 2\nd: 3\n".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parseYaml()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "entry"("key" to "a", "type" to "verbatim") { +" [x:\"y,\nb]\n" }
+            "entry"("key" to "c", "type" to "int") { +"2" }
+            "entry"("key" to "d", "type" to "int") { +"3" }
         }
     }
 

@@ -16,13 +16,16 @@
 
 package com.xemantic.markanywhere.html
 
+import com.xemantic.kotlin.test.assert
 import com.xemantic.kotlin.test.sameAs
 import com.xemantic.markanywhere.SemanticEvent
+import com.xemantic.markanywhere.flow.mergeAdjacentText
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.parse.parse
 import com.xemantic.markanywhere.render.renderMarkdown
 import com.xemantic.markanywhere.test.sameAs
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 
@@ -1440,8 +1443,8 @@ class EnsureFrontmatterTitleTest {
 
     @Test
     fun `should derive no title beside a title line outside the YAML subset`() = runTest {
-        // given — the multi-line quoted title comes through as verbatim lines,
-        // yet readers read it: deriving one would make a duplicate key
+        // given — the multi-line quoted title is kept as source, yet readers
+        // read it: deriving one would make a duplicate key
         val markdown = "---\ntitle: \"A long\n  title\"\nx: y\n---\n\n# Heading"
 
         // when
@@ -1466,8 +1469,8 @@ class EnsureFrontmatterTitleTest {
 
     @Test
     fun `should keep the continuation lines of a verbatim line after a title entry`() = runTest {
-        // given — the indented line continues the verbatim line, not the
-        // title entry dropped before it
+        // given — the indented line continues `bar`, whose value is outside
+        // the YAML subset, not the title entry dropped before it
         val markdown = "---\nfoo: a\nTitle:\nbar: [a:, b]\n  x\n---\n\nBody."
 
         // when
@@ -1475,6 +1478,55 @@ class EnsureFrontmatterTitleTest {
 
         // then
         output sameAs "---\nfoo: a\nbar: [a:, b]\n  x\n---\n\nBody."
+    }
+
+    @Test
+    fun `should respell a usable title quoted with indentation and a trailing newline`() = runTest {
+        // given — a decoded quoted scalar (`Title: " Hello\n"`) of the shape a
+        // verbatim line has, which is known all the same
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "Title") { +" Hello\n" }
+            }
+            "h1" { +"Heading" }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +" Hello\n" }
+            }
+            "h1" { +"Heading" }
+        }
+    }
+
+    @Test
+    fun `should derive no title beside a title line outside the YAML subset once adjacent text merges`() = runTest {
+        // given — the multi-line quoted title follows a line that is no
+        // entry; merged with it into one text event, it would hide the title
+        // key, and a derived title would make a duplicate key js-yaml rejects
+        val markdown = "---\nfoo: a\n? complex\ntitle: \"A long\n  title\"\n---\n\n# Heading"
+
+        // when
+        val output = flowOf(markdown).parse().mergeAdjacentText().ensureFrontmatterTitle().renderMarkdown()
+
+        // then
+        output sameAs markdown
+    }
+
+    @Test
+    fun `should drop an empty title before an entry whose value is outside the YAML subset`() = runTest {
+        // given — the entry keeps the front matter detectable on re-parse
+        val markdown = "---\nTitle:\nbar: [a:, b]\n---\n\nBody."
+
+        // when
+        val output = flowOf(markdown).parse().ensureFrontmatterTitle().renderMarkdown()
+
+        // then
+        output sameAs "---\nbar: [a:, b]\n---\n\nBody."
     }
 
     @Test
@@ -1523,6 +1575,61 @@ class EnsureFrontmatterTitleTest {
                 "entry"("key" to "title") { +"Hello" }
             }
         }
+    }
+
+    @Test
+    fun `should close an entry the stream ends inside before moving it to the first title slot`() = runTest {
+        // given — a broken upstream contract: the usable title variant is
+        // left open; it moves ahead of the verbatim line, which must stay
+        // outside it. Built from raw events on purpose: the balanced builders
+        // cannot express an unclosed mark.
+        val input = flowOf(
+            SemanticEvent.Mark(name = "frontmatter", isTagged = false),
+            SemanticEvent.Mark(name = "entry", isTagged = false, attributes = mapOf("key" to "title", "type" to "null")),
+            SemanticEvent.Unmark(name = "entry", isTagged = false),
+            SemanticEvent.Text("foo bar baz\n"),
+            SemanticEvent.Mark(name = "entry", isTagged = false, attributes = mapOf("key" to "Title")),
+            SemanticEvent.Text("Real"),
+        )
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"Real" }
+                +"foo bar baz\n"
+            }
+        }
+    }
+
+    @Test
+    fun `should close the marks a crossed h1 leaves open by name`() = runTest {
+        // given — a broken upstream contract: an unmark matching no open
+        // mark closes nothing, so the marks left open still get their own
+        // closers. Raw events on purpose: the builders cannot express it.
+        val input = flowOf(
+            SemanticEvent.Mark(name = "h1", isTagged = false),
+            SemanticEvent.Mark(name = "em", isTagged = false),
+            SemanticEvent.Text("Hello"),
+            SemanticEvent.Unmark(name = "strong", isTagged = false),
+        )
+
+        // when
+        val output = input.ensureFrontmatterTitle().toList()
+
+        // then
+        assert(
+            output.drop(output.indexOfFirst { it is SemanticEvent.Mark && it.name == "h1" }) == listOf(
+                SemanticEvent.Mark(name = "h1", isTagged = false),
+                SemanticEvent.Mark(name = "em", isTagged = false),
+                SemanticEvent.Text("Hello"),
+                SemanticEvent.Unmark(name = "strong", isTagged = false),
+                SemanticEvent.Unmark(name = "em", isTagged = false),
+                SemanticEvent.Unmark(name = "h1", isTagged = false),
+            )
+        )
     }
 
     @Test

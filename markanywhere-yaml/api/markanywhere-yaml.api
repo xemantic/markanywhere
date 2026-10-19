@@ -4,6 +4,7 @@ public final class com/xemantic/markanywhere/yaml/YamlKeyLineKt {
 }
 
 public final class com/xemantic/markanywhere/yaml/YamlKt {
+	public static final field YAML_VERBATIM_TYPE Ljava/lang/String;
 	public static final fun asYaml (Lkotlinx/coroutines/flow/Flow;)Lkotlinx/coroutines/flow/Flow;
 	public static final fun parseYaml (Lkotlinx/coroutines/flow/Flow;)Lkotlinx/coroutines/flow/Flow;
 	public static final fun renderYaml (Lkotlinx/coroutines/flow/Flow;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;

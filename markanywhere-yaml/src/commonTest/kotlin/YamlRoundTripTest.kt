@@ -261,6 +261,77 @@ class YamlRoundTripTest {
     }
 
     @Test
+    fun `should keep a value of unknown shape as written`() = runTest {
+        // given — values the subset does not parse, each verified against
+        // PyYAML, Psych and go-yaml v2: a continued plain scalar, a bare key
+        // holding plain lines or a flow collection the readers disagree on,
+        // a multi-line quoted scalar with an empty line and a `#` line in it,
+        // a scalar continued past an empty line, a multi-line flow sequence,
+        // a block scalar followed by a line the readers refuse, a continued
+        // sequence item and compact entry
+        val sources = listOf(
+            "title: A long\n  title\nb: 1\n",
+            "description:\n  first line\n  second\n",
+            "title:\n  [a:, b]\nb: 1\n",
+            "t: \"a\n\n# c\n  b\"\nz: 1\n",
+            "t: a\n\n  b\nz: 1\n",
+            "tags: [a,\n  b]\n",
+            "t: |\n  x\n c\nz: 1\n",
+            "- a\n  b\n- k: v\n   x\n- c\n",
+            "title: \"x\nauthor: y\"\nz: 1\n",
+            "tags: [a, \"b,\n]\"]\nz: 1\n",
+            "- k: \"x\n    y\"\n  m: 1\n",
+        )
+        for (source in sources) {
+            // when
+            val rendered = flowOf(source).parseYaml().renderYaml()
+
+            // then
+            rendered sameAs source
+        }
+    }
+
+    @Test
+    fun `should re-indent a line outside the subset along with its container`() = runTest {
+        // given — four columns per nesting level, and an indented root; the
+        // readers read each the same as its rendering (`p: {a: 1, x: null}`).
+        // Lines ahead of the first root entry keep their own indentation,
+        // which is then what keeps the root indented.
+        val sources = mapOf(
+            "p:\n    a: 1\n    ? x\n" to "p:\n  a: 1\n  ? x\n",
+            "  a: 1\n  ? x\n" to "a: 1\n? x\n",
+            "    >'\n  [|\nb:\n" to "    >'\n  [|\nb:\n",
+            "-\n  k: \"x\n    y\"\n  m: 1\n" to "- k: \"x\n    y\"\n  m: 1\n",
+            "a:\n  t: \"x\ny\"\n  m: 1\n" to "a:\n  t: \"x\n  y\"\n  m: 1\n",
+        )
+        for ((source, expected) in sources) {
+            // when
+            val first = flowOf(source).parseYaml().events()
+            val rendered = flowOf(source).parseYaml().renderYaml()
+            val second = flowOf(rendered).parseYaml().events()
+
+            // then
+            rendered sameAs expected
+            assert(first == second)
+        }
+    }
+
+    @Test
+    fun `should re-indent a value of unknown shape without losing its continuation`() = runTest {
+        // given — one column per nesting level, narrower than the writer's two
+        val source = "a:\n b: A\n  x\n"
+
+        // when
+        val first = flowOf(source).parseYaml().events()
+        val rendered = flowOf(source).parseYaml().renderYaml()
+        val second = flowOf(rendered).parseYaml().events()
+
+        // then
+        rendered sameAs "a:\n  b: A\n   x\n"
+        assert(first == second)
+    }
+
+    @Test
     fun `should quote a string go-yaml v2 reads as a number once underscores are removed`() = runTest {
         // given
         val values = listOf("1_e5", "1e5_", "1_E5", "+_1", "+_1.", "0_x1", "0X1F")
@@ -449,7 +520,8 @@ class YamlRoundTripTest {
     @Test
     fun `should round-trip every value shape`() = runTest {
         // given — typed scalars, empty string, null, empty collections,
-        // nested mappings and sequences, a verbatim line
+        // nested mappings and sequences, values kept as source, a verbatim
+        // line
         val events = semanticEvents {
             "entry"("key" to "draft", "type" to "bool") { +"true" }
             "entry"("key" to "count", "type" to "int") { +"42" }
@@ -479,7 +551,12 @@ class YamlRoundTripTest {
                     "item" { +"x\ny\n" }
                 }
                 "item" { +"plain" }
+                "item"("type" to "verbatim") { +" a\n  b\n" }
+                "item" {
+                    "entry"("key" to "k", "type" to "verbatim") { +"\n  [a:, b]\n" }
+                }
             }
+            "entry"("key" to "title", "type" to "verbatim") { +" A long\n  title\n" }
             +"? complex\n: value\n"
         }
 

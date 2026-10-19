@@ -49,8 +49,13 @@ import com.xemantic.markanywhere.SemanticEvent
  *   `_`, `-`, `.`, starting with a letter or `_`) and not a key a reader
  *   would type — Psych takes a bare `yes:` or `nULL:` as a boolean / null
  *   key, go-yaml v2 a `y:` below the top level — and double-quoted otherwise, even where YAML would not require it;
+ * - a `type=verbatim` scalar is the value's YAML source, written as-is
+ *   after the key or dash, every line after the first indented by the
+ *   node's column (the parser removed it);
  * - a `text` child of a container (the parser's verbatim fallback for a
- *   line outside its YAML subset) is written as-is, on its own line(s).
+ *   line outside its YAML subset) is written as-is, on its own line(s),
+ *   each indented by the column of the container's entries (the parser
+ *   removed it).
  *
  * Event-incremental with one bounded buffer: a scalar's text is held until
  * its `unmark`, since the quoting decision needs the whole value.
@@ -123,7 +128,7 @@ public class YamlWriter(
             node.state = SCALAR
             node.scalar.append(text)
         } else {
-            writeVerbatim(text)
+            writeVerbatim(text, node.childIndent)
         }
     }
 
@@ -141,8 +146,28 @@ public class YamlWriter(
                 atLineStart = true
             }
             UNDECIDED -> writeLine(node, emptyValue(node.type))
-            SCALAR -> writeLine(node, formatScalar(node.scalar.toString(), node.type, node.childIndent))
+            SCALAR ->
+                if (node.type == YAML_VERBATIM_TYPE) writeSource(node, node.scalar.toString())
+                else writeLine(node, formatScalar(node.scalar.toString(), node.type, node.childIndent))
         }
+    }
+
+    // Writes a value kept as source after the node's key or dash: its first
+    // line on the node's own line, every further line indented by the
+    // node's column, as the parser removed it.
+    private fun writeSource(node: Node, source: String) {
+        val lines = source.removeSuffix("\n").split('\n')
+        val first = lines.first()
+        val sb = StringBuilder(linePrefix(node))
+        sb.append(if (node.kind == ITEM) "-" else renderKey(node) + ":")
+        if (first.isNotEmpty() && first[0] != ' ' && first[0] != '\t') sb.append(' ')
+        sb.append(first).append('\n')
+        for (line in lines.drop(1)) {
+            if (line.isNotEmpty()) sb.append(" ".repeat(node.indent))
+            sb.append(line).append('\n')
+        }
+        out(sb.toString())
+        atLineStart = true
     }
 
     // Ensures the node has emitted its own line prefix before its first child.
@@ -159,7 +184,7 @@ public class YamlWriter(
             out(linePrefix(node) + renderKey(node) + ":\n")
             atLineStart = true
         }
-        if (pendingVerbatim != null) writeVerbatim(pendingVerbatim)
+        if (pendingVerbatim != null) writeVerbatim(pendingVerbatim, node.childIndent)
     }
 
     private fun writeLine(node: Node, value: String) {
@@ -176,12 +201,16 @@ public class YamlWriter(
             " ".repeat(node.indent)
         }
 
-    private fun writeVerbatim(text: String) {
+    // Writes verbatim lines of a container whose entries start at [indent],
+    // each line indented by it, as the parser removed it.
+    private fun writeVerbatim(text: String, indent: Int) {
         if (text.isEmpty()) return
         if (!atLineStart) out("\n")
         afterDash = false
-        out(text)
-        if (!text.endsWith("\n")) out("\n")
+        val prefix = " ".repeat(indent)
+        for (line in text.removeSuffix("\n").split('\n')) {
+            out(if (line.isEmpty()) "\n" else prefix + line + "\n")
+        }
         atLineStart = true
     }
 
