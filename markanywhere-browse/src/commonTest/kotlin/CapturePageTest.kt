@@ -29,13 +29,15 @@ import dev.kdriver.cdp.domain.DOMSnapshot
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlin.test.Test
 
 class CapturePageTest {
 
     @Test
-    fun `should skip a frame whose document never committed`() {
+    fun `should skip a frame whose document never committed`() = runTest {
         // given - a page embedding an iframe whose snapshot document holds no
         // <html> element (a frame that never committed a document), which CDP
         // still reports as a document of its own
@@ -817,9 +819,9 @@ class CapturePageTest {
     /**
      * A name is judged by the same rule as the control itself
      * ([isRedactedControl]): a field that is not laid out has no computed
-     * `-webkit-text-security`, so it is not known to be masked and keeps its
-     * value — in the dump and in a name alike. Issue #100 covers reading the
-     * style of such a field, which will hide both at once.
+     * `-webkit-text-security` in the snapshot, so unless the page reported it
+     * masked (see the next test) it keeps its value — in the dump and in a
+     * name alike.
      */
     @Test
     fun `should judge a field in a name as the field itself is judged`() = runTest {
@@ -840,6 +842,112 @@ class CapturePageTest {
             "input"("id" to "pin", "type" to "text", "value" to "1234", DISPLAY to "none") { }
             "button"("aria-labelledby" to "pin", DISPLAY to "block", "aria-label" to "1234") { }
         }
+    }
+
+    /**
+     * A field that is not laid out, which the page reported masked when asked
+     * for its style (issue #100), is redacted like a laid-out masked one — its
+     * value hidden in the dump and in a name alike.
+     */
+    @Test
+    fun `should redact a field the page reports masked though it is not laid out`() = runTest {
+        // given
+        val page = NamedNodes(
+            Node("INPUT", parent = 1, value = "1234", laidOut = false, attributes = mapOf(
+                "id" to "pin", "type" to "text"
+            )),
+            Node("BUTTON", parent = 1, attributes = mapOf("aria-labelledby" to "pin")),
+        )
+        val axNames = mapOf(3 to "PIN 1234")
+
+        // when - the input's backend node id is its index + 1
+        val events = page.capture(axNames) { asked -> asked.filterTo(mutableSetOf()) { it == 3 } }
+
+        // then
+        events sameAs page.expected {
+            "input"("id" to "pin", "type" to "text", REDACTED to "filled", DISPLAY to "none") { }
+            "button"("aria-labelledby" to "pin", DISPLAY to "block", "aria-label" to "PIN") { }
+        }
+    }
+
+    /**
+     * The page answers the text-security lookup with a string; anything else —
+     * `undefined` from a page that overrides `getComputedStyle` or
+     * `getPropertyValue`, a number, an object — leaves the masking unknown,
+     * and the capture fails closed.
+     */
+    @Test
+    fun `should judge any answer but a string to the masking lookup as masked`() = runTest {
+        // given
+        val answers = listOf(
+            JsonPrimitive("disc"),
+            JsonPrimitive("none"),
+            JsonPrimitive(""),
+            JsonNull,
+            null,
+            JsonPrimitive(42),
+            JsonPrimitive(false),
+            JsonObject(emptyMap()),
+        )
+
+        // when
+        val verdicts = answers.map(::isMaskingAnswer)
+
+        // then
+        assert(verdicts == listOf(true, false, false, true, true, true, true, true))
+    }
+
+    /**
+     * A laid-out control whose style list lacks the `-webkit-text-security`
+     * slot (a malformed snapshot) was never asked about — the page is queried
+     * only for controls that are not laid out — so its masking is unknown and
+     * the capture fails closed, redacting it.
+     */
+    @Test
+    fun `should redact a laid-out field whose masking the snapshot does not report`() = runTest {
+        // given
+        val page = NamedNodes(
+            Node("INPUT", parent = 1, value = "1234", textSecurityReported = false, attributes = mapOf(
+                "id" to "pin", "type" to "text"
+            )),
+        )
+
+        // when
+        val events = page.capture(axNames = emptyMap())
+
+        // then
+        events sameAs page.expected {
+            "input"("id" to "pin", "type" to "text", REDACTED to "filled", DISPLAY to "block") { }
+        }
+    }
+
+    /**
+     * Only a control whose masking the capture reads ([readsMaskedState]), the
+     * snapshot carries no style for — one not laid out — and whose capture
+     * the answer can change is asked about: a password or a field with a
+     * secret `autocomplete` is redacted whatever its masking.
+     */
+    @Test
+    fun `should ask only about the controls whose capture their masking can change`() = runTest {
+        // given
+        val page = NamedNodes(
+            Node("INPUT", parent = 1, attributes = mapOf("type" to "text")),
+            Node("INPUT", parent = 1, laidOut = false, attributes = mapOf("type" to "text")),
+            Node("INPUT", parent = 1, laidOut = false, attributes = mapOf("type" to "checkbox")),
+            Node("TEXTAREA", parent = 1, laidOut = false),
+            Node("SELECT", parent = 1, laidOut = false),
+            Node("OPTION", parent = 6, laidOut = false),
+            Node("DIV", parent = 1, laidOut = false),
+            Node("INPUT", parent = 1, laidOut = false, attributes = mapOf("type" to "password")),
+            Node("INPUT", parent = 1, laidOut = false, attributes = mapOf("autocomplete" to "one-time-code")),
+        )
+        val asked = mutableListOf<Int>()
+
+        // when
+        page.capture(axNames = emptyMap()) { asked += it; emptySet() }
+
+        // then - by backend node id, the node index + 1
+        assert(asked == listOf(4, 6))
     }
 
     /**
@@ -905,6 +1013,7 @@ class CapturePageTest {
         val display: String = "block",
         val masked: Boolean = false,
         val selected: Boolean = false,
+        val textSecurityReported: Boolean = true,
     )
 
     /** A one-document snapshot of [nodes], every element laid out as a block unless told otherwise. */
@@ -912,8 +1021,38 @@ class CapturePageTest {
 
         private val nodes = listOf(Node("HTML", parent = -1), Node("BODY", parent = 0)) + nodes
 
-        /** Captures the page, Blink's computed name of each node given by node index in [axNames]. */
-        fun capture(axNames: Map<Int, String>): Flow<SemanticEvent> {
+        /**
+         * Captures the page, Blink's computed name of each node given by node
+         * index in [axNames], the controls the page reported masked though not
+         * laid out answered by [maskedControls].
+         */
+        suspend fun capture(
+            axNames: Map<Int, String>,
+            maskedControls: suspend (List<Int>) -> Set<Int> = { emptySet() },
+        ): Flow<SemanticEvent> {
+            val axNodes = axNames.map { (index, name) ->
+                val backendNodeId = index + 1
+                Accessibility.AXNode(
+                    nodeId = backendNodeId.toString(),
+                    ignored = false,
+                    name = Accessibility.AXValue(
+                        type = Accessibility.AXValueType.COMPUTEDSTRING,
+                        value = JsonPrimitive(name)
+                    ),
+                    backendDOMNodeId = backendNodeId,
+                )
+            }
+            return captureEvents(
+                snapshot = snapshot(),
+                axNodes = axNodes,
+                refAttribute = null,
+                isActionable = { false },
+                maskedControls = maskedControls,
+            ).events.asFlow()
+        }
+
+        /** The page as `DOMSnapshot.captureSnapshot` reports it, each node's backend id its index + 1. */
+        fun snapshot(): DOMSnapshot.CaptureSnapshotReturn {
             val strings = mutableListOf<String>()
             fun string(value: String): Int =
                 strings.indexOf(value).takeIf { it >= 0 } ?: strings.size.also { strings += value }
@@ -944,30 +1083,18 @@ class CapturePageTest {
                         optionSelected = DOMSnapshot.RareBooleanData(index = selected),
                         layoutNodeIndex = laidOut,
                         layoutStyles = laidOut.map {
-                            listOf(nodes[it].display, "visible", if (nodes[it].masked) "disc" else "none").map(::string)
+                            val node = nodes[it]
+                            listOfNotNull(
+                                node.display,
+                                "visible",
+                                if (!node.textSecurityReported) null else if (node.masked) "disc" else "none"
+                            ).map(::string)
                         },
                     ),
                 ),
                 strings = strings,
             )
-            val axNodes = axNames.map { (index, name) ->
-                val backendNodeId = index + 1
-                Accessibility.AXNode(
-                    nodeId = backendNodeId.toString(),
-                    ignored = false,
-                    name = Accessibility.AXValue(
-                        type = Accessibility.AXValueType.COMPUTEDSTRING,
-                        value = JsonPrimitive(name)
-                    ),
-                    backendDOMNodeId = backendNodeId,
-                )
-            }
-            return captureEvents(
-                snapshot = snapshot,
-                axNodes = axNodes,
-                refAttribute = null,
-                isActionable = { false },
-            ).events.asFlow()
+            return snapshot
         }
 
         fun expected(

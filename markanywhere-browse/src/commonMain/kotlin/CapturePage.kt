@@ -33,10 +33,19 @@ import com.xemantic.markanywhere.html.spec.stripAndCollapseHtmlWhitespace
 import dev.kdriver.cdp.domain.Accessibility
 import dev.kdriver.cdp.domain.DOMSnapshot
 import dev.kdriver.cdp.domain.accessibility
+import dev.kdriver.cdp.domain.dom
 import dev.kdriver.cdp.domain.dOMSnapshot
+import dev.kdriver.cdp.domain.runtime
 import dev.kdriver.core.tab.Tab
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Clock
 
 private const val ELEMENT_NODE = 1
@@ -106,7 +115,7 @@ internal suspend fun Tab.capturePage(
             .map { snapshot.strings.getOrNull(it.frameId) }
             .distinct()
     )
-    val builder = captureEvents(snapshot, axNodes, refAttribute, isActionable)
+    val builder = captureEvents(snapshot, axNodes, refAttribute, isActionable) { maskedControls(it) }
     return PageCapture(
         dump = SemanticEventDump(
             url = url ?: "",
@@ -118,23 +127,92 @@ internal suspend fun Tab.capturePage(
 }
 
 /**
+ * Which of the controls with these [backendNodeIds] render their text masked
+ * (see [isMaskingTextSecurity]), asked of the page for every control at once —
+ * through `getComputedStyle`, which answers for an element without a layout
+ * box too, as in the in-page walker. A control whose style cannot be read
+ * (gone from the page since the snapshot, or in a document without a window)
+ * counts as masked: the capture would rather hide a plain value than show a
+ * secret one. The walker, reading a windowless element as unmasked, differs
+ * there on purpose — it never meets one, walking the live page from its own
+ * window.
+ */
+private suspend fun Tab.maskedControls(backendNodeIds: List<Int>): Set<Int> {
+    if (backendNodeIds.isEmpty()) return emptySet()
+    return try {
+        coroutineScope {
+            backendNodeIds
+                .map { id -> async { id.takeIf { isMaskingTextSecurityOrUnknown(it) } } }
+                .awaitAll()
+                .filterNotNullTo(mutableSetOf())
+        }
+    } finally {
+        withContext(NonCancellable) {
+            try {
+                runtime.releaseObjectGroup(MASKING_OBJECT_GROUP)
+            } catch (_: Exception) {
+                // a release that fails leaves the group to the page's lifetime; the capture stands
+            }
+        }
+    }
+}
+
+private suspend fun Tab.isMaskingTextSecurityOrUnknown(backendNodeId: Int): Boolean = try {
+    val element = dom.resolveNode(backendNodeId = backendNodeId, objectGroup = MASKING_OBJECT_GROUP).`object`
+    val call = runtime.callFunctionOn(
+        functionDeclaration = TEXT_SECURITY_FUNCTION,
+        objectId = element.objectId,
+        returnByValue = true
+    )
+    call.exceptionDetails != null || isMaskingAnswer(call.result.value)
+} catch (e: CancellationException) {
+    throw e
+} catch (_: Exception) {
+    true
+}
+
+/**
+ * Whether the page's answer to the text-security lookup — the value
+ * `getPropertyValue('-webkit-text-security')` returned — renders the control
+ * masked (see [isMaskingTextSecurity]). Anything but a string (`undefined`
+ * from a page overriding `getComputedStyle`, say) leaves the masking unknown,
+ * so it counts as masked.
+ */
+internal fun isMaskingAnswer(value: JsonElement?): Boolean =
+    if (value is JsonPrimitive && value.isString) isMaskingTextSecurity(value.content) else true
+
+private const val MASKING_OBJECT_GROUP = "markanywhere-masking"
+
+// the element's own window: a control in a frame has the frame's styles; an
+// element of a windowless (inert) document throws, which counts as masked
+private const val TEXT_SECURITY_FUNCTION =
+    "function() { return this.ownerDocument.defaultView.getComputedStyle(this).getPropertyValue('-webkit-text-security'); }"
+
+/**
  * Walks the main-frame document of [snapshot] (and, through their embedding
  * elements, every same-origin frame document it carries) into a
  * [DomEventBuilder] holding the event stream and the ref registry. Separated
  * from [capturePage] so the walk can be exercised on a hand-built snapshot.
+ *
+ * @param maskedControls asked, before the walk, which of the controls the
+ *   snapshot carries no style for render their text masked (see
+ *   [SnapshotDom.maskReadersOutsideLayout]): given their backend node ids, it
+ *   returns those of the masked ones.
  */
-internal fun captureEvents(
+internal suspend fun captureEvents(
     snapshot: DOMSnapshot.CaptureSnapshotReturn,
     axNodes: List<Accessibility.AXNode>,
     refAttribute: String?,
-    isActionable: (Accessibility.AXNode?) -> Boolean
+    isActionable: (Accessibility.AXNode?) -> Boolean,
+    maskedControls: suspend (backendNodeIds: List<Int>) -> Set<Int> = { emptySet() },
 ): DomEventBuilder {
-    val dom = SnapshotDom(snapshot)
-    val documents = mutableMapOf(0 to dom)
+    // every document up front: a control in any of them may need asking about
+    val documents = snapshot.documents.indices.map { SnapshotDom(snapshot, it) }
+    val masked = maskedControls(documents.flatMap { it.maskReadersOutsideLayout() })
+    documents.forEach { it.maskedOutsideLayout = masked }
+    val dom = documents.first()
     val builder = DomEventBuilder(
-        documents = { index ->
-            documents.getOrPut(index) { SnapshotDom(snapshot, index) }
-        },
+        documents = { index -> documents[index] },
         axIndex = buildMap {
             axNodes.forEach { node ->
                 node.backendDOMNodeId?.let {
@@ -196,6 +274,14 @@ internal class SnapshotDom(
     documentIndex: Int = 0,
 ) {
 
+    /**
+     * The backend node ids of the controls rendering their text masked though
+     * not laid out — those of [maskReadersOutsideLayout] the page reported
+     * masked when asked. Set before the walk: the snapshot reports no computed
+     * style for these, so they can only be judged once the page has answered.
+     */
+    var maskedOutsideLayout: Set<Int> = emptySet()
+
     private val strings = snapshot.strings // shared across all documents
     private val document = snapshot.documents[documentIndex]
     private val nodes = document.nodes
@@ -232,9 +318,29 @@ internal class SnapshotDom(
 
     /**
      * Computed `-webkit-text-security` per laid-out node index — a control
-     * rendering its text masked — absent = not laid out.
+     * rendering its text masked — absent = not laid out (see
+     * [maskedOutsideLayout]).
      */
     private val textSecurity: Map<Int, String> = computedStyle(TEXT_SECURITY_STYLE)
+
+    /** The laid-out node indexes — those the snapshot reports computed styles for. */
+    private val laidOut: Set<Int> = layout.nodeIndex.toSet()
+
+    /**
+     * The backend node ids of the controls whose masking the capture reads
+     * ([readsMaskedState]) but the snapshot cannot tell: it reports computed
+     * styles for laid-out nodes only, so a PIN field in a hidden wizard step or
+     * a collapsed panel comes without its `-webkit-text-security`. A control
+     * redacted whatever its masking (a password, a secret `autocomplete`) is
+     * left out, since the answer could not change its capture.
+     */
+    fun maskReadersOutsideLayout(): List<Int> = nodeType.indices.filter { index ->
+        // by name first: no <option>, say, has its attributes decoded
+        if (!isElement(index) || index in laidOut || !isRedactableElement(name(index))) return@filter false
+        val attributes = attributeMap(index)
+        readsMaskedState(name(index), attributes) &&
+                !isRedactedControl(name(index), attributes, FormControlState(masked = false))
+    }.map { backendNodeId(it) }
 
     /**
      * One computed style per laid-out node index, [slot] indexing the
@@ -445,10 +551,17 @@ internal class SnapshotDom(
 
     /**
      * Whether the control renders its text masked (see [isMaskingTextSecurity]),
-     * judged only for a control whose capture reads it ([readsMaskedState]).
+     * judged only for a control whose capture reads it ([readsMaskedState]):
+     * by its computed style when it is laid out — masked when the snapshot
+     * left that style out, its masking unknown — else as the page answered for
+     * it ([maskedOutsideLayout]). Laid out means reported in the layout tree,
+     * the criterion [maskReadersOutsideLayout] picks the controls to ask by.
      */
     private fun isMasked(index: Int, attributes: Map<String, String>): Boolean =
-        readsMaskedState(name(index), attributes) && isMaskingTextSecurity(textSecurity[index])
+        readsMaskedState(name(index), attributes) && when (index) {
+            in laidOut -> textSecurity[index]?.let(::isMaskingTextSecurity) ?: true
+            else -> backendNodeId(index) in maskedOutsideLayout
+        }
 
     /**
      * Whether the `<option>` is selected: as the snapshot reports it, else as
@@ -677,7 +790,7 @@ internal class DomEventBuilder(
     /**
      * The snapshot's documents, indexed as CDP indexes them: `[0]` is the main
      * frame and an `<iframe>`'s content document is looked up by the index its
-     * element carries. Built lazily — a page with no frames pays for one view.
+     * element carries.
      */
     private val documents: (Int) -> SnapshotDom,
     private val axIndex: Map<Int, Accessibility.AXNode>,

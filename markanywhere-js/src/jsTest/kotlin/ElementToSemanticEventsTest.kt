@@ -1097,6 +1097,31 @@ class ElementToSemanticEventsTest {
         }
     }
 
+    /**
+     * `getComputedStyle` answers for an element without a layout box too, so
+     * a masked field in a hidden wizard step is redacted like a shown one —
+     * as the CDP capture, which asks the page the same, does (issue #100).
+     */
+    @Test
+    fun `should redact a masked field that is not laid out`() = runTest {
+        // given
+        document.body!!.innerHTML = """
+            <div hidden style="-webkit-text-security: disc"><input type="text" id="pin" value="2222"></div>
+        """.trimIndent()
+
+        // when
+        val events = document.body!!.toSemanticEvents()
+
+        // then
+        events sameAs semanticEvents(tagged = true) {
+            "body" {
+                "div"("hidden" to "", "style" to "-webkit-text-security: disc") {
+                    "input"("type" to "text", "id" to "pin", REDACTED to "filled") {}
+                }
+            }
+        }
+    }
+
     @Test
     fun `should redact which option a secret select has chosen`() = runTest {
         // given - a card expiry month picked from a select
