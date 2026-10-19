@@ -17,6 +17,8 @@
 package com.xemantic.markanywhere.xml
 
 import com.xemantic.kotlin.test.assert
+import com.xemantic.kotlin.test.have
+import com.xemantic.kotlin.test.should
 import com.xemantic.markanywhere.flow.mergeAdjacentText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -27,7 +29,18 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
+import java.io.InputStream
+import java.io.Reader
+import javax.xml.stream.EventFilter
+import javax.xml.stream.StreamFilter
+import javax.xml.stream.XMLEventReader
 import javax.xml.stream.XMLInputFactory
+import javax.xml.stream.XMLReporter
+import javax.xml.stream.XMLResolver
+import javax.xml.stream.XMLStreamReader
+import javax.xml.stream.util.StreamReaderDelegate
+import javax.xml.stream.util.XMLEventAllocator
+import javax.xml.transform.Source
 import kotlin.test.Test
 import kotlin.time.Duration.Companion.seconds
 
@@ -63,6 +76,30 @@ class StaxXmlParserTest : XmlParserTest() {
     }
 
     @Test
+    fun `should not throw when the provider fails with an unchecked exception`() = runTest {
+        // given — a provider failing with an exception which is no
+        // XMLStreamException, nor caused by one, once the first element is read
+        val failing = StaxXmlParser(
+            factory = object : DelegatingXmlInputFactory() {
+                override fun createXMLStreamReader(reader: Reader): XMLStreamReader =
+                    object : StreamReaderDelegate(delegate.createXMLStreamReader(reader)) {
+                        override fun next(): Int =
+                            if (isStartElement) throw IllegalStateException("provider bug") else super.next()
+                    }
+            }
+        )
+
+        // when
+        val events = failing.parse("<a><b/></a>").toList()
+
+        // then
+        events should {
+            have(markNames() == listOf("a"))
+            have(isBalanced())
+        }
+    }
+
+    @Test
     fun `should default to the JDK StAX implementation`() {
         // when
         val factory = defaultXmlInputFactory()
@@ -71,4 +108,36 @@ class StaxXmlParserTest : XmlParserTest() {
         assert(factory.javaClass == XMLInputFactory.newDefaultFactory().javaClass)
     }
 
+}
+
+/**
+ * An [XMLInputFactory] handing everything to the JDK's own, for a test to
+ * override the one method it needs.
+ */
+private abstract class DelegatingXmlInputFactory : XMLInputFactory() {
+    val delegate: XMLInputFactory = defaultXmlInputFactory()
+    override fun createXMLStreamReader(reader: Reader): XMLStreamReader = delegate.createXMLStreamReader(reader)
+    override fun createXMLStreamReader(source: Source): XMLStreamReader = delegate.createXMLStreamReader(source)
+    override fun createXMLStreamReader(stream: InputStream): XMLStreamReader = delegate.createXMLStreamReader(stream)
+    override fun createXMLStreamReader(stream: InputStream, encoding: String?): XMLStreamReader = delegate.createXMLStreamReader(stream, encoding)
+    override fun createXMLStreamReader(systemId: String?, stream: InputStream): XMLStreamReader = delegate.createXMLStreamReader(systemId, stream)
+    override fun createXMLStreamReader(systemId: String?, reader: Reader): XMLStreamReader = delegate.createXMLStreamReader(systemId, reader)
+    override fun createXMLEventReader(reader: Reader): XMLEventReader = delegate.createXMLEventReader(reader)
+    override fun createXMLEventReader(systemId: String?, reader: Reader): XMLEventReader = delegate.createXMLEventReader(systemId, reader)
+    override fun createXMLEventReader(reader: XMLStreamReader): XMLEventReader = delegate.createXMLEventReader(reader)
+    override fun createXMLEventReader(source: Source): XMLEventReader = delegate.createXMLEventReader(source)
+    override fun createXMLEventReader(stream: InputStream): XMLEventReader = delegate.createXMLEventReader(stream)
+    override fun createXMLEventReader(stream: InputStream, encoding: String?): XMLEventReader = delegate.createXMLEventReader(stream, encoding)
+    override fun createXMLEventReader(systemId: String?, stream: InputStream): XMLEventReader = delegate.createXMLEventReader(systemId, stream)
+    override fun createFilteredReader(reader: XMLStreamReader, filter: StreamFilter): XMLStreamReader = delegate.createFilteredReader(reader, filter)
+    override fun createFilteredReader(reader: XMLEventReader, filter: EventFilter): XMLEventReader = delegate.createFilteredReader(reader, filter)
+    override fun getXMLResolver(): XMLResolver? = delegate.xmlResolver
+    override fun setXMLResolver(resolver: XMLResolver?) { delegate.xmlResolver = resolver }
+    override fun getXMLReporter(): XMLReporter? = delegate.xmlReporter
+    override fun setXMLReporter(reporter: XMLReporter?) { delegate.xmlReporter = reporter }
+    override fun setProperty(name: String, value: Any?) = delegate.setProperty(name, value)
+    override fun getProperty(name: String): Any? = delegate.getProperty(name)
+    override fun isPropertySupported(name: String): Boolean = delegate.isPropertySupported(name)
+    override fun setEventAllocator(allocator: XMLEventAllocator?) { delegate.eventAllocator = allocator }
+    override fun getEventAllocator(): XMLEventAllocator? = delegate.eventAllocator
 }

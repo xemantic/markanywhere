@@ -19,10 +19,9 @@ package com.xemantic.markanywhere.xml
 import com.xemantic.kotlin.test.have
 import com.xemantic.kotlin.test.should
 import com.xemantic.markanywhere.SemanticEvent
+import com.xemantic.markanywhere.flow.mergeAdjacentText
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.test.sameAs
-import kotlinx.coroutines.awaitCancellation
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.toList
@@ -38,28 +37,6 @@ import kotlin.test.Test
 class MarkanywhereXmlParserTest : XmlParserTest() {
 
     override val parser: XmlParser = MarkanywhereXmlParser()
-
-    @Test
-    fun `should stop reading a source which never ends once the document is malformed`() = runTest {
-        // given — a malformed document followed by a source which never ends
-        val chunks = flow {
-            emit("<a></b>")
-            awaitCancellation()
-        }
-
-        // when — the mismatched end tag ends the read, so this completes only
-        // because the parser stops asking for what it will no longer read.
-        // `StaxXmlParser` cannot: its reader blocks for characters it needs
-        // before it can even see the error, which is why this is asserted here
-        // rather than in the shared suite.
-        val events = parser.parse(chunks).toList()
-
-        // then
-        events should {
-            have(markNames() == listOf("a"))
-            have(isBalanced())
-        }
-    }
 
     @Test
     fun `should stop reading XML parsed out of another parse without disturbing it`() = runTest {
@@ -103,6 +80,45 @@ class MarkanywhereXmlParserTest : XmlParserTest() {
             +"before"
             "a" { }
             +"after"
+        }
+    }
+
+    @Test
+    fun `should keep whitespace continuing text outside any element across chunks`() = runTest {
+        // when — split right before the space, so that the chunk ending in
+        // `foo` has already flushed it when the space arrives
+        val beforeElement = parser.parse(flowOf("foo", " <a/>")).mergeAdjacentText()
+        val atEnd = parser.parse(flowOf("foo", " ")).mergeAdjacentText()
+
+        // then — the same text the document read as one chunk yields
+        beforeElement sameAs semanticEvents(tagged = true) {
+            +"foo "
+            "a" { }
+        }
+        atEnd sameAs semanticEvents(tagged = true) {
+            +"foo "
+        }
+    }
+
+    @Test
+    fun `should keep the text read before a literal character XML does not allow`() = runTest {
+        // when
+        val events = parse("<a>x\u0000y</a>")
+
+        // then
+        events sameAs semanticEvents(tagged = true) {
+            "a" { +"x" }
+        }
+    }
+
+    @Test
+    fun `should keep the right brackets read of a CDATA section cut short`() = runTest {
+        // when — the stream ends where the brackets may yet have ended the section
+        val events = parse("<a><![CDATA[x]]")
+
+        // then
+        events sameAs semanticEvents(tagged = true) {
+            "a" { +"x]]" }
         }
     }
 

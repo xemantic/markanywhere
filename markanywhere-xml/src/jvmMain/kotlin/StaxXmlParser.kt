@@ -17,6 +17,7 @@
 package com.xemantic.markanywhere.xml
 
 import com.xemantic.markanywhere.SemanticEvent
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
@@ -67,7 +68,7 @@ public class StaxXmlParser(
         chunks: Flow<String>
     ): Flow<SemanticEvent> = channelFlow {
         val source = Channel<String>(Channel.BUFFERED)
-        launch {
+        val feeder = launch {
             try {
                 chunks.collect { chunk -> source.send(chunk) }
             } finally {
@@ -80,9 +81,10 @@ public class StaxXmlParser(
                 collector.readDocument(ChannelReader(source))
             }
         } finally {
-            // Releases the feeding coroutine when the reader stopped early: its
-            // pending send fails, the collection unwinds, and only then can this
-            // channelFlow — which awaits its children — complete.
+            // Releases the feeding coroutine when the reader stopped early —
+            // whether it is suspended sending a chunk or waiting for the next
+            // one from its source — since this channelFlow awaits its children.
+            feeder.cancel()
             source.cancel()
         }
     }
@@ -132,18 +134,18 @@ public class StaxXmlParser(
                     else -> {}
                 }
             }
-        } catch (_: XMLStreamException) {
-            // Not well-formed: stop reading here. The contract forbids throwing,
-            // and the balancing below keeps the truncated stream renderable.
-        } catch (e: RuntimeException) {
-            // A provider reporting an error lazily — Woodstox's
-            // `WstxLazyException` from `getText()` — wraps it in an unchecked
-            // exception; anything else, cancellation included, is not ours.
-            if (e.cause !is XMLStreamException) throw e
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // Not well-formed — reported as an XMLStreamException, lazily
+            // wrapped in an unchecked one (Woodstox's `WstxLazyException`), or
+            // as whatever a provider throws on input it chokes on: stop reading
+            // here. The contract forbids throwing, and the balancing below
+            // keeps the truncated stream renderable.
         } finally {
             try {
                 reader?.close()
-            } catch (_: XMLStreamException) {
+            } catch (_: Exception) {
                 // Closing a reader which already failed is of no interest.
             }
         }
@@ -190,7 +192,15 @@ private class ChannelReader(
      */
     private fun awaitChunk(): String? {
         while (chunk == null) {
-            val next = runBlocking { chunks.receiveCatching() }.getOrNull() ?: return null
+            // Blocking only when no chunk is buffered yet, since every
+            // `runBlocking` sets up an event loop of its own.
+            val buffered = chunks.tryReceive()
+            val received = if (buffered.isSuccess || buffered.isClosed) {
+                buffered
+            } else {
+                runBlocking { chunks.receiveCatching() }
+            }
+            val next = received.getOrNull() ?: return null
             if (next.isNotEmpty()) {
                 chunk = next
                 position = 0
@@ -253,9 +263,12 @@ private fun XMLStreamReader.readAttributes(): Map<String, String> {
 }
 
 /**
- * The JDK's own [XMLInputFactory], configured for the [XmlParser] contract:
- * adjacent character data and CDATA sections coalesced into a single text
- * event, and every door to an external resource shut.
+ * The JDK's own [XMLInputFactory], configured for the [XmlParser] contract,
+ * with every door to an external resource shut.
+ *
+ * Text is not coalesced — the contract leaves its granularity open — because a
+ * coalescing reader discards the character data it has read when an error
+ * follows in the same text run, `text ` of `<a>text &nbsp;</a>` included.
  *
  * `newDefaultFactory`, not `newInstance`: the latter picks whichever StAX
  * provider is on the classpath (Woodstox, say, which Jackson XML brings in), and
@@ -263,7 +276,7 @@ private fun XMLStreamReader.readAttributes(): Map<String, String> {
  */
 public fun defaultXmlInputFactory(): XMLInputFactory =
     XMLInputFactory.newDefaultFactory().apply {
-        setProperty(XMLInputFactory.IS_COALESCING, true)
+        setProperty(XMLInputFactory.IS_COALESCING, false)
         setProperty(XMLInputFactory.SUPPORT_DTD, false)
         setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false)
     }

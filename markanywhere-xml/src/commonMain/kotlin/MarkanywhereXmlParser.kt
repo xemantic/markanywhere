@@ -114,6 +114,13 @@ private class XmlDocumentReader(
     private val open = ArrayDeque<String>()
 
     private val text = StringBuilder()
+
+    /**
+     * Whether the text read since the last mark or unmark holds anything but
+     * whitespace — kept apart from [text], which is flushed at every chunk end,
+     * so that whitespace continuing such text is never taken for the prolog's.
+     */
+    private var textHasContent = false
     private val elementName = StringBuilder()
     private val attributes = LinkedHashMap<String, String>()
     private val attributeName = StringBuilder()
@@ -165,6 +172,10 @@ private class XmlDocumentReader(
                 skipLineFeed = false
                 if (char == '\n') continue
             }
+            if (!char.isXmlCharacter()) {
+                stop()
+                return
+            }
             process(char)
         }
         // Whitespace outside every element is held rather than flushed: only
@@ -179,6 +190,9 @@ private class XmlDocumentReader(
      * the input was.
      */
     suspend fun closeOpenElements() {
+        // The `]` held back in a CDATA section cut short were read as content
+        // as much as anything before them.
+        if (state == CDATA) repeat(repeats) { appendText(']') }
         flushText()
         while (open.isNotEmpty()) {
             collector.emit(
@@ -195,8 +209,8 @@ private class XmlDocumentReader(
             CONTENT -> when (char) {
                 '<' -> state = MARKUP
                 '&' -> startReference(inAttribute = false)
-                '\r' -> appendLineFeed(text)
-                else -> text.append(char)
+                '\r' -> appendLineFeed()
+                else -> appendText(char)
             }
             MARKUP -> when {
                 char == '/' -> {
@@ -301,23 +315,9 @@ private class XmlDocumentReader(
                 else -> stop()
             }
             DECLARATION -> readDeclaration(char)
-            COMMENT -> when {
-                char == '-' -> repeats++
-                char == '>' && repeats >= 2 -> {
-                    repeats = 0
-                    state = CONTENT
-                }
-                else -> repeats = 0
-            }
+            COMMENT -> if (endsComment(char)) state = CONTENT
             CDATA -> readCdata(char)
-            PROCESSING_INSTRUCTION -> when {
-                char == '?' -> questionMark = true
-                char == '>' && questionMark -> {
-                    questionMark = false
-                    state = CONTENT
-                }
-                else -> questionMark = false
-            }
+            PROCESSING_INSTRUCTION -> if (endsInstruction(char)) state = CONTENT
             DOCTYPE -> readDoctype(char)
         }
     }
@@ -364,14 +364,14 @@ private class XmlDocumentReader(
         when {
             char == ']' -> repeats++
             char == '>' && repeats >= 2 -> {
-                repeat(repeats - 2) { text.append(']') }
+                repeat(repeats - 2) { appendText(']') }
                 repeats = 0
                 state = CONTENT
             }
             else -> {
-                repeat(repeats) { text.append(']') }
+                repeat(repeats) { appendText(']') }
                 repeats = 0
-                if (char == '\r') appendLineFeed(text) else text.append(char)
+                if (char == '\r') appendLineFeed() else appendText(char)
             }
         }
     }
@@ -386,18 +386,36 @@ private class XmlDocumentReader(
      */
     private fun readDoctype(char: Char) {
         when (subsetMarkup) {
-            COMMENT -> when {
-                char == '-' -> repeats++
-                char == '>' && repeats >= 2 -> subsetMarkup = NONE
-                else -> repeats = 0
-            }
-            PROCESSING_INSTRUCTION -> when {
-                char == '?' -> questionMark = true
-                char == '>' && questionMark -> subsetMarkup = NONE
-                else -> questionMark = false
-            }
+            COMMENT -> if (endsComment(char)) subsetMarkup = NONE
+            PROCESSING_INSTRUCTION -> if (endsInstruction(char)) subsetMarkup = NONE
             NONE -> readDoctypeDeclaration(char)
         }
+    }
+
+    /**
+     * Follows a comment, counting its consecutive `-` in [repeats], up to the
+     * `-->` which ends it — wherever the comment stands.
+     */
+    private fun endsComment(char: Char): Boolean {
+        when {
+            char == '-' -> repeats++
+            char == '>' && repeats >= 2 -> {
+                repeats = 0
+                return true
+            }
+            else -> repeats = 0
+        }
+        return false
+    }
+
+    /**
+     * Follows a processing instruction up to the `?>` which ends it — wherever
+     * the instruction stands.
+     */
+    private fun endsInstruction(char: Char): Boolean {
+        val ends = char == '>' && questionMark
+        questionMark = char == '?'
+        return ends
     }
 
     private fun readDoctypeDeclaration(char: Char) {
@@ -468,7 +486,7 @@ private class XmlDocumentReader(
             attributeValue.append(resolved)
             state = ATTRIBUTE_VALUE
         } else {
-            text.append(resolved)
+            resolved.forEach { appendText(it) }
             state = CONTENT
         }
     }
@@ -505,6 +523,7 @@ private class XmlDocumentReader(
         } else {
             open.addLast(name)
         }
+        textHasContent = false
         attributes.clear()
         state = CONTENT
     }
@@ -521,12 +540,18 @@ private class XmlDocumentReader(
         }
         open.removeLast()
         collector.emit(SemanticEvent.Unmark(name = name, isTagged = true))
+        textHasContent = false
         state = CONTENT
     }
 
+    private fun appendText(char: Char) {
+        text.append(char)
+        if (!char.isXmlWhitespace()) textHasContent = true
+    }
+
     /** Appends the line feed a carriage return is read as, CRLF being one. */
-    private fun appendLineFeed(target: StringBuilder) {
-        target.append('\n')
+    private fun appendLineFeed() {
+        text.append('\n')
         skipLineFeed = true
     }
 
@@ -546,7 +571,7 @@ private class XmlDocumentReader(
     }
 
     private fun isOutsideElementsWhitespace(): Boolean =
-        open.isEmpty() && text.all { it.isXmlWhitespace() }
+        open.isEmpty() && !textHasContent
 
     /** Ends the read, keeping everything understood up to this point. */
     private suspend fun stop() {
@@ -628,6 +653,15 @@ private fun isXmlCharacter(code: Int): Boolean =
         (code in 0x20..0xD7FF) ||
         (code in 0xE000..0xFFFD) ||
         (code in 0x10000..0x10FFFF)
+
+/**
+ * Whether this UTF-16 unit may stand in a document — [isXmlCharacter] judged
+ * one unit at a time, so either half of a surrogate pair is accepted, the pair
+ * encoding a character above the basic plane.
+ */
+private fun Char.isXmlCharacter(): Boolean =
+    (this == '\t') || (this == '\n') || (this == '\r') ||
+        (this in '\u0020'..'\uFFFD')
 
 private fun String.isNamespaceDeclaration(): Boolean =
     (this == "xmlns") || startsWith("xmlns:")

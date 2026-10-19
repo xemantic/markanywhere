@@ -389,14 +389,33 @@ abstract class XmlParserTest {
     }
 
     @Test
+    fun `should stop reading a source which never ends once the document is malformed`() = runTest {
+        // given — a malformed document followed by a source which never ends
+        val chunks = flow {
+            emit("<a></b>")
+            awaitCancellation()
+        }
+
+        // when — the mismatched end tag ends the read, so this completes only
+        // because the parser stops waiting for what it will no longer read
+        val events = parser.parse(chunks).toList()
+
+        // then
+        events should {
+            have(markNames() == listOf("a"))
+            have(isBalanced())
+        }
+    }
+
+    @Test
     fun `should close open marks instead of throwing on a truncated document`() = runTest {
         // when — the stream ends mid-document
         val events = parse("<a><b>text").toList()
 
         // then — the elements read before the input ran out are reported, and
         // the mark of every element left open is closed, LIFO. How much of the
-        // trailing character data survives is left to the implementation: a
-        // coalescing parser needs the end of a text run before it can report it.
+        // trailing character data survives is left to the implementation:
+        // StAX needs the end of a text run before it can report it.
         events should {
             have(markNames() == listOf("a", "b"))
             have(isBalanced())
@@ -423,10 +442,45 @@ abstract class XmlParserTest {
         // entities can be resolved
         val events = parse("<a>text &nbsp; more</a>").toList()
 
-        // then
+        // then — the text read before the reference stands
         events should {
             have(markNames() == listOf("a"))
+            have(textContent() == "text ")
             have(isBalanced())
+        }
+    }
+
+    @Test
+    fun `should stop at a literal character XML does not allow`() = runTest {
+        // given — control characters and the two noncharacters of the basic plane
+        val characters = listOf('\u0000', '\u0001', '\u000B', '\u001F', '\uFFFE', '\uFFFF')
+
+        characters.forEach { character ->
+            // when
+            val inText = parse("<a>x${character}y</a>").toList()
+            val inAttribute = parse("<a b=\"x${character}y\"/>").toList()
+
+            // then — the character is as malformed as a reference to it. How
+            // much of the text run it interrupts survives is left to the
+            // implementation: StAX fails the whole run it was scanning.
+            inText should {
+                have(markNames() == listOf("a"))
+                have(character !in textContent())
+                have(isBalanced())
+            }
+            assert(inAttribute.isEmpty())
+        }
+    }
+
+    @Test
+    fun `should read a literal character outside the basic plane`() = runTest {
+        // when — written as a surrogate pair, each half of which is no
+        // character on its own
+        val events = parse("<a b=\"😀\">😀</a>")
+
+        // then
+        events sameAs semanticEvents(tagged = true) {
+            "a"("b" to "😀") { +"😀" }
         }
     }
 
