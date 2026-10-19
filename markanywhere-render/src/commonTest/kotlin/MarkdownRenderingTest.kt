@@ -382,6 +382,117 @@ class MarkdownRenderingTest {
     }
 
     @Test
+    fun `should encode a non-ASCII punctuation char after a closer that ends in punctuation`() = runTest {
+        // given — the parser counts only ASCII punctuation for flanking, so in
+        // `**Price:**€5` the `€` is not punctuation to it and the closer does
+        // not re-parse as one (issue #93)
+        val flow = semanticEvents {
+            "p" { "strong" { +"Price:" }; +"€5" }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "**Price:**&#8364;5"
+    }
+
+    @Test
+    fun `should not encode the char after a closer that ends in non-ASCII punctuation`() = runTest {
+        // given — a closing `”` is not punctuation to the parser, so the closer
+        // after it is right-flanking whatever follows
+        val flow = semanticEvents {
+            "p" { "strong" { +"“x”" }; +"y" }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "**“x”**y"
+    }
+
+    @Test
+    fun `should write a no-break space ending a span after the closer`() = runTest {
+        // given — `**Price: **5` with a no-break space before the closer would
+        // not re-parse: a closer after Unicode whitespace is not right-flanking
+        val flow = semanticEvents {
+            "p" { "strong" { +"Price:\u00A0" }; +"5" }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "**Price:**\u00A05"
+    }
+
+    @Test
+    fun `should write a tab ending a span after the closer`() = runTest {
+        // when
+        val markdown = semanticEvents {
+            "p" { "em" { +"a\t" }; +"b" }
+        }.renderMarkdown()
+
+        // then
+        markdown sameAs "*a*\tb"
+    }
+
+    @Test
+    fun `should keep a no-break space ending a span at the paragraph end`() = runTest {
+        // when
+        val markdown = semanticEvents {
+            "p" { "strong" { +"a\u00A0" } }
+        }.renderMarkdown()
+
+        // then
+        markdown sameAs "**a**\u00A0"
+    }
+
+    @Test
+    fun `should not turn spaces held after a no-break space into a hard break`() = runTest {
+        // given — `a\u00A0  ` + soft break would write two spaces before the
+        // newline, which re-parse as a hard break
+        val flow = semanticEvents {
+            "p" { "strong" { +"a\u00A0  " }; +"\nb" }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "**a**\u00A0\nb"
+    }
+
+    @Test
+    fun `should keep a no-break space standing alone between two spans`() = runTest {
+        // given — dropping it would make the closer and the opener abut
+        val flow = semanticEvents {
+            "p" { "em" { +"a" }; +"\u00A0"; "strong" { +"b" } }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "*a*\u00A0**b**"
+    }
+
+    @Test
+    fun `should write a no-break space ending a span nested in the same span after the closer`() = runTest {
+        // given — the inner span is transparent, the outer one's closer counts
+        val flow = semanticEvents {
+            "p" { "strong" { "strong" { +"a\u00A0" } }; +"5" }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "**a**\u00A05"
+    }
+
+    @Test
     fun `should not encode the char after a closer that ends in a word char`() = runTest {
         // when
         val markdown = semanticEvents {

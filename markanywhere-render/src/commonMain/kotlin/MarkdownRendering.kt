@@ -73,6 +73,12 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
     // dropping deferred spaces never loses a break. Without this the renderer
     // leaks trailing whitespace that re-parsing strips, so a round-trip diverges.
     var pendingSpaces = 0
+    // Trailing whitespace other than ASCII spaces (NBSP, tab, any `Zs`) at the
+    // end of an emphasis span's text, held so a closer can be written before
+    // it: a closer after whitespace is not right-flanking (`**Price:\u00A0**5`).
+    // Unlike deferred spaces it is content, so a line end writes it, never
+    // drops it. Written before any spaces deferred after it.
+    var pendingWhitespace = ""
     // True when the next content begins a fresh Markdown line in a block context
     // (right after a newline or a block prefix, before any content is written).
     // At that position a leading block marker in paragraph text (`1.`, `- `,
@@ -138,10 +144,23 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
     // written on the current line, so a space between inline tokens survives
     // while a space at a line end is dropped (it is never flushed there).
     fun flushPendingSpaces() {
+        if (pendingWhitespace.isNotEmpty()) {
+            out(pendingWhitespace)
+            pendingWhitespace = ""
+        }
         if (pendingSpaces > 0) {
             out(" ".repeat(pendingSpaces))
             pendingSpaces = 0
         }
+    }
+
+    // At a line end deferred spaces are trailing and dropped, but held
+    // whitespace is content and written — without its own trailing ASCII
+    // spaces, which before the newline would re-parse as a hard break.
+    fun flushHeldWhitespaceAtLineEnd() {
+        pendingSpaces = 0
+        out(pendingWhitespace.trimEnd(' '))
+        pendingWhitespace = ""
     }
 
     // Emits the deferred space between a heading's `#`s and its first content
@@ -276,7 +295,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
     fun ensureLineStart() {
         if (!atLineStart) {
             // Deferred spaces at a line end are trailing — drop them.
-            pendingSpaces = 0
+            flushHeldWhitespaceAtLineEnd()
             out("\n")
             atLineStart = true
             freshBlockLine = true
@@ -336,7 +355,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         // a pending `<br>` lets the boundary win even mid-line (the moot-break
         // case). Without a `<br>`, mid-line content stays on the line so a run
         // of loose inline siblings (e.g. `[a] [b]`) is not split block-by-block.
-        if (boundary && (pendingHardBreak || (atLineStart && pendingSpaces == 0))) {
+        if (boundary && (pendingHardBreak || (atLineStart && pendingSpaces == 0 && pendingWhitespace.isEmpty()))) {
             ensureBlankLine() // drops a moot pendingHardBreak + deferred spaces
             // Loose inline content at a block boundary (e.g. a link directly
             // inside an unwrapped <nav>, not wrapped in a paragraph) behaves as
@@ -345,7 +364,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         } else if (pendingHardBreak) {
             // Hard line break inside the same block. Deferred trailing spaces
             // before the break are insignificant and dropped.
-            pendingSpaces = 0
+            flushHeldWhitespaceAtLineEnd()
             out("  ")
             ensureLineStart()
             pendingHardBreak = false
@@ -483,22 +502,26 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         activeDelimiterMask = mask
     }
 
-    // Writes an emphasis closing delimiter. Spaces deferred inside the span
-    // stay deferred past it: a closer after a space is not right-flanking
-    // (`**a **c`), while one before the space is (`**a** c`).
+    // Writes an emphasis closing delimiter. Whitespace deferred inside the span
+    // stays deferred past it: a closer after whitespace is not right-flanking
+    // (`**a **c`), while one before it is (`**a** c`).
     fun writeCloser(delimiter: String) {
         val spaces = pendingSpaces
+        val whitespace = pendingWhitespace
         pendingSpaces = 0
+        pendingWhitespace = ""
         writeRaw(delimiter)
         pendingSpaces = spaces
+        pendingWhitespace = whitespace
         refreshActiveDelimiters()
     }
 
     // Writes the closing delimiter held back by an emphasis unmark, given the
     // event that follows it. A closer after punctuation is right-flanking only
-    // when whitespace or punctuation follows (CommonMark §6.2), so a word char
-    // right after it (`**Price:**5`) is written as a character reference: the
-    // closer is then followed by `&`, and the text reads the same.
+    // when whitespace or punctuation follows (CommonMark §6.2), so any other
+    // char right after it (`**Price:**5`, `**Price:**€5`) is written as a
+    // character reference: the closer is then followed by `&`, and the text
+    // reads the same. Both are judged by the parser's flanking classes.
     // Returns the text still to be written for [next], or null when none of
     // it was.
     fun closePendingInline(next: SemanticEvent?): String? {
@@ -508,9 +531,9 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         writeCloser(frame.delimiter)
         closerChar = frame.delimiter[0]
         val text = (next as? Text)?.text ?: return null
-        if (pendingSpaces > 0 || !contentEnd.isMarkdownPunctuation()) return null
+        if (pendingSpaces > 0 || pendingWhitespace.isNotEmpty() || !contentEnd.isFlankPunctuation()) return null
         val first = text.firstOrNull() ?: return null
-        if (first.isWhitespace() || first.isMarkdownPunctuation()) return null
+        if (first.isFlankWhitespace() || first.isFlankPunctuation()) return null
         val pair = first.isHighSurrogate() && text.length > 1 && text[1].isLowSurrogate()
         val codePoint = if (pair) {
             0x10000 + ((first.code - 0xD800) shl 10) + (text[1].code - 0xDC00)
@@ -539,7 +562,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         when {
             nested -> blockStack.addLast(BlockFrame.Inline(""))
             // A deferred space or hard break will be written between the two.
-            closerChar == delimiter[0] && pendingSpaces == 0 && !pendingHardBreak -> {
+            closerChar == delimiter[0] && pendingSpaces == 0 && pendingWhitespace.isEmpty() && !pendingHardBreak -> {
                 writeRaw("<$name>")
                 blockStack.addLast(BlockFrame.TaggedInline())
             }
@@ -568,11 +591,39 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
             pendingSpaces = 1
             return
         }
-        pendingSpaces = 0
+        flushHeldWhitespaceAtLineEnd()
         out("\n")
         atLineStart = true
         freshBlockLine = true
         lineStartDigits = false
+    }
+
+    // The delimiter of the emphasis span enclosing the current text, looking
+    // past raw inline tags and the transparent frame of a span nested in a span
+    // of the same kind (`Inline("")`); null when no span encloses it.
+    fun enclosingSpanDelimiter(): String? {
+        for (i in blockStack.indices.reversed()) {
+            when (val frame = blockStack[i]) {
+                is TaggedInline -> continue
+                is Inline -> if (frame.delimiter.isNotEmpty()) return frame.delimiter
+                else -> return null
+            }
+        }
+        return null
+    }
+
+    // Holds the whitespace of a whitespace-only text event: ASCII spaces are
+    // deferred, other space separators held as content (see
+    // pendingWhitespace) — dropping a no-break space between two spans would
+    // make a closer and an opener abut. Tabs are structural and dropped.
+    fun holdBlankText(text: String) {
+        for (c in text) when {
+            c == ' ' -> pendingSpaces++
+            c.category == CharCategory.SPACE_SEPARATOR && !inLabel() -> {
+                pendingWhitespace += " ".repeat(pendingSpaces) + c
+                pendingSpaces = 0
+            }
+        }
     }
 
     fun emitText(rawText: String) {
@@ -595,7 +646,12 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                 // Split off the line's trailing ASCII spaces and defer them
                 // (see flushPendingSpaces / pendingSpaces): they are emitted
                 // only if real content follows on this line, dropped otherwise.
-                val contentEnd = part.indexOfLast { it != ' ' } + 1
+                // Inside an emphasis span any trailing whitespace is held, so
+                // the span's closer can precede it (see pendingWhitespace).
+                val inSpan = enclosingSpanDelimiter() != null
+                val contentEnd = if (inSpan) {
+                    part.indexOfLast { !it.isFlankWhitespace() } + 1
+                } else part.indexOfLast { it != ' ' } + 1
                 val original = part.substring(0, contentEnd)
                 if (original.isNotEmpty()) {
                     flushPendingSpaces()
@@ -622,7 +678,13 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                         content == original && original.all { it in '0'..'9' }
                     freshBlockLine = false
                 }
-                pendingSpaces += part.length - contentEnd
+                val trailing = part.substring(contentEnd)
+                if (trailing.all { it == ' ' }) {
+                    pendingSpaces += trailing.length
+                } else {
+                    pendingWhitespace += " ".repeat(pendingSpaces) + trailing
+                    pendingSpaces = 0
+                }
             }
         }
     }
@@ -919,11 +981,14 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                     // `\n` is the source newline that follows the `<br>` and is
                     // absorbed by it (the hard break renders when the next real
                     // content arrives, via beforeContent).
-                    blank && '\n' in text && !pendingHardBreak -> emitSoftBreak()
+                    blank && '\n' in text && !pendingHardBreak -> {
+                        holdBlankText(text.substringBefore('\n'))
+                        emitSoftBreak()
+                    }
                     // Mid-line whitespace with no newline: defer ASCII spaces
                     // (re-emitted before real same-line content, dropped at a
-                    // line/block boundary); tabs are structural and dropped.
-                    blank -> { for (c in text) if (c == ' ') pendingSpaces++ }
+                    // line/block boundary), hold other space separators.
+                    blank -> holdBlankText(text)
                     else -> {
                         emitText(text)
                         if (text.isNotEmpty() && !inLabel()) lastBlock = BLOCK_MARKDOWN
@@ -1299,8 +1364,10 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         flush()
     }
 
-    // A stream ending on an emphasis close (no enclosing block) still owes it.
+    // A stream ending on an emphasis close (no enclosing block) still owes it,
+    // and the whitespace held inside it.
     closePendingInline(next = null)
+    flushHeldWhitespaceAtLineEnd()
     flush()
 }
 
@@ -1603,17 +1670,21 @@ private fun emphasisDelimiter(name: String): String? = when (name) {
     else -> null
 }
 
-// CommonMark's "Unicode punctuation character" (§2.1): general category P or S.
-// Delimiter flanking is decided by it, not by ASCII punctuation alone.
-private fun Char.isMarkdownPunctuation(): Boolean = when (category) {
-    CharCategory.CONNECTOR_PUNCTUATION, CharCategory.DASH_PUNCTUATION,
-    CharCategory.START_PUNCTUATION, CharCategory.END_PUNCTUATION,
-    CharCategory.INITIAL_QUOTE_PUNCTUATION, CharCategory.FINAL_QUOTE_PUNCTUATION,
-    CharCategory.OTHER_PUNCTUATION, CharCategory.MATH_SYMBOL,
-    CharCategory.CURRENCY_SYMBOL, CharCategory.MODIFIER_SYMBOL,
-    CharCategory.OTHER_SYMBOL -> true
-    else -> false
-}
+// The parser's emphasis flanking classes (`isFlankWhitespace` / `isFlankPunct`
+// in `MarkanywhereParser.kt`), so a closer is kept only where it re-parses as
+// one (issue #93). Whitespace is CommonMark's Unicode whitespace (`Zs` plus tab,
+// line feed, form feed, carriage return) — narrower than Kotlin's
+// `isWhitespace()`, which also counts VT, U+001C–U+001F and U+2028/U+2029.
+// Punctuation is ASCII only, a GFM divergence of the parser (CommonMark counts
+// Unicode categories P and S). The two modules share no home for them, so they
+// are pinned to each other by `EmphasisDelimiterRoundTripTest` in
+// `markanywhere-html`.
+private fun Char.isFlankWhitespace(): Boolean =
+    this == '\t' || this == '\n' || this == '\u000C' || this == '\r' ||
+        category == CharCategory.SPACE_SEPARATOR
+
+private fun Char.isFlankPunctuation(): Boolean =
+    this in '!'..'/' || this in ':'..'@' || this in '['..'`' || this in '{'..'~'
 
 // The distinct delimiter base char of every inline emphasis frame, as a bit:
 // `*` (em/strong), `~` (del), `=` (mark), `^` (sup). Any other char → 0, so it
