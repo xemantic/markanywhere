@@ -1174,4 +1174,100 @@ class HtmlToMarkdownTest {
         markdown sameAs "[![$GRAPHIC_PLACEHOLDER_ALT]()](/x) [Settings](/y)"
     }
 
+    @Test
+    fun `should keep the ref of a list item and heading promoted from ARIA roles`() = runTest {
+        // given — Bing's related-search chips: a `role="list"` of focusable
+        // `role="listitem"` divs, each carrying a ref besides its link's own,
+        // next to a focusable `role="heading"` and a listbox, whose options are
+        // controls rather than list items
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "div"("role" to "heading", "aria-level" to "3", "tabindex" to "0", AccessibilityAnnotations.REF to "5") {
+                    +"Related searches"
+                }
+                "div"("role" to "list", "aria-label" to "Please use arrow keys to navigate") {
+                    "div"("role" to "listitem", "tabindex" to "0", AccessibilityAnnotations.REF to "35") {
+                        "a"("href" to "/search?q=examples", AccessibilityAnnotations.REF to "36") {
+                            "div" { "span" { +"Markdown formatting examples" } }
+                        }
+                    }
+                    "div"("role" to "listitem", "tabindex" to "0", AccessibilityAnnotations.REF to "37") {
+                        "a"("href" to "/search?q=viewers", AccessibilityAnnotations.REF to "38") {
+                            "div" { "span" { +"Free Markdown Viewer Tools" } }
+                        }
+                    }
+                }
+                "div"("role" to "listbox") {
+                    "div"("role" to "option", AccessibilityAnnotations.REF to "40") { +"Berlin Hbf" }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then — a Markdown heading or list item carries no attributes, so the
+        // promoted block's ref rides on a span around its label
+        markdown sameAs """
+            ### <span ref="5">Related searches</span>
+            
+            - <span ref="35">[Markdown formatting examples](ref:36:/search?q=examples)</span>
+            - <span ref="37">[Free Markdown Viewer Tools](ref:38:/search?q=viewers)</span>
+            
+            <div role="option" ref="40">Berlin Hbf</div>
+        """.trimIndent()
+        flowOf(markdown).parse().renderMarkdown() sameAs markdown
+    }
+
+    @Test
+    fun `should keep the ref of a list item a web component carries`() = runTest {
+        // given — a Material Web list, whose hosts carry their semantics only
+        // as a `role`; unwrapped as unknown elements, the item's ref went too
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "md-list"("role" to "list") {
+                    "md-list-item"("role" to "listitem", "tabindex" to "0", AccessibilityAnnotations.REF to "3") {
+                        +"Wi-Fi"
+                    }
+                    "md-list-item"("role" to "listitem", "tabindex" to "-1", AccessibilityAnnotations.REF to "4") {
+                        +"Bluetooth"
+                    }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then
+        markdown sameAs """
+            - <span ref="3">Wi-Fi</span>
+            - <span ref="4">Bluetooth</span>
+        """.trimIndent()
+        flowOf(markdown).parse().renderMarkdown() sameAs markdown
+    }
+
+    @Test
+    fun `should keep the ref and role of a control a web component carries`() = runTest {
+        // given — Shoelace / Fluent tabs and options: the host is the control,
+        // and its `role` is all that says what kind
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "sl-tab"("role" to "tab", "tabindex" to "0", AccessibilityAnnotations.REF to "3") { +"General" }
+                "fluent-option"("role" to "option", AccessibilityAnnotations.REF to "4") { +"Berlin" }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then
+        markdown sameAs """
+            <sl-tab role="tab" ref="3">General</sl-tab>
+            
+            <fluent-option role="option" ref="4">Berlin</fluent-option>
+        """.trimIndent()
+        flowOf(markdown).parse().renderMarkdown() sameAs markdown
+    }
+
 }

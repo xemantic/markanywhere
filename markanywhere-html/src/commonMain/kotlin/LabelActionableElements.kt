@@ -245,11 +245,6 @@ internal fun Mark.isDeclaredControl(): Boolean =
 private fun Mark.mayHoldItsName(): Boolean =
     name !in HTML_VOID_ELEMENTS && name !in NOT_CONTENT_NAMED_TAGS && !isEditable()
 
-// `role` is a token list whose first recognised token wins; the first token is
-// what every page in practice relies on.
-private fun Mark.explicitRole(): String? =
-    this["role"]?.trim()?.lowercase()?.substringBefore(' ')?.takeIf { it.isNotEmpty() }
-
 /** Whether this element is a rich-text editor, whose content is its value. */
 private fun Mark.isEditable(): Boolean =
     this["contenteditable"]?.trim()?.lowercase()?.let { it != "false" } == true
