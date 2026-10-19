@@ -16,9 +16,12 @@
 
 package com.xemantic.markanywhere.html
 
+import com.xemantic.kotlin.test.assert
+import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.dump.AccessibilityAnnotations
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.test.sameAs
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 
@@ -51,7 +54,7 @@ class SeparateUnwrappedBlocksTest {
     }
 
     @Test
-    fun `should separate the lines of uncaptured divs by their UA default display`() = runTest {
+    fun `should break the lines of uncaptured divs into paragraphs by their UA default display`() = runTest {
         // given — what Chrome leaves in a contenteditable after "Hi Paul,\nThree
         // hearts.": the first line as bare text, each later one in a `<div>`.
         // Without a captured display the UA stylesheet's `block` is assumed.
@@ -69,8 +72,9 @@ class SeparateUnwrappedBlocksTest {
         output sameAs semanticEvents(tagged = true) {
             "div"("role" to "textbox") {
                 +"Hi Paul,"
-                +" "
-                "div" { +"Three hearts." }
+                "div" {
+                    "p" { +"Three hearts." }
+                }
             }
         }
     }
@@ -164,8 +168,9 @@ class SeparateUnwrappedBlocksTest {
             "body" {
                 "input"("type" to "password", AccessibilityAnnotations.REDACTED to "filled") { }
                 "div" { +"Forgot password?" }
-                +" "
-                "div" { +"Sign up" }
+                "div" {
+                    "p" { +"Sign up" }
+                }
             }
         }
     }
@@ -226,16 +231,15 @@ class SeparateUnwrappedBlocksTest {
         // when
         val output = input.separateUnwrappedBlocks()
 
-        // then
+        // then — the content below it opens a paragraph, as after any stacked box
         output sameAs semanticEvents {
             "frontmatter" { +"Shop" }
-            +" "
-            +"Hello"
+            tag("p") { +"Hello" }
         }
     }
 
     @Test
-    fun `should separate the lines of a span the capture recorded as a block`() = runTest {
+    fun `should break the lines of a span the capture recorded as a block into paragraphs`() = runTest {
         // given — a rich editor's `<span style="display: block">` per line
         val input = semanticEvents(tagged = true) {
             "div"(AccessibilityAnnotations.DISPLAY to "block") {
@@ -251,8 +255,9 @@ class SeparateUnwrappedBlocksTest {
         output sameAs semanticEvents(tagged = true) {
             "div"(AccessibilityAnnotations.DISPLAY to "block") {
                 "span"(AccessibilityAnnotations.DISPLAY to "block") { +"Hi Paul," }
-                +" "
-                "span"(AccessibilityAnnotations.DISPLAY to "block") { +"Three hearts." }
+                "span"(AccessibilityAnnotations.DISPLAY to "block") {
+                    "p" { +"Three hearts." }
+                }
             }
         }
     }
@@ -502,11 +507,12 @@ class SeparateUnwrappedBlocksTest {
     }
 
     @Test
-    fun `should separate box content that starts with a code span before the span`() = runTest {
-        // given — issue #148: a tagged <code> is a preserve region, whose
-        // verbatim text still decides the separator in front of it
+    fun `should separate a flex item that starts with a code span before the span`() = runTest {
+        // given — issue #148 with the boxes side by side: a tagged <code> is a
+        // preserve region, whose verbatim text still decides the separator in
+        // front of it
         val input = semanticEvents(tagged = true) {
-            "section" {
+            "div"(AccessibilityAnnotations.DISPLAY to "flex") {
                 "div" { +"Pro" }
                 "div" {
                     "code" { +"teams" }
@@ -519,11 +525,40 @@ class SeparateUnwrappedBlocksTest {
 
         // then — the space lands before the marks opened since "Pro"
         output sameAs semanticEvents(tagged = true) {
-            "section" {
+            "div"(AccessibilityAnnotations.DISPLAY to "flex") {
                 "div" { +"Pro" }
                 +" "
                 "div" {
                     "code" { +"teams" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should separate box content that starts with a code span before the span`() = runTest {
+        // given — issue #148: a tagged <code> is a preserve region, whose
+        // verbatim text still decides the break in front of it
+        val input = semanticEvents(tagged = true) {
+            "section" {
+                "div" { +"Pro" }
+                "div" {
+                    "code" { +"teams" }
+                }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then — the paragraph wraps the code span, never the other way round
+        output sameAs semanticEvents(tagged = true) {
+            "section" {
+                "div" { +"Pro" }
+                "div" {
+                    "p" {
+                        "code" { +"teams" }
+                    }
                 }
             }
         }
@@ -606,5 +641,407 @@ class SeparateUnwrappedBlocksTest {
 
         // then
         output sameAs input
+    }
+
+    @Test
+    fun `should wrap the content after a stacked box boundary in a paragraph`() = runTest {
+        // given — issue #109: content of two stacked boxes, one below the other
+        val input = semanticEvents(tagged = true) {
+            "body" {
+                "div" {
+                    +"x"
+                    "div" { +"A" }
+                }
+                "div" { +"B" }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then — the first run stays as it is: the renderer separates loose
+        // text from the paragraph after it
+        output sameAs semanticEvents(tagged = true) {
+            "body" {
+                "div" {
+                    +"x"
+                    "div" { "p" { +"A" } }
+                }
+                "div" { "p" { +"B" } }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep a run of inline content in one paragraph`() = runTest {
+        // given — inline elements and a display contents wrapper inside the
+        // second box are one run of content, not boxes of their own
+        val input = semanticEvents(tagged = true) {
+            "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                "div"(AccessibilityAnnotations.DISPLAY to "block") { +"A" }
+                "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                    +"Price "
+                    "strong"(AccessibilityAnnotations.DISPLAY to "inline") { +"US" }
+                    "div"(AccessibilityAnnotations.DISPLAY to "contents") {
+                        "span"(AccessibilityAnnotations.DISPLAY to "inline") { +"$5" }
+                    }
+                    +" now"
+                }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                "div"(AccessibilityAnnotations.DISPLAY to "block") { +"A" }
+                "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                    "p" {
+                        +"Price "
+                        "strong"(AccessibilityAnnotations.DISPLAY to "inline") { +"US" }
+                        "div"(AccessibilityAnnotations.DISPLAY to "contents") {
+                            "span"(AccessibilityAnnotations.DISPLAY to "inline") { +"$5" }
+                        }
+                        +" now"
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should end a paragraph at the next stacked box`() = runTest {
+        // given — loose text between stacked boxes in one container
+        val input = semanticEvents(tagged = true) {
+            "div" {
+                "div" { +"A" }
+                +"B"
+                "div" { +"C" }
+                +"D"
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "div" {
+                "div" { +"A" }
+                "p" { +"B" }
+                "div" { "p" { +"C" } }
+                "p" { +"D" }
+            }
+        }
+    }
+
+    @Test
+    fun `should not break between stacked boxes inside side by side flex items`() = runTest {
+        // given — two flex items, each holding a block: the blocks stack inside
+        // their item, but the items themselves sit beside each other
+        val input = semanticEvents(tagged = true) {
+            "div"(AccessibilityAnnotations.DISPLAY to "flex") {
+                "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                    "div"(AccessibilityAnnotations.DISPLAY to "block") { +"3 hrs ago" }
+                }
+                "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                    "div"(AccessibilityAnnotations.DISPLAY to "block") { +"Europe" }
+                }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then — a space, as between any two flex items
+        output sameAs semanticEvents(tagged = true) {
+            "div"(AccessibilityAnnotations.DISPLAY to "flex") {
+                "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                    "div"(AccessibilityAnnotations.DISPLAY to "block") { +"3 hrs ago" }
+                }
+                +" "
+                "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                    "div"(AccessibilityAnnotations.DISPLAY to "block") { +"Europe" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should break before a flex row stacked below a block`() = runTest {
+        // given — a flex row under a headline: the row's first item is below
+        // the headline, whatever the row does inside, so the paragraph holds
+        // the whole row
+        val input = semanticEvents(tagged = true) {
+            "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                "div"(AccessibilityAnnotations.DISPLAY to "block") { +"Headline" }
+                "div"(AccessibilityAnnotations.DISPLAY to "flex") {
+                    "span"(AccessibilityAnnotations.DISPLAY to "block") { +"3 hrs ago" }
+                    "span"(AccessibilityAnnotations.DISPLAY to "block") { +"Europe" }
+                }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                "div"(AccessibilityAnnotations.DISPLAY to "block") { +"Headline" }
+                "div"(AccessibilityAnnotations.DISPLAY to "flex") {
+                    "p" {
+                        "span"(AccessibilityAnnotations.DISPLAY to "block") { +"3 hrs ago" }
+                        +" "
+                        "span"(AccessibilityAnnotations.DISPLAY to "block") { +"Europe" }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should not open a paragraph where Markdown cannot hold one`() = runTest {
+        // given — stacked boxes inside a heading, a link and a control
+        val input = semanticEvents(tagged = true) {
+            "h2" {
+                "div" { +"A" }
+                "div" { +"B" }
+            }
+            "a"("href" to "/card") {
+                "div" { +"C" }
+                "div" { +"D" }
+            }
+            "div"("role" to "button") {
+                "div" { +"E" }
+                "div" { +"F" }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then — the space separator of an unwrapped box, as before (and the
+        // one between two adjacent controls); the control, itself a stacked
+        // box below the link, gets its paragraph around it instead
+        output sameAs semanticEvents(tagged = true) {
+            "h2" {
+                "div" { +"A" }
+                +" "
+                "div" { +"B" }
+            }
+            "a"("href" to "/card") {
+                "div" { +"C" }
+                +" "
+                "div" { +"D" }
+            }
+            +" "
+            "p" {
+                "div"("role" to "button") {
+                    "div" { +"E" }
+                    +" "
+                    "div" { +"F" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should not wrap a run that turns out to hold a block`() = runTest {
+        // given — a block-wrapping link after a stacked box: a paragraph
+        // around it would put a heading inside a paragraph
+        val input = semanticEvents(tagged = true) {
+            "div" { +"A" }
+            "div" {
+                "a"("href" to "/card") {
+                    +"Live"
+                    "h2" { +"Headline" }
+                }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then — the run is left as it was, with the separator space before
+        // the marks opened since the last token
+        output sameAs semanticEvents(tagged = true) {
+            "div" { +"A" }
+            +" "
+            "div" {
+                "a"("href" to "/card") {
+                    +"Live"
+                    "h2" { +"Headline" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should break before a block after an inline block at the same level`() = runTest {
+        // given — an inline-block, then a block box: the block starts a line
+        val input = semanticEvents(tagged = true) {
+            "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                "span"(AccessibilityAnnotations.DISPLAY to "inline-block") { +"A" }
+                "div"(AccessibilityAnnotations.DISPLAY to "block") { +"B" }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                "span"(AccessibilityAnnotations.DISPLAY to "inline-block") { +"A" }
+                "div"(AccessibilityAnnotations.DISPLAY to "block") { "p" { +"B" } }
+            }
+        }
+    }
+
+    @Test
+    fun `should not wrap a description list in a paragraph`() = runTest {
+        // given — a `<dl>` reached through a `display: contents` wrapper, after
+        // a block: `simplifyHtml` keeps the list, which a paragraph cannot hold
+        val input = semanticEvents(tagged = true) {
+            "body" {
+                "div" { +"X" }
+                "div"(AccessibilityAnnotations.DISPLAY to "contents") {
+                    "span"(AccessibilityAnnotations.DISPLAY to "inline") {
+                        "dl" {
+                            "dt" { +"Term" }
+                            "dd" { +"Definition" }
+                        }
+                    }
+                }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks().toList()
+
+        // then
+        assert(output.none { it is SemanticEvent.Mark && it.name == "p" })
+    }
+
+    @Test
+    fun `should open the paragraph after a stacked box before the formatting its text starts with`() = runTest {
+        // given — the second box's content opens in a <b>
+        val input = semanticEvents(tagged = true) {
+            "body" {
+                "div" { +"X" }
+                "div" {
+                    "b" { +"A" }
+                }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then — the paragraph wraps the <b>
+        output sameAs semanticEvents(tagged = true) {
+            "body" {
+                "div" { +"X" }
+                "div" {
+                    "p" {
+                        "b" { +"A" }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should open the paragraph around formatting that wraps a stacked box`() = runTest {
+        // given — the <b> opens before the stacked box, so it is held with the
+        // run, and a paragraph cannot open inside a kept inline element
+        val input = semanticEvents(tagged = true) {
+            "body" {
+                "div" { +"X" }
+                "b" {
+                    "div" { +"A" }
+                }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then — the paragraph opens before the <b>, at the nearest ancestor
+        // that can hold it
+        output sameAs semanticEvents(tagged = true) {
+            "body" {
+                "div" { +"X" }
+                "p" {
+                    "b" {
+                        "div" { +"A" }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should restore the separator before the formatting of a run a paragraph cannot wrap`() = runTest {
+        // given — a stacked box whose content opens in a link and an <em>, the
+        // link turning out to wrap a block
+        val input = semanticEvents(tagged = true) {
+            "body" {
+                "div" { +"X" }
+                "div" {
+                    "a"("href" to "/card") {
+                        "em" { +"A" }
+                        "h2" { +"B" }
+                    }
+                }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then — the space is back before every mark held since "X"
+        output sameAs semanticEvents(tagged = true) {
+            "body" {
+                "div" { +"X" }
+                +" "
+                "div" {
+                    "a"("href" to "/card") {
+                        "em" { +"A" }
+                        "h2" { +"B" }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should separate a flex item that starts with emphasis before the emphasis`() = runTest {
+        // given
+        val input = semanticEvents(tagged = true) {
+            "div"(AccessibilityAnnotations.DISPLAY to "flex") {
+                "div"(AccessibilityAnnotations.DISPLAY to "block") { +"a" }
+                "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                    "em"(AccessibilityAnnotations.DISPLAY to "inline") { +"b" }
+                }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "div"(AccessibilityAnnotations.DISPLAY to "flex") {
+                "div"(AccessibilityAnnotations.DISPLAY to "block") { +"a" }
+                +" "
+                "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                    "em"(AccessibilityAnnotations.DISPLAY to "inline") { +"b" }
+                }
+            }
+        }
     }
 }

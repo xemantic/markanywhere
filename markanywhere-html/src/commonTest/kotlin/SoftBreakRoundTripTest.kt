@@ -57,7 +57,9 @@ class SoftBreakRoundTripTest {
 
     @Test
     fun `should round-trip an image followed by a paragraph`() = runTest {
-        assertFixpoint("![](x.gif)\nAfter") {
+        // An image directly in the body and the paragraph after it are two
+        // blocks, so they stay apart (not a soft break joining one paragraph).
+        assertFixpoint("![](x.gif)\n\nAfter") {
             "img"("src" to "x.gif") {}
             "p" { +"After" }
         }
@@ -65,7 +67,7 @@ class SoftBreakRoundTripTest {
 
     @Test
     fun `should round-trip loose text followed by a paragraph`() = runTest {
-        assertFixpoint("Loose\nAfter") {
+        assertFixpoint("Loose\n\nAfter") {
             +"Loose"
             "p" { +"After" }
         }
@@ -74,9 +76,9 @@ class SoftBreakRoundTripTest {
     @Test
     fun `should round-trip an image hard break then a paragraph`() = runTest {
         // The reviewer's original repro shape: a moot `<br>` before a following
-        // block. The break is dropped (block boundary), and the soft break the
-        // re-parse introduces between the image and the text is preserved.
-        assertFixpoint("![](x.gif)\nAfter") {
+        // block. The break is dropped (block boundary), and the paragraph
+        // stays a block of its own.
+        assertFixpoint("![](x.gif)\n\nAfter") {
             "img"("src" to "x.gif") {}
             "br" {}
             "p" { +"After" }

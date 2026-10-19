@@ -922,6 +922,11 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                         // indented continuation, the same shape a second `p`
                         // in an item takes (see the two-paragraph item test).
                         if (parent is BlockFrame.ListItem && !atLineStart && !inLabel()) ensureLineStart()
+                        // Loose inline text still open on the current line is a
+                        // block of its own (`A<p>B</p>` is two blocks in HTML), so
+                        // the paragraph needs a blank line, not the bare newline
+                        // that re-parses as a soft break inside one paragraph.
+                        else if (!atLineStart && !inLabel()) pendingBlockSeparator = true
                         // Defer startBlock() until the first real content (see
                         // pendingParagraph): an empty paragraph then emits nothing.
                         pendingParagraph = true

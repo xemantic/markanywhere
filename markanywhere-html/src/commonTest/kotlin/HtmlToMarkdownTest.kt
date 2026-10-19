@@ -501,6 +501,187 @@ class HtmlToMarkdownTest {
     }
 
     @Test
+    fun `should separate the content of stacked divs into paragraphs`() = runTest {
+        // given — the reproduction of issue #109, uncaptured, so every `<div>`
+        // is the block box of the UA stylesheet
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "h2" { +"siblings" }
+                "div" { +"A" }
+                "div" { +"B" }
+                "h2" { +"nested end, then sibling" }
+                "div" {
+                    +"x"
+                    "div" { +"A" }
+                }
+                "div" { +"B" }
+                "h2" { +"nested only child, then sibling" }
+                "div" { "div" { +"A" } }
+                "div" { +"B" }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            ## siblings
+            
+            A
+            
+            B
+            
+            ## nested end, then sibling
+            
+            x
+            
+            A
+            
+            B
+            
+            ## nested only child, then sibling
+            
+            A
+            
+            B
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should break around a formatting element displayed as a block`() = runTest {
+        // given — Bootstrap's `.d-block` on a `<strong>`: a paragraph inside it
+        // would leave a raw `<strong>` wrapping a block, so it goes around it
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "div"(AccessibilityAnnotations.DISPLAY to "block") { +"X" }
+                "strong"(AccessibilityAnnotations.DISPLAY to "block") { +"A" }
+                "div"(AccessibilityAnnotations.DISPLAY to "block") { +"Y" }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+        val roundTripped = flowOf(markdown).parse().renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            X
+            
+            **A**
+            
+            Y
+        """.trimIndent()
+        roundTripped sameAsMarkdown markdown
+    }
+
+    @Test
+    fun `should break before a link wrapping stacked boxes`() = runTest {
+        // given — a card link around two block boxes, below a block
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "div" { +"X" }
+                "a"("href" to "u") {
+                    "div" { +"A" }
+                    "div" { +"B" }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then — the link is a paragraph of its own, its label one line
+        markdown sameAsMarkdown """
+            X
+            
+            [A B](u)
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should break between links displayed as blocks`() = runTest {
+        // given — a nav of block-level links
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "div"(AccessibilityAnnotations.DISPLAY to "block") { +"X" }
+                "a"("href" to "u", AccessibilityAnnotations.DISPLAY to "block") { +"A" }
+                "a"("href" to "v", AccessibilityAnnotations.DISPLAY to "block") { +"B" }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            X
+            
+            [A](u)
+            
+            [B](v)
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should keep the cells of a CSS table row on one line`() = runTest {
+        // given — a table laid out by CSS on divs, not a data table
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "div"(AccessibilityAnnotations.DISPLAY to "table") {
+                    "div"(AccessibilityAnnotations.DISPLAY to "table-row") {
+                        "div"(AccessibilityAnnotations.DISPLAY to "table-cell") { +"Name:" }
+                        "div"(AccessibilityAnnotations.DISPLAY to "table-cell") { +"Alice" }
+                    }
+                    "div"(AccessibilityAnnotations.DISPLAY to "table-row") {
+                        "div"(AccessibilityAnnotations.DISPLAY to "table-cell") { +"Age:" }
+                        "div"(AccessibilityAnnotations.DISPLAY to "table-cell") { +"30" }
+                    }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then — one line per row
+        markdown sameAsMarkdown """
+            Name: Alice
+            
+            Age: 30
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should keep the items of a flex row on one line`() = runTest {
+        // given — the BBC card metadata: blockified flex items, laid out side
+        // by side, each holding a block of its own
+        val page = semanticEvents(tagged = true) {
+            "body"(AccessibilityAnnotations.DISPLAY to "block") {
+                "div"(AccessibilityAnnotations.DISPLAY to "block") { +"Headline" }
+                "div"(AccessibilityAnnotations.DISPLAY to "flex") {
+                    "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                        "div"(AccessibilityAnnotations.DISPLAY to "block") { +"3 hrs ago" }
+                    }
+                    "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                        "div"(AccessibilityAnnotations.DISPLAY to "block") { +"Europe" }
+                    }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then — the row is below the headline, its items beside each other
+        markdown sameAsMarkdown """
+            Headline
+            
+            3 hrs ago Europe
+        """.trimIndent()
+    }
+
+    @Test
     fun `should render a menu as a tag around a Markdown list`() = runTest {
         // given — unwrapping `<menu>` left its items with no list, which the
         // renderer could not emit at all (it failed the whole document).
@@ -586,7 +767,7 @@ class HtmlToMarkdownTest {
     }
 
     @Test
-    fun `should separate the boxes of a section when the second starts with emphasis`() = runTest {
+    fun `should break the boxes of a section into paragraphs when the second starts with emphasis`() = runTest {
         // given — issue #148: a captured section whose second block box opens
         // with markup simplifyHtml keeps
         val page = semanticEvents(tagged = true) {
@@ -608,7 +789,9 @@ class HtmlToMarkdownTest {
         markdown sameAsMarkdown """
             <section>
             
-            Pro *teams*
+            Pro
+            
+            *teams*
             
             </section>
         """.trimIndent()
@@ -616,9 +799,9 @@ class HtmlToMarkdownTest {
     }
 
     @Test
-    fun `should separate the boxes of a section when the second starts with code`() = runTest {
+    fun `should break the boxes of a section into paragraphs when the second starts with code`() = runTest {
         // given — issue #148: the code span is a preserve region, whose text
-        // still decides the separator before it
+        // still decides the break before it
         val page = semanticEvents(tagged = true) {
             "body" {
                 "section"(AccessibilityAnnotations.DISPLAY to "block") {
@@ -638,7 +821,9 @@ class HtmlToMarkdownTest {
         markdown sameAsMarkdown """
             <section>
             
-            Pro `teams`
+            Pro
+            
+            `teams`
             
             </section>
         """.trimIndent()
@@ -646,7 +831,7 @@ class HtmlToMarkdownTest {
     }
 
     @Test
-    fun `should separate the boxes of a section when the second starts with bold code`() = runTest {
+    fun `should break the boxes of a section into paragraphs when the second starts with bold code`() = runTest {
         // given — issue #148: the code span nested in a kept <b>
         val page = semanticEvents(tagged = true) {
             "body" {
@@ -669,7 +854,9 @@ class HtmlToMarkdownTest {
         markdown sameAsMarkdown """
             <section>
             
-            Pro **`teams`**
+            Pro
+            
+            **`teams`**
             
             </section>
         """.trimIndent()
@@ -1294,8 +1481,13 @@ class HtmlToMarkdownTest {
         val markdown = page.transformHtmlToMarkdown().renderMarkdown()
 
         // then — no bullets and no heading, yet the boxes still separate the
-        // items' content
-        markdown sameAs "[News](/news) [Sport](/sport) Today"
+        // items' content: the flex items by a space, the demoted heading's
+        // stacked block below them by a paragraph break (#109)
+        markdown sameAs """
+            [News](/news) [Sport](/sport)
+
+            Today
+        """.trimIndent()
     }
 
 
@@ -1407,6 +1599,55 @@ class HtmlToMarkdownTest {
             
             </button>
         """.trimIndent()
+    }
+
+    @Test
+    fun `should break before a stacked block whose text starts with bold`() = runTest {
+        // given — issue #109 meets #96: the paragraph after the stacked box
+        // opens before the <b> its text starts with
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "div"(AccessibilityAnnotations.DISPLAY to "block") { +"X" }
+                "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                    "b"(AccessibilityAnnotations.DISPLAY to "inline") { +"A" }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown(refMode = RefMode.STRIP).renderMarkdown()
+        val reRendered = flowOf(markdown).parse().renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            X
+            
+            **A**
+        """.trimIndent()
+        reRendered sameAs markdown
+    }
+
+    @Test
+    fun `should separate a flex item whose text starts with emphasis`() = runTest {
+        // given — side-by-side boxes keep the space, written before the <em>
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "div"(AccessibilityAnnotations.DISPLAY to "flex") {
+                    "div"(AccessibilityAnnotations.DISPLAY to "block") { +"a" }
+                    "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                        "em"(AccessibilityAnnotations.DISPLAY to "inline") { +"b" }
+                    }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown(refMode = RefMode.STRIP).renderMarkdown()
+        val reRendered = flowOf(markdown).parse().renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown "a *b*"
+        reRendered sameAs markdown
     }
 
 }

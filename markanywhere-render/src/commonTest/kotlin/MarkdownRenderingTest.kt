@@ -2803,6 +2803,51 @@ class MarkdownRenderingTest {
         """.trimIndent()
     }
 
+    @Test
+    fun `should separate a paragraph from preceding loose text on the same line`() = runTest {
+        // given — loose text at the start of the document, then a paragraph:
+        // two blocks in HTML (`A<p>B</p>`), so they must not share a paragraph
+        val flow = semanticEvents {
+            +"A"
+            "p" { +"B" }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then — a blank line, not the soft break that re-parses as `A B`
+        markdown sameAs """
+            A
+
+            B
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should separate a paragraph from preceding loose text inside a block tag`() = runTest {
+        // given — the same shape one level down, inside a raw block tag
+        val flow = semanticEvents {
+            tag("section") {
+                +"A"
+                "p" { +"B" }
+            }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs """
+            <section>
+
+            A
+
+            B
+
+            </section>
+        """.trimIndent()
+    }
+
     // Combined document
 
     @Test
