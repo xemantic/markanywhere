@@ -1677,4 +1677,360 @@ class ApplyAccessibilityTest {
         }
     }
 
+
+    // --- presentational roles (issue #50) --------------------------------
+
+    @Test
+    fun `should demote a heading with a presentation role to a generic container`() = runTest {
+        // given — a heading used only for its styling
+        val input = semanticEvents(tagged = true) {
+            "h2"("role" to "presentation", "id" to "promo", AccessibilityAnnotations.DISPLAY to "block") {
+                +"Free shipping"
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then the semantics are gone, the box (and its display) stays, and the
+        // consumed role does not leak downstream
+        output sameAs semanticEvents(tagged = true) {
+            "div"("id" to "promo", AccessibilityAnnotations.DISPLAY to "block") {
+                +"Free shipping"
+            }
+        }
+    }
+
+    @Test
+    fun `should demote a landmark with the none role`() = runTest {
+        // given — `none` is a synonym of `presentation`, read case-insensitively
+        // from the first token of the role list
+        val input = semanticEvents(tagged = true) {
+            "nav"("role" to " NONE navigation") {
+                "a"("href" to "/home") { +"Home" }
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "div" {
+                "a"("href" to "/home") { +"Home" }
+            }
+        }
+    }
+
+    @Test
+    fun `should demote the items of a presentational list too`() = runTest {
+        // given — a list's items are its required owned elements, so they
+        // inherit its presentational role
+        val input = semanticEvents(tagged = true) {
+            "ul"("role" to "presentation", AccessibilityAnnotations.DISPLAY to "flex") {
+                "li"(AccessibilityAnnotations.DISPLAY to "block") {
+                    "a"("href" to "/a") { +"A" }
+                }
+                "li"(AccessibilityAnnotations.DISPLAY to "block") {
+                    "a"("href" to "/b") { +"B" }
+                }
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "div"(AccessibilityAnnotations.DISPLAY to "flex") {
+                "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                    "a"("href" to "/a") { +"A" }
+                }
+                "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                    "a"("href" to "/b") { +"B" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep a list nested in an item of a presentational list`() = runTest {
+        // given — the inheritance stops at the nearest list: a nested list owns
+        // its own items, and an item with an explicit role does not inherit
+        val input = semanticEvents(tagged = true) {
+            "ol"("role" to "none") {
+                "li" {
+                    +"Menu"
+                    "ul" {
+                        "li" { +"Sub" }
+                    }
+                }
+                "li"("role" to "separator") { }
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "div" {
+                "div" {
+                    +"Menu"
+                    "ul" {
+                        "li" { +"Sub" }
+                    }
+                }
+                "li"("role" to "separator") { }
+            }
+        }
+    }
+
+    @Test
+    fun `should demote the terms and definitions of a presentational description list`() = runTest {
+        // given
+        val input = semanticEvents(tagged = true) {
+            "dl"("role" to "presentation") {
+                "div" {
+                    "dt" { +"Price" }
+                    "dd" { +"5" }
+                }
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then the wrapper between the list and its items does not stop the
+        // inheritance — both deliberate choices, not WAI-ARIA: Blink inherits
+        // a presentational role from the direct parent only, and `dt`/`dd`
+        // are not required owned elements; demoting them keeps a demoted
+        // list from leaving items Markdown cannot render outside it
+        output sameAs semanticEvents(tagged = true) {
+            "div" {
+                "div" {
+                    "div" { +"Price" }
+                    "div" { +"5" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should ignore a presentation role on an item of a list keeping its role`() = runTest {
+        // given — demoting the item alone would leave list content outside any
+        // item, which Markdown cannot express
+        val input = semanticEvents(tagged = true) {
+            "ul" {
+                "li"("role" to "presentation") { +"A" }
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then the ignored role is gone, so nothing downstream honours it
+        output sameAs semanticEvents(tagged = true) {
+            "ul" {
+                "li" { +"A" }
+            }
+        }
+    }
+
+    @Test
+    fun `should ignore a presentation role on a focusable element`() = runTest {
+        // given — ARIA presentational role conflict resolution: a focusable
+        // element keeps its implicit role
+        val input = semanticEvents(tagged = true) {
+            "h2"("role" to "presentation", "tabindex" to "-1") { +"Title" }
+            "button"("role" to "presentation") { +"Buy" }
+            "section"("role" to "none", AccessibilityAnnotations.REF to "7") { +"Card" }
+            "p"("role" to "none", "contenteditable" to "") { +"Edit me" }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then each keeps its implicit role: the ignored role is gone, so
+        // nothing downstream honours it
+        output sameAs semanticEvents(tagged = true) {
+            "h2"("tabindex" to "-1") { +"Title" }
+            "button" { +"Buy" }
+            "section"(AccessibilityAnnotations.REF to "7") { +"Card" }
+            "p"("contenteditable" to "") { +"Edit me" }
+        }
+    }
+
+    @Test
+    fun `should ignore a presentation role on an element with a global ARIA attribute`() = runTest {
+        // given — a global ARIA attribute also undoes the presentational role,
+        // and a list that keeps its role keeps its items as well
+        val input = semanticEvents(tagged = true) {
+            "ul"("role" to "presentation", "aria-label" to "Sections") {
+                "li" { +"A" }
+            }
+            "h3"("role" to "none", "aria-describedby" to "hint") { +"Title" }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "ul"("aria-label" to "Sections") {
+                "li" { +"A" }
+            }
+            "h3"("aria-describedby" to "hint") { +"Title" }
+        }
+    }
+
+    @Test
+    fun `should keep an inherited item focusable within a presentational list`() = runTest {
+        // given — conflict resolution applies to an inherited role too
+        val input = semanticEvents(tagged = true) {
+            "ul"("role" to "presentation") {
+                "li"("tabindex" to "0") { +"A" }
+                "li" { +"B" }
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "div" {
+                "li"("tabindex" to "0") { +"A" }
+                "div" { +"B" }
+            }
+        }
+    }
+
+    @Test
+    fun `should not demote an element for a generic role`() = runTest {
+        // given — only an explicit presentation or none removes semantics;
+        // generic is every div and span, and a stray one is no such signal
+        val input = semanticEvents(tagged = true) {
+            "h2"("role" to "generic") { +"Title" }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "h2"("role" to "generic") { +"Title" }
+        }
+    }
+
+    @Test
+    fun `should unwrap a presentational table carrying no role annotation`() = runTest {
+        // given — a stream never captured (or by a producer recording no
+        // computed role) still says what the author meant
+        val input = semanticEvents(tagged = true) {
+            "table"("role" to "presentation") {
+                "tr" {
+                    "td" { +"A" }
+                    "td" { +"B" }
+                }
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            +"A"
+            +" "
+            +"B"
+            +" "
+        }
+    }
+
+    @Test
+    fun `should prefer the computed role of a table over its presentation role`() = runTest {
+        // given — Blink resolved the conflict (here a focusable table) itself
+        val input = semanticEvents(tagged = true) {
+            "table"("role" to "presentation", AccessibilityAnnotations.ROLE to "table") {
+                "tr" { "td" { +"A" } }
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "table" {
+                "tr" { "td" { +"A" } }
+            }
+        }
+    }
+
+    @Test
+    fun `should demote a presentational list inside an unwrapped layout table`() = runTest {
+        // given — the verdict belongs to the element, wherever it sits
+        val input = semanticEvents(tagged = true) {
+            "table"(AccessibilityAnnotations.ROLE to "LayoutTable") {
+                "tr" {
+                    "td" {
+                        "ul"("role" to "none") { "li" { +"A" } }
+                    }
+                }
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "div" { "div" { +"A" } }
+            +" "
+        }
+    }
+
+
+    @Test
+    fun `should parse tabindex and contenteditable as HTML does`() = runTest {
+        // given — a tabindex is read by its leading integer, and an invalid
+        // contenteditable value is the inherit state, not an editing host
+        val input = semanticEvents(tagged = true) {
+            "h2"("role" to "none", "tabindex" to " 1.5") { +"Focusable" }
+            "h2"("role" to "none", "tabindex" to "x1") { +"Not focusable" }
+            "p"("role" to "none", "contenteditable" to "PLAINTEXT-ONLY") { +"Editable" }
+            "p"("role" to "none", "contenteditable" to "foo") { +"Inherits" }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "h2"("tabindex" to " 1.5") { +"Focusable" }
+            "div"("tabindex" to "x1") { +"Not focusable" }
+            "p"("contenteditable" to "PLAINTEXT-ONLY") { +"Editable" }
+            "div"("contenteditable" to "foo") { +"Inherits" }
+        }
+    }
+
+    @Test
+    fun `should ignore a presentation role on an element with a braille ARIA attribute`() = runTest {
+        // given
+        val input = semanticEvents(tagged = true) {
+            "h2"("role" to "none", "aria-braillelabel" to "T") { +"Title" }
+            "nav"("role" to "none", "aria-brailleroledescription" to "menu") { +"Menu" }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "h2"("aria-braillelabel" to "T") { +"Title" }
+            "nav"("aria-brailleroledescription" to "menu") { +"Menu" }
+        }
+    }
+
 }

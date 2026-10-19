@@ -1270,4 +1270,143 @@ class HtmlToMarkdownTest {
         flowOf(markdown).parse().renderMarkdown() sameAs markdown
     }
 
+
+    @Test
+    fun `should render a presentational list and heading as plain content`() = runTest {
+        // given — a captured navigation bar laid out with a list whose role
+        // the author removed, with no whitespace between its items, and a
+        // heading used only for its styling
+        val page = semanticEvents(tagged = true) {
+            "body"(AccessibilityAnnotations.DISPLAY to "block") {
+                "ul"("role" to "presentation", AccessibilityAnnotations.DISPLAY to "flex") {
+                    "li"(AccessibilityAnnotations.DISPLAY to "block") {
+                        "a"("href" to "/news", AccessibilityAnnotations.DISPLAY to "inline") { +"News" }
+                    }
+                    "li"(AccessibilityAnnotations.DISPLAY to "block") {
+                        "a"("href" to "/sport", AccessibilityAnnotations.DISPLAY to "inline") { +"Sport" }
+                    }
+                }
+                "h2"("role" to "none", AccessibilityAnnotations.DISPLAY to "block") { +"Today" }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then — no bullets and no heading, yet the boxes still separate the
+        // items' content
+        markdown sameAs "[News](/news) [Sport](/sport) Today"
+    }
+
+
+    @Test
+    fun `should keep a heading whose presentation role a global ARIA attribute undoes`() = runTest {
+        // given — conflict resolution keeps the heading's implicit role, which
+        // must survive simplifyHtml as well
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "span" { +"pre" }
+                "h2"("role" to "none", "aria-label" to "T") { +"Title" }
+                "span" { +"post" }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then
+        markdown sameAs """
+            pre
+            ## Title
+            
+            post
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should keep the items of a list keeping its role despite their presentation role`() = runTest {
+        // given — the items alone cannot drop their role while the list keeps
+        // its own
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "ul"("style" to "display: flex") {
+                    "li"("role" to "presentation") { "a"("href" to "/n") { +"News" } }
+                    "li"("role" to "presentation") { "a"("href" to "/s") { +"Sport" } }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then
+        markdown sameAs """
+            - [News](/n)
+            - [Sport](/s)
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should keep a presentational item beside a plain one in a list`() = runTest {
+        // given
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "ul" {
+                    "li"("role" to "presentation") { +"A" }
+                    "li" { +"B" }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then
+        markdown sameAs """
+            - A
+            - B
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should keep a presentational term of a description list keeping its role`() = runTest {
+        // given
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "dl" {
+                    "dt"("role" to "presentation") { +"Price" }
+                    "dd" { +"5" }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then
+        markdown sameAs "<dl><dt>Price</dt><dd>5</dd></dl>"
+    }
+
+    @Test
+    fun `should keep a button whose presentation role its focusability undoes`() = runTest {
+        // given — a natively focusable control keeps its role
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "button"("role" to "presentation") { +"Buy" }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then
+        markdown sameAs """
+            <button>
+            
+            Buy
+            
+            </button>
+        """.trimIndent()
+    }
+
 }

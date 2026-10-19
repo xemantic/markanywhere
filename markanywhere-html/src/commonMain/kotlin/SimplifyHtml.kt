@@ -464,8 +464,11 @@ private fun Flow<SemanticEvent>.simplifyHtmlRules(
     // `presentation`/`none` is the exception: it strips an element's *own*
     // semantics on purpose, so it applies to any element (e.g. a layout
     // `<table role="presentation">`), promoted by a caller keep-attribute like
-    // the generic-container rule is.
-    match({ name !in DROPPED_TAGS && explicitRole() in PRESENTATION_ROLES }) { event ->
+    // the generic-container rule is — unless ARIA's conflict resolution keeps
+    // the element's implicit role (focusable, or a global ARIA attribute), the
+    // same verdict `applyAccessibility` reaches (which, in the pipeline, has
+    // already resolved every such role before this rule sees the element).
+    match({ name !in DROPPED_TAGS && hasPresentationalRole() }) { event ->
         val kept = extraKept(event)
         if (promotes(kept)) preserve(event.name, kept) { children() }
         else children()
@@ -701,9 +704,6 @@ private val DROPPED_TAGS = setOf(
 // (`rt`) and the parenthesis fallback (`rp`). Preserved as inline raw HTML —
 // see the matcher for why flattening is not an option.
 private val RUBY_TAGS = setOf("ruby", "rt", "rp")
-
-// `role` values that strip an element's semantics while keeping its children.
-private val PRESENTATION_ROLES = setOf("presentation", "none")
 
 // ARIA roles promoted to the equivalent semantic tag (straight rename, children
 // preserved). `heading`, `img`, `separator`, and `presentation`/`none` are
