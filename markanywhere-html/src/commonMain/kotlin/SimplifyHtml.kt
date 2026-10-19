@@ -257,12 +257,10 @@ private fun Flow<SemanticEvent>.simplifyHtmlRules(
 
     // Whether the keep-attributes of an element that would be unwrapped
     // promote it to a preserved wrapper, so an attribute the caller asked for
-    // (e.g. a `golemId` correlation id) is not lost with the tag. The display
-    // annotation alone never does: it is downstream whitespace metadata the
-    // capture records on every element, not content, and it is no longer
-    // needed once the element is gone.
-    fun promotes(kept: Map<String, String>): Boolean =
-        kept.keys.any { it != AccessibilityAnnotations.DISPLAY }
+    // (e.g. a `golemId` correlation id) is not lost with the tag. A
+    // contentless annotation alone never does (see [CONTENTLESS_ANNOTATIONS]):
+    // it is no longer needed once the element is gone.
+    fun promotes(kept: Map<String, String>): Boolean = kept.carriesContentAttribute()
 
     // --- aria-hidden subtree drop (must win over every other matcher) ---
 
@@ -759,6 +757,26 @@ internal val FRAME_TAGS = setOf("iframe", "frame", "object")
 // through `preserveAttrs`.
 internal val CAPTURE_ANNOTATIONS = AccessibilityAnnotations.ALL +
         AccessibilityAnnotations.REF + AccessibilityAnnotations.REDACTED
+
+/**
+ * The annotations that carry no content of the element they sit on: downstream
+ * layout metadata ([AccessibilityAnnotations.DISPLAY] — the whitespace and
+ * box-separation operators read it, the capture records it on every element)
+ * rather than something a reader of the output needs. Alone they neither
+ * promote an unwrapped wrapper to a preserved one ([simplifyHtml]) nor stop
+ * Markdown from expressing an emphasis element ([expressEmphasisInMarkdown]) —
+ * both ask [carriesContentAttribute], so the two cannot drift when an
+ * annotation joins this set.
+ */
+internal val CONTENTLESS_ANNOTATIONS: Set<String> = setOf(AccessibilityAnnotations.DISPLAY)
+
+/**
+ * Whether these attributes hold one that is content — anything but the
+ * [CONTENTLESS_ANNOTATIONS] — and so must survive in the output: a caller
+ * keep-attribute, an actionable ref, an `id`.
+ */
+internal fun Map<String, String>.carriesContentAttribute(): Boolean =
+    keys.any { it !in CONTENTLESS_ANNOTATIONS }
 
 // The annotations only the CDP capture writes. [AccessibilityAnnotations.REDACTED]
 // is not one of them: the in-page JS walker writes it too (the two producers

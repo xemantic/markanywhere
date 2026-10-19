@@ -17,7 +17,6 @@
 package com.xemantic.markanywhere.html
 
 import com.xemantic.markanywhere.SemanticEvent
-import com.xemantic.markanywhere.dump.AccessibilityAnnotations
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 
@@ -34,8 +33,8 @@ import kotlinx.coroutines.flow.flow
  * - its subtree holds **block content** ([LINK_BLOCK_CONTENT_TAGS]) — Markdown
  *   emphasis cannot span blocks, and its delimiters would be left on lines of
  *   their own, while a raw tag can wrap them;
- * - it carries a **kept attribute** other than the transient
- *   [AccessibilityAnnotations.DISPLAY] — Markdown emphasis has no syntax for
+ * - it carries a **kept attribute** other than the contentless ones
+ *   ([CONTENTLESS_ANNOTATIONS]) — Markdown emphasis has no syntax for
  *   attributes, so the actionable ref of a clickable `<b>` would be lost;
  * - it sits **inside code** (`pre` / `code`), where delimiters would read as
  *   part of the code, so a `b` stays the tag it is.
@@ -122,7 +121,7 @@ private fun SemanticEvent.Mark.isEmphasis(): Boolean =
     if (isTagged) name in MARKDOWN_EMPHASIS_EQUIVALENTS else name in MARKDOWN_EMPHASIS
 
 private fun SemanticEvent.Mark.carriesInexpressibleAttribute(): Boolean =
-    attributes.keys.any { it != AccessibilityAnnotations.DISPLAY }
+    attributes.carriesContentAttribute()
 
 // Only an emphasis element Markdown could still express needs its subtree
 // checked for block content.
