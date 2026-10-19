@@ -2420,6 +2420,162 @@ class MarkdownRenderingTest {
     }
 
     @Test
+    fun `should keep a button inside the heading it labels`() = runTest {
+        // given — a heading whose only content is a disclosure button (the
+        // WAI-ARIA APG accordion, issue #89): a Markdown heading is one line,
+        // so the block-level form of the tag would leave the heading empty
+        val flow = semanticEvents {
+            "h2" {
+                tag("button", "type" to "button", "aria-expanded" to "false") {
+                    +"Aloha Macadamia"
+                }
+            }
+            "p" { +"Pineapple ice cream." }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            ## <button type="button" aria-expanded="false">Aloha Macadamia</button>
+            
+            Pineapple ice cream.
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should keep an untagged button inline among heading text`() = runTest {
+        // given — the untagged fallback of a hand-built stream renders the same
+        val flow = semanticEvents {
+            "h3" {
+                +"Flavor "
+                "button" { +"Toggle" }
+                +" details"
+            }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "### Flavor <button>Toggle</button> details"
+    }
+
+    @Test
+    fun `should keep a void control inside the heading it sits in`() = runTest {
+        // given — a void element ends its line only when it is a block of its
+        // own, which nothing inside a single-line heading can be
+        val flow = semanticEvents {
+            "h2" {
+                tag("input", "type" to "checkbox") {}
+                +" Done"
+            }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs """## <input type="checkbox"> Done"""
+    }
+
+    @Test
+    fun `should keep a block-level tag the parser cannot read inline out of a heading`() = runTest {
+        // given — only phrasing content the parser keeps inline may join the
+        // heading line: `iframe` and `textarea` are dropped mid-line, `select`
+        // loses its options, and the rest can hold Markdown blocks whose tags
+        // re-parse as literal text inside a heading
+        val names = listOf(
+            "iframe", "textarea", "select", "datalist", "object",
+            "menu", "details", "section", "dialog", "form"
+        )
+
+        names.forEach { name ->
+            val flow = semanticEvents {
+                "h2" {
+                    +"T "
+                    tag(name) { +"body" }
+                }
+            }
+
+            // when
+            val markdown = flow.renderMarkdown()
+
+            // then
+            assert(markdown.lines().first() == "## T")
+            assert("<$name>" in markdown.lines())
+        }
+    }
+
+    @Test
+    fun `should render a block-level tag nested in a heading by its own context`() = runTest {
+        // given — the nearest enclosing block decides: a button inside a
+        // section that already broke out of the heading line is a block again
+        val flow = semanticEvents {
+            "h2" {
+                tag("section") {
+                    tag("button") { +"Toggle" }
+                }
+            }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        assert("<button>" in markdown.lines())
+        assert("</button>" in markdown.lines())
+    }
+
+    @Test
+    fun `should keep a heading on one line across a soft break before a void control`() = runTest {
+        // given — a soft break inside a heading would end the heading line, so
+        // the control after it would open a paragraph of its own on re-parse
+        val flow = semanticEvents {
+            "h2" {
+                +"a"
+                +"\n"
+                tag("input") {}
+                +"b"
+            }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAs "## a <input>b"
+    }
+
+    @Test
+    fun `should keep a button inside a heading inside a list item`() = runTest {
+        // given — the accordion as the Ben & Jerry's flavor graveyard lays it out
+        val flow = semanticEvents {
+            "ul" {
+                "li" {
+                    "h2" { tag("button") { +"Aloha Macadamia" } }
+                    "p" { +"Pineapple ice cream." }
+                }
+                "li" {
+                    "h2" { tag("button") { +"Bovinity Divinity" } }
+                }
+            }
+        }
+
+        // when
+        val markdown = flow.renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            - ## <button>Aloha Macadamia</button>
+            
+              Pineapple ice cream.
+            - ## <button>Bovinity Divinity</button>
+        """.trimIndent()
+    }
+
+    @Test
     fun `should render untagged section element with newlines around content`() = runTest {
         // given
         val flow = semanticEvents {

@@ -1650,4 +1650,67 @@ class HtmlToMarkdownTest {
         reRendered sameAs markdown
     }
 
+    @Test
+    fun `should keep a button inside the heading it labels`() = runTest {
+        // given — the WAI-ARIA APG accordion: a heading whose only content is
+        // its disclosure button (issue #89, the Ben & Jerry's flavor graveyard)
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "ul" {
+                    "li" {
+                        "h2" {
+                            "button"(
+                                "type" to "button",
+                                "aria-expanded" to "false",
+                                AccessibilityAnnotations.REF to "13"
+                            ) { +"Aloha Macadamia" }
+                        }
+                        "p" { +"Pineapple ice cream." }
+                    }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+        val reRendered = flowOf(markdown).parse().renderMarkdown()
+
+        // then — the heading carries its label and the ref together
+        markdown sameAsMarkdown """
+            - ## <button type="button" aria-expanded="false" ref="13">Aloha Macadamia</button>
+            
+              Pineapple ice cream.
+        """.trimIndent()
+        reRendered sameAs markdown
+    }
+
+    @Test
+    fun `should keep a link wrapping a button inside the heading it labels`() = runTest {
+        // given — the link wraps a block-level control, so it renders as a raw
+        // `<a>` tag carrying its ref; inside a heading that tag must stay on
+        // the heading line too
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "h2" {
+                    "a"("href" to "/f", AccessibilityAnnotations.REF to "3") {
+                        "button"(AccessibilityAnnotations.REF to "4") { +"Aloha" }
+                    }
+                }
+                "p" { +"x" }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+        val reRendered = flowOf(markdown).parse().renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            ## <a href="/f" ref="3"><button ref="4">Aloha</button></a>
+            
+            x
+        """.trimIndent()
+        reRendered sameAs markdown
+    }
+
 }
