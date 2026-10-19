@@ -197,7 +197,7 @@ private fun SemanticEvent.Mark.isPreserveRegion(): Boolean =
 // The synthetic `frontmatter` block (`simplifyHtml`'s, or the parser's) is no
 // HTML element at all: a browser would lay an unknown tag out inline, but it
 // is document metadata standing apart from the body, so it is a block.
-private fun SemanticEvent.Mark.isInlineLevel(): Boolean =
+internal fun SemanticEvent.Mark.isInlineLevel(): Boolean =
     when (val display = this[AccessibilityAnnotations.DISPLAY]) {
         null -> name != "frontmatter" && isInlineByUaDefault()
         "contents" -> true
@@ -211,7 +211,7 @@ private fun SemanticEvent.Mark.isInlineLevel(): Boolean =
  */
 internal fun SemanticEvent.Mark.isInlineByUaDefault(): Boolean = isInlineByUaDefault(name)
 
-private fun isInlineByUaDefault(name: String): Boolean = name !in UA_NON_INLINE_ELEMENTS
+internal fun isInlineByUaDefault(name: String): Boolean = name !in UA_NON_INLINE_ELEMENTS
 
 /**
  * Whether the UA stylesheet never renders this element (`display: none`) —

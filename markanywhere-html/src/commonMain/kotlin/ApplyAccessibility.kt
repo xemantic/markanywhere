@@ -110,6 +110,21 @@ public fun TransformerBuilder.applyAccessibility() {
  * separates the visible content on either side (`Inbox Sent`, not
  * `InboxSent`); dropped with the element otherwise.
  *
+ * Unlike `display:none`, an invisible element still takes its space: the
+ * browser paints a blank gap where its text (or its image, or its block) is,
+ * so the content on either side never reads as one word. Its other text
+ * therefore becomes a single space, and an element dropped whole leaves one
+ * in its place (`Price 5`, not `Price5`) — when it lays out any width at all:
+ * text, a box that is not plain `inline`, or a replaced element
+ * ([SPACE_TAKING_ELEMENTS]). An empty inline element takes none, so
+ * `a<span></span>b` stays one word, as in the browser. The space is only
+ * written after inline content not already ending in whitespace — at the
+ * edge of a line (a block, a `<br>`) there is nothing for it to separate — and
+ * never into verbatim text (`pre`, `code`, `textarea`). Content laying out no
+ * box (`display:none`, the H5BP `.hidden { display: none; visibility: hidden }`
+ * included) or dropped by the rule set anyway takes no space and is no
+ * content to separate either.
+ *
  * The `<head>` never inherits invisibility: its metadata is not painted at
  * all, so `visibility` does not apply to it, and the capture leaves it
  * unannotated — inheriting an anti-flicker `html { visibility: hidden }` lost
@@ -123,7 +138,24 @@ public fun TransformerBuilder.applyAccessibility() {
  */
 private fun Flow<SemanticEvent>.resolveVisibility(): Flow<SemanticEvent> = flow {
 
-    class Frame(val mark: SemanticEvent.Mark, val invisible: Boolean, var emitted: Boolean) {
+    class Frame(
+        val mark: SemanticEvent.Mark,
+        val invisible: Boolean,
+        var emitted: Boolean,
+        // this element or an ancestor lays out no box (`display:none`, …) or
+        // is dropped by the rule set anyway: it takes no space and is no
+        // content a gap could separate
+        val silent: Boolean,
+        // inside a `<select>`'s popup, where `display:none` is an artifact
+        // (see [SELECT_CONTENT_MODE])
+        val inPopup: Boolean,
+        // inside verbatim text, where no gap is written
+        val verbatim: Boolean,
+    ) {
+        // whether this invisible element lays out any width — its own box, or
+        // text / a space-taking descendant below it
+        var takesSpace = invisible && !silent && mark.takesSpaceWhenEmpty()
+
         // the invisible table structure this held-back element closed,
         // re-emitted empty if the element turns out to be shown — allocated
         // only by the few elements holding any, not by every mark
@@ -137,6 +169,43 @@ private fun Flow<SemanticEvent>.resolveVisibility(): Flow<SemanticEvent> = flow 
     val stack = ArrayDeque<Frame>()
     var skipDepth = 0 // inside an invisible frame's document
 
+    // whether the last content emitted that survives the rule set is inline
+    // content an invisible gap after it would separate from what follows: not
+    // the edge of a line, and not already whitespace
+    var separable = false
+
+    suspend fun FlowCollector<SemanticEvent>.out(
+        event: SemanticEvent,
+        silent: Boolean,
+        opening: SemanticEvent.Mark? = null
+    ) {
+        emit(event)
+        separable = separable.after(event, silent, opening)
+    }
+
+    // [separable] as it will be once the held-back content of the pending
+    // frames is emitted — in stack order, as [emitHeldBack] emits it — so a
+    // second gap written behind a held one sees the first
+    fun pendingSeparable(): Boolean {
+        var result = separable
+        for (frame in stack) {
+            if (frame.emitted) continue
+            result = result.after(frame.mark, frame.silent)
+            frame.heldStructure?.forEach { result = result.after(it, frame.silent) }
+        }
+        return result
+    }
+
+    // the gap an invisible element (or its text) paints, written into
+    // [target] — the element it sits in
+    suspend fun FlowCollector<SemanticEvent>.separate(target: Frame?) {
+        if (target?.silent == true) return
+        target?.takesSpace = true
+        if (target?.verbatim == true || !pendingSeparable()) return
+        val space = SemanticEvent.Text(" ")
+        if (target == null || target.emitted) out(space, silent = false) else target.hold(listOf(space))
+    }
+
     // Emitted frames are always a prefix of the stack: a frame is emitted only
     // after every ancestor was.
     suspend fun FlowCollector<SemanticEvent>.emitHeldBack() {
@@ -144,9 +213,9 @@ private fun Flow<SemanticEvent>.resolveVisibility(): Flow<SemanticEvent> = flow 
         if (first < 0) return
         for (index in first until stack.size) {
             val frame = stack[index]
-            emit(frame.mark)
+            out(frame.mark, frame.silent)
             frame.emitted = true
-            frame.heldStructure?.forEach { emit(it) }
+            frame.heldStructure?.forEach { out(it, frame.silent) }
         }
     }
 
@@ -163,43 +232,130 @@ private fun Flow<SemanticEvent>.resolveVisibility(): Flow<SemanticEvent> = flow 
             is Mark -> {
                 val parent = stack.lastOrNull()
                 val invisible = event.isInvisible(parentInvisible = parent?.invisible == true)
+                val inPopup = (parent?.mark?.name == "select" || parent?.inPopup == true)
+                        && event.hasNoLayoutBox()
+                val silent = parent?.silent == true || event.isDroppedContent(honourDisplayNone = !inPopup)
                 if (invisible && event.name in FRAME_TAGS) {
+                    // a frame keeps its box like any replaced element
+                    if (!silent && event.takesSpaceWhenEmpty()) separate(parent)
                     skipDepth = 1
                     return@collect
                 }
                 val mark = if (AccessibilityAnnotations.VISIBILITY in event.attributes) {
                     event.copy(attributes = event.attributes - AccessibilityAnnotations.VISIBILITY)
                 } else event
-                val frame = Frame(mark, invisible, emitted = false)
+                val frame = Frame(
+                    mark, invisible, emitted = false,
+                    silent = silent,
+                    inPopup = inPopup,
+                    verbatim = parent?.verbatim == true || event.name in VERBATIM_TAGS,
+                )
                 if (!invisible || (parent?.emitted == true && event.isTableStructure(parent.mark.name))) {
                     if (parent != null && !parent.emitted) emitHeldBack()
-                    emit(mark)
+                    out(mark, silent)
                     frame.emitted = true
                 }
                 stack.addLast(frame)
             }
             is Text -> {
                 val parent = stack.lastOrNull()
-                if (parent?.invisible != true) emit(event)
+                if (parent?.invisible != true) out(event, silent = parent?.silent == true)
                 // the whitespace of an element kept for a visible descendant
                 // still separates the visible content on either side of it
                 else if (event.text.isHtmlBlank()) {
-                    if (parent.emitted) emit(event) else parent.hold(listOf(event))
+                    if (!parent.silent) parent.takesSpace = true
+                    if (parent.emitted) out(event, parent.silent) else parent.hold(listOf(event))
                 }
+                // and its other text is painted as a blank gap of its width
+                else separate(parent)
             }
             is Unmark -> {
                 val frame = stack.removeLastOrNull()
                 val parent = stack.lastOrNull()
-                if (frame == null || frame.emitted) emit(event)
-                else if (parent != null && frame.mark.isTableStructure(parent.mark.name)) {
+                if (frame == null || frame.emitted) {
+                    out(event, silent = frame?.silent == true, opening = frame?.mark)
+                } else if (parent != null && frame.mark.isTableStructure(parent.mark.name)) {
                     parent.hold(listOf(frame.mark))
                     frame.heldStructure?.let { parent.hold(it) }
                     parent.hold(listOf(event))
                 }
+                // dropped whole, yet its box still takes its space
+                else if (frame.takesSpace) separate(parent)
             }
         }
     }
 }
+
+/**
+ * Whether content after this event can be separated from the content before
+ * it by an invisible gap, given whether it [this] could before: inline
+ * content not ending in whitespace can, the edge of a line cannot. A [silent]
+ * event — content the rule set drops, laying out no box — changes nothing.
+ * [opening] is the mark an unmark closes, when known (an unmark carries no
+ * display of its own); otherwise its tag's UA default decides.
+ */
+private fun Boolean.after(
+    event: SemanticEvent,
+    silent: Boolean,
+    opening: SemanticEvent.Mark? = null
+): Boolean = if (silent) this else when (event) {
+    is Text -> if (event.text.isEmpty()) this else !event.text.last().isWhitespace()
+    // a replaced element's content (a <select>'s options, a <button>'s
+    // label) lays out in a box of its own, starting at its edge
+    is Mark -> if (event.name in SPACE_TAKING_ELEMENTS || event.isLineEdge()) false else this
+    is Unmark -> when {
+        opening?.isLineEdge() ?: (event.name == "br" || !isInlineByUaDefault(event.name)) -> false
+        // and the closed box is inline content of the flow around it
+        event.name in SPACE_TAKING_ELEMENTS -> true
+        else -> this
+    }
+}
+
+/**
+ * Whether this element starts or ends a line: a block-level box, or a `<br>`
+ * whatever display the capture recorded for it.
+ */
+private fun SemanticEvent.Mark.isLineEdge(): Boolean = name == "br" || !isInlineLevel()
+
+/**
+ * Whether the rule set drops this element with its subtree, or the browser
+ * lays no box out for it: either way it takes no space and is no content.
+ */
+private fun SemanticEvent.Mark.isDroppedContent(honourDisplayNone: Boolean): Boolean =
+    name in NEVER_RENDERED_TAGS
+        || isHidden(honourDisplayNone)
+        || (name == "img" && isAxIgnoredImage())
+
+/** Elements whose text is verbatim, so no gap is written into it. */
+private val VERBATIM_TAGS = setOf("pre", "code", "textarea")
+
+/**
+ * Whether this element lays out width of its own even with no text in it.
+ * The display decides first: `none` and `contents` lay out no box, a plain
+ * `inline` box only a replaced element's ([SPACE_TAKING_ELEMENTS]) has width,
+ * any other box (a block, an `inline-block`, …) has. An element with no
+ * recorded display falls back to the UA default of its tag, like every
+ * operator.
+ */
+private fun SemanticEvent.Mark.takesSpaceWhenEmpty(): Boolean =
+    when (this[AccessibilityAnnotations.DISPLAY]) {
+        null -> name in SPACE_TAKING_ELEMENTS
+            || (!isInlineByUaDefault() && !isNeverRenderedByUaDefault())
+        "none", "contents" -> false
+        "inline" -> name in SPACE_TAKING_ELEMENTS
+        else -> true
+    }
+
+/**
+ * Replaced elements and frames: each lays out a box of its own size, so an
+ * invisible one still takes its space between the content around it, with no
+ * text in it — and a visible one is inline content of the flow around it,
+ * while its own content starts at the edge of that box.
+ */
+private val SPACE_TAKING_ELEMENTS = setOf(
+    "img", "input", "textarea", "select", "button", "svg", "canvas", "video",
+    "audio", "iframe", "frame", "embed", "object",
+)
 
 /**
  * Whether this element is table structure an emitted parent keeps even when
