@@ -48,8 +48,14 @@ import kotlinx.coroutines.flow.flow
  *   `thead`/`tbody`/`tr`/`td`/… descendants are likewise unwrapped and the real
  *   cell content is promoted into the surrounding flow. A nested `<table>` is
  *   re-evaluated independently, so a data table inside a layout table survives.
- *   A `<table>` carrying a data-table role (or no role annotation at all) is
- *   left intact.
+ *   A `<table>` carrying a data-table role is left intact, as is one with no
+ *   role annotation at all — unless its authored role is presentational (see
+ *   below), the only verdict such a stream still carries.
+ * - **Demote presentational elements** — a structural element whose authored
+ *   `role` is `presentation` / `none` (and which ARIA's conflict resolution
+ *   does not keep: neither focusable nor carrying a global ARIA attribute)
+ *   becomes a generic `<div>`, together with the items of a list it owns (see
+ *   [resolvePresentationalRoles]).
  *
  * Everything else passes through unchanged, and the reserved annotation
  * attributes are stripped from every surviving element so they do not leak
@@ -60,7 +66,7 @@ import kotlinx.coroutines.flow.flow
  * sees a tree already cleaned of hidden/layout noise).
  */
 public fun Flow<SemanticEvent>.applyAccessibility(): Flow<SemanticEvent> =
-    resolveVisibility().transform { accessibilityRuleSet() }
+    resolveVisibility().resolvePresentationalRoles().transform { accessibilityRuleSet() }
 
 /**
  * Formerly registered the accessibility rules on a [TransformerBuilder]. The
@@ -355,6 +361,132 @@ private fun SemanticEvent.Mark.takesSpaceWhenEmpty(): Boolean =
 private val SPACE_TAKING_ELEMENTS = setOf(
     "img", "input", "textarea", "select", "button", "svg", "canvas", "video",
     "audio", "iframe", "frame", "embed", "object",
+)
+
+/**
+ * Resolves every `presentation` / `none` role, so that nothing downstream has
+ * to: an honoured one is demoted, an ignored one is removed.
+ *
+ * - **Demoted** — an element whose semantics the author removed becomes a
+ *   generic `<div>`, the same element as far as the accessibility tree goes,
+ *   which `simplifyHtml` then unwraps like any other layout wrapper. The mark
+ *   is renamed rather than dropped, keeping its box (and the captured display
+ *   verdict on it): `separateUnwrappedBlocks` still sees the boundary and
+ *   separates the content on either side of it, so the items of a
+ *   `<ul role="presentation">` nav bar do not merge into one word. Only the
+ *   elements of [PRESENTATIONAL_DEMOTABLE_TAGS] are demoted, the ones whose
+ *   Markdown rendering *is* their role.
+ * - **Ignored** — ARIA's conflict resolution keeps the implicit role of an
+ *   element that is focusable or carries a global ARIA attribute (see
+ *   [undoesPresentationalRole]; the capture's actionable verdict,
+ *   [AccessibilityAnnotations.REF], counts as focusable too), and a `<table>`
+ *   whose computed role Blink reports as a data table has had its conflict
+ *   resolved already. The `role` attribute is then **removed** — the element
+ *   is exposed with its implicit role, not a fallback token — since
+ *   `simplifyHtml` would otherwise unwrap it on the role alone.
+ * - **Left as is** — any other element with an honoured presentational role:
+ *   a `<table>`, unwrapped by the layout-table rule (see `isLayoutTable`), and
+ *   whatever `simplifyHtml`'s own presentation rule then decides.
+ *
+ * The items of a list inherit its presentational role: an `<li>` whose
+ * nearest `<ul>`/`<ol>`/`<menu>` is demoted is demoted too — unless it has an
+ * explicit role of its own, or conflict resolution keeps it — and so are the
+ * `<dt>`/`<dd>` of a demoted `<dl>`. A list nested in such an item owns its
+ * own items. Two parts of this are deliberate choices rather than WAI-ARIA:
+ * Blink inherits the role from the direct parent only, while the nearest
+ * owner is found here at any depth, through wrapper `<div>`s; and `<dt>`/`<dd>`
+ * are not required owned elements at all. Both keep a demoted list from
+ * leaving items behind that Markdown cannot render outside it. For the same
+ * reason a presentational role on an item alone, in a list that keeps its
+ * own, is ignored.
+ *
+ * The decision is the element's own, wherever it sits — inside an unwrapped
+ * layout table or a `<select>`'s popup alike — which is why it is a pre-pass
+ * and not a rule a mode would have to repeat.
+ *
+ * The capture records Blink's computed role on `<table>` only, so the
+ * authored `role` attribute is the one signal available for anything else.
+ */
+private fun Flow<SemanticEvent>.resolvePresentationalRoles(): Flow<SemanticEvent> = flow {
+
+    class Frame(val name: String, val emittedName: String) {
+        val demoted: Boolean get() = name != emittedName
+    }
+
+    val stack = ArrayDeque<Frame>()
+
+    fun SemanticEvent.Mark.keepsImplicitRole(): Boolean =
+        undoesPresentationalRole() || AccessibilityAnnotations.REF in attributes
+
+    fun SemanticEvent.Mark.verdict(): PresentationVerdict {
+        val role = explicitRole()
+        val presentational = role in PRESENTATIONAL_ROLES
+        val owners = LIST_OWNERS[name]
+        if (owners != null) {
+            val owner = stack.lastOrNull { it.name in owners }
+            val inherits = owner?.demoted == true && (role == null || presentational)
+            return when {
+                inherits && !keepsImplicitRole() -> DEMOTED
+                presentational -> IGNORED
+                else -> NONE
+            }
+        }
+        return when {
+            !presentational -> NONE
+            keepsImplicitRole() -> IGNORED
+            name in PRESENTATIONAL_DEMOTABLE_TAGS -> DEMOTED
+            name == "table" && this[AccessibilityAnnotations.ROLE] in DATA_TABLE_ROLES ->
+                IGNORED
+            else -> NONE
+        }
+    }
+
+    collect { event ->
+        when (event) {
+            is Mark -> when (event.verdict()) {
+                DEMOTED -> {
+                    stack.addLast(Frame(event.name, emittedName = "div"))
+                    emit(event.copy(name = "div", attributes = event.attributes - "role"))
+                }
+                IGNORED -> {
+                    stack.addLast(Frame(event.name, emittedName = event.name))
+                    emit(event.copy(attributes = event.attributes - "role"))
+                }
+                NONE -> {
+                    stack.addLast(Frame(event.name, emittedName = event.name))
+                    emit(event)
+                }
+            }
+            is Unmark -> {
+                val frame = stack.removeLastOrNull()
+                emit(if (frame?.demoted == true) event.copy(name = frame.emittedName) else event)
+            }
+            is Text -> emit(event)
+        }
+    }
+}
+
+private enum class PresentationVerdict { DEMOTED, IGNORED, NONE }
+
+/**
+ * The structural elements whose Markdown rendering is their role, demoted by
+ * [resolvePresentationalRoles] when the author removed it.
+ */
+private val PRESENTATIONAL_DEMOTABLE_TAGS = setOf(
+    "h1", "h2", "h3", "h4", "h5", "h6", "hgroup",
+    "ul", "ol", "menu", "li", "dl", "dt", "dd",
+    "article", "aside", "footer", "header", "main", "nav", "search", "section",
+    "address", "blockquote", "figure", "figcaption", "p", "hr",
+)
+
+/**
+ * The list items of [PRESENTATIONAL_DEMOTABLE_TAGS], each with the lists
+ * owning it: an item is demoted only along with its nearest owner.
+ */
+private val LIST_OWNERS = mapOf(
+    "li" to setOf("ul", "ol", "menu"),
+    "dt" to setOf("dl"),
+    "dd" to setOf("dl"),
 )
 
 /**
@@ -660,8 +792,14 @@ private fun SemanticEvent.Mark.isAxIgnoredImage(): Boolean =
 private fun SemanticEvent.Mark.hasNoLayoutBox(): Boolean =
     this[AccessibilityAnnotations.DISPLAY] == "none"
 
+/**
+ * Whether this `<table>` lays out content rather than presenting data: Blink's
+ * own verdict when the capture recorded its computed role, otherwise only an
+ * authored presentational role (see [hasPresentationalRole]) — the computed
+ * role has already resolved any conflict, so it wins.
+ */
 private fun SemanticEvent.Mark.isLayoutTable(): Boolean {
-    val role = this[AccessibilityAnnotations.ROLE] ?: return false
+    val role = this[AccessibilityAnnotations.ROLE] ?: return hasPresentationalRole()
     return role !in DATA_TABLE_ROLES
 }
 
