@@ -45,7 +45,9 @@ import kotlinx.coroutines.flow.flow
  * goes (a void element, a field whose content is its value, a container of
  * options or rows). A combobox suggestion `<li role="option">` whose visible
  * text is `aria-hidden` and whose only name is `aria-label` would otherwise
- * reach the output empty, and an empty list item vanishes with its ref.
+ * reach the output empty, and an empty list item vanishes with its ref. An
+ * `<a>` without `href` is a placeholder, not a link, and counts only when it
+ * carries a ref kept under [refMode].
  *
  * For each control the operator holds the subtree only until
  * the question is settled: the first child that would render as a label releases
@@ -89,6 +91,7 @@ import kotlinx.coroutines.flow.flow
  */
 public fun Flow<SemanticEvent>.labelActionableElements(
     svgMode: SvgMode = SvgMode.RESOLVE,
+    refMode: RefMode = RefMode.ENCODE,
 ): Flow<SemanticEvent> = flow {
     // One frame per open control, innermost last. An event arriving inside a
     // control is offered to the innermost frame; a frame that has shown its
@@ -116,7 +119,7 @@ public fun Flow<SemanticEvent>.labelActionableElements(
     }
 
     collect { event ->
-        if (event is Mark && event.isControl()) {
+        if (event is Mark && event.isControl(refMode)) {
             frames.addLast(Control().also { it.buffer.add(event) })
             return@collect
         }
@@ -211,8 +214,18 @@ private val NOT_CONTENT_NAMED_TAGS = setOf(
  * [HTML_VOID_ELEMENTS] exclude where it is not named from content. The tag
  * wins over an explicit role too: a name written into a `<select>` or a
  * `<main>` is wrong whatever role the author gave it.
+ *
+ * An `<a>` without `href` is a placeholder, not a link, and [simplifyHtml]
+ * unwraps it whatever its role — a label inserted into it would be left behind
+ * as stray text, or as a `![:svg:]()` pointing at nothing — unless the capture
+ * found it actionable anyway (a scripted control carrying a ref), which keeps
+ * it a link — under [RefMode.ENCODE] only: [RefMode.STRIP] drops the ref, and
+ * simplify then unwraps the placeholder like any other.
  */
-internal fun Mark.isControl(): Boolean {
+internal fun Mark.isControl(refMode: RefMode): Boolean {
+    if (name == "a" && !isHyperlink()) {
+        return refMode == RefMode.ENCODE && AccessibilityAnnotations.REF in attributes
+    }
     if (name in ACTIONABLE_TAGS) return true
     if (!mayHoldItsName()) return false
     val role = explicitRole()

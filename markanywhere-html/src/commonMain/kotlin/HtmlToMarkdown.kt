@@ -81,10 +81,10 @@ public fun Flow<SemanticEvent>.transformHtmlToMarkdown(
     // contribution to its keep-set.
     when (refMode) {
         ENCODE ->
-            htmlToMarkdownBase(keepAttributes, setOf(AccessibilityAnnotations.REF), svgMode)
+            htmlToMarkdownBase(keepAttributes, setOf(AccessibilityAnnotations.REF), refMode, svgMode)
                 .encodeActionableRefs()
         STRIP ->
-            htmlToMarkdownBase(keepAttributes, refKeep = emptySet(), svgMode)
+            htmlToMarkdownBase(keepAttributes, refKeep = emptySet(), refMode, svgMode)
     }
 
 /**
@@ -101,6 +101,7 @@ public fun Flow<SemanticEvent>.transformHtmlToMarkdown(
 private fun Flow<SemanticEvent>.htmlToMarkdownBase(
     keepAttributes: Set<String>,
     refKeep: Set<String>,
+    refMode: RefMode,
     svgMode: SvgMode,
 ): Flow<SemanticEvent> = resolveIcons()
     .applyAccessibility()
@@ -109,7 +110,7 @@ private fun Flow<SemanticEvent>.htmlToMarkdownBase(
     // <svg> this needs as evidence) and simplifyHtml (which strips the `title`
     // it reads): give an icon-only link or button the accessible name it would
     // otherwise lose, so no control reaches the output as a bare `[](…)`.
-    .labelActionableElements(svgMode)
+    .labelActionableElements(svgMode, refMode)
     // After applyAccessibility (aria-hidden SVGs already dropped), before
     // simplifyHtml (which would otherwise discard the whole svg subtree): turn
     // an accessible-name-bearing inline <svg> logo/wordmark into an ![name]().

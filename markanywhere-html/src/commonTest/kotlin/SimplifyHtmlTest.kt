@@ -381,6 +381,99 @@ class SimplifyHtmlTest {
     }
 
     @Test
+    fun `should unwrap an a without href keeping its content`() = runTest {
+        // given - an `<a>` with no `href` is a placeholder (HTML §4.5.1), not a
+        // link: quotes.toscrape.com renders its tags this way (issue #110)
+        val input = semanticEvents(tagged = true) {
+            "p" {
+                +"Tags: "
+                "a"("class" to "tag") { +"change" }
+                +" and a real "
+                "a"("href" to "/x") { +"link" }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "p" {
+                +"Tags: "
+                +"change"
+                +" and a real "
+                "a"("href" to "/x") { +"link" }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep an a with an empty href as a link`() = runTest {
+        // given - an empty `href` resolves to the current document, so it is a
+        // real (if useless) link; only an absent one is a placeholder
+        val input = semanticEvents(tagged = true) {
+            "p" { "a"("href" to "") { +"here" } }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "p" { "a"("href" to "") { +"here" } }
+        }
+    }
+
+    @Test
+    fun `should keep an a without href that carries a kept ref`() = runTest {
+        // given - a scripted placeholder the capture found actionable; it must
+        // stay a link for encodeActionableRefs to fold its ref into
+        val input = semanticEvents(tagged = true) {
+            "p" { "a"("class" to "more", AccessibilityAnnotations.REF to "5") { +"more" } }
+        }
+
+        // when
+        val output = input.simplifyHtml(keepAttributes = setOf(AccessibilityAnnotations.REF))
+
+        // then
+        output sameAs semanticEvents {
+            "p" { "a"(AccessibilityAnnotations.REF to "5") { +"more" } }
+        }
+    }
+
+    @Test
+    fun `should keep an a without href carrying a keep-attribute as a tag`() = runTest {
+        // given - the correlation id must survive, but not as a Markdown link
+        val input = semanticEvents(tagged = true) {
+            "p" { "a"("class" to "tag", "golemId" to "1") { +"change" } }
+        }
+
+        // when
+        val output = input.simplifyHtml(keepAttributes = setOf("golemId"))
+
+        // then
+        output sameAs semanticEvents {
+            "p" { tag("a", "golemId" to "1") { +"change" } }
+        }
+    }
+
+    @Test
+    fun `should unwrap an a without href wrapping block content`() = runTest {
+        // given
+        val input = semanticEvents(tagged = true) {
+            "a"("class" to "card") { "h2" { +"Headline" } }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "h2" { +"Headline" }
+        }
+    }
+
+    @Test
     fun `should preserve img with src and alt and title`() = runTest {
         // given
         val input = semanticEvents(tagged = true) {
