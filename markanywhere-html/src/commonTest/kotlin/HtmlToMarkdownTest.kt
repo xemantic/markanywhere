@@ -707,4 +707,41 @@ class HtmlToMarkdownTest {
         assert("alert" !in encoded)
     }
 
+    @Test
+    fun `should keep ARIA controls named only by aria-label`() = runTest {
+        // given — the bahn.de station autocomplete (issue #108): a combobox
+        // whose clear button and listbox options carry their visible text only
+        // in `aria-hidden` spans, so `aria-label` is all that names them
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "input"("role" to "combobox", "aria-expanded" to "true", AccessibilityAnnotations.REF to "20") { }
+                "span"("role" to "button", "aria-label" to "Delete entry", AccessibilityAnnotations.REF to "21") { }
+                "ul"("role" to "listbox", AccessibilityAnnotations.REF to "22") {
+                    "li"("role" to "option", "aria-label" to "Berlin Hbf. ", AccessibilityAnnotations.REF to "23") {
+                        "span"("data-icon" to "station", "aria-hidden" to "true") { }
+                        "span"("aria-hidden" to "true") { +"Berlin Hbf" }
+                    }
+                    "li"("role" to "option", "aria-label" to "Berlin Südkreuz. ", AccessibilityAnnotations.REF to "24") {
+                        "span"("aria-hidden" to "true") { +"Berlin Südkreuz" }
+                    }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then - every control keeps its ref and reads its name; the list
+        // items' refs ride on a span, since `- ` carries no attributes
+        markdown sameAs """
+            <input aria-expanded="true" ref="20">
+            
+            <span role="button" aria-label="Delete entry" ref="21">Delete entry</span>
+            
+            - <span ref="23">Berlin Hbf.</span>
+            - <span ref="24">Berlin Südkreuz.</span>
+        """.trimIndent()
+        flowOf(markdown).parse().renderMarkdown() sameAs markdown
+    }
+
 }

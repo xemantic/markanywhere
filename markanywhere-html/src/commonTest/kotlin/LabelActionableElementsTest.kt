@@ -17,6 +17,7 @@
 package com.xemantic.markanywhere.html
 
 import com.xemantic.kotlin.test.assert
+import com.xemantic.markanywhere.dump.AccessibilityAnnotations
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.test.sameAs
 import kotlinx.coroutines.flow.flow
@@ -377,6 +378,144 @@ class LabelActionableElementsTest {
                 "button" { "span"("class" to "spacer") { } }
             }
         }
+    }
+
+    @Test
+    fun `should label an option named only by its own aria-label`() = runTest {
+        // given - a combobox suggestion (issue #108) whose visible text sat in
+        // an `aria-hidden` span that applyAccessibility has already dropped:
+        // an `li` is no link or button, but its `role` says it is clicked
+        val input = semanticEvents(tagged = true) {
+            "li"("role" to "option", "aria-label" to "Berlin Hbf. ") { }
+        }
+
+        // when
+        val output = input.labelActionableElements()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "li"("role" to "option", "aria-label" to "Berlin Hbf. ") { +"Berlin Hbf." }
+        }
+    }
+
+    @Test
+    fun `should label an element with an interactive role from a descendant title`() = runTest {
+        // given
+        val input = semanticEvents(tagged = true) {
+            "div"("role" to "menuitemcheckbox") {
+                "span"("class" to "check", "title" to "Show hidden files") { }
+            }
+        }
+
+        // when
+        val output = input.labelActionableElements()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "div"("role" to "menuitemcheckbox") {
+                +"Show hidden files"
+                "span"("class" to "check", "title" to "Show hidden files") { }
+            }
+        }
+    }
+
+    @Test
+    fun `should label a ref-bearing generic element from its own aria-label`() = runTest {
+        // given - the browser found it actionable (it carries a ref), though
+        // nothing in the markup says what kind of control it is
+        val input = semanticEvents(tagged = true) {
+            "span"("aria-label" to "Delete entry", AccessibilityAnnotations.REF to "21") { }
+        }
+
+        // when
+        val output = input.labelActionableElements()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "span"("aria-label" to "Delete entry", AccessibilityAnnotations.REF to "21") {
+                +"Delete entry"
+            }
+        }
+    }
+
+    @Test
+    fun `should not label an element whose role does not take its name from content`() = runTest {
+        // given - a listbox's name says what its options are for, it is not
+        // one of them; written as content it would read as an option
+        val input = semanticEvents(tagged = true) {
+            "ul"("role" to "listbox", "aria-label" to "Stations", AccessibilityAnnotations.REF to "22") { }
+        }
+
+        // when
+        val output = input.labelActionableElements()
+
+        // then
+        output sameAs input
+    }
+
+    @Test
+    fun `should not label a ref-bearing element whose content is its value`() = runTest {
+        // given - a text field's content is what the user typed: its name
+        // written there would read as a value
+        val input = semanticEvents(tagged = true) {
+            "textarea"("aria-label" to "Message", AccessibilityAnnotations.REF to "1") { }
+            "div"("contenteditable" to "true", "aria-label" to "Body", AccessibilityAnnotations.REF to "2") { }
+            "select"("aria-label" to "Country", AccessibilityAnnotations.REF to "3") { }
+        }
+
+        // when
+        val output = input.labelActionableElements()
+
+        // then
+        output sameAs input
+    }
+
+    @Test
+    fun `should not label a ref-bearing void element`() = runTest {
+        // given - an `input` has no content to hold a label
+        val input = semanticEvents(tagged = true) {
+            "input"("type" to "checkbox", "aria-label" to "Remember me", AccessibilityAnnotations.REF to "4") { }
+        }
+
+        // when
+        val output = input.labelActionableElements()
+
+        // then
+        output sameAs input
+    }
+
+    @Test
+    fun `should not label an element without a ref or an interactive role`() = runTest {
+        // given - a named region is not a control
+        val input = semanticEvents(tagged = true) {
+            "div"("aria-label" to "Sidebar") { }
+        }
+
+        // when
+        val output = input.labelActionableElements()
+
+        // then
+        output sameAs input
+    }
+
+    @Test
+    fun `should not label a ref-bearing landmark or container`() = runTest {
+        // given - a focusable `<main tabindex="-1">` carries a ref, but its
+        // implicit role is not named from content: the input's name inside
+        // must not be written into the landmark
+        val input = semanticEvents(tagged = true) {
+            "main"("tabindex" to "-1", AccessibilityAnnotations.REF to "1") {
+                "input"("aria-label" to "Search", AccessibilityAnnotations.REF to "2") { }
+            }
+            "form"("title" to "Login", AccessibilityAnnotations.REF to "3") { }
+            "section"("aria-label" to "News", AccessibilityAnnotations.REF to "4") { }
+        }
+
+        // when
+        val output = input.labelActionableElements()
+
+        // then
+        output sameAs input
     }
 
 }

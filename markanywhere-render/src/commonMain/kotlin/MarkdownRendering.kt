@@ -754,6 +754,17 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
             closeList()
         }
 
+        // Content written straight into a list item, with no `p` around it,
+        // is the item's first child: a `p` after it is a block of its own, not
+        // the text that opens the item's line (else `- LabelDescription`).
+        val openItem = blockStack.lastOrNull() as? BlockFrame.ListItem
+        if (openItem != null && openItem.firstChild &&
+            ((event is Text && event.text.isNotBlank()) ||
+                (event is Mark && event.name != "p" && event.name != "caption"))
+        ) {
+            openItem.firstChild = false
+        }
+
         // A `<table>` nested inside a table cell can't be expressed in
         // Markdown — emit it as raw single-line HTML into the cell buffer.
         // The mode is entered when a `table` mark arrives while a cell (or
@@ -819,7 +830,12 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
             // If the closing tag returned us to a block-level context
             // (no inline frame open above), treat it as a block boundary
             // so the next Markdown block parses with a blank line before it.
-            if (!blockTagged && !inLabel() && blockStack.none { it.isInline() }) {
+            // A list item's own text is the exception: it is inline flow with
+            // no `p` frame around it, so the item's paragraph goes on (text
+            // after the tag stays on its line, a `<br>` stays a hard break).
+            if (!blockTagged && !inLabel() && blockStack.none { it.isInline() } &&
+                blockStack.lastOrNull() !is BlockFrame.ListItem
+            ) {
                 endBlock()
             }
             flush()
@@ -901,6 +917,11 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                         parent.firstChild = false
                         blockStack.addLast(BlockFrame.Paragraph(suppressClose = true))
                     } else {
+                        // A paragraph after the item's own text on the
+                        // marker line starts on a line of its own — as an
+                        // indented continuation, the same shape a second `p`
+                        // in an item takes (see the two-paragraph item test).
+                        if (parent is BlockFrame.ListItem && !atLineStart && !inLabel()) ensureLineStart()
                         // Defer startBlock() until the first real content (see
                         // pendingParagraph): an empty paragraph then emits nothing.
                         pendingParagraph = true

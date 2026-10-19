@@ -418,4 +418,42 @@ class SeparateUnwrappedBlocksTest {
         // then
         output sameAs input
     }
+
+    @Test
+    fun `should separate adjacent controls built out of generic elements`() = runTest {
+        // given — Bing's search box: two icon buttons made of `<div>`s, each
+        // given its name by labelActionableElements; simplifyHtml unwraps a
+        // generic element that carries no ref, which would leave
+        // `Search using voiceSearch using an image`
+        val input = semanticEvents(tagged = true) {
+            "div"("role" to "button", AccessibilityAnnotations.DISPLAY to "inline-block") { +"Search using voice" }
+            "span"("role" to "button", AccessibilityAnnotations.DISPLAY to "inline") { +"Search using an image" }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "div"("role" to "button", AccessibilityAnnotations.DISPLAY to "inline-block") { +"Search using voice" }
+            +" "
+            "span"("role" to "button", AccessibilityAnnotations.DISPLAY to "inline") { +"Search using an image" }
+        }
+    }
+
+    @Test
+    fun `should not separate adjacent ref-bearing generic elements`() = runTest {
+        // given - a ref alone does not make a control a reader tells apart:
+        // a price split into two clickable spans is still one word
+        val input = semanticEvents(tagged = true) {
+            "span"(AccessibilityAnnotations.REF to "1", AccessibilityAnnotations.DISPLAY to "inline") { +"US" }
+            "span"(AccessibilityAnnotations.REF to "2", AccessibilityAnnotations.DISPLAY to "inline") { +"$5" }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs input
+    }
 }
