@@ -19,6 +19,7 @@ package com.xemantic.markanywhere.html
 import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.dump.AccessibilityAnnotations
 import com.xemantic.markanywhere.html.spec.asciiLowercase
+import com.xemantic.markanywhere.html.spec.isHtmlBlank
 import com.xemantic.markanywhere.transform.MatcherScope
 import com.xemantic.markanywhere.transform.transform
 import kotlinx.coroutines.flow.Flow
@@ -95,10 +96,11 @@ import kotlinx.coroutines.flow.onEach
  *   - `a` — `href`, `title`, `id`; an `a` with no `href` at all is a
  *     placeholder, not a link (HTML §4.5.1), and is unwrapped unless the
  *     capture found it actionable (it carries a kept ref, and stays a link for
- *     [encodeActionableRefs] to fold the ref into), it is a named-anchor
- *     target (an `id` or `name`, kept with `title` as a tag) or a caller
- *     keep-attribute promotes it (kept as a tag, not a Markdown link). An
- *     empty `href=""` names the current document and stays a link.
+ *     [encodeActionableRefs] to fold the ref into) or a caller keep-attribute
+ *     promotes it (kept as a tag, not a Markdown link) — or, with
+ *     `keepFragmentTargets`, it is a named-anchor target (kept as a tag with
+ *     its `id`, `name` and `title`). An empty `href=""` names the current
+ *     document and stays a link.
  *   - `img` — `src`, `alt`, `title`, `id`
  *   - `code` — `class` (language hint), `id`
  *   - `ol` — `start`, `id`
@@ -198,16 +200,35 @@ import kotlinx.coroutines.flow.onEach
  *   its own attributes intact, for a consumer that renders graphics rather
  *   than reading them — minus a `script`, an `aria-hidden` part, and the
  *   capture's annotations, which obey the same rules as everywhere else.
+ * @param keepFragmentTargets whether an `<a>` without `href` that is a
+ *   named-anchor target keeps its `id` / `name` (and `title`) as a tagged `a`
+ *   instead of being unwrapped like any other placeholder — so a `#sec2` link
+ *   in the output still finds `<a id="sec2">` (issue #138). **Meant for HTML
+ *   output only** (`simplifyHtml(keepFragmentTargets = true).renderHtml()`),
+ *   hence off by default and never set by [transformHtmlToMarkdown]: a
+ *   Markdown link carries no attributes, and the Markdown renderer emits a
+ *   raw `<a>` that starts a line as a block-level tag, so an anchor at the
+ *   start of a list item, a paragraph or a code line splits it apart (inside
+ *   a fence it even becomes literal text). A target is an anchor with a
+ *   non-blank `id` or `name` (fragment navigation resolves a `#name` against
+ *   an element's `id` and, for an `<a>` alone, its `name`) that is no script
+ *   hook — one carrying a `role`, a `tabindex` or an `on…` event handler is
+ *   a scripted control whose `id` is a hook for code, not a place to link
+ *   to, so it is unwrapped even here. Heuristic, not proof: whether any link
+ *   actually points at the anchor is only known once the whole document has
+ *   been read.
  */
 public fun Flow<SemanticEvent>.simplifyHtml(
     keepAttributes: Set<String> = emptySet(),
     svgMode: SvgMode = SvgMode.RESOLVE,
-): Flow<SemanticEvent> = simplifyHtmlElements(keepAttributes, svgMode)
+    keepFragmentTargets: Boolean = false,
+): Flow<SemanticEvent> = simplifyHtmlElements(keepAttributes, svgMode, keepFragmentTargets)
     .expressEmphasisInMarkdown()
 
 private fun Flow<SemanticEvent>.simplifyHtmlElements(
     keepAttributes: Set<String>,
     svgMode: SvgMode,
+    keepFragmentTargets: Boolean,
 ): Flow<SemanticEvent> = flow {
     // Each element's display, read ahead of the rules — which would see the
     // element showing an unmarked stream is a capture only if no earlier rule
@@ -220,13 +241,14 @@ private fun Flow<SemanticEvent>.simplifyHtmlElements(
                 is Unmark -> displays.close()
                 is Text -> { /* no element */ }
             }
-        }.simplifyHtmlRules(keepAttributes, svgMode, displays)
+        }.simplifyHtmlRules(keepAttributes, svgMode, keepFragmentTargets, displays)
     )
 }
 
 private fun Flow<SemanticEvent>.simplifyHtmlRules(
     keepAttributes: Set<String>,
     svgMode: SvgMode,
+    keepFragmentTargets: Boolean,
     displays: CapturedDisplayReader,
 ): Flow<SemanticEvent> = transform {
 
@@ -409,10 +431,12 @@ private fun Flow<SemanticEvent>.simplifyHtmlRules(
             // destination (`[more](ref:5:)`) and the reader can still act on it.
             AccessibilityAnnotations.REF in kept ->
                 preserve("a", preserveAttrs(event, "title", "id")) { children() }
-            // Kept for a caller's attribute, like an unwrapped `<span>` is, or
-            // as a fragment target a `#name` link elsewhere points at — as a
+            // Kept for a caller's attribute, like an unwrapped `<span>` is — as a
             // tag, since a Markdown link would claim a destination there is none.
-            promotes(kept) || event.isFragmentTarget() ->
+            promotes(kept) -> tag("a", preserveAttrs(event, "title", "id")) { children() }
+            // A named-anchor target, kept only on the HTML consumer's request
+            // (see `keepFragmentTargets`) — as a tag, for the same reason.
+            keepFragmentTargets && event.isFragmentTarget() ->
                 tag("a", preserveAttrs(event, "title", "id", "name")) { children() }
             // Otherwise it is no link at all (tag lists, scripting hooks): only
             // its content survives.
@@ -856,11 +880,17 @@ internal fun SemanticEvent.Mark.isHyperlink(): Boolean = "href" in attributes
 /**
  * Whether this placeholder `<a>` is a named-anchor target: fragment navigation
  * resolves a `#name` against an element's `id` and, for an `<a>` alone, its
- * `name` (HTML "find a potential indicated element") — so unwrapping it would
- * orphan every link to it (issue #138).
+ * `name` (HTML "find a potential indicated element"), so a non-blank one of
+ * either makes it a place a link can point at (issue #138). An anchor carrying
+ * a `role`, a `tabindex` or an `on…` event handler is a scripted control whose
+ * `id` is a hook for code (Bing's `<a id="sw_clx" role="button" tabindex="0">`),
+ * not a target.
  */
-private fun SemanticEvent.Mark.isFragmentTarget(): Boolean =
-    !this["id"].isNullOrEmpty() || !this["name"].isNullOrEmpty()
+private fun SemanticEvent.Mark.isFragmentTarget(): Boolean {
+    if ("role" in attributes || "tabindex" in attributes) return false
+    if (attributes.keys.any { it.startsWith("on", ignoreCase = true) }) return false
+    return this["id"]?.isHtmlBlank() == false || this["name"]?.isHtmlBlank() == false
+}
 
 // The short LLM-facing name of [AccessibilityAnnotations.REDACTED] on a form
 // control whose secret value the capture left out (`filled` / `empty`).
