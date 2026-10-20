@@ -24,6 +24,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -32,6 +33,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
@@ -81,6 +83,44 @@ class StaxXmlParserTest : XmlParserTest() {
 
         // then
         assert(results.all { it.markNames() == listOf("a") && it.isBalanced() })
+    }
+
+    @Test
+    fun `should report a tag as soon as it is read once the document has started`() = runTest(timeout = 30.seconds) {
+        // given — the opening chunk is long enough for the reader's look-ahead
+        // at the document start, after which each tag arrives on its own
+        val chunks = flow {
+            emit("<root>")
+            emit("<a>")
+            awaitCancellation()
+        }
+
+        // when — this can only complete if `a` was reported without more input
+        val events = withContext(Dispatchers.Default) {
+            parser.parse(chunks).take(2).toList()
+        }
+
+        // then
+        assert(events.markNames() == listOf("root", "a"))
+    }
+
+    @Test
+    fun `DIVERGENCE - should report nothing until the first few characters of the document arrive`() = runTest(timeout = 30.seconds) {
+        // given — a document whose opening tag is shorter than the look-ahead
+        // the JDK reader takes at the document start, sniffing for an XML
+        // declaration (MarkanywhereXmlParser reports `a` at once)
+        val chunks = flow {
+            emit("<a>")
+            awaitCancellation()
+        }
+
+        // when
+        val event = withContext(Dispatchers.Default) {
+            withTimeoutOrNull(1.seconds) { parser.parse(chunks).first() }
+        }
+
+        // then
+        assert(event == null)
     }
 
     @Test
