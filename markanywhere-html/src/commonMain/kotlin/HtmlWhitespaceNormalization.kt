@@ -183,11 +183,10 @@ public fun Flow<SemanticEvent>.dropHtmlStructuralWhitespace(): Flow<SemanticEven
             }
 
             is Unmark -> {
-                // An empty inline element (`<b> </b>`) is written as it was.
-                if (heldOpens.isNotEmpty()) {
-                    heldOpens.forEach { emit(it) }
-                    heldOpens.clear()
-                }
+                // An inline element closing with no content in it: a run
+                // after its opening tag (`Hi<b> </b>there`) still separates
+                // the content around it, so it goes before the held tags too.
+                releaseHeldOpens(rightQualifies = true)
                 displays.close()
                 if (depth == preserveFrom) preserveFrom = -1
                 depth--
