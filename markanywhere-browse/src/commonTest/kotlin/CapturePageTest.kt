@@ -938,71 +938,92 @@ class CapturePageTest {
 
     /**
      * A snapshot without `optionSelected` leaves the selection to the markup,
-     * read as the browser reads it: a single-choice select (no `multiple`, a
-     * `size` of at most 1) selects the last option marked `selected`, else
-     * its first option that is not disabled — itself or through its
-     * `<optgroup>` — which a secret select then reports `filled`, since that
-     * is the value the form submits. A list box selects only what the markup
-     * marks. Issue #131.
+     * read as the browser reads it to tell whether a secret select is
+     * `filled`: a select without `multiple` selects only the last option
+     * marked `selected`, whatever its size, and a single-choice one (a
+     * display size of at most 1, an unparsable or overflowing `size` reading
+     * as none) with no marked option selects its first option that is not
+     * disabled — by itself or by its parent `<optgroup>` — which is the value
+     * the form submits. A list box or a `multiple` select selects only what
+     * the markup marks. The options keep their markup `selected` as it is,
+     * the selection having not been read. Issue #131.
      */
     @Test
-    fun `should select the first enabled option of a single select when the snapshot omits selection`() = runTest {
+    fun `should judge a secret select by its markup selection when the snapshot omits selection`() = runTest {
         // given
         val strings = mutableListOf<String>()
         fun string(value: String): Int =
             strings.indexOf(value).takeIf { it >= 0 } ?: strings.size.also { strings += value }
-        fun attributes(vararg pairs: Pair<String, String>): List<Int> =
-            pairs.flatMap { (name, value) -> listOf(string(name), string(value)) }
 
-        val names = listOf(
-            "HTML", "BODY",
-            "SELECT", "OPTION", "OPTION", "OPTION",
-            "SELECT", "OPTGROUP", "OPTION", "OPTION",
-            "SELECT", "OPTION", "OPTION", "OPTION",
-            "SELECT", "OPTION",
-            "SELECT", "OPTION",
-            "SELECT", "OPTION",
+        // name, parent, attributes
+        val nodes = mutableListOf<Triple<String, Int, List<Pair<String, String>>>>(
+            Triple("HTML", -1, emptyList()),
+            Triple("BODY", 0, emptyList()),
         )
+        fun node(name: String, parent: Int, vararg attributes: Pair<String, String>): Int =
+            nodes.size.also { nodes += Triple(name, parent, attributes.toList()) }
+        fun secretSelect(vararg attributes: Pair<String, String>): Int =
+            node("SELECT", 1, "autocomplete" to "cc-exp-month", *attributes)
+
+        // the first enabled option, past a disabled placeholder
+        secretSelect().let {
+            node("OPTION", it, "value" to "", "disabled" to "")
+            node("OPTION", it, "value" to "01")
+        }
+        // an option of a disabled optgroup is disabled
+        secretSelect().let {
+            node("OPTION", node("OPTGROUP", it, "disabled" to ""), "value" to "a")
+            node("OPTION", it, "value" to "")
+        }
+        // only a parent optgroup disables an option
+        secretSelect().let {
+            node("OPTION", node("DIV", node("OPTGROUP", it, "disabled" to "")), "value" to "b")
+            node("OPTION", it, "value" to "")
+        }
+        // the last marked option wins in a list box too
+        secretSelect("size" to "3").let {
+            node("OPTION", it, "value" to "", "selected" to "")
+            node("OPTION", it, "value" to "05", "selected" to "")
+        }
+        // a list box selects nothing implicitly
+        secretSelect("size" to "3").let {
+            node("OPTION", it, "value" to "g")
+        }
+        // nor does a multiple select
+        secretSelect("multiple" to "").let {
+            node("OPTION", it, "value" to "f")
+        }
+        // a size parsed as an HTML non-negative integer
+        secretSelect("size" to " +1").let {
+            node("OPTION", it, "value" to "h")
+        }
+        // an overflowing size reads as none
+        secretSelect("size" to "99999999999").let {
+            node("OPTION", it, "value" to "i")
+        }
+        // a plain select keeps its markup selection as it is
+        node("SELECT", 1).let {
+            node("OPTION", it, "value" to "c", "selected" to "")
+            node("OPTION", it, "value" to "d", "selected" to "")
+            node("OPTION", it, "value" to "e")
+        }
+        node("SELECT", 1).let {
+            node("OPTION", it, "value" to "j")
+        }
+
         val snapshot = DOMSnapshot.CaptureSnapshotReturn(
             documents = listOf(
                 document(
-                    nodeType = names.map { 1 },
-                    nodeName = names.map(::string),
-                    parentIndex = listOf(
-                        -1, 0,
-                        1, 2, 2, 2,
-                        1, 6, 7, 6,
-                        1, 10, 10, 10,
-                        1, 14,
-                        1, 16,
-                        1, 18,
-                    ),
-                    backendNodeId = names.indices.map { it + 1 },
-                    attributes = listOf(
-                        emptyList(),
-                        emptyList(),
-                        attributes("autocomplete" to "cc-exp-month"),
-                        attributes("value" to "", "disabled" to ""),
-                        attributes("value" to "01"),
-                        attributes("value" to "02"),
-                        emptyList(),
-                        attributes("label" to "Off", "disabled" to ""),
-                        attributes("value" to "a"),
-                        attributes("value" to "b"),
-                        emptyList(),
-                        attributes("value" to "c", "selected" to ""),
-                        attributes("value" to "d", "selected" to ""),
-                        attributes("value" to "e"),
-                        attributes("multiple" to ""),
-                        attributes("value" to "f"),
-                        attributes("size" to "3"),
-                        attributes("value" to "g"),
-                        attributes("size" to " +1"),
-                        attributes("value" to "h"),
-                    ),
+                    nodeType = nodes.map { 1 },
+                    nodeName = nodes.map { string(it.first) },
+                    parentIndex = nodes.map { it.second },
+                    backendNodeId = nodes.indices.map { it + 1 },
+                    attributes = nodes.map { (_, _, attributes) ->
+                        attributes.flatMap { (name, value) -> listOf(string(name), string(value)) }
+                    },
                     optionSelected = null,
-                    layoutNodeIndex = names.indices.toList(),
-                    layoutStyles = names.map {
+                    layoutNodeIndex = nodes.indices.toList(),
+                    layoutStyles = nodes.map {
                         listOf("block", "visible", "none").map(::string)
                     },
                 ),
@@ -1025,27 +1046,44 @@ class CapturePageTest {
                     "select"("autocomplete" to "cc-exp-month", REDACTED to "filled", DISPLAY to "block") {
                         "option"("value" to "", "disabled" to "", DISPLAY to "block") { }
                         "option"("value" to "01", DISPLAY to "block") { }
-                        "option"("value" to "02", DISPLAY to "block") { }
                     }
-                    "select"(DISPLAY to "block") {
-                        "optgroup"("label" to "Off", "disabled" to "", DISPLAY to "block") {
+                    "select"("autocomplete" to "cc-exp-month", REDACTED to "empty", DISPLAY to "block") {
+                        "optgroup"("disabled" to "", DISPLAY to "block") {
                             "option"("value" to "a", DISPLAY to "block") { }
                         }
-                        "option"("value" to "b", "selected" to "", DISPLAY to "block") { }
+                        "option"("value" to "", DISPLAY to "block") { }
+                    }
+                    "select"("autocomplete" to "cc-exp-month", REDACTED to "filled", DISPLAY to "block") {
+                        "optgroup"("disabled" to "", DISPLAY to "block") {
+                            "div"(DISPLAY to "block") {
+                                "option"("value" to "b", DISPLAY to "block") { }
+                            }
+                        }
+                        "option"("value" to "", DISPLAY to "block") { }
+                    }
+                    "select"("autocomplete" to "cc-exp-month", "size" to "3", REDACTED to "filled", DISPLAY to "block") {
+                        "option"("value" to "", DISPLAY to "block") { }
+                        "option"("value" to "05", DISPLAY to "block") { }
+                    }
+                    "select"("autocomplete" to "cc-exp-month", "size" to "3", REDACTED to "empty", DISPLAY to "block") {
+                        "option"("value" to "g", DISPLAY to "block") { }
+                    }
+                    "select"("autocomplete" to "cc-exp-month", "multiple" to "", REDACTED to "empty", DISPLAY to "block") {
+                        "option"("value" to "f", DISPLAY to "block") { }
+                    }
+                    "select"("autocomplete" to "cc-exp-month", "size" to " +1", REDACTED to "filled", DISPLAY to "block") {
+                        "option"("value" to "h", DISPLAY to "block") { }
+                    }
+                    "select"("autocomplete" to "cc-exp-month", "size" to "99999999999", REDACTED to "filled", DISPLAY to "block") {
+                        "option"("value" to "i", DISPLAY to "block") { }
                     }
                     "select"(DISPLAY to "block") {
-                        "option"("value" to "c", DISPLAY to "block") { }
+                        "option"("value" to "c", "selected" to "", DISPLAY to "block") { }
                         "option"("value" to "d", "selected" to "", DISPLAY to "block") { }
                         "option"("value" to "e", DISPLAY to "block") { }
                     }
-                    "select"("multiple" to "", DISPLAY to "block") {
-                        "option"("value" to "f", DISPLAY to "block") { }
-                    }
-                    "select"("size" to "3", DISPLAY to "block") {
-                        "option"("value" to "g", DISPLAY to "block") { }
-                    }
-                    "select"("size" to " +1", DISPLAY to "block") {
-                        "option"("value" to "h", "selected" to "", DISPLAY to "block") { }
+                    "select"(DISPLAY to "block") {
+                        "option"("value" to "j", DISPLAY to "block") { }
                     }
                 }
             }
