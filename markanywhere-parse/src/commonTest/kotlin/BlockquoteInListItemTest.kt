@@ -330,6 +330,39 @@ class BlockquoteInListItemTest {
     }
 
     @Test
+    fun `should keep a trailing backslash of a heading as literal text`() = runTest {
+        // given — a heading has no hard break (GFM §6.7)
+        val textFlow = buildString {
+            +"- # foo\\\n"
+            +"- > # foo\\\n"
+            +"- # a ~~\\\n"
+            +"\n"
+            +"### foo\\\n"
+        }.chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ul" {
+                "li" {
+                    "h1" { +"foo\\" }
+                }
+                "li" {
+                    "blockquote" {
+                        "h1" { +"foo\\" }
+                    }
+                }
+                "li" {
+                    "h1" { +"a ~~\\" }
+                }
+            }
+            "h3" { +"foo\\" }
+        }
+    }
+
+    @Test
     fun `should round-trip a heading in a blockquote in a list item`() = runTest {
         // given
         val events = semanticEvents {
