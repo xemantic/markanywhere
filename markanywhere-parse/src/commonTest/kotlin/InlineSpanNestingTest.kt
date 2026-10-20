@@ -718,12 +718,17 @@ class InlineSpanNestingTest {
         }
     }
 
-    // The orphaned closer of a force-closed span is only a run in closing
-    // position that cannot open: a run that can is a legitimate span of its
-    // own, as GFM pairs it (issue #135).
+    // Issue #135 asked for the GFM pairing below; the orphaned closer stays
+    // literal instead, so a run that only GFM pairs with a later one opens a
+    // span to the line end (or an empty one at it).
 
     @Test
-    fun `should pair a del after the closer of a del force-closed by an em`() = runTest {
+    fun `DIVERGENCE - should keep the closer of a force-closed del literal before a letter`() = runTest {
+        // GFM pairs `~~d~~` (its `~~b` was never a del). Here the `~~` after `c`
+        // is the leftover closer of the del the em force-closed, and whether a
+        // later `~~` pairs with it is only known at the line end — holding the
+        // line would break streaming. Opening a del there instead would strike
+        // `d e` to the line end in the common `*a ~~b* c~~d e`.
         // given
         val textFlow = "*a ~~b* c~~d~~ e".chunkedRandomly().asFlow()
 
@@ -737,15 +742,16 @@ class InlineSpanNestingTest {
                     +"a "
                     "del" { +"b" }
                 }
-                +" c"
-                "del" { +"d" }
-                +" e"
+                +" c~~d"
+                "del" { +" e" }
             }
         }
     }
 
     @Test
-    fun `should pair a sup after the closer of a sup force-closed by an em`() = runTest {
+    fun `DIVERGENCE - should keep the closer of a force-closed sup literal before a letter`() = runTest {
+        // As above: GFM pairs `^d^`, the caret after `c` stays the leftover
+        // closer, so the last caret opens a sup the line end closes empty.
         // given
         val textFlow = "*a ^b* c^d^".chunkedRandomly().asFlow()
 
@@ -759,8 +765,8 @@ class InlineSpanNestingTest {
                     +"a "
                     "sup" { +"b" }
                 }
-                +" c"
-                "sup" { +"d" }
+                +" c^d"
+                "sup" { }
             }
         }
     }
@@ -1105,6 +1111,81 @@ class InlineSpanNestingTest {
             "p" {
                 +"<3 a <= b "
                 "strong" { +"c" }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep a tilde pair before the closer of an em literal`() = runTest {
+        // given
+        val textFlow = "*a~~* and **x==**".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "em" { +"a~~" }
+                +" and "
+                "strong" { +"x==" }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep a less-than sign before an escape literal`() = runTest {
+        // given
+        val textFlow = """a <\* b *c*""".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                +"a <* b "
+                "em" { +"c" }
+            }
+        }
+    }
+
+    @Test
+    fun `should parse an email autolink starting with a digit or a dash or an equals sign`() = runTest {
+        // given
+        val textFlow = "<1u@x.com> <-u@x.com> <=u@x.com>".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "a"("href" to "mailto:1u@x.com") { +"1u@x.com" }
+                +" "
+                "a"("href" to "mailto:-u@x.com") { +"-u@x.com" }
+                +" "
+                "a"("href" to "mailto:=u@x.com") { +"=u@x.com" }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep a less-than sign starting no email autolink literal`() = runTest {
+        // given
+        val textFlow = "I <3 you *a* <-b *c* x <== y".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                +"I <3 you "
+                "em" { +"a" }
+                +" <-b "
+                "em" { +"c" }
+                +" x <== y"
             }
         }
     }
