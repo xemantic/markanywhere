@@ -32,7 +32,7 @@ class DataUriImagesTest {
     @Test
     fun `should not inline a data uri payload into any dump`() = runTest {
         // given — every dump; Bing, DuckDuckGo and Google carry `data:` images
-        val dumps = DumpFixtures.all
+        val dumps = DumpFixtures.byFileName
 
         // when
         val leaks = dumps.mapValues { (_, dump) ->

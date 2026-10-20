@@ -402,6 +402,40 @@ class ResolveLazyImagesTest {
     }
 
     @Test
+    fun `should not let a lazy conditional source replace a real src`() = runTest {
+        // given — a `media` source is an art-direction variant (a mobile
+        // crop), not what the library swaps into the image's own `src`
+        val input = semanticEvents(tagged = true) {
+            "picture" {
+                "source"("media" to "(max-width:600px)", "data-srcset" to "mobile-crop.jpg") { }
+                "img"("src" to "desktop.jpg", "alt" to "A") { }
+            }
+        }
+
+        // when
+        val output = input.resolveLazyImages()
+
+        // then
+        output sameAs input
+    }
+
+    @Test
+    fun `should replace a url template in src only when something real replaces it`() = runTest {
+        // when — an unfilled template in `src` names no image, but with
+        // nothing to replace it the source is kept as it was
+        val output = semanticEvents(tagged = true) {
+            "img"("src" to "a_{width}x.jpg", "srcset" to "a_360x.jpg 360w, a_720x.jpg 720w", "alt" to "A") { }
+            "img"("src" to "b_{width}x.jpg", "alt" to "B") { }
+        }.resolveLazyImages()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "img"("src" to "a_720x.jpg", "srcset" to "a_360x.jpg 360w, a_720x.jpg 720w", "alt" to "A") { }
+            "img"("src" to "b_{width}x.jpg", "alt" to "B") { }
+        }
+    }
+
+    @Test
     fun `should not let a url template replace a real src`() = runTest {
         // given — lazysizes-rias and Shopify themes put a URL template in
         // `data-src` that a script fills in; unfilled it names no image

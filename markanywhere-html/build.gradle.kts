@@ -122,7 +122,7 @@ val generateDumpFixtures = tasks.register("generateDumpFixtures") {
         }
         // every fixture by its file name, for tests sweeping all the dumps
         sb.append("    /** Every fixture, keyed by its file name. */\n")
-        sb.append("    val all: Map<String, String> by lazy {\n        mapOf(\n")
+        sb.append("    val byFileName: Map<String, String> by lazy {\n        mapOf(\n")
         jsonFiles.forEach { file ->
             sb.append("            \"${file.name}\" to ${fixturePropertyName(file.name)},\n")
         }

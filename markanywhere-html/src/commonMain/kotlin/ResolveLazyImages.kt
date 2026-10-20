@@ -50,12 +50,15 @@ import kotlinx.coroutines.flow.flow
  *    cannot decode is skipped, as the browser skips it.
  *
  * A lazy attribute — one of step 1, or a `data-srcset` of the image or of the
- * picture's chosen `<source>` — wins over a `src` that is a real URL too:
+ * picture's unconditional `<source>` (never of a `media` variant) — wins over
+ * a `src` that is a real URL too:
  * some libraries (WordPress a3-lazy-load, jQuery lazyload, lazysizes) keep a
  * real placeholder image in `src` (`lazy_placeholder.gif`, `grey.gif`), which
  * no rule could tell from the image by its URL, and the attribute names what
  * the library swaps in. A plain `srcset` never replaces such a `src`: beside a
- * real `src` it is a responsive image, not a lazy one.
+ * real `src` it is a responsive image, not a lazy one. A `src` that is
+ * itself an unfilled URL template is replaced by any candidate, and kept as it
+ * is when there is none.
  *
  * The "best" `srcset` candidate is the widest (`w` descriptor), or, without
  * width descriptors, the densest (`x`, a bare URL counting as `1x`) — the one
@@ -150,7 +153,7 @@ internal class LazyImageResolver(private val dropPlaceholders: Boolean = true) {
                     }
                     event
                 }
-                "img" -> event.withResolvedSrc(pictures.lastOrNull()?.source)
+                "img" -> event.withResolvedSrc(pictures.lastOrNull())
                 else -> event
             }
         }
@@ -162,17 +165,25 @@ internal class LazyImageResolver(private val dropPlaceholders: Boolean = true) {
         is Text -> event
     }
 
-    private fun Mark.withResolvedSrc(pictureSource: Candidate?): Mark? {
+    private fun Mark.withResolvedSrc(picture: Picture?): Mark? {
         val src = this["src"]
         val lazySrc = LAZY_SRC_ATTRIBUTES.firstNotNullOfOrNull { name ->
             this[name]?.trim()?.takeIf { it.isImageCandidate() }
         }
         val ownCandidate = srcsetCandidate()
+        val pictureSource = picture?.source
         if (src != null && src.isImageUrl()) {
-            // only what a library swaps into `src` replaces a real one
-            val swapped = lazySrc
-                ?: ownCandidate?.takeIf { it.isLazy }?.url
-                ?: pictureSource?.takeIf { it.isLazy }?.url
+            val swapped = if (src.isImageCandidate()) {
+                // only what a library swaps into `src` replaces a real one —
+                // never an art-direction variant (a `media` source)
+                lazySrc
+                    ?: ownCandidate?.takeIf { it.isLazy }?.url
+                    ?: picture?.defaultSource?.takeIf { it.isLazy }?.url
+            } else {
+                // an unfilled URL template: anything real replaces it, but
+                // with nothing to, it is kept as it was
+                lazySrc ?: ownCandidate?.url ?: pictureSource?.url
+            }
             return if (swapped == null || swapped == src.trim()) this
             else copy(attributes = attributes + ("src" to swapped))
         }
