@@ -227,6 +227,109 @@ class BlockquoteInListItemTest {
     }
 
     @Test
+    fun `should end a blockquote at a link reference definition`() = runTest {
+        // given
+        val textFlow = buildString {
+            +"- > a\n"
+            +"  >\n"
+            +"  [x]: /u\n"
+            +"  > b\n"
+        }.chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ul" {
+                "li" {
+                    "blockquote" {
+                        "p" { +"a" }
+                    }
+                    "blockquote" {
+                        "p" { +"b" }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should strip a closing sequence from a heading in a blockquote in a list item`() = runTest {
+        // given
+        val textFlow = "- > ## foo ##\n".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ul" {
+                "li" {
+                    "blockquote" {
+                        "h2" { +"foo" }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should strip a closing sequence from a heading in a list item`() = runTest {
+        // given
+        val textFlow = buildString {
+            +"- ## foo ##  \n"
+            +"- x\n"
+            +"\n"
+            +"  ### bar ###\n"
+        }.chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ul" {
+                "li" {
+                    "h2" { +"foo" }
+                }
+                "li" {
+                    "p" { +"x" }
+                    "h3" { +"bar" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep a hash run not preceded by whitespace in a heading in a list item`() = runTest {
+        // given — GFM example 81 inside a list item
+        val textFlow = buildString {
+            +"- # foo#\n"
+            +"- # foo \\#\n"
+            +"- ### ###\n"
+        }.chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ul" {
+                "li" {
+                    "h1" { +"foo#" }
+                }
+                "li" {
+                    "h1" { +"foo #" }
+                }
+                "li" {
+                    "h3" {}
+                }
+            }
+        }
+    }
+
+    @Test
     fun `should round-trip a heading in a blockquote in a list item`() = runTest {
         // given
         val events = semanticEvents {
