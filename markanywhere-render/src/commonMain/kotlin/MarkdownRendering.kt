@@ -135,9 +135,10 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
     // row can be dropped if empty, and so a headerless table can synthesize an
     // empty header (column count is known only once the first row closes).
     var rowCapture: StringBuilder? = null
-    // Whether the output ends with a blank line (or nothing was written yet):
-    // a raw tag written here starts a block of its own.
-    var afterBlankLine = true
+    // Whether the next content starts a block of its own: nothing written yet
+    // in the current block (after a blank line, a block-level tag or a block
+    // container's start), not a line continuing a paragraph.
+    var atBlockStart = true
     // Counts the writes that broke a line, to tell whether an HTML block's
     // content stayed on its opening line (see closesAsBlock).
     var lineBreaks = 0
@@ -157,7 +158,6 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
     fun out(s: String) {
         if (s.isEmpty()) return
         (rowCapture ?: eventBuffer).append(s)
-        afterBlankLine = if (s == "\n") lastChar == '\n' else s.endsWith("\n\n")
         if ('\n' in s) lineBreaks++
         lastChar = s.last()
         closerChar = null
@@ -315,6 +315,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         atLineStart = false
         freshBlockLine = false
         lineStartDigits = false
+        atBlockStart = false
     }
 
     fun ensureLineStart() {
@@ -325,12 +326,19 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
             atLineStart = true
             freshBlockLine = true
             lineStartDigits = false
+            atBlockStart = false
         }
     }
 
     // Called before emitting Markdown content / a Markdown block. Emits a
     // blank separator line when one is pending (sibling blocks) or when the
     // previous block-level item was a raw HTML tag (tag→Markdown boundary).
+    // A blank line ends the raw text an HTML block opened with (see
+    // TaggedInline.rawUntilBlank): the parser sub-parses what follows it.
+    fun markBlankLine() {
+        for (frame in blockStack) if (frame is TaggedInline) frame.rawUntilBlank = false
+    }
+
     fun ensureBlankLine() {
         // A pending hard break (`<br>`) is inline-only; reaching a block
         // boundary makes it moot, so drop it rather than letting it inject
@@ -341,6 +349,8 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         if (pendingBlockSeparator || lastBlock == BLOCK_TAG) {
             out(buildPrefix(consumeMarker = false).trimEnd())
             out("\n")
+            markBlankLine()
+            atBlockStart = true
         }
         pendingBlockSeparator = false
         lastBlock = BLOCK_MARKDOWN
@@ -412,8 +422,12 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         if (lastBlock == BLOCK_MARKDOWN || pendingBlockSeparator) {
             out(buildPrefix(consumeMarker = false).trimEnd())
             out("\n")
+            markBlankLine()
         }
         pendingBlockSeparator = false
+        // A block-level tag goes on a line of its own: what follows it starts
+        // a block either way.
+        atBlockStart = true
     }
 
     // The first frame from the top of blockStack that is not a transparent inline
@@ -447,9 +461,10 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
     // escaping, block-marker escaping and the fresh-line trim all ask it:
     //  - TEXT_VERBATIM: certainly as raw text, where a backslash is literal —
     //    code, preformatted text, front matter, a raw verbatim tag (`<pre>`,
-    //    `<textarea>`, …), custom markup (`<ns:name>`) opening a top-level
-    //    block (TaggedInline.rawCertain), and the rest of the line a type-6
-    //    HTML block opens at a block boundary (rawLine). Written as is.
+    //    `<textarea>`, …), custom markup (`<ns:name>`) opening a block outside
+    //    a list item, an HTML block in a list item (TaggedInline.rawCertain),
+    //    a type-6 HTML block up to its first blank line (rawUntilBlank) and the
+    //    rest of its opening line once it closes there (rawLine). Written as is.
     //  - TEXT_RAW_OR_MARKDOWN: inside an HTML block candidate written inline
     //    (a raw tag starting a line with its content after it on the same line
     //    — TaggedInline.htmlBlock, not a block-level tag). Whether the parser
@@ -466,7 +481,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
             when (frame) {
                 is Code, Pre, Frontmatter -> return TEXT_VERBATIM
                 is TaggedInline -> when {
-                    frame.verbatim || frame.rawCertain -> return TEXT_VERBATIM
+                    frame.verbatim || frame.rawCertain || frame.rawUntilBlank -> return TEXT_VERBATIM
                     // A block-level tag is written alone on its line, its content
                     // and its closer after blank lines: Markdown in between.
                     frame.htmlBlock && !frame.block -> context = TEXT_RAW_OR_MARKDOWN
@@ -483,13 +498,14 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
 
     // Whether a raw tag written here, at a line start, opens an HTML block on
     // re-parse: a type-6 tag ([type6]) anywhere, as it interrupts a paragraph;
-    // any other after a blank line or as a list item's first content. Never
-    // in a blockquote, where the parser detects no HTML block.
-    fun opensBlock(type6: Boolean): Boolean =
-        (type6 || afterBlankLine || (blockStack.lastOrNull { it is ListItem } as? ListItem)?.pendingMarker != null) &&
-            blockStack.none { it == Blockquote }
+    // any other at a block start ([blockStart]). Never in a blockquote, where
+    // the parser detects no HTML block.
+    fun opensBlock(type6: Boolean, blockStart: Boolean): Boolean =
+        (type6 || blockStart) && blockStack.none { it == Blockquote }
 
-    fun opensHtmlBlockInItem(type6: Boolean): Boolean = blockStack.any { it is ListItem } && opensBlock(type6)
+    // A list item's first content is still to be written: its marker is pending.
+    fun atItemFirstLine(): Boolean =
+        (blockStack.lastOrNull { it is ListItem } as? ListItem)?.pendingMarker != null
 
     // The emphasis delimiter chars (`*`/`~`/`=`/`^`, as delimiterBit bits) to
     // escape wherever they stand in the current text: every one of them when
@@ -529,10 +545,9 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
     // it (see escapeInlineSyntax). Suppressed in verbatim text, where a
     // backslash is literal: code, preformatted text, front matter, a raw
     // verbatim tag, and an HTML block in a list item.
-    fun escapeInlineText(text: String, next: Char?): String {
+    fun escapeInlineText(text: String, next: Char?, context: Int = textContext()): String {
         // Pre-scan so plain words return without the stack scans below.
         if (text.none { it in INLINE_SYNTAX_CHARS || it == '[' || it == ']' }) return text
-        val context = textContext()
         if (context == TEXT_VERBATIM) return text
         // The parser never opens an em (strong) while one is open, even outside
         // the label the text is in, so `*x [a*b](u) y*` keeps its `*` as is.
@@ -544,10 +559,16 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                 "**" -> strongOpen = true
             }
         }
+        // A heading and a table cell are one line: a line break in them is
+        // written as a space, so it ends nothing — and a block in a cell is
+        // joined to what precedes it, so what comes next there is unknown.
+        val inCell = blockStack.any { it is TableCell }
+        val oneLine = inCell || onHeadingLine()
         return escapeInlineSyntax(
             text = text,
             before = prevWrittenChar(),
-            next = next,
+            next = if (inCell && next == '\n') null else next,
+            oneLine = oneLine,
             mask = spanEscapeMask(),
             emOpen = emOpen,
             strongOpen = strongOpen,
@@ -643,10 +664,6 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         }
     }
 
-    // Escaping a leading block marker is only safe in a Markdown-block context —
-    // never inside verbatim `pre`/`code` or a raw frontmatter block.
-    fun blockMarkerEscapingAllowed(): Boolean = !inVerbatimText()
-
     // A soft line break. Spaces deferred from the previous line are trailing
     // and dropped (insignificant around a soft break); the line resets to a
     // fresh Markdown line so a continuation line that begins with a block
@@ -662,6 +679,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         atLineStart = true
         freshBlockLine = true
         lineStartDigits = false
+        atBlockStart = false
     }
 
     // The delimiter of the emphasis span enclosing the current text, looking
@@ -704,15 +722,21 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         // keep that guarantee or move this call after the appropriate guard.
         // Outside a label the block separation comes first, so the escaping
         // sees the line start it writes (see prevWrittenChar).
-        if (!inLabel()) {
-            consumeHeadingSpace()
-            beforeContent()
+        if (inLabel()) {
+            appendLabel(escapeInlineText(rawText, next))
+            return
         }
-        val text = escapeInlineText(rawText, next)
-        if (inLabel()) { appendLabel(text); return }
-        val parts = text.split('\n')
-        parts.forEachIndexed { i, part ->
+        consumeHeadingSpace()
+        beforeContent()
+        // Each line is escaped in its own context, decided once for it: a line
+        // break may end the raw text of an HTML block's opening line (rawLine).
+        val rawParts = rawText.split('\n')
+        rawParts.forEachIndexed { i, rawPart ->
             if (i > 0) emitSoftBreak()
+            // An empty line between two others is a blank line written.
+            if (i > 1 && rawParts[i - 1].isBlank()) markBlankLine()
+            val context = textContext()
+            val part = escapeInlineText(rawPart, if (i == rawParts.lastIndex) next else '\n', context)
             if (part.isNotEmpty()) {
                 // Split off the line's trailing ASCII spaces and defer them
                 // (see flushPendingSpaces / pendingSpaces): they are emitted
@@ -721,7 +745,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                 // the span's closer can precede it (see pendingWhitespace) —
                 // but not inside a raw verbatim tag, whose text is kept as
                 // written (as is its indentation, see below).
-                val verbatim = inVerbatimText()
+                val verbatim = context == TEXT_VERBATIM
                 val inSpan = !verbatim && enclosingSpanDelimiter() != null
                 val contentEnd = if (inSpan) {
                     part.indexOfLast { !it.isFlankWhitespace() } + 1
@@ -734,31 +758,33 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                 val original = part.substring(0, contentEnd).let {
                     // Only ASCII spaces: whitespace held as content (NBSP and
                     // other `Zs`, see pendingWhitespace) is never trimmed.
-                    if (atLineStart && freshBlockLine && blockMarkerEscapingAllowed() && !verbatim) it.trimStart(' ')
+                    if (atLineStart && freshBlockLine && !verbatim) it.trimStart(' ')
                     else it
                 }
                 if (original.isNotEmpty()) {
                     flushPendingSpaces()
                     if (atLineStart) out(buildPrefix(consumeMarker = true))
                     var content = original
-                    if (blockMarkerEscapingAllowed()) {
+                    if (!verbatim) {
+                        val entities = context == TEXT_RAW_OR_MARKDOWN
                         if (freshBlockLine) {
                             // At a fresh Markdown line, escape a leading block
                             // marker so paragraph text like "1." / "- x" / "# x"
                             // / "---" / ">" does not re-parse as a different block.
-                            content = escapeLeadingBlockMarker(original, entities = textContext() == TEXT_RAW_OR_MARKDOWN)
+                            content = escapeLeadingBlockMarker(original, entities)
                         } else if (lineStartDigits) {
                             // Complete a fragmented ordered marker: a "."/")"
                             // right after a bare line-starting digit run.
-                            content = escapeLeadingOrderedDelimiter(original, entities = textContext() == TEXT_RAW_OR_MARKDOWN)
+                            content = escapeLeadingOrderedDelimiter(original, entities)
                         }
                     }
                     out(content)
                     atLineStart = false
+                    atBlockStart = false
                     // A bare, unescaped digit run starting the line may be the
                     // first half of a fragmented ordered marker (`1\.` parses to
                     // "1" then "."); remember it so the delimiter is escaped next.
-                    lineStartDigits = freshBlockLine && blockMarkerEscapingAllowed() &&
+                    lineStartDigits = freshBlockLine && !verbatim &&
                         content == original && original.all { it in '0'..'9' }
                     freshBlockLine = false
                 }
@@ -821,7 +847,8 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                 // as Markdown rather than raw HTML. Any inline label collected
                 // before the spill (e.g. a "LIVE" badge) becomes its own block.
                 separateBeforeBlockTag()
-                frame.rawInItem = opensHtmlBlockInItem(type6 = false)
+                frame.rawInItem = blockStack.any { it is ListItem } &&
+                    opensBlock(type6 = false, blockStart = atBlockStart || atItemFirstLine())
                 writeTag(openTag)
                 ensureLineStart()
                 lastBlock = BLOCK_TAG
@@ -857,7 +884,11 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         // `<a>` at a paragraph start inline — without it, atLineStart would
         // still be true and trip the line-start block-tag rule below, wrongly
         // spilling `<a href>text</a> rest` to a block-level raw tag.
-        if (!inLabel() && pendingParagraph) {
+        // Captured before the deferred paragraph starts, which writes its
+        // prefix: a tag that is a paragraph's first content starts its line.
+        val paragraphStart = !inLabel() && pendingParagraph
+        val itemFirstLine = !inLabel() && atItemFirstLine()
+        if (paragraphStart) {
             pendingParagraph = false
             startBlock()
         }
@@ -875,21 +906,23 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
             if (blockLevelTag) separateBeforeBlockTag()
             else if (atLineStart && pendingSpaces == 0) ensureBlankLine()
         }
-        val startsLine = atLineStart && !inLabel()
-        // Custom markup opening a top-level block is read back raw for certain:
-        // in a list item, a blockquote or after a soft break it is not.
+        val startsLine = !inLabel() && (paragraphStart || atLineStart)
+        val blockStart = paragraphStart || atBlockStart || itemFirstLine
+        val inItem = blockStack.any { it is ListItem }
+        // Custom markup opening a block outside a list item is read back raw
+        // for certain — in a blockquote too; in a list item or continuing a
+        // paragraph it is Markdown.
         val custom = ':' in event.name
         val blockName = custom || event.name.lowercase() in HTML_BLOCK_START_TAGS
-        val rawCertain = custom && startsLine && afterBlankLine &&
-            blockStack.none { it is ListItem || it == Blockquote }
-        // The first line of an HTML block is raw text, wherever the block may
-        // go on: at a blank line, or as a list item's first line — never in a
-        // blockquote, where the parser detects no HTML block.
+        val rawCertain = custom && startsLine && blockStart && !inItem
+        // An HTML block's text is raw up to its first blank line (rawUntilBlank),
+        // and in a list item, which the parser never sub-parses, to its end
+        // (rawInItem) — never in a blockquote, where it detects no HTML block.
         val type6 = event.name.lowercase() in HTML_BLOCK_START_TAGS
-        if (startsLine && type6 && opensBlock(type6 = true)) rawLine = lineBreaks
-        // In a list item the parser never sub-parses an HTML block: all of it
-        // is raw text for certain.
-        val rawInItem = startsLine && (blockLevelTag || type6) && opensHtmlBlockInItem(type6)
+        val opensHtmlBlock = startsLine && (blockLevelTag || type6) &&
+            opensBlock(type6, blockStart)
+        if (opensHtmlBlock && type6) rawLine = lineBreaks
+        val rawInItem = opensHtmlBlock && inItem
         writeTag(event.renderOpenTag())
         // Block decision captured before writeTag cleared atLineStart. A void
         // element also ends its line outside a heading (a soft break there);
@@ -907,7 +940,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                 rawCertain = rawCertain || rawInItem,
                 blockName = blockName,
                 openedAtLineBreak = lineBreaks
-            )
+            ).also { it.rawUntilBlank = opensHtmlBlock && type6 }
         )
     }
 
@@ -1302,6 +1335,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                         out("](")
                         out(src)
                         out(")")
+                        atBlockStart = false
                         atLineStart = false
                         freshBlockLine = false
                         lineStartDigits = false
@@ -1556,8 +1590,8 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
     fun holdsText(event: SemanticEvent): Boolean {
         if (event !is Text) return false
         val last = event.text.lastOrNull() ?: return false
-        // A `<` is judged by the chars after it, up to past the text's end.
-        return last in LOOKAHEAD_CHARS || '<' in event.text ||
+        // A `<` or a `&` is judged by the chars after it, up to past the text's end.
+        return last in LOOKAHEAD_CHARS || '<' in event.text || '&' in event.text ||
             (last.isFlankWhitespace() && enclosingSpanDelimiter() != null)
     }
 
@@ -1763,7 +1797,11 @@ private sealed interface BlockFrame {
         val rawCertain: Boolean = false,
         val blockName: Boolean = false,
         val openedAtLineBreak: Int = 0
-    ) : BlockFrame
+    ) : BlockFrame {
+        // Opened a type-6 HTML block whose text stays raw up to the first
+        // blank line written in it (see markBlankLine).
+        var rawUntilBlank: Boolean = false
+    }
     data object Frontmatter : BlockFrame
     class Table(var columnCount: Int = 0, var headerEmitted: Boolean = false) : BlockFrame
     class TableSection(val name: String) : BlockFrame
@@ -2097,6 +2135,7 @@ private fun escapeInlineSyntax(
     before: Char,
     next: Char?,
     mask: Int,
+    oneLine: Boolean = false,
     emOpen: Boolean = false,
     strongOpen: Boolean = false,
     brackets: Boolean = false,
@@ -2110,7 +2149,7 @@ private fun escapeInlineSyntax(
         var end = i + 1
         if (c in RUN_SYNTAX_CHARS) while (end < text.length && text[end] == c) end++
         val prev = if (i == 0) before else text[i - 1]
-        val after = if (end < text.length) text[end] else next
+        val after = (if (end < text.length) text[end] else next).let { if (oneLine && it == '\n') ' ' else it }
         // The char before is written escaped or as a closer — either way the run
         // would join it, so it is escaped like the char before.
         val joinsRun = prev == c || after == c || after == null
@@ -2136,6 +2175,11 @@ private fun escapeInlineSyntax(
             '\\' -> after == null || after.isFlankWhitespace() || after in BACKSLASH_ESCAPED_SYNTAX
             '<' -> lessThanStartsInlineHtml(text, end, next, mask, brackets)
             '[', ']' -> brackets
+            // A literal `&amp;` would decode to `&` on re-parse. The parser
+            // splits text at an escaped `&`, so one ending the text is judged
+            // by the char after it alone.
+            '&' -> if (i == text.lastIndex) after == null || after.isLetter() || after == '#'
+                else text.startsCharacterReference(i, next)
             else -> false
         }
         if (escape && out == null) out = StringBuilder(text.length + 8).append(text, 0, i)
@@ -2226,6 +2270,22 @@ private val HTML_BLOCK_START_TAGS = setOf(
     "tbody", "td", "tfoot", "th", "thead", "title", "tr", "track", "ul"
 )
 
+// Whether a character reference (`&amp;`, `&#42;`, `&#x2A;`) starts at the `&`
+// at [index] — the parser decodes one, so a literal one must be escaped.
+// A reference running to the end of the text is judged by [next], the char
+// written after it: the parser splits text at chars such as `;`.
+private fun String.startsCharacterReference(index: Int, next: Char?): Boolean {
+    var i = index + 1
+    if (i < length && this[i] == '#') {
+        i++
+        if (i < length && (this[i] == 'x' || this[i] == 'X')) i++
+    } else if (i >= length || !this[i].isLetter()) return false
+    val start = i
+    while (i < length && i - start < 32 && this[i].isLetterOrDigit()) i++
+    if (i == length) return next == null || next == ';' || next.isLetterOrDigit()
+    return i > start && this[i] == ';'
+}
+
 // Escapes an image's alt text for its `![alt](src)` description, which the
 // parser reads as inline content before reducing it to plain text.
 private fun escapeAltText(alt: String, entities: Boolean): String =
@@ -2251,11 +2311,11 @@ private fun canOpenEmphasis(c: Char, before: Char, after: Char?): Boolean {
 private fun Char.isMathOpen(): Boolean = isLetter() || this == '\\' || this == '{'
 
 // Chars escapeInlineText may have to escape; text without any is written as is.
-private const val INLINE_SYNTAX_CHARS = "*~=^`_$\\<"
+private const val INLINE_SYNTAX_CHARS = "*~=^`_$\\<&"
 
 // Chars whose escaping depends on the char written after them — a text event
 // ending in one is held until the next event (see heldText).
-private const val LOOKAHEAD_CHARS = "*~=_$\\<"
+private const val LOOKAHEAD_CHARS = "*~=_$\\<&"
 
 // The chars after a `\` that make it an escape the renderer must keep literal
 // (see escapeInlineSyntax): inline syntax chars, brackets, `!` and `&`.

@@ -235,7 +235,7 @@ class InlineSyntaxEscapingRoundTripTest {
     }
 
     @Test
-    fun `should escape the closer of a del force-closed by an em before a letter`() = runTest {
+    fun `DIVERGENCE - should escape the closer of a del force-closed by an em before a letter`() = runTest {
         // given — the parser keeps the `~~` after `c` literal (a DIVERGENCE)
         val markdown = "*a ~~b* c~~d~~ e"
         // when
@@ -1021,6 +1021,71 @@ class InlineSyntaxEscapingRoundTripTest {
 
         // then
         assert(failures.isEmpty())
+    }
+
+    // --- round 6: raw text for certain stays exact --------------------------
+
+    @Test
+    fun `should keep the lines of an html block before its first blank line exact`() = runTest {
+        for (markdown in listOf(
+            "<div align=\"center\">\n**Bold** and *em* text\n</div>",
+            "<div>\nSome *text* with a [link](u) here\n</div>",
+            "<center>\n*x* & y\n</center>",
+            "<div>\n- a\n- c\n</div>",
+            "<div>\n1. a\n2. b\n</div>",
+        )) {
+            // given — the parser reads them as the block's raw text
+            // when
+            val once = flowOf(markdown).parse().renderMarkdown()
+            // then
+            once sameAs markdown
+        }
+    }
+
+    @Test
+    fun `should keep raw text with block markers in an html block exact`() = runTest {
+        // given
+        val events = semanticEvents { tag("div") { +"a\n# b *c*\n- d" } }
+        // when
+        val (once, twice, thrice) = renderThreePasses(events)
+        // then
+        assert("\\" !in once && "&#" !in once)
+        twice sameAs once
+        thrice sameAs twice
+    }
+
+    @Test
+    fun `should keep custom markup opening a blockquote verbatim`() = runTest {
+        // given
+        val markdown = "> <x:think>a *b* `c`</x:think>"
+        // when
+        val once = flowOf(markdown).parse().renderMarkdown()
+        // then
+        once sameAs markdown
+    }
+
+    @Test
+    fun `should keep a raw tag that is the first content of a paragraph verbatim`() = runTest {
+        for (name in listOf("x:note", "h3", "div")) {
+            // given — the tag opens the paragraph's line, so it starts an HTML block
+            val events = semanticEvents { "p" { tag(name) { +"x*y* `c`" } } }
+            // when
+            val markdown = events.renderMarkdown()
+            // then
+            markdown sameAs "<$name>x*y* `c`</$name>"
+            assertMarkdownFixpoint(markdown)
+        }
+    }
+
+    @Test
+    fun `should keep custom markup that is the first content of a paragraph in a blockquote verbatim`() = runTest {
+        // given
+        val events = semanticEvents { "blockquote" { "p" { tag("x:note") { +"x*y* `c`" } } } }
+        // when
+        val markdown = events.renderMarkdown()
+        // then
+        markdown sameAs "> <x:note>x*y* `c`</x:note>"
+        assertMarkdownFixpoint(markdown)
     }
 
 }
