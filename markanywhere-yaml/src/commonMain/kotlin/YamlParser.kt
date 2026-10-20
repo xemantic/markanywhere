@@ -97,7 +97,8 @@ import kotlinx.coroutines.flow.FlowCollector
  * it arrives (they are then written relative to the root) or cannot arrive
  * any more (they keep their own indentation) — at most 8 of them: past that
  * they keep their own indentation and stream (DIVERGENCE: an entry after
- * them then loses the fixpoint). A verbatim
+ * them, written back at column 0, then sits less indented than they do —
+ * Psych and go-yaml v2 drop it, PyYAML refuses the document). A verbatim
  * value streams line by line. Never throws.
  */
 public class YamlParser(
