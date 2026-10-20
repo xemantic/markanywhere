@@ -17,6 +17,7 @@
 package com.xemantic.markanywhere.xml
 
 import com.xemantic.markanywhere.SemanticEvent
+import com.xemantic.markanywhere.flow.mergeAdjacentText
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.test.sameAs
 import kotlinx.coroutines.flow.Flow
@@ -26,10 +27,10 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 
 /**
- * The engine-independent half of the module: the two conveniences which route
+ * The engine-independent half of the module: the conveniences which route
  * source into an [XmlParser]. Asserted against a parser which merely echoes the
  * chunks it was handed, so that what reaches the engine is visible in the
- * resulting events.
+ * resulting events — except for the default engine, which has to be a real one.
  */
 class XmlParserExtensionsTest {
 
@@ -62,6 +63,17 @@ class XmlParserExtensionsTest {
             +"<a>"
             +"text"
             +"</a>"
+        }
+    }
+
+    @Test
+    fun `should parse a flow of source chunks with the multiplatform engine by default`() = runTest {
+        // when
+        val events = flowOf("<a b=", "\"c\">te", "xt</", "a>").parseXml()
+
+        // then
+        events.mergeAdjacentText() sameAs semanticEvents(tagged = true) {
+            "a"("b" to "c") { +"text" }
         }
     }
 

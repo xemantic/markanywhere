@@ -7,8 +7,10 @@ XML source → `Flow<SemanticEvent>`, through an `XmlParser` contract that more 
 - `StaxXmlParser` (JVM only) — a binding of the JDK's StAX pull parser, the reference the multiplatform engine is measured against.
 
 ```kotlin
-val events: Flow<SemanticEvent> = chunks.parseXml(MarkanywhereXmlParser())
+val events: Flow<SemanticEvent> = chunks.parseXml()
 ```
+
+`parseXml()` uses `MarkanywhereXmlParser` unless given another engine, e.g. `chunks.parseXml(StaxXmlParser())`.
 
 Elements become tagged `mark` / `unmark` events under their qualified name, attributes stay on the mark in document order (namespace declarations among them, as ordinary attributes), and character data, CDATA sections and references become `text`.
 Comments, processing instructions, the XML declaration and the DOCTYPE are dropped.

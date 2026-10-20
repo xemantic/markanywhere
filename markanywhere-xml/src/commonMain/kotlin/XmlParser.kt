@@ -117,10 +117,11 @@ public fun XmlParser.parse(
 
 /**
  * Parses this flow of XML source chunks with the given [parser], so that
- * parsing reads as a pipeline step: `chunks.parseXml(parser).renderMarkdown()`.
+ * parsing reads as a pipeline step: `chunks.parseXml().renderMarkdown()`.
+ * The default is [MarkanywhereXmlParser], the engine available on every target.
  */
 public fun Flow<String>.parseXml(
-    parser: XmlParser
+    parser: XmlParser = MarkanywhereXmlParser()
 ): Flow<SemanticEvent> = parser.parse(this)
 
 /**
