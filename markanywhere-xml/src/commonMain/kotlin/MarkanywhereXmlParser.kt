@@ -130,15 +130,8 @@ private class XmlDocumentReader(
      * Whether the text read since the last mark or unmark holds anything but
      * whitespace — kept apart from [text], which is flushed at every chunk end,
      * so that whitespace continuing such text is never taken for the prolog's.
-     *
-     * Content ends the prolog, so it also ends [isDoctypeAllowed] — set here,
-     * where every way of reading character data passes.
      */
     private var textHasContent = false
-        set(value) {
-            if (value) isDoctypeAllowed = false
-            field = value
-        }
     private val elementName = StringBuilder()
 
     /** The target of the processing instruction being read. */
@@ -172,7 +165,10 @@ private class XmlDocumentReader(
     /**
      * Whether nothing but whitespace, comments and processing instructions has
      * been read — no element, no character data and no DOCTYPE — so a DOCTYPE
-     * may follow.
+     * may follow. Cleared where content starts — at the first character of
+     * text which is no whitespace, at a `]` or a reference in content, and at
+     * the opening of a CDATA section, even an empty one — rather than where
+     * character data is appended, which an empty section never does.
      */
     private var isDoctypeAllowed = true
 
@@ -393,7 +389,10 @@ private class XmlDocumentReader(
     private fun process(char: Char) {
         when (state) {
             CONTENT -> when (char) {
-                ']' -> brackets++
+                ']' -> {
+                    brackets++
+                    isDoctypeAllowed = false
+                }
                 '>' -> if (brackets >= 2) {
                     // Only the last two brackets are the `]]>`.
                     brackets -= 2
@@ -407,7 +406,10 @@ private class XmlDocumentReader(
                     releaseBrackets()
                     when (char) {
                         '<' -> startMarkup()
-                        '&' -> startReference(inAttribute = false)
+                        '&' -> {
+                            isDoctypeAllowed = false
+                            startReference(inAttribute = false)
+                        }
                         '\r' -> appendLineFeed()
                         else -> appendText(char)
                     }
@@ -620,9 +622,16 @@ private class XmlDocumentReader(
         }
         declarationLength++
         if (declarationLength < declarationOpening.length) return
-        dashes = 0
-        if (declarationOpening == DOCTYPE_KEYWORD) return
-        state = if (declarationOpening == COMMENT_DASHES) COMMENT else CDATA
+        when (declarationOpening) {
+            COMMENT_DASHES -> {
+                dashes = 0
+                state = COMMENT
+            }
+            CDATA_OPENING -> {
+                isDoctypeAllowed = false
+                state = CDATA
+            }
+        }
     }
 
     private fun startDoctype() {
@@ -966,6 +975,7 @@ private class XmlDocumentReader(
             if (isOutsideElementsWhitespace() && text.length >= MAX_LAYOUT_WHITESPACE) return
         } else {
             textHasContent = true
+            isDoctypeAllowed = false
         }
         text.append(char)
     }

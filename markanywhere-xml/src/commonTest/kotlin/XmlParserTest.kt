@@ -749,12 +749,15 @@ abstract class XmlParserTest {
     @Test
     fun `should stop at a DOCTYPE preceded by character data`() = runTest {
         // given — text, a reference (even to whitespace) and a CDATA section
-        // are content, after which a DOCTYPE is as malformed as after an element
+        // (even an empty one) are content, after which a DOCTYPE is as malformed as after an element
         val prologs = listOf(
             "junk",
             "junk<!-- c -->",
+            "]",
             "&#32;",
-            "<![CDATA[x]]>"
+            "<![CDATA[x]]>",
+            "<![CDATA[ ]]>",
+            "<![CDATA[]]>"
         )
 
         prologs.forEach { prolog ->
