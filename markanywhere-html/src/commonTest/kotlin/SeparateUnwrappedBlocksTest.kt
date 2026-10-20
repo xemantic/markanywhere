@@ -1130,4 +1130,140 @@ class SeparateUnwrappedBlocksTest {
             }
         }
     }
+
+    @Test
+    fun `should end a paragraph at a stacked box inside a display contents wrapper`() = runTest {
+        // given — issue #154: the wrapper lays out no box, so its stacked
+        // children start lines of their own below the intro
+        val input = semanticEvents(tagged = true) {
+            "body" {
+                "div"(AccessibilityAnnotations.DISPLAY to "block") { +"X" }
+                "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                    +"Intro"
+                    "div"(AccessibilityAnnotations.DISPLAY to "contents") {
+                        "div"(AccessibilityAnnotations.DISPLAY to "block") { +"A" }
+                        "div"(AccessibilityAnnotations.DISPLAY to "block") { +"B" }
+                    }
+                }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "body" {
+                "div"(AccessibilityAnnotations.DISPLAY to "block") { +"X" }
+                "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                    "p" { +"Intro" }
+                    "div"(AccessibilityAnnotations.DISPLAY to "contents") {
+                        "div"(AccessibilityAnnotations.DISPLAY to "block") { "p" { +"A" } }
+                        "div"(AccessibilityAnnotations.DISPLAY to "block") { "p" { +"B" } }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should not end a paragraph at a stacked box inside a wrapper holding part of it`() = runTest {
+        // given — the inline wrapper opened inside the paragraph, which cannot
+        // end inside it, so the box stays in the run as before
+        val input = semanticEvents(tagged = true) {
+            "body" {
+                "div"(AccessibilityAnnotations.DISPLAY to "block") { +"X" }
+                "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                    +"Intro "
+                    "span"(AccessibilityAnnotations.DISPLAY to "inline") {
+                        +"more"
+                        "div"(AccessibilityAnnotations.DISPLAY to "block") { +"A" }
+                    }
+                }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "body" {
+                "div"(AccessibilityAnnotations.DISPLAY to "block") { +"X" }
+                "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                    "p" {
+                        +"Intro "
+                        "span"(AccessibilityAnnotations.DISPLAY to "inline") {
+                            +"more"
+                            +" "
+                            "div"(AccessibilityAnnotations.DISPLAY to "block") { +"A" }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should break the document a same-origin frame embeds into paragraphs`() = runTest {
+        // given — issue #154: the frame element is inline, but its document's
+        // root lays its content out like the page's own
+        val input = semanticEvents(tagged = true) {
+            "body" {
+                "p" { +"x" }
+                "iframe"("src" to "f") {
+                    "html" {
+                        "body" {
+                            "div" { +"A" }
+                            "div" { +"B" }
+                        }
+                    }
+                }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "body" {
+                "p" { +"x" }
+                "iframe"("src" to "f") {
+                    "html" {
+                        "body" {
+                            "div" { +"A" }
+                            "div" { "p" { +"B" } }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should end a paragraph opened around a stacked box at its close`() = runTest {
+        // given — issue #154: a kept formatting element displayed as a block
+        // cannot hold the paragraph, which opens around it; the loose text
+        // after it sits below it
+        val input = semanticEvents(tagged = true) {
+            "div" {
+                +"X"
+                "strong"(AccessibilityAnnotations.DISPLAY to "block") { +"A" }
+                +"tail"
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "div" {
+                +"X"
+                "p" { "strong"(AccessibilityAnnotations.DISPLAY to "block") { +"A" } }
+                "p" { +"tail" }
+            }
+        }
+    }
 }

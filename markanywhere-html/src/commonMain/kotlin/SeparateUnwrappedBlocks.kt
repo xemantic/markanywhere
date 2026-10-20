@@ -48,7 +48,9 @@ import kotlinx.coroutines.flow.flow
  * outermost stacked box entered on the way to it (or the common parent, for
  * loose content after a box), so a whole flex row below a headline becomes
  * one paragraph — which ends where that anchor closes or the next stacked box
- * or surviving block starts in it. The content *before* the first break of a
+ * or surviving block starts in it (directly, or behind `display: contents` or
+ * inline wrappers opened since the last content), and a paragraph opened
+ * around a stacked box ends where that box closes. The content *before* the first break of a
  * container stays loose: the renderer separates loose text from a following
  * paragraph by a blank line. Wrapping is the only way to say "paragraph" in
  * the event model: it needs no renderer convention, and an HTML rendering of
@@ -62,7 +64,9 @@ import kotlinx.coroutines.flow.flow
  * `<textarea>`). When the stacked box itself is such an element (a nav or
  * card link displayed as a block, a control), the paragraph opens *around*
  * it, in the nearest ancestor that can hold one; below that, inside it, the
- * separator space applies, as before. The cells of a CSS table
+ * separator space applies, as before. A document root (`html`) holds
+ * paragraphs again, so a same-origin frame's document nested in its inline
+ * frame element breaks like the page's own. The cells of a CSS table
  * (`table-cell`) count as side by side, its rows as stacked.
  *
  * The run after a break is held until the paragraph ends — where its anchor
@@ -240,6 +244,17 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
 
     fun allowsParagraph(depth: Int) = depth == 0 || stack[depth - 1].allowsParagraph
 
+    // Whether a box opening now starts directly in the held paragraph's
+    // anchor: right inside it, or behind wrappers laying out no box of their
+    // own (`display: contents`, inline) opened since the last token, before
+    // which the paragraph can still end (issue #154). A wrapper already
+    // holding part of the paragraph cannot be crossed by its end.
+    fun opensDirectlyInParagraph(): Boolean =
+        stack.size == paragraphDepth || (
+            stack.size - heldMarks.size <= paragraphDepth &&
+                (paragraphDepth + 1..stack.size).all { stack[it - 1].boundary == INLINE }
+            )
+
     fun cross(boundary: BlockBoundary) {
         when (boundary) {
             SURVIVING_BLOCK -> crossedSurvivingBlock = true
@@ -321,7 +336,7 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
                 // anchor, and cannot hold one starting deeper inside its run.
                 if (paragraphDepth >= 0) {
                     val block = boundary == STACKED_BOX || event.rendersAsBlock()
-                    if (block && stack.size == paragraphDepth) release(wrap = true)
+                    if (block && opensDirectlyInParagraph()) release(wrap = true)
                     else if (event.rendersAsBlock()) release(wrap = false)
                 }
                 val control = if (event.isDeclaredControl()) OpenControl(
@@ -348,7 +363,10 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
                         else display.isFlexGridContainer(),
                         control = control != null,
                         rendersAsBlock = event.rendersAsBlock(),
-                        allowsParagraph = (parent?.allowsParagraph ?: true) &&
+                        // A document root (a same-origin frame's, nested in
+                        // its inline frame element) lays its content out on
+                        // its own, like the page's (issue #154).
+                        allowsParagraph = (event.name == "html" || parent?.allowsParagraph ?: true) &&
                             event.mayHoldParagraph(display)
                     )
                 )
@@ -376,6 +394,12 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
                     turnDepth = minOf(turnDepth, stack.size)
                 }
                 out(event)
+                // A stacked box directly in the anchor is one the paragraph
+                // opened around (a box starting there inside the paragraph
+                // ends it), and what follows it is below it (issue #154).
+                if (paragraphDepth >= 0 && frame?.boundary == STACKED_BOX && stack.size == paragraphDepth) {
+                    release(wrap = true)
+                }
                 if (preserveDepth == 0) holdIfLineBreaks()
             }
             is Text -> when {
