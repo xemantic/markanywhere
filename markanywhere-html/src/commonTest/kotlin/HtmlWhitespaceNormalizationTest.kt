@@ -477,6 +477,60 @@ class HtmlWhitespaceNormalizationTest {
     }
 
     @Test
+    fun `should keep space around Markdown links and images displayed as blocks`() = runTest {
+        // given — issue #169: a Markdown link or image renders inline whatever
+        // CSS displayed it as, so the separator next to it is significant
+        val input = semanticEvents {
+            "p" {
+                "a"("href" to "u", AccessibilityAnnotations.DISPLAY to "block") { +"Home" }
+                +" "
+                "a"("href" to "v", AccessibilityAnnotations.DISPLAY to "block") { +"About" }
+                +" "
+                "img"("alt" to "logo", AccessibilityAnnotations.DISPLAY to "block") { }
+                +" x"
+            }
+        }
+
+        // when
+        val output = input.dropHtmlStructuralWhitespace()
+
+        // then
+        output sameAs semanticEvents {
+            "p" {
+                "a"("href" to "u") { +"Home" }
+                +" "
+                "a"("href" to "v") { +"About" }
+                +" "
+                "img"("alt" to "logo") { }
+                +" x"
+            }
+        }
+    }
+
+    @Test
+    fun `should keep space around a kept ref-bearing element displayed as a block`() = runTest {
+        // given — issue #169: a generic element simplifyHtml keeps for its ref
+        // is written as a raw inline tag, so the separator before it shows
+        val input = semanticEvents {
+            "p" {
+                +"Pro "
+                tag("div", AccessibilityAnnotations.REF to "5", AccessibilityAnnotations.DISPLAY to "block") { +"teams" }
+            }
+        }
+
+        // when
+        val output = input.dropHtmlStructuralWhitespace()
+
+        // then
+        output sameAs semanticEvents {
+            "p" {
+                +"Pro "
+                tag("div", AccessibilityAnnotations.REF to "5") { +"teams" }
+            }
+        }
+    }
+
+    @Test
     fun `should keep space around a display contents wrapper`() = runTest {
         // given — a `display: contents` `<div>` lays out no box of its own, so
         // the whitespace touching it separates the inline content on either

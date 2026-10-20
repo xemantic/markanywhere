@@ -145,7 +145,10 @@ public fun Flow<SemanticEvent>.dropHtmlStructuralWhitespace(): Flow<SemanticEven
             }
 
             is Mark -> {
-                val inline = event.isInlineLevel(displays.open(event))
+                val display = displays.open(event)
+                // A generic element [simplifyHtml] keeps only for its ref is
+                // written as a raw inline tag, whatever its display (#169).
+                val inline = event.isKeptForItsRef() || event.isInlineLevel(display)
                 val opensPreserve = preserveFrom < 0 && event.isPreserveRegion()
                 // Strip the display annotation we consumed (and the capture
                 // format saying how to read it) so it can't leak into the
@@ -256,7 +259,14 @@ private fun SemanticEvent.Mark.isInlineLevel(display: CapturedDisplay): Boolean 
         UaDefault, Unrecorded -> isInlineLevel(name)
     }
 
-private val MARKDOWN_INLINE_SPANS = MARKDOWN_EMPHASIS + "code"
+// The Markdown inline syntax: emphasis, a code span, a link and an image
+// render inline whatever their CSS display (a link displayed as a block in a
+// flex row, issue #169). A block-wrapping link, which the renderer spills to a
+// raw block `<a>` tag, gets its block separation from the block inside it.
+private val MARKDOWN_INLINE_SPANS = MARKDOWN_EMPHASIS + setOf("code", "a", "img")
+
+private fun SemanticEvent.Mark.isKeptForItsRef(): Boolean =
+    AccessibilityAnnotations.REF in attributes && name != "body" && isGenericContainer()
 
 /**
  * The same verdict read from this element's own annotation alone, an absent

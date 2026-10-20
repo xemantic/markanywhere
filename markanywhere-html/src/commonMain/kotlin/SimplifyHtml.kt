@@ -763,7 +763,7 @@ private val UNWRAPPED_TAGS = setOf(
  * `md-list`, whose host carries its semantics only as a `role`), which the
  * catch-all unwraps. A native semantic tag is never overridden.
  */
-private fun SemanticEvent.Mark.isGenericContainer(): Boolean =
+internal fun SemanticEvent.Mark.isGenericContainer(): Boolean =
     name in UNWRAPPED_TAGS || name.isCustomElementName()
 
 // The shape of a valid custom element name (HTML §4.13.2): a lowercase ASCII
