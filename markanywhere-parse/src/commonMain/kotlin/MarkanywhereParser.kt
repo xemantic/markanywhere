@@ -2800,12 +2800,33 @@ private class ParserState(
      */
     private suspend fun SemanticEventScope.settleLineEnd(line: String): LineEnd {
         if (escaped) {
-            escaped = false
-            if (line.endsWith('\\')) return LineEnd.BACKSLASH
-            +"\\"
+            if (line.endsWith('\\')) {
+                escaped = false
+                return LineEnd.BACKSLASH
+            }
+            emitPendingEscapeAsLiteral()
         }
         return if (line.length - line.trimEnd(' ').length >= 2) LineEnd.SPACES
         else LineEnd.SOFT
+    }
+
+    /**
+     * Resolve a `\` left pending in [escaped] at the end of a line's content
+     * as escaping nothing: like the `escaped` branch of [processInlineCharImpl]
+     * before a non-punctuation char, it first writes what the `\` held — an
+     * in-flight entity ref, a delimiter run ([ESCAPE_HELD_RUNS]) — as literal
+     * text, then the `\` itself, so the text keeps its source order. Open
+     * spans stay open around it, for [flushInline] to close.
+     */
+    private suspend fun SemanticEventScope.emitPendingEscapeAsLiteral() {
+        escaped = false
+        if (inEntityRef) abortEntityRef()
+        val run = inlineBuffer.toString()
+        if (run in ESCAPE_HELD_RUNS) {
+            inlineBuffer.clear()
+            +run
+        }
+        +"\\"
     }
 
     /**
