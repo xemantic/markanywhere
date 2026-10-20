@@ -98,6 +98,17 @@ public fun Flow<SemanticEvent>.dropHtmlStructuralWhitespace(): Flow<SemanticEven
     val heldOpens = mutableListOf<SemanticEvent>()
     var heldOpenCount = 0 // the held opening tags not closed yet
     var leftBeforeHeld = false // could the content before the held tags be a left side?
+    // Where in the held run a whitespace run follows the close of an emptied
+    // element, whose close is its left side (-1 = none).
+    var spaceAfterHeldClose = -1
+
+    // Buffers a whitespace run, remembering whether it follows a held close.
+    fun markPending() {
+        pending = true
+        if (spaceAfterHeldClose < 0 && heldOpens.lastOrNull() is Unmark) {
+            spaceAfterHeldClose = heldOpens.size
+        }
+    }
 
     // Resolve a buffered whitespace run now that its right neighbour is known:
     // keep a single collapsed space if inline content flanks both sides, else
@@ -109,17 +120,26 @@ public fun Flow<SemanticEvent>.dropHtmlStructuralWhitespace(): Flow<SemanticEven
         }
     }
 
-    // Writes the held opening tags, preceded by the whitespace run that
-    // followed them when inline content flanks the run on both sides.
+    // Writes the held tags with the whitespace run among them as one space
+    // when inline content flanks it on both sides: after the close of an
+    // emptied element it follows, else before the tags.
     suspend fun releaseHeldOpens(rightQualifies: Boolean) {
         if (heldOpens.isEmpty()) return
-        if (pending) {
-            if (leftBeforeHeld && rightQualifies) emit(SemanticEvent.Text(" "))
-            pending = false
+        val spaceAt = when {
+            !pending || !rightQualifies -> -1
+            spaceAfterHeldClose >= 0 -> spaceAfterHeldClose
+            leftBeforeHeld -> 0
+            else -> -1
         }
-        heldOpens.forEach { emit(it) }
+        pending = false
+        heldOpens.forEachIndexed { index, held ->
+            if (index == spaceAt) emit(SemanticEvent.Text(" "))
+            emit(held)
+        }
+        if (spaceAt == heldOpens.size) emit(SemanticEvent.Text(" "))
         heldOpens.clear()
         heldOpenCount = 0
+        spaceAfterHeldClose = -1
     }
 
     collect { event ->
@@ -132,13 +152,13 @@ public fun Flow<SemanticEvent>.dropHtmlStructuralWhitespace(): Flow<SemanticEven
                     leftQualifies = true
                 }
                 event.text.isEmpty() -> { /* skip — empty text carries no information */ }
-                event.text.isHtmlBlank() -> { pending = true }
+                event.text.isHtmlBlank() -> markPending()
                 else -> {
                     // Collapse interior whitespace runs and split off the
                     // leading / trailing whitespace, which is gated like any
                     // other whitespace run (kept as a space only between inline
                     // content, dropped at a block boundary).
-                    if (event.text.first().isHtmlWhitespace()) pending = true
+                    if (event.text.first().isHtmlWhitespace()) markPending()
                     releaseHeldOpens(rightQualifies = true)
                     resolvePending(rightQualifies = true)
                     emit(SemanticEvent.Text(event.text.stripAndCollapseHtmlWhitespace()))
@@ -203,7 +223,8 @@ public fun Flow<SemanticEvent>.dropHtmlStructuralWhitespace(): Flow<SemanticEven
                     // (or dropped at a block one) like any run before a close.
                     heldOpens.forEach { emit(it) }
                     heldOpens.clear()
-                    if (pending) leftQualifies = leftBeforeHeld
+                    if (pending) leftQualifies = leftBeforeHeld || spaceAfterHeldClose >= 0
+                    spaceAfterHeldClose = -1
                 }
                 displays.close()
                 if (depth == preserveFrom) preserveFrom = -1

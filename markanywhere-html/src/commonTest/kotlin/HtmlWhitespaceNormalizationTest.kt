@@ -623,4 +623,21 @@ class HtmlWhitespaceNormalizationTest {
             "p" { +"Hi "; "span" { "b" { } }; +"there" }
         }
     }
+
+    @Test
+    fun `should keep the space after an empty inline element`() = runTest {
+        // given — DuckDuckGo's empty switch control between two labels: the
+        // close of the element is the left side of the space after it
+        val input = semanticEvents(tagged = true) {
+            "p" { +"Protected "; "a"("href" to "/x") { }; +" "; +"Germany" }
+        }
+
+        // when
+        val output = input.dropHtmlStructuralWhitespace()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "p" { +"Protected "; "a"("href" to "/x") { }; +" Germany" }
+        }
+    }
 }
