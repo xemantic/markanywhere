@@ -40,9 +40,13 @@ import javax.xml.stream.XMLStreamReader
  * running the pull loop on a dedicated view of [Dispatchers.IO] against a
  * [Reader] blocking on a
  * [Channel] which a coroutine fills from [parse]'s chunks. Parsing is
- * therefore genuinely incremental — an element is reported as soon as its tag
- * has been read, however much of the document is still to come — and memory
- * stays bounded by the channel rather than by the document.
+ * therefore incremental, and memory stays bounded by the channel rather than
+ * by the document — but the latency is the JDK reader's, coarser than
+ * [MarkanywhereXmlParser]'s: it reports nothing until the first few characters
+ * of the document have arrived, reading ahead for an XML declaration, so a
+ * source delivering `<a>` and then waiting gets no event for `a` until more
+ * input comes. Past that start an element is reported as soon as its tag has
+ * been read, while text is reported only once the markup after it begins.
  *
  * What that costs, and what a native implementation would save: a thread
  * held by the pull loop for the whole parse — blocked in [runBlocking]
