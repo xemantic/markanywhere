@@ -112,7 +112,8 @@ private fun Flow<SemanticEvent>.htmlToMarkdownBase(
     // otherwise lose, so no control reaches the output as a bare `[](…)`.
     .labelActionableElements(svgMode, refMode)
     // After labelActionableElements (which labels a control for the nameless
-    // `data:` image this drops) and before simplifyHtml, which keeps only an
+    // image this drops — a `data:`, `blob:` or other placeholder `src` nothing
+    // replaces) and before simplifyHtml, which keeps only an
     // img's `src` and would discard the data-src / srcset that name the real
     // image behind a lazy-loading placeholder.
     .resolveLazyImages(svgMode)

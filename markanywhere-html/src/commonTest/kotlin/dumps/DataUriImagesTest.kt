@@ -32,22 +32,21 @@ class DataUriImagesTest {
     @Test
     fun `should not inline a data uri payload into any dump`() = runTest {
         // given — every dump; Bing, DuckDuckGo and Google carry `data:` images
-        val dumps = listOf(
-            DumpFixtures.bbcNews, DumpFixtures.hackernews, DumpFixtures.openjur,
-            DumpFixtures.serpBing, DumpFixtures.serpBrave, DumpFixtures.serpDuckduckgo,
-            DumpFixtures.serpGoogle, DumpFixtures.w3cValidator,
-        )
+        val dumps = DumpFixtures.all
 
-        for (dump in dumps) {
-            // when
+        // when
+        val leaks = dumps.mapValues { (_, dump) ->
             val markdown = dumpFlow(dump).transformHtmlToMarkdown().renderMarkdown()
+            DATA_URI_PAYLOAD.find(markdown)?.value
+        }.filterValues { it != null }
 
-            // then — a media type marks a payload, not prose or a form
-            // pattern mentioning the scheme (`(?:data:.+)` on the W3C validator)
-            assert(DATA_URI_PAYLOAD.find(markdown)?.value == null)
-        }
+        // then — a media type (or its empty form, `data:,` / `data:;base64,`)
+        // marks a payload, not prose or a form pattern mentioning the scheme
+        // (`(?:data:.+)` on the W3C validator)
+        assert(dumps.size >= 8)
+        assert(leaks.isEmpty())
     }
 
 }
 
-private val DATA_URI_PAYLOAD = Regex("data:[a-z]+/[a-z0-9.+-]+[;,]", RegexOption.IGNORE_CASE)
+private val DATA_URI_PAYLOAD = Regex("data:(?:[a-z]+/[a-z0-9.+-]+)?[;,]", RegexOption.IGNORE_CASE)

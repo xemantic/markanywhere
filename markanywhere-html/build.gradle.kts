@@ -120,6 +120,13 @@ val generateDumpFixtures = tasks.register("generateDumpFixtures") {
             sb.append(content.toKotlinStringLiteral())
             sb.append("\n\n")
         }
+        // every fixture by its file name, for tests sweeping all the dumps
+        sb.append("    /** Every fixture, keyed by its file name. */\n")
+        sb.append("    val all: Map<String, String> by lazy {\n        mapOf(\n")
+        jsonFiles.forEach { file ->
+            sb.append("            \"${file.name}\" to ${fixturePropertyName(file.name)},\n")
+        }
+        sb.append("        )\n    }\n\n")
         sb.append("}\n")
         pkgDir.resolve("DumpFixtures.kt").writeText(sb.toString())
     }

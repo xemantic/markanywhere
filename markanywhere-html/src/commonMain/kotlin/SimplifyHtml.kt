@@ -198,6 +198,9 @@ import kotlinx.coroutines.flow.onEach
  *   its own attributes intact, for a consumer that renders graphics rather
  *   than reading them — minus a `script`, an `aria-hidden` part, and the
  *   capture's annotations, which obey the same rules as everywhere else.
+ *   It also decides a `data:` URI payload in the `src` / `poster` / `data`
+ *   of embedded content: dropped under [SvgMode.RESOLVE], kept under
+ *   [SvgMode.PRESERVE].
  */
 public fun Flow<SemanticEvent>.simplifyHtml(
     keepAttributes: Set<String> = emptySet(),

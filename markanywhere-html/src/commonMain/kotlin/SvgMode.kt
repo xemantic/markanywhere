@@ -34,6 +34,10 @@ public enum class SvgMode {
      * discarded as decorative. This is what an LLM-facing rendering wants: on
      * the pages captured in this repository the vector subtrees are 5-13% of
      * all events and up to 110 KB per page, none of it readable.
+     *
+     * The same goes for every other inline `data:` payload: an `<img>` whose
+     * `src` is one keeps only its `alt` ([resolveLazyImages]), and a `data:`
+     * `poster`, `<object data>` or frame `src` is dropped ([simplifyHtml]).
      */
     RESOLVE,
 
@@ -45,7 +49,8 @@ public enum class SvgMode {
      * For a simplified *reader* rather than a Markdown rendering for a model —
      * logos, diagrams and icons survive and can be displayed. [resolveIcons]
      * still maps icon fonts to emoji, and everything else in the pipeline is
-     * unchanged.
+     * unchanged — except that `data:` images, posters and embedded sources
+     * are kept too, since a reader sees them whatever their format.
      */
     PRESERVE,
 }

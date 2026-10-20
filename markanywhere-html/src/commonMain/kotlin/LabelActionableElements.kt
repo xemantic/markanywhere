@@ -317,8 +317,9 @@ private fun SemanticEvent.rendersALabel(): Boolean = when (this) {
 /**
  * Whether the control holds a graphic that will **vanish** from the output — a
  * nameless `<svg>`, which [resolveInlineGraphics] drops as decorative, or an
- * unnamed `<img>` left without a usable `src` (an inline `data:` icon), which
- * [resolveLazyImages] drops — asked of the same [LazyImageResolver].
+ * unnamed `<img>` left without a usable `src` (an inline `data:` icon, a
+ * `blob:` or `javascript:` URL), which [resolveLazyImages] drops — asked of
+ * the same [LazyImageResolver].
  *
  * Not an unnamed `<img>` with a real `src`: it survives as `![](src)`, which
  * already tells the reader a picture is there, so standing a placeholder beside

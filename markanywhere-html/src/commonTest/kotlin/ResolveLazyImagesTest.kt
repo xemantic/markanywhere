@@ -362,10 +362,14 @@ class ResolveLazyImagesTest {
 
     @Test
     fun `should not let a srcset replace a real src`() = runTest {
-        // given — only the lazy `src` attributes name what a library swaps
-        // into `src`; a `srcset` beside a real `src` is a responsive image
+        // given — a `srcset` beside a real `src`, on the image or on its
+        // picture's source, is a responsive image, not a lazy one
         val input = semanticEvents(tagged = true) {
-            "img"("src" to "a-480.jpg", "data-srcset" to "a-960.jpg 960w", "alt" to "A") { }
+            "img"("src" to "a-480.jpg", "srcset" to "a-960.jpg 960w", "alt" to "A") { }
+            "picture" {
+                "source"("srcset" to "b.webp") { }
+                "img"("src" to "b.jpg", "alt" to "B") { }
+            }
         }
 
         // when
@@ -373,6 +377,72 @@ class ResolveLazyImagesTest {
 
         // then
         output sameAs input
+    }
+
+    @Test
+    fun `should prefer a data-srcset over a real-url placeholder src`() = runTest {
+        // when — lazysizes swaps `data-srcset` in, like `data-src`, so beside
+        // a real placeholder image it names the image too
+        val output = semanticEvents(tagged = true) {
+            "img"("src" to "/img/blank.gif", "data-srcset" to "a-480.jpg 480w, a-960.jpg 960w") { }
+            "picture" {
+                "source"("data-srcset" to "b.webp") { }
+                "img"("src" to "grey.gif", "alt" to "B") { }
+            }
+        }.resolveLazyImages()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "img"("src" to "a-960.jpg", "data-srcset" to "a-480.jpg 480w, a-960.jpg 960w") { }
+            "picture" {
+                "source"("data-srcset" to "b.webp") { }
+                "img"("src" to "b.webp", "alt" to "B") { }
+            }
+        }
+    }
+
+    @Test
+    fun `should not let a url template replace a real src`() = runTest {
+        // given — lazysizes-rias and Shopify themes put a URL template in
+        // `data-src` that a script fills in; unfilled it names no image
+        val input = semanticEvents(tagged = true) {
+            "img"(
+                "src" to "//cdn.shopify.com/s/files/a_360x.jpg",
+                "data-src" to "//cdn.shopify.com/s/files/a_{width}x.jpg",
+                "alt" to "A",
+            ) { }
+        }
+
+        // when
+        val output = input.resolveLazyImages()
+
+        // then
+        output sameAs input
+    }
+
+    @Test
+    fun `should skip a url template among the candidates of a placeholder`() = runTest {
+        // when
+        val output = semanticEvents(tagged = true) {
+            "img"(
+                "src" to TRANSPARENT_GIF,
+                "data-src" to "a_{width}x.jpg",
+                "data-srcset" to "a_{width}x.jpg 1x, a_720x.jpg 2x",
+                "alt" to "A",
+            ) { }
+            "img"("src" to TRANSPARENT_GIF, "data-src" to "b_{width}x.jpg", "alt" to "B") { }
+        }.resolveLazyImages()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "img"(
+                "src" to "a_720x.jpg",
+                "data-src" to "a_{width}x.jpg",
+                "data-srcset" to "a_{width}x.jpg 1x, a_720x.jpg 2x",
+                "alt" to "A",
+            ) { }
+            "img"("data-src" to "b_{width}x.jpg", "alt" to "B") { }
+        }
     }
 
     @Test
@@ -394,16 +464,16 @@ class ResolveLazyImagesTest {
     }
 
     @Test
-    fun `should only accept http and https and relative candidates`() = runTest {
-        // when — a candidate in any other scheme is no image URL
+    fun `should never choose a javascript or blob or about candidate`() = runTest {
+        // when — a candidate in a scheme that names no image is skipped
         val output = semanticEvents(tagged = true) {
             "img"(
                 "src" to TRANSPARENT_GIF,
                 "data-src" to "javascript:alert(1)",
                 "data-original" to "HTTPS://cdn.example.com/a.jpg",
             ) { }
-            "img"("srcset" to "javascript:alert(2) 2x, //cdn.example.com/b.jpg 1x") { }
-            "img"("data-src" to "ftp://example.com/c.jpg", "alt" to "C") { }
+            "img"("srcset" to "javascript:alert(2) 2x, blob:https://x/1 3x, //cdn.example.com/b.jpg 1x") { }
+            "img"("data-src" to "about:blank", "alt" to "C") { }
         }.resolveLazyImages()
 
         // then
@@ -413,13 +483,38 @@ class ResolveLazyImagesTest {
                 "data-src" to "javascript:alert(1)",
                 "data-original" to "HTTPS://cdn.example.com/a.jpg",
             ) { }
-            "img"("srcset" to "javascript:alert(2) 2x, //cdn.example.com/b.jpg 1x", "src" to "//cdn.example.com/b.jpg") { }
-            "img"("data-src" to "ftp://example.com/c.jpg", "alt" to "C") { }
+            "img"(
+                "srcset" to "javascript:alert(2) 2x, blob:https://x/1 3x, //cdn.example.com/b.jpg 1x",
+                "src" to "//cdn.example.com/b.jpg",
+            ) { }
+            "img"("data-src" to "about:blank", "alt" to "C") { }
         }
     }
 
     @Test
-    fun `should drop a src in another scheme when nothing replaces it`() = runTest {
+    fun `should keep an image in a scheme a reader may still resolve`() = runTest {
+        // given — a captured local page (`file:`), an email body (`cid:`) or
+        // an `ftp:` image is no placeholder: only schemes known to name no
+        // image are, the rest are left to whoever reads the output
+        val input = semanticEvents(tagged = true) {
+            "img"("src" to "file:///home/me/report/chart.png", "alt" to "Chart") { }
+            "img"("src" to "cid:logo@example.com") { }
+            "img"("src" to TRANSPARENT_GIF, "data-src" to "ftp://example.com/c.jpg") { }
+        }
+
+        // when
+        val output = input.resolveLazyImages()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "img"("src" to "file:///home/me/report/chart.png", "alt" to "Chart") { }
+            "img"("src" to "cid:logo@example.com") { }
+            "img"("src" to "ftp://example.com/c.jpg", "data-src" to "ftp://example.com/c.jpg") { }
+        }
+    }
+
+    @Test
+    fun `should drop a javascript src when nothing replaces it`() = runTest {
         // when
         val output = semanticEvents(tagged = true) {
             "img"("src" to "javascript:alert(1)", "alt" to "A") { }

@@ -18,6 +18,7 @@ package com.xemantic.markanywhere.html
 
 import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.SemanticEvent.Mark
+import com.xemantic.markanywhere.html.spec.asciiLowercase
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 
@@ -30,10 +31,11 @@ import kotlinx.coroutines.flow.flow
  * GIF — in `src` (or leave `src` out) until the image scrolls into view, and a
  * dump is taken without scrolling, so nearly every image below the fold would
  * otherwise render as `![alt](data:image/gif;base64,…)`: ~80 bytes of noise
- * and no image. Only an `http:` / `https:` or a relative URL counts as an
- * image URL: a `src` that is missing, blank, a `data:` or `blob:` URI (the
- * latter meaningless outside the captured page), `about:blank`, an empty host
- * (`//:0`) or in any other scheme is a placeholder, replaced by the first of:
+ * and no image. A `src` that is missing, blank, a `data:` or `blob:` URI (the
+ * latter meaningless outside the captured page), `about:blank`, a
+ * `javascript:` URL or an empty host (`//:0`) is a placeholder — any other
+ * scheme (`file:` on a captured local page, `cid:` in an email body) is kept
+ * for the reader — and is replaced by the first of:
  *
  * 1. `data-src`, `data-lazy-src`, `data-original` — the attributes the common
  *    libraries swap into `src` on load;
@@ -47,18 +49,20 @@ import kotlinx.coroutines.flow.flow
  *    conditional one. A `<source>` whose `type` the capturing browser (Chrome)
  *    cannot decode is skipped, as the browser skips it.
  *
- * A lazy attribute of step 1 wins over a `src` that **is** an image URL too:
- * some libraries (WordPress a3-lazy-load, jQuery lazyload) keep a real
- * placeholder image in `src` (`lazy_placeholder.gif`, `grey.gif`), which no
- * rule could tell from the image by its URL, and the attribute names what the
- * library swaps in. A `srcset` never replaces such a `src`: beside a real
- * `src` it is a responsive image, not a lazy one.
+ * A lazy attribute — one of step 1, or a `data-srcset` of the image or of the
+ * picture's chosen `<source>` — wins over a `src` that is a real URL too:
+ * some libraries (WordPress a3-lazy-load, jQuery lazyload, lazysizes) keep a
+ * real placeholder image in `src` (`lazy_placeholder.gif`, `grey.gif`), which
+ * no rule could tell from the image by its URL, and the attribute names what
+ * the library swaps in. A plain `srcset` never replaces such a `src`: beside a
+ * real `src` it is a responsive image, not a lazy one.
  *
  * The "best" `srcset` candidate is the widest (`w` descriptor), or, without
  * width descriptors, the densest (`x`, a bare URL counting as `1x`) — the one
  * that carries the most of the image, rather than the one a particular viewport
- * would pick. A candidate that is no image URL (above) is never chosen, nor
- * one whose descriptors the HTML standard rejects.
+ * would pick. A candidate that is a placeholder (above) is never chosen, nor a
+ * URL template (`a_{width}x.jpg`, which lazysizes-rias and Shopify themes leave
+ * for a script to fill in), nor one whose descriptors the HTML standard rejects.
  *
  * Under [SvgMode.RESOLVE] (the LLM-facing default), a placeholder `src`
  * nothing replaces is **dropped**: an inline image's base64 payload is noise to a
@@ -113,9 +117,9 @@ internal class LazyImageResolver(private val dropPlaceholders: Boolean = true) {
     // Scoped by depth, not by name, so an unclosed <picture> ends with its
     // parent instead of leaking its source into every later image.
     private class Picture(val depth: Int) {
-        var defaultSource: String? = null
-        var conditionalSource: String? = null
-        val source: String? get() = defaultSource ?: conditionalSource
+        var defaultSource: Candidate? = null
+        var conditionalSource: Candidate? = null
+        val source: Candidate? get() = defaultSource ?: conditionalSource
     }
 
     private val pictures = ArrayDeque<Picture>()
@@ -137,7 +141,7 @@ internal class LazyImageResolver(private val dropPlaceholders: Boolean = true) {
                 "source" -> {
                     val picture = pictures.lastOrNull()
                     if (picture != null && picture.defaultSource == null && event.hasDecodableType()) {
-                        val candidate = event.bestSrcsetCandidate()
+                        val candidate = event.srcsetCandidate()
                         if (event.isUnconditional()) {
                             picture.defaultSource = candidate
                         } else if (picture.conditionalSource == null) {
@@ -158,16 +162,21 @@ internal class LazyImageResolver(private val dropPlaceholders: Boolean = true) {
         is Text -> event
     }
 
-    private fun Mark.withResolvedSrc(pictureSource: String?): Mark? {
+    private fun Mark.withResolvedSrc(pictureSource: Candidate?): Mark? {
         val src = this["src"]
         val lazySrc = LAZY_SRC_ATTRIBUTES.firstNotNullOfOrNull { name ->
-            this[name]?.trim()?.takeIf { it.isImageUrl() }
+            this[name]?.trim()?.takeIf { it.isImageCandidate() }
         }
+        val ownCandidate = srcsetCandidate()
         if (src != null && src.isImageUrl()) {
-            return if (lazySrc == null || lazySrc == src) this
-            else copy(attributes = attributes + ("src" to lazySrc))
+            // only what a library swaps into `src` replaces a real one
+            val swapped = lazySrc
+                ?: ownCandidate?.takeIf { it.isLazy }?.url
+                ?: pictureSource?.takeIf { it.isLazy }?.url
+            return if (swapped == null || swapped == src.trim()) this
+            else copy(attributes = attributes + ("src" to swapped))
         }
-        val resolved = lazySrc ?: bestSrcsetCandidate() ?: pictureSource
+        val resolved = lazySrc ?: ownCandidate?.url ?: pictureSource?.url
         if (resolved != null) return copy(attributes = attributes + ("src" to resolved))
         if (!dropPlaceholders) return this
         val alt = this["alt"]
@@ -182,17 +191,23 @@ internal class LazyImageResolver(private val dropPlaceholders: Boolean = true) {
 
 private val LAZY_SRC_ATTRIBUTES = listOf("data-src", "data-lazy-src", "data-original")
 
-private val SRCSET_ATTRIBUTES = listOf("data-srcset", "srcset")
+/** A candidate image URL, and whether a lazy-loading library swaps it in. */
+private class Candidate(val url: String, val isLazy: Boolean)
 
-private fun Mark.bestSrcsetCandidate(): String? =
-    SRCSET_ATTRIBUTES.firstNotNullOfOrNull { name -> this[name]?.bestSrcsetCandidate() }
+/**
+ * The best candidate of this element's `data-srcset` — a lazy attribute, which
+ * lazysizes swaps in like `data-src` — or else of its `srcset`.
+ */
+private fun Mark.srcsetCandidate(): Candidate? =
+    this["data-srcset"]?.bestSrcsetCandidate()?.let { Candidate(it, isLazy = true) }
+        ?: this["srcset"]?.bestSrcsetCandidate()?.let { Candidate(it, isLazy = false) }
 
 /**
  * Whether this `<source>` names no `media` condition — or one that always
  * holds (`all`, `screen`) — and so is its picture's default.
  */
 private fun Mark.isUnconditional(): Boolean =
-    this["media"]?.trim()?.lowercase().let { it == null || it in UNCONDITIONAL_MEDIA }
+    this["media"]?.trim()?.asciiLowercase().let { it == null || it in UNCONDITIONAL_MEDIA }
 
 private val UNCONDITIONAL_MEDIA = setOf("", "all", "screen")
 
@@ -203,7 +218,7 @@ private val UNCONDITIONAL_MEDIA = setOf("", "all", "screen")
  */
 private fun Mark.hasDecodableType(): Boolean {
     val type = this["type"] ?: return true
-    val essence = type.substringBefore(';').trim().lowercase()
+    val essence = type.substringBefore(';').trim().asciiLowercase()
     return essence.isEmpty() || essence in DECODABLE_IMAGE_TYPES
 }
 
@@ -219,16 +234,17 @@ private val DECODABLE_IMAGE_TYPES = setOf(
 internal fun String.isDataUrl(): Boolean = trimStart().startsWith("data:", ignoreCase = true)
 
 /**
- * Whether this is a URL a reader can fetch an image from: a relative URL, or
- * an absolute `http:` / `https:` one — not blank, not `data:`, `blob:`,
- * `about:`, `javascript:` or any other scheme, and not a protocol-relative URL
- * with an empty host (`//:0`, a placeholder that loads nothing).
+ * Whether this may name an image: not blank, not in a scheme known to name
+ * none outside the captured page ([NON_IMAGE_SCHEMES]), and not a
+ * protocol-relative URL with an empty host (`//:0`, a placeholder that loads
+ * nothing). Any other scheme is kept — `file:` on a captured local page,
+ * `cid:` in an email body — since a reader may still resolve it.
  */
 private fun String.isImageUrl(): Boolean {
     val url = trim()
     if (url.isEmpty()) return false
     val scheme = url.urlScheme()
-    if (scheme != null) return scheme.equals("http", ignoreCase = true) || scheme.equals("https", ignoreCase = true)
+    if (scheme != null) return scheme.asciiLowercase() !in NON_IMAGE_SCHEMES
     if (url.startsWith("//")) {
         val authority = url.substring(2).takeWhile { it != '/' && it != '?' && it != '#' }
         val host = authority.substringAfterLast('@').substringBefore(':')
@@ -236,6 +252,18 @@ private fun String.isImageUrl(): Boolean {
     }
     return true
 }
+
+// `data:` is the inline payload (or the placeholder GIF) this operator exists
+// to replace; `blob:` lives only in the captured page; `about:blank` is a
+// placeholder; a script URL is no image.
+private val NON_IMAGE_SCHEMES = setOf("data", "blob", "about", "javascript", "vbscript")
+
+/**
+ * Whether this may replace a placeholder: an image URL that is no URL
+ * template — lazysizes-rias and Shopify themes put `a_{width}x.jpg` in
+ * `data-src` for a script to fill in, and unfilled it names no image.
+ */
+private fun String.isImageCandidate(): Boolean = isImageUrl() && '{' !in this
 
 /**
  * The scheme of this URL, or `null` for a relative one: a letter followed by
@@ -285,7 +313,7 @@ private fun String.bestSrcsetCandidate(): String? {
             }
             descriptors = substring(descriptorStart, position)
         }
-        if (!url.isImageUrl()) continue
+        if (!url.isImageCandidate()) continue
         candidates += parseCandidate(url, descriptors) ?: continue
     }
     val widest = candidates.filter { it.width != null }.maxByOrNull { it.width!! }

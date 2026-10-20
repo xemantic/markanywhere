@@ -631,6 +631,21 @@ class LabelActionableElementsTest {
     }
 
     @Test
+    fun `should not mark an unnamed image in a scheme a reader may resolve`() = runTest {
+        // given - a `file:` image (a captured local page) survives
+        // resolveLazyImages as `![](file:…)`, so the link is not empty
+        val input = semanticEvents(tagged = true) {
+            "a"("href" to "/x") { "img"("src" to "file:///home/me/chart.png") { } }
+        }
+
+        // when
+        val output = input.labelActionableElements()
+
+        // then
+        output sameAs input
+    }
+
+    @Test
     fun `should not mark an unnamed lazy image that resolves to a real src`() = runTest {
         // given - the placeholder is replaced by the picture's source downstream
         val input = semanticEvents(tagged = true) {
