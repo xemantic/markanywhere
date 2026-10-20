@@ -871,6 +871,186 @@ class SimplifyHtmlTest {
     }
 
     @Test
+    fun `should keep a focusable separator as a control carrying its ref and value`() = runTest {
+        // given — a focusable separator is a splitter widget (ARIA), not a
+        // thematic break: a `---` would drop the ref, the name and the value
+        val input = semanticEvents(tagged = true) {
+            "x-splitter"(
+                "role" to "separator",
+                "tabindex" to "0",
+                "aria-valuenow" to "50",
+                "aria-label" to "Resize",
+                AccessibilityAnnotations.REF to "7",
+            ) { }
+        }
+
+        // when
+        val output = input.simplifyHtml(keepAttributes = setOf(AccessibilityAnnotations.REF))
+
+        // then
+        output sameAs semanticEvents {
+            tag(
+                "x-splitter",
+                "role" to "separator",
+                "aria-valuenow" to "50",
+                "aria-label" to "Resize",
+                AccessibilityAnnotations.REF to "7",
+            ) { }
+        }
+    }
+
+    @Test
+    fun `should keep the value of a generic control built on a div`() = runTest {
+        // given — a slider made of a `<div>`: its value is its state
+        val input = semanticEvents(tagged = true) {
+            "div"(
+                "role" to "slider",
+                "aria-valuenow" to "3",
+                "aria-valuemin" to "1",
+                "aria-valuemax" to "5",
+                "aria-valuetext" to "3 stars",
+                AccessibilityAnnotations.REF to "4",
+            ) { }
+        }
+
+        // when
+        val output = input.simplifyHtml(keepAttributes = setOf(AccessibilityAnnotations.REF))
+
+        // then
+        output sameAs semanticEvents {
+            tag(
+                "div",
+                "role" to "slider",
+                "aria-valuenow" to "3",
+                "aria-valuemin" to "1",
+                "aria-valuemax" to "5",
+                "aria-valuetext" to "3 stars",
+                AccessibilityAnnotations.REF to "4",
+            ) { }
+        }
+    }
+
+    @Test
+    fun `should not promote a block role inside running text`() = runTest {
+        // given — a paragraph holds only inline content, so a heading, a list
+        // item, a separator or a cell there cannot become a Markdown block
+        val input = semanticEvents(tagged = true) {
+            "p" {
+                +"Hello "
+                "x-name"("role" to "heading") { +"World" }
+                +" and "
+                "span"("role" to "listitem") { +"A" }
+                +" "
+                "span"("role" to "separator") { }
+                +" "
+                "span"("role" to "gridcell") { +"x" }
+                +" end"
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then — the elements unwrap into the running text
+        output sameAs semanticEvents {
+            "p" {
+                +"Hello "
+                +"World"
+                +" and "
+                +"A"
+                +" "
+                +" "
+                +"x"
+                +" end"
+            }
+        }
+    }
+
+    @Test
+    fun `should not promote a block role nested deeper inside running text`() = runTest {
+        // given — inside emphasis inside a heading, and inside a role heading
+        val input = semanticEvents(tagged = true) {
+            "h3" { "b" { "span"("role" to "heading") { +"a" } } }
+            "div"("role" to "heading") { "span"("role" to "separator") { } }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "h3" { "strong" { +"a" } }
+            "h2" { }
+        }
+    }
+
+    @Test
+    fun `should not promote a block role on an inline box`() = runTest {
+        // given — the capture laid the element out inline, inside a line of text
+        val input = semanticEvents(tagged = true) {
+            "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                +"Hello "
+                "span"("role" to "heading", AccessibilityAnnotations.DISPLAY to "inline") { +"World" }
+                +" end"
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            +"Hello "
+            +"World"
+            +" end"
+        }
+    }
+
+    @Test
+    fun `should promote a block role on a block box`() = runTest {
+        // given — a `span` the capture laid out as a block is one
+        val input = semanticEvents(tagged = true) {
+            "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                "span"("role" to "heading", AccessibilityAnnotations.DISPLAY to "block") { +"World" }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "h2" { +"World" }
+        }
+    }
+
+    @Test
+    fun `should promote the cells of a grid laid out as inline boxes`() = runTest {
+        // given — a cell's place is decided by its row, whatever box it is
+        val input = semanticEvents(tagged = true) {
+            "div"("role" to "table", AccessibilityAnnotations.DISPLAY to "block") {
+                "div"("role" to "row", AccessibilityAnnotations.DISPLAY to "block") {
+                    "span"("role" to "cell", AccessibilityAnnotations.DISPLAY to "inline-block") { +"a" }
+                    "span"("role" to "cell", AccessibilityAnnotations.DISPLAY to "inline-block") { +"b" }
+                }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "table" {
+                "tr" {
+                    "td" { +"a" }
+                    "td" { +"b" }
+                }
+            }
+        }
+    }
+
+    @Test
     fun `should unwrap a role presentation element keeping its children`() = runTest {
         // given — role="presentation" strips this element's own semantics (a
         // normally-preserved nav) while its content still flows through. Note we

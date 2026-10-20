@@ -669,6 +669,87 @@ class EncodeActionableRefsTest {
     }
 
     @Test
+    fun `should carry a table row's ref on a span in its first cell`() = runTest {
+        // given - a `| … |` row carries no attributes, and no span can sit
+        // between cells, so the ref goes into the row's first cell
+        val input = semanticEvents {
+            "table" {
+                "tr"(AccessibilityAnnotations.REF to "1", "aria-selected" to "true") {
+                    "td" { +"a" }
+                    "td" { +"b" }
+                }
+            }
+        }
+
+        // when
+        val output = input.encodeActionableRefs()
+
+        // then
+        output sameAs semanticEvents {
+            "table" {
+                "tr" {
+                    "td" { tag("span", "aria-selected" to "true", "ref" to "1") { +"a" } }
+                    "td" { +"b" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep a table row's ref beside its first cell's own ref`() = runTest {
+        // given - the row and its first cell are both actionable
+        val input = semanticEvents {
+            "table" {
+                "tr"(AccessibilityAnnotations.REF to "11") {
+                    "td"(AccessibilityAnnotations.REF to "12") { +"a" }
+                }
+            }
+        }
+
+        // when
+        val output = input.encodeActionableRefs()
+
+        // then - each keeps its own span
+        output sameAs semanticEvents {
+            "table" {
+                "tr" {
+                    "td" {
+                        tag("span", "ref" to "11") { }
+                        tag("span", "ref" to "12") { +"a" }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should carry an image's ref on a span around it`() = runTest {
+        // given - `![alt](src)` carries no attributes
+        val input = semanticEvents {
+            "p" {
+                "img"(
+                    "alt" to "Jane",
+                    "aria-label" to "Jane",
+                    "aria-pressed" to "false",
+                    AccessibilityAnnotations.REF to "8",
+                ) { }
+            }
+        }
+
+        // when
+        val output = input.encodeActionableRefs()
+
+        // then - the name the alt already says is not said twice
+        output sameAs semanticEvents {
+            "p" {
+                tag("span", "aria-pressed" to "false", "ref" to "8") {
+                    "img"("alt" to "Jane") { }
+                }
+            }
+        }
+    }
+
+    @Test
     fun `should carry the ref of a list item nested in a ref-bearing list item`() = runTest {
         // given
         val input = semanticEvents {

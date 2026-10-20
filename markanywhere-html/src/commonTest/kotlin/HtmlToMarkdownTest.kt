@@ -744,6 +744,100 @@ class HtmlToMarkdownTest {
     }
 
     @Test
+    fun `should round-trip block roles inside running text`() = runTest {
+        // given — issue #165: promoted to blocks, these broke the paragraph
+        // into lines the next parse reads differently (`Hello\n## World`)
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "p" {
+                    +"Hello "
+                    "x-name"("role" to "heading") { +"World" }
+                    +" end"
+                }
+                "p" {
+                    +"See "
+                    "span"("role" to "listitem") { +"A" }
+                }
+                "p" {
+                    +"a "
+                    "span"("role" to "separator") { }
+                    +" b"
+                }
+                "p" {
+                    +"x "
+                    "span"("role" to "gridcell") { +"A" }
+                    +" y"
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+        val reRendered = flowOf(markdown).parse().renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            Hello World end
+
+            See A
+
+            a b
+
+            x A y
+        """.trimIndent()
+        reRendered sameAs markdown
+    }
+
+    @Test
+    fun `should keep the refs of a focusable separator an image and a row`() = runTest {
+        // given — issue #165: role promotion used to drop each of these refs
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "p" { +"a" }
+                "x-splitter"(
+                    "role" to "separator",
+                    "tabindex" to "0",
+                    "aria-valuenow" to "50",
+                    "aria-label" to "Resize",
+                    AccessibilityAnnotations.REF to "7",
+                ) { }
+                "p" {
+                    +"By "
+                    "x-avatar"(
+                        "role" to "img",
+                        "aria-label" to "Jane",
+                        "tabindex" to "0",
+                        AccessibilityAnnotations.REF to "8",
+                    ) { +"JD" }
+                }
+                "div"("role" to "table") {
+                    "x-row"("role" to "row", AccessibilityAnnotations.REF to "11") {
+                        "div"("role" to "cell", AccessibilityAnnotations.REF to "12") { +"A" }
+                    }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+        val reRendered = flowOf(markdown).parse().renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            a
+
+            <x-splitter role="separator" aria-valuenow="50" aria-label="Resize" ref="7"></x-splitter>
+
+            By <span ref="8">![Jane]()</span>
+
+            |  |
+            | --- |
+            | <span ref="11"></span><span ref="12">A</span> |
+        """.trimIndent()
+        reRendered sameAs markdown
+    }
+
+    @Test
     fun `should separate adjacent links when the second is wrapped in formatting`() = runTest {
         // given — issue #96: no whitespace between the links, the second in a <b>
         val page = semanticEvents(tagged = true) {

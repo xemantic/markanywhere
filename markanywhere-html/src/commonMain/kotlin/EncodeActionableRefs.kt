@@ -126,7 +126,8 @@ internal val LINK_BLOCK_CONTENT_TAGS: Set<String> = setOf(
  * `ref:<id>:<href>` destination; a block-wrapping `<a>` (rendered as a raw tag)
  * and every other ref-bearing element take the short `ref="<id>"` attribute —
  * on a tagged `span` around the content of an untagged list item, heading or
- * cell, whose Markdown syntax carries no attributes (see
+ * cell (a table row's in its first cell), or around an untagged image, whose
+ * Markdown syntax carries no attributes (see
  * [moveRefsOffAttributelessBlocks]). Elements without a ref pass through
  * untouched.
  *
@@ -181,7 +182,9 @@ private val ATTRIBUTELESS_BLOCKS = setOf(
  *   renderer writes as a line-start block tag: it goes before the span.
  *
  * Any other item with no leading inline content gets an empty span, since its
- * ref is still something to act on. Bounded by one top-level inline child of
+ * ref is still something to act on. A ref-bearing `tr` has no content of its
+ * own and no span can sit between cells, so it hands its ref to its first
+ * cell — an empty span ahead of that cell's own when it carries one. Bounded by one top-level inline child of
  * the innermost ref-bearing block at a time — which can be a whole card `<a>`
  * subtree, the same bound [encodeActionableLinkRefs] pays per link.
  *
@@ -201,6 +204,9 @@ private fun Flow<SemanticEvent>.moveRefsOffAttributelessBlocks(): Flow<SemanticE
     val holders = ArrayDeque<Holder>()
     // The span attributes a ref-bearing item hands to its first `p`.
     var handedToParagraph: Map<String, String>? = null
+    // The span attributes a ref-bearing row hands to its first cell, until the
+    // row's next event (a row with no cell keeps nowhere to put them).
+    var rowMoved: Map<String, String>? = null
 
     suspend fun openSpan(holder: Holder, firstText: String?) {
         val label = holder.moved["aria-label"]
@@ -287,16 +293,36 @@ private fun Flow<SemanticEvent>.moveRefsOffAttributelessBlocks(): Flow<SemanticE
             else -> { /* text does not nest */ }
         }
         val handed = handedToParagraph
+        // A ref-bearing row's moved attributes reach its first cell: a cell
+        // with no ref of its own takes them, one with a ref gets an empty span
+        // of the row's before its own.
+        val row = rowMoved
+        if (event !is SemanticEvent.Text) rowMoved = null
+        var current = event
+        var rowSpanAfterCell: Map<String, String>? = null
+        if (row != null && current is Mark && !current.isTagged && current.name in TABLE_CELLS) {
+            if (current.carriesRef()) rowSpanAfterCell = row
+            else current = current.copy(attributes = current.attributes + row)
+        }
         when {
-            handed != null && event is Mark -> {
+            handed != null && current is Mark -> {
                 handedToParagraph = null
-                emit(event)
+                emit(current)
                 holders.addLast(Holder(handed))
             }
-            event is Mark && !event.isTagged && event.name in ATTRIBUTELESS_BLOCKS &&
-                event.carriesRef() -> {
-                val (moved, kept) = event.attributes.entries.partition { it.key.isMovedToRefSpan() }
-                emit(event.copy(attributes = kept.associate { it.toPair() }))
+            current is Mark && !current.isTagged && current.name == "tr" && current.carriesRef() -> {
+                val (moved, kept) = current.attributes.entries.partition { it.key.isMovedToRefSpan() }
+                emit(current.copy(attributes = kept.associate { it.toPair() }))
+                rowMoved = moved.associate { it.toPair() }
+            }
+            current is Mark && !current.isTagged && current.name in ATTRIBUTELESS_BLOCKS &&
+                current.carriesRef() -> {
+                val (moved, kept) = current.attributes.entries.partition { it.key.isMovedToRefSpan() }
+                emit(current.copy(attributes = kept.associate { it.toPair() }))
+                rowSpanAfterCell?.let {
+                    emit(Mark("span", isTagged = true, attributes = it))
+                    emit(Unmark("span", isTagged = true))
+                }
                 holders.addLast(Holder(moved.associate { it.toPair() }))
             }
             event is Unmark && holder != null && holder.depth < 0 -> {
@@ -317,6 +343,8 @@ private fun Flow<SemanticEvent>.moveRefsOffAttributelessBlocks(): Flow<SemanticE
         settle(holder)
     }
 }
+
+private val TABLE_CELLS = setOf("td", "th")
 
 private fun SemanticEvent.carriesRef(): Boolean =
     this is Mark && this[AccessibilityAnnotations.REF] != null
@@ -358,6 +386,23 @@ private fun String.collapseWhitespace(): String = buildString {
 private enum class SpanState { PENDING, OPEN, CLOSED }
 
 public fun TransformerBuilder.encodeActionableNonLinkRefs() {
+
+    // A Markdown image `![alt](src)` carries no attributes, so a ref-bearing
+    // one (an image the page made clickable, or a promoted `role="img"`
+    // control) is wrapped in a span carrying its ref, role and ARIA state —
+    // minus an `aria-label` the alt already says.
+    match({ !isTagged && name == "img" && this[AccessibilityAnnotations.REF] != null }) { event ->
+        val (moved, kept) = event.attributes.entries.partition { it.key.isMovedToRefSpan() }
+        val alt = event["alt"]
+        val spanAttributes = moved.associate { it.toPair() }
+            .filterNot { (name, value) ->
+                name == "aria-label" && alt != null && value.collapseWhitespace() == alt.collapseWhitespace()
+            }
+            .mapKeys { (name, _) -> if (name == AccessibilityAnnotations.REF) ATTRIBUTE else name }
+        tag("span", spanAttributes) {
+            "img"(kept.associate { it.toPair() }) { children() }
+        }
+    }
 
     // Every ref-bearing element except <a>: rename the DOM attribute to the
     // short one. No name guard is needed — the link pre-pass consumes the ref
