@@ -187,6 +187,19 @@ private class ListContext(
     /** True while the inner `<p>` of an open blockquote is currently open. */
     var blockquoteParagraphOpen: Boolean = false,
     /**
+     * True when the last line of the open paragraph (the item's own or its
+     * inner blockquote's) asked for a hard line break (GFM §6.7) — ≥2
+     * trailing spaces or a trailing backslash. The list counterpart of the
+     * top-level `paragraphTrailingSpaces` tally: promoted to `<br>` when the
+     * paragraph continues on the next line, dropped when it closes.
+     */
+    var hardBreakPending: Boolean = false,
+    /**
+     * True when [hardBreakPending] came from a trailing backslash, which is
+     * emitted as literal text if the paragraph closes instead (GFM example 669).
+     */
+    var hardBreakBackslash: Boolean = false,
+    /**
      * True once any content (paragraph, code, heading, blockquote, etc.) has
      * been emitted for the active item. Used to decide whether a blank line
      * followed by a continuation line ends the list (an empty item followed
@@ -3173,11 +3186,7 @@ private class ParserState(
             ctx.blockquoteOpen = true
             mark("p")
             ctx.blockquoteParagraphOpen = true
-            val bqContent = stripBlockquotePrefix(trimmed)
-            if (bqContent.isNotBlank()) {
-                processInlineContent(bqContent.trimEnd())
-            }
-            flushInline()
+            emitListParagraphLine(ctx, stripBlockquotePrefix(firstContent))
             return
         }
         // Table header as the first content of a list item (`- | a | b |`).
@@ -3217,7 +3226,59 @@ private class ParserState(
         mark("p")
         ctx.paragraphOpen = true
         emitItemFirstContent(trimmed)
+        recordListHardBreak(ctx, firstContent)
         flushInline()
+    }
+
+    /**
+     * Emit one [line] of an open list-item paragraph (the item's own or its
+     * inner blockquote's) and record whether it asks for a hard break.
+     */
+    private suspend fun SemanticEventScope.emitListParagraphLine(
+        ctx: ListContext,
+        line: String
+    ) {
+        processInlineContent(line.trim())
+        recordListHardBreak(ctx, line)
+        flushInline()
+    }
+
+    /**
+     * Record on [ctx] whether the just-processed paragraph [line] ends with a
+     * hard line break request (GFM §6.7): ≥2 trailing spaces, or a backslash
+     * left pending in [escaped] — the list counterpart of
+     * [captureLineEndBackslash]. Must run before [flushInline], which would
+     * drop the pending backslash.
+     */
+    private fun recordListHardBreak(ctx: ListContext, line: String) {
+        ctx.hardBreakBackslash = escaped
+        ctx.hardBreakPending = escaped || line.length - line.trimEnd(' ').length >= 2
+        escaped = false
+    }
+
+    /**
+     * Emit the line break joining the next line to the open list-item
+     * paragraph: a `<br>` first when the previous line asked for a hard break.
+     */
+    private suspend fun SemanticEventScope.emitListParagraphLineBreak(ctx: ListContext) {
+        if (ctx.hardBreakPending) {
+            mark("br")
+            unmark("br")
+        }
+        ctx.hardBreakPending = false
+        ctx.hardBreakBackslash = false
+        +"\n"
+    }
+
+    /**
+     * Settle a hard break request left by the last line of a list-item
+     * paragraph that is closing: trailing spaces are dropped, a trailing
+     * backslash is literal text (GFM example 669). Call before `unmark("p")`.
+     */
+    private suspend fun SemanticEventScope.endListParagraph(ctx: ListContext) {
+        if (ctx.hardBreakBackslash) +"\\"
+        ctx.hardBreakPending = false
+        ctx.hardBreakBackslash = false
     }
 
     /**
@@ -3250,6 +3311,7 @@ private class ParserState(
         val top = mode.stack.lastOrNull() ?: return
         if (top.paragraphOpen) {
             flushInline()
+            endListParagraph(top)
             unmark("p")
             top.paragraphOpen = false
         }
@@ -3291,6 +3353,7 @@ private class ParserState(
         if (top.blockquoteOpen) {
             if (top.blockquoteParagraphOpen) {
                 flushInline()
+                endListParagraph(top)
                 unmark("p")
                 top.blockquoteParagraphOpen = false
             }
@@ -3340,10 +3403,9 @@ private class ParserState(
             mark("p")
             top.paragraphOpen = true
         } else {
-            +"\n"
+            emitListParagraphLineBreak(top)
         }
-        processInlineContent(text)
-        flushInline()
+        emitListParagraphLine(top, pending)
         top.hasContent = true
     }
 
@@ -4110,9 +4172,8 @@ private class ParserState(
             // — `    - e` lazy-continues the open paragraph instead of opening
             // a new sibling item).
             if (top != null && top.paragraphOpen && !lineInterruptsParagraph(line)) {
-                +"\n"
-                processInlineContent(line.trimStart().trimEnd())
-                flushInline()
+                emitListParagraphLineBreak(top)
+                emitListParagraphLine(top, line)
                 mode.blankSeen = false
                 return
             }
@@ -4122,9 +4183,8 @@ private class ParserState(
             // inner-blockquote case used by GFM §5.2 examples 270, 271).
             if (top != null && top.blockquoteOpen && top.blockquoteParagraphOpen
                 && !lineInterruptsParagraph(line)) {
-                +"\n"
-                processInlineContent(line.trimStart().trimEnd())
-                flushInline()
+                emitListParagraphLineBreak(top)
+                emitListParagraphLine(top, line)
                 mode.blankSeen = false
                 return
             }
@@ -4353,6 +4413,7 @@ private class ParserState(
                 // example 300) — the next blockquote line starts a fresh `<p>`.
                 if (bqContent.isBlank() && ctx.blockquoteParagraphOpen) {
                     flushInline()
+                    endListParagraph(ctx)
                     unmark("p")
                     ctx.blockquoteParagraphOpen = false
                     ctx.hasContent = true
@@ -4363,12 +4424,9 @@ private class ParserState(
                     mark("p")
                     ctx.blockquoteParagraphOpen = true
                 } else {
-                    +"\n"
+                    emitListParagraphLineBreak(ctx)
                 }
-                if (bqContent.isNotBlank()) {
-                    processInlineContent(bqContent.trimEnd())
-                }
-                flushInline()
+                emitListParagraphLine(ctx, bqContent)
                 ctx.hasContent = true
                 mode.blankSeen = false
                 return
@@ -4388,11 +4446,11 @@ private class ParserState(
             mark("p")
             ctx.paragraphOpen = true
         } else {
-            // Soft-break between joined lines of the same paragraph.
-            +"\n"
+            // Soft (or hard, GFM §6.7) break between joined lines of the same
+            // paragraph.
+            emitListParagraphLineBreak(ctx)
         }
-        processInlineContent(stripped.trimStart().trimEnd())
-        flushInline()
+        emitListParagraphLine(ctx, stripped)
         ctx.hasContent = true
         mode.blankSeen = false
     }
