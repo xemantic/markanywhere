@@ -1630,21 +1630,25 @@ private class ParserState(
      * `sup`): close the span when it is closable, open one when none is open,
      * and otherwise — the span is open outside the current link label — emit the
      * run as [literal] text, deferring the close to a label abort when it can.
-     * A run in closing position ([prev] not whitespace) after a span of [name]
-     * was force-closed on this line is that span's orphaned closer: literal.
+     * A run that can only close ([prev] not whitespace, and not left-flanking
+     * before [next]) after a span of [name] was force-closed on this line is
+     * that span's orphaned closer: literal. One that can also open is a span
+     * of its own (`*a ~~b* c~~d~~ e` pairs `~~d~~`, issue #135).
      */
     private suspend fun SemanticEventScope.toggleInlineSpan(
         name: String,
         delimChar: Char,
         literal: String,
-        prev: Char?
+        prev: Char?,
+        next: Char?
     ) {
         val outer = outerFrameIndex(name, isTagged = false)
         when {
             isInlineClosable(name) -> closeInlineDownTo(name, isTagged = false)
             outer >= 0 && canDeferOuterClose() -> deferOuterClose(outer, literal)
             isInlineOpen(name) -> +literal
-            name in forceClosedSpans && !prev.isFlankWhitespace() -> {
+            name in forceClosedSpans && !prev.isFlankWhitespace() &&
+                !emphasisFlanking('*', prev, next).first -> {
                 forceClosedSpans -= name
                 +literal
             }
@@ -1974,8 +1978,8 @@ private class ParserState(
         when (run) {
             "*", "**", "***" -> resolveEmphasisRun('*', run.length, next)
             "_", "__", "___" -> resolveEmphasisRun('_', run.length, next)
-            "~", "~~" -> toggleInlineSpan("del", '~', run, runPrevChar)
-            "==" -> toggleInlineSpan("mark", '=', run, runPrevChar)
+            "~", "~~" -> toggleInlineSpan("del", '~', run, runPrevChar, next)
+            "==" -> toggleInlineSpan("mark", '=', run, runPrevChar, next)
             else -> return false
         }
         inlineBuffer.clear()
@@ -6352,11 +6356,11 @@ private class ParserState(
             // new-char branch below: those flush a pending run as literal text, so
             // a closing `==` right before a `~` (`~~a ==b==~~`) or a closing `~~`
             // before a `*` would never close. An *opening* run keeps its original
-            // position below (literal before `` ` ``/`*`, etc.).
+            // position below (literal before `_`, `[`, etc.).
             isPendingSpanCloser() && char != inlineBuffer[0] -> {
                 val run = inlineBuffer.toString()
                 inlineBuffer.clear()
-                toggleInlineSpan(if (run[0] == '~') "del" else "mark", run[0], run, runPrevChar)
+                toggleInlineSpan(if (run[0] == '~') "del" else "mark", run[0], run, runPrevChar, char)
                 pendingDeferredChar = char
             }
             // A `~`/`~~`/`==` run before a code span or an emphasis run toggles
@@ -6365,7 +6369,14 @@ private class ParserState(
             (char == '`' || char == '*') && inlineBuffer.toString() in SPAN_TOGGLE_RUNS -> {
                 val run = inlineBuffer.toString()
                 inlineBuffer.clear()
-                toggleInlineSpan(if (run[0] == '~') "del" else "mark", run[0], run, runPrevChar)
+                toggleInlineSpan(if (run[0] == '~') "del" else "mark", run[0], run, runPrevChar, char)
+                pendingDeferredChar = char
+            }
+            // A `^` held as the possible orphaned closer of a force-closed sup
+            // (see the `^` branch) resolves on the char after it.
+            inlineBuffer.toString() == "^" -> {
+                inlineBuffer.clear()
+                toggleInlineSpan("sup", '^', "^", runPrevChar, char)
                 pendingDeferredChar = char
             }
             // Backtick run accumulation: keep appending backticks until a non-backtick
@@ -6407,12 +6418,12 @@ private class ParserState(
             // Tilde buffer checks (before char == '~')
             inlineBuffer.toString() == "~~" && char != '~' -> {
                 inlineBuffer.clear()
-                toggleInlineSpan("del", '~', "~~", runPrevChar)
+                toggleInlineSpan("del", '~', "~~", runPrevChar, char)
                 pendingDeferredChar = char
             }
             inlineBuffer.toString() == "~" && char != '~' -> {
                 inlineBuffer.clear()
-                toggleInlineSpan("del", '~', "~", runPrevChar)
+                toggleInlineSpan("del", '~', "~", runPrevChar, char)
                 pendingDeferredChar = char
             }
             // Now handle new character cases
@@ -6445,12 +6456,21 @@ private class ParserState(
                     +inlineBuffer.toString()
                     inlineBuffer.clear()
                 }
-                toggleInlineSpan("sup", '^', "^", prevInlineChar)
+                // A `^` resolves eagerly, except in closing position after a sup
+                // was force-closed on this line: whether it is that sup's orphaned
+                // closer or opens a span of its own depends on the char after it
+                // (toggleInlineSpan), so it is held for one char.
+                if ("sup" in forceClosedSpans && !isInlineOpen("sup") && !prevInlineChar.isFlankWhitespace()) {
+                    runPrevChar = prevInlineChar
+                    inlineBuffer.append('^')
+                } else {
+                    toggleInlineSpan("sup", '^', "^", prevInlineChar, next = null)
+                }
             }
             // Equals buffer checks (before char == '=')
             inlineBuffer.toString() == "==" && char != '=' -> {
                 inlineBuffer.clear()
-                toggleInlineSpan("mark", '=', "==", runPrevChar)
+                toggleInlineSpan("mark", '=', "==", runPrevChar, char)
                 pendingDeferredChar = char
             }
             inlineBuffer.toString() == "=" && char != '=' -> {

@@ -718,6 +718,96 @@ class InlineSpanNestingTest {
         }
     }
 
+    // The orphaned closer of a force-closed span is only a run in closing
+    // position that cannot open: a run that can is a legitimate span of its
+    // own, as GFM pairs it (issue #135).
+
+    @Test
+    fun `should pair a del after the closer of a del force-closed by an em`() = runTest {
+        // given
+        val textFlow = "*a ~~b* c~~d~~ e".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "em" {
+                    +"a "
+                    "del" { +"b" }
+                }
+                +" c"
+                "del" { +"d" }
+                +" e"
+            }
+        }
+    }
+
+    @Test
+    fun `should pair a sup after the closer of a sup force-closed by an em`() = runTest {
+        // given
+        val textFlow = "*a ^b* c^d^".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "em" {
+                    +"a "
+                    "sup" { +"b" }
+                }
+                +" c"
+                "sup" { +"d" }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep the closer of a sup force-closed by an em literal at the line end`() = runTest {
+        // given
+        val textFlow = "*a ^b* c^\nd".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "em" {
+                    +"a "
+                    "sup" { +"b" }
+                }
+                +" c^\nd"
+            }
+        }
+    }
+
+    @Test
+    fun `DIVERGENCE - should open a sup at a caret with no closer after a deferred close`() = runTest {
+        // GFM keeps the last `^` literal, since no closer follows it — but a `^`
+        // opens eagerly, and seeing that no closer follows would mean holding
+        // the rest of the line. The `^` in the aborted label closed the outer
+        // sup, so nothing marks the last one as an orphaned closer: it opens a
+        // span the line end closes empty.
+        // given
+        val textFlow = "^a [b^ c] d^".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "sup" { +"a [b" }
+                +" c] d"
+                "sup" { }
+            }
+        }
+    }
+
     // The renderer escapes a delimiter right after an opener (`*\~*`), so a run
     // followed by a backslash must resolve like a run followed by any other char.
 

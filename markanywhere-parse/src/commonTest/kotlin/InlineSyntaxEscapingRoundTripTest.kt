@@ -161,4 +161,99 @@ class InlineSyntaxEscapingRoundTripTest {
         assertMarkdownFixpoint("foo~~\nbar")
     }
 
+    // --- #135: force-closed span closers and escaped delimiters ------------
+
+    @Test
+    fun `should escape the literal closer of a mark force-closed by an em`() = runTest {
+        // given
+        val markdown = "*a ==b* c== d ==e=="
+        // when
+        val once = flowOf(markdown).parse().renderMarkdown()
+        val twice = flowOf(once).parse().renderMarkdown()
+        // then
+        once sameAs """*a ==b==* c\=\= d ==e=="""
+        twice sameAs once
+    }
+
+    @Test
+    fun `should escape the literal closer of a sup force-closed by an em`() = runTest {
+        // given
+        val markdown = "*a ^b* c^ d ^e^"
+        // when
+        val once = flowOf(markdown).parse().renderMarkdown()
+        val twice = flowOf(once).parse().renderMarkdown()
+        // then
+        once sameAs """*a ^b^* c\^ d ^e^"""
+        twice sameAs once
+    }
+
+    @Test
+    fun `should round-trip a del paired after the closer of a del force-closed by an em`() = runTest {
+        // given
+        val markdown = "*a ~~b* c~~d~~ e"
+        // when
+        val once = flowOf(markdown).parse().renderMarkdown()
+        val twice = flowOf(once).parse().renderMarkdown()
+        // then
+        once sameAs "*a ~~b~~* c~~d~~ e"
+        twice sameAs once
+    }
+
+    @Test
+    fun `should round-trip an escaped tilde right after a del`() = runTest {
+        assertMarkdownFixpoint("""a ~~b~~\~ c""")
+    }
+
+    @Test
+    fun `should escape a caret in plain text`() = runTest {
+        // given
+        val events = semanticEvents { "p" { +"x^2" } }
+        // when
+        val markdown = events.renderMarkdown()
+        // then
+        markdown sameAs """x\^2"""
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should escape an equals pair in plain text`() = runTest {
+        // given
+        val events = semanticEvents { "p" { +"a == b = c" } }
+        // when
+        val markdown = events.renderMarkdown()
+        // then
+        markdown sameAs """a \=\= b = c"""
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should keep an equals pair ending a line unescaped`() = runTest {
+        assertMarkdownFixpoint("foo==\nbar")
+    }
+
+    @Test
+    fun `should escape a tilde in image alt text`() = runTest {
+        // given — the alt is the plain text of the description: `a ~b`
+        val markdown = """![a ~~\~b~~](i.png)"""
+        // when
+        val once = flowOf(markdown).parse().renderMarkdown()
+        val twice = flowOf(once).parse().renderMarkdown()
+        // then
+        once sameAs """![a \~b](i.png)"""
+        twice sameAs once
+    }
+
+    @Test
+    fun `should escape inline syntax in image alt text`() = runTest {
+        // given
+        val events = semanticEvents {
+            "p" { "img"("src" to "i.png", "alt" to $$"_b_ `c` ^d^ $e [f]") {} }
+        }
+        // when
+        val markdown = events.renderMarkdown()
+        // then
+        markdown sameAs $$"""![\_b_ \`c\` \^d\^ \$e \[f\]](i.png)"""
+        assertMarkdownFixpoint(markdown)
+    }
+
 }

@@ -461,70 +461,29 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         } else if (activeDelimiterMask != 0) allInlineDelimiters
         else 0
 
-    // Backslash-escapes every char of [text] that would read as inline syntax
-    // on re-parse instead of the literal char it is, given [next], the char
-    // written right after the text (null when unknown — then a char is escaped
-    // whenever some next char could make it syntax). Two layers:
-    //  - every emphasis delimiter while a span is open (spanEscapeMask), and a
-    //    backtick while a span is open or inside a label;
-    //  - anywhere, a char that opens a construct at its position (issue #133):
-    //    a tilde run not ending a line, a `$` before a math opener, an
-    //    underscore run that can open emphasis by the parser's flanking rules.
-    //    A run next to a closer of its own char, or followed by its own char
-    //    written next, would join that run, so it is escaped too.
-    // Suppressed in verbatim text (inVerbatimText), where a backslash is
-    // literal: code, preformatted text, front matter, raw verbatim tags.
-    //
-    // A single `~` is itself a valid GFM strikethrough delimiter (`~a~` →
-    // `<del>a</del>`), so inside a span it must always be escaped. A lone `=` is
-    // NOT a delimiter (only `==` toggles mark), so escaping it inside a span is
-    // *conservative* — but pair-only escaping is unsafe there: re-parsing an
-    // escaped span emits its `\=\=` as two separate single-`=` text events, so
-    // the per-event pass could no longer see the pair and the run would re-form.
-    // Over-escaping a lone `=` (a harmless `\=` in `<mark>x=5</mark>`) keeps the
-    // round-trip stable, which the append-only stream cannot trade away.
-    //
-    // A literal backtick inside a span or a label is escaped too: inside
-    // `<em>`/`<strong>`/… it eagerly opens an inline code span on re-parse that
-    // `flushInline` LIFO-closes *before* the emphasis (`<em>a`b</em>` →
+    // Escapes [text] written here, given [next], the char written right after
+    // it (see escapeInlineSyntax). A literal backtick is escaped inside a span
+    // or a label even where no other delimiter is: inside `<em>`/`<strong>`/…
+    // it eagerly opens an inline code span on re-parse that `flushInline`
+    // LIFO-closes *before* the emphasis (`<em>a`b</em>` →
     // `<em>a<code>b</code></em>`, growing every round-trip); inside a link/image
     // label it opens a code span that consumes the `]`/`(url)` so the link never
     // forms (`*[a`b](u)*` — the outer em's `*` is excluded from the label mask,
-    // so mask is 0 yet the backtick must still be escaped). Real code-span
-    // *content* is verbatim (inVerbatimText); only literal backtick text gets here.
+    // so mask is 0 yet the backtick must still be escaped). Suppressed in
+    // verbatim text (inVerbatimText), where a backslash is literal — real
+    // code-span *content* never gets here.
     fun escapeInlineText(text: String, next: Char?): String {
         // Pre-scan so plain words return without the stack scans below.
         if (text.none { it in INLINE_SYNTAX_CHARS }) return text
         if (inVerbatimText()) return text
         val mask = spanEscapeMask()
-        val backtick = mask != 0 || inLabel()
-        val before0 = prevWrittenChar()
-        return buildString(text.length + 4) {
-            var i = 0
-            while (i < text.length) {
-                val c = text[i]
-                var end = i + 1
-                if (c == '~' || c == '_') while (end < text.length && text[end] == c) end++
-                val before = if (i == 0) before0 else text[i - 1]
-                val after = if (end < text.length) text[end] else next
-                val joinsRun = (i == 0 && closerChar == c) || after == c || after == null
-                val escape = (delimiterBit(c) and mask) != 0 || when (c) {
-                    '`' -> backtick
-                    // A tilde run toggles a del wherever it stands, except at
-                    // the end of a line, where it stays literal — unless it
-                    // starts the line, where three of them open a fence.
-                    '~' -> after != '\n' || before == '\n' || joinsRun
-                    '_' -> joinsRun || canOpenEmphasis(c, before, after)
-                    '$' -> after == null || after.isMathOpen() || after == '$'
-                    else -> false
-                }
-                for (k in i until end) {
-                    if (escape) +'\\'
-                    +text[k]
-                }
-                i = end
-            }
-        }
+        return escapeInlineSyntax(
+            text = text,
+            before = prevWrittenChar(),
+            next = next,
+            mask = mask,
+            backtick = mask != 0 || inLabel()
+        )
     }
 
     // Recompute the open inline emphasis delimiter mask from blockStack — called
@@ -1229,7 +1188,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
 
                 "img" -> {
                     val src = event.attributes["src"] ?: ""
-                    val alt = event.attributes["alt"] ?: ""
+                    val alt = escapeAltText(event.attributes["alt"] ?: "")
                     if (inLabel()) appendLabel("![$alt]($src)")
                     else {
                         consumeHeadingSpace()
@@ -1865,6 +1824,86 @@ private fun Char.isFlankWhitespace(): Boolean =
 private fun Char.isFlankPunctuation(): Boolean =
     this in '!'..'/' || this in ':'..'@' || this in '['..'`' || this in '{'..'~'
 
+// Backslash-escapes every char of [text] that would read as inline syntax on
+// re-parse instead of the literal char it is. [before] is the char written
+// right before the text, [next] the one written right after it (null when
+// unknown — then a char is escaped whenever some next char could make it
+// syntax). Two layers:
+//  - every emphasis delimiter in [mask] (delimiterBit bits — all of them while
+//    a span is open, see spanEscapeMask), and a backtick when [backtick];
+//  - anywhere, a char that opens a construct at its position: a tilde run not
+//    ending a line (#133), an `==` run not ending a line and every `^` (#135),
+//    a `$` before a math opener, an underscore run that can open emphasis by
+//    the parser's flanking rules (#133). A run right after its own char (a
+//    closer, or that char written escaped), or followed by its own char
+//    written next, would join that run, so it is escaped too.
+// [brackets] also escapes `[` / `]`, for image alt text, where an unbalanced
+// one ends the description early.
+//
+// A single `~` is itself a valid GFM strikethrough delimiter (`~a~` →
+// `<del>a</del>`), so inside a span it must always be escaped. A lone `=` is NOT
+// a delimiter (only `==` toggles mark), so escaping it inside a span is
+// *conservative* — but pair-only escaping is unsafe there: re-parsing an escaped
+// span emits its `\=\=` as two separate single-`=` text events, so the per-event
+// pass could no longer see the pair and the run would re-form. Over-escaping a
+// lone `=` (a harmless `\=` in `<mark>x=5</mark>`) keeps the round-trip stable,
+// which the append-only stream cannot trade away. Outside a span the pair is
+// seen across events, as a text ending in `=` is judged by the next event.
+private fun escapeInlineSyntax(
+    text: String,
+    before: Char,
+    next: Char?,
+    mask: Int,
+    backtick: Boolean,
+    brackets: Boolean = false
+): String = buildString(text.length + 4) {
+    var i = 0
+    while (i < text.length) {
+        val c = text[i]
+        var end = i + 1
+        if (c in RUN_SYNTAX_CHARS) while (end < text.length && text[end] == c) end++
+        val prev = if (i == 0) before else text[i - 1]
+        val after = if (end < text.length) text[end] else next
+        // The char before is written escaped or as a closer — either way the run
+        // would join it, so it is escaped like the char before.
+        val joinsRun = prev == c || after == c || after == null
+        val escape = (delimiterBit(c) and mask) != 0 || when (c) {
+            '`' -> backtick
+            // A `~` / `~~` run toggles a del wherever it stands, except at the
+            // end of a line, where it stays literal — unless it starts the
+            // line, where three of them open a fence.
+            '~' -> after != '\n' || prev == '\n' || joinsRun
+            // Only an `==` run toggles a mark, and it too stays literal at the
+            // end of a line.
+            '=' -> joinsRun || (end - i == 2 && after != '\n')
+            // A `^` toggles a sup wherever it stands, even at a line end.
+            '^' -> true
+            '_' -> joinsRun || canOpenEmphasis(c, prev, after)
+            '$' -> after == null || after.isMathOpen() || after == '$'
+            '[', ']' -> brackets
+            else -> false
+        }
+        for (k in i until end) {
+            if (escape) +'\\'
+            +text[k]
+        }
+        i = end
+    }
+}
+
+// Escapes an image's alt text for its `![alt](src)` description, which the
+// parser reads as inline content before reducing it to plain text.
+private fun escapeAltText(alt: String): String =
+    if (alt.none { it in INLINE_SYNTAX_CHARS || it == '[' || it == ']' }) alt
+    else escapeInlineSyntax(
+        text = alt,
+        before = '[',
+        next = ']',
+        mask = 0,
+        backtick = true,
+        brackets = true
+    )
+
 // Whether a `*` / `_` run between [before] and [after] can open emphasis on
 // re-parse — the parser's flanking rules (`emphasisFlanking` in
 // `MarkanywhereParser.kt`), `_` with its stricter intraword rule.
@@ -1888,7 +1927,10 @@ private const val INLINE_SYNTAX_CHARS = "*~=^`_$"
 
 // Chars whose escaping depends on the char written after them — a text event
 // ending in one is held until the next event (see heldText).
-private const val LOOKAHEAD_CHARS = "~_$"
+private const val LOOKAHEAD_CHARS = "~=_$"
+
+// Chars escapeInlineSyntax judges as a run of the same char.
+private const val RUN_SYNTAX_CHARS = "~=_"
 
 // The first char the renderer writes for this event, as far as escaping the
 // text right before it is concerned (see escapeInlineText); null when unknown.
