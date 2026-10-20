@@ -485,7 +485,7 @@ private fun Flow<SemanticEvent>.simplifyHtmlRules(
     }
 
     // `role="img"` → image; its accessible name becomes the alt text.
-    match({ isGenericContainer() && explicitRole() == "img" }) { event ->
+    match({ isImageRole() }) { event ->
         val attrs = preserveAttrs(event, "id").toMutableMap()
         // accname: `aria-label` (step 2C), else the tooltip `title` (step 2I)
         (event["aria-label"] ?: event["title"])?.let { attrs["alt"] = it }
@@ -765,6 +765,13 @@ private val UNWRAPPED_TAGS = setOf(
  */
 internal fun SemanticEvent.Mark.isGenericContainer(): Boolean =
     name in UNWRAPPED_TAGS || name.isCustomElementName()
+
+/**
+ * Whether this is a generic element with the `img` role, which [simplifyHtml]
+ * turns into an image named after it, dropping its children.
+ */
+internal fun SemanticEvent.Mark.isImageRole(): Boolean =
+    isGenericContainer() && explicitRole() == "img"
 
 // The shape of a valid custom element name (HTML §4.13.2): a lowercase ASCII
 // letter first and a hyphen somewhere, minus the SVG / MathML names of that

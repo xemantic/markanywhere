@@ -1372,4 +1372,35 @@ class SeparateUnwrappedBlocksTest {
             }
         }
     }
+
+    @Test
+    fun `should not take the children of an element with the img role for content`() = runTest {
+        // given — simplifyHtml drops them for the image's name, so the space
+        // they end with separates nothing
+        val input = semanticEvents(tagged = true) {
+            "p" {
+                +"Pro"
+                "div"("role" to "img", "aria-label" to "logo", AccessibilityAnnotations.DISPLAY to "block") {
+                    "span"(AccessibilityAnnotations.DISPLAY to "inline") { +"icon " }
+                }
+                +"teams"
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "p" {
+                +"Pro"
+                +" "
+                "div"("role" to "img", "aria-label" to "logo", AccessibilityAnnotations.DISPLAY to "block") {
+                    "span"(AccessibilityAnnotations.DISPLAY to "inline") { +"icon " }
+                }
+                +" "
+                +"teams"
+            }
+        }
+    }
 }
