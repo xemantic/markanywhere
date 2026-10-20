@@ -119,10 +119,13 @@ import kotlinx.coroutines.flow.flow
  * outside its label. Controls are distinct things to act on (see
  * [isDeclaredControl] — only a declared one: a bare ref-bearing `<span>` may
  * be half a word, `US` + `$5`), and nothing renders two of them flush against
- * each other on purpose — they would read as one. Unless one of the two is a
- * link or a box of its own (its display not `inline`), though: two controls
- * in the inline text flow may be one word a page made a tap target per
- * syllable (`<span role=button>Hel</span><span role=button>lo</span>`, #141).
+ * each other on purpose — they would read as one. Unless the capture shows
+ * both in the inline text flow (a recorded `inline`/`contents` display) and
+ * neither is a link (`<a>` or `role=link`), though: such controls may be one
+ * word a page made a tap target per syllable
+ * (`<span role=button>Hel</span><span role=button>lo</span>`, #141). Links
+ * are always separated — a per-syllable `<a>` is split, the price of the
+ * masthead links whose gap is a CSS margin.
  *
  * A separator goes *before* the marks opened since the previous token (`<b>`,
  * `<em>`, an inline `<a>`, a blockified `<strong>`, the box itself …), never
@@ -341,8 +344,11 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
                 }
                 val control = if (event.isDeclaredControl()) OpenControl(
                     // A link is a distinct thing to follow wherever it sits; any
-                    // other control only when it is a box of its own.
-                    distinct = event.name == "a" || boundary != BlockBoundary.INLINE
+                    // other control unless the capture shows it in the inline
+                    // text flow — an unrecorded or UA-default display says
+                    // nothing about that, so it keeps the separator.
+                    distinct = event.name == "a" || event.explicitRole() == "link" ||
+                        !display.isCapturedInlineFlow()
                 ) else null
                 if (preserveDepth == 0) {
                     cross(boundary)
@@ -582,6 +588,11 @@ private val BLOCK_ROLES = setOf(
 // child of one is a separated box. An absent display is never a flex container.
 private fun CapturedDisplay.isFlexGridContainer(): Boolean =
     this is Known && ("flex" in value || "grid" in value)
+
+// A captured `inline` (or box-less `contents`) display: the element sits in
+// the text flow of its parent, flush against its neighbours.
+private fun CapturedDisplay.isCapturedInlineFlow(): Boolean =
+    this is Known && (value == "inline" || value == "contents")
 
 private fun SemanticEvent.Mark.isImageRole(): Boolean =
     isGenericContainer() && explicitRole() == "img"
