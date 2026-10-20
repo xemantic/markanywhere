@@ -83,6 +83,16 @@ import kotlinx.coroutines.flow.flow
  * labelled by the same rules, and the label inserted into it is content of the
  * enclosing control too, which therefore needs none of its own.
  *
+ * A **heading** is held and named the same way, by rules 1 and 2 only: its name
+ * comes from its content and, failing that, from its `title` (accname step 2I)
+ * — which [simplifyHtml] strips, so `<h1 title="Back to Bing search">` holding
+ * only a CSS-background logo would otherwise render as a bare `#` (issue #177).
+ * Rule 3 does not apply: the placeholder says "a picture to click", and a
+ * heading is not clicked. A heading is not itself a control, but the name
+ * inserted into it is content of a control around it — the Bing logo link
+ * `<a><h1 title>` is labelled once, by its heading, rather than getting a
+ * second copy of the name beside it.
+ *
  * Runs **after** [resolveIcons] and [applyAccessibility] (so an icon font has
  * already become emoji text and hidden subtrees are gone — neither should be
  * read as a label) and **before** [resolveInlineGraphics] (which drops a
@@ -119,9 +129,12 @@ public fun Flow<SemanticEvent>.labelActionableElements(
     }
 
     collect { event ->
-        if (event is Mark && event.isControl(refMode)) {
-            frames.addLast(Control().also { it.buffer.add(event) })
-            return@collect
+        if (event is Mark) {
+            val placeholder = event.isControl(refMode)
+            if (placeholder || event.isHeading()) {
+                frames.addLast(Control(placeholder).also { it.buffer.add(event) })
+                return@collect
+            }
         }
         val top = frames.lastOrNull()
         if (top == null) {
@@ -143,24 +156,34 @@ public fun Flow<SemanticEvent>.labelActionableElements(
             pass(event, frames.lastIndex)
         } else {
             top.buffer.add(event)
-            labelled(top.buffer, svgMode).forEach { pass(it, frames.lastIndex) }
+            labelled(top, svgMode).forEach { pass(it, frames.lastIndex) }
         }
     }
     // Controls unclosed at end-of-stream (synthetic edge): flush what we have,
     // innermost first so its events reach the enclosing frame's buffer.
     while (frames.isNotEmpty()) {
         val top = frames.removeLast()
-        val held = if (top.labelled) top.buffer else labelled(top.buffer, svgMode)
+        val held = if (top.labelled) top.buffer else labelled(top, svgMode)
         held.forEach { pass(it, frames.lastIndex) }
     }
 }
 
-/** An open actionable element and what it has held back so far. */
-private class Control {
+/**
+ * An open element this operator names — an actionable element, or a heading —
+ * and what it has held back so far. Only a control is given the
+ * [GRAPHIC_PLACEHOLDER_ALT] for a nameless graphic ([placeholder]).
+ */
+private class Control(val placeholder: Boolean) {
     val buffer = mutableListOf<SemanticEvent>()
     var depth = 1 // nesting depth inside the control, 1 = its own open mark
     var labelled = false // the control has shown a label: nothing left to hold
 }
+
+private val HEADING_TAGS = setOf("h1", "h2", "h3", "h4", "h5", "h6")
+
+/** Whether this element is a heading, by its tag or its explicit `role`. */
+private fun Mark.isHeading(): Boolean =
+    name in HEADING_TAGS || (mayHoldItsName() && explicitRole() == "heading")
 
 /** Elements whose whole point is to be activated by the reader. */
 private val ACTIONABLE_TAGS = setOf("a", "button", "summary")
@@ -266,14 +289,15 @@ private val NAME_ATTRIBUTES = listOf("aria-label", "title")
  * vanishing graphic gives us something to say.
  */
 private fun labelled(
-    buffer: List<SemanticEvent>,
+    control: Control,
     svgMode: SvgMode,
 ): List<SemanticEvent> {
+    val buffer = control.buffer
     val open = buffer.first() as Mark
     val name = open.accessibleName() ?: buffer.descendantName()
     val label = when {
         name != null -> listOf(Text(name))
-        svgMode == SvgMode.RESOLVE && buffer.holdsAVanishingGraphic() -> listOf(
+        control.placeholder && svgMode == SvgMode.RESOLVE && buffer.holdsAVanishingGraphic() -> listOf(
             Mark("img", isTagged = open.isTagged,
                 attributes = mapOf("alt" to GRAPHIC_PLACEHOLDER_ALT)),
             Unmark("img", isTagged = open.isTagged),
