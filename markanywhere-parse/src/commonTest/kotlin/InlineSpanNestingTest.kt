@@ -1171,6 +1171,42 @@ class InlineSpanNestingTest {
     }
 
     @Test
+    fun `should keep an underscore after a less-than sign and a digit intraword`() = runTest {
+        // given — the `_` is re-delivered after the `<1` flushes; it must still
+        // see the digit before it
+        val textFlow = "if n <1_000_000 x or <2_000 and _y_".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                +"if n <1_000_000 x or <2_000 and "
+                "em" { +"y" }
+            }
+        }
+    }
+
+    @Test
+    fun `should parse an email autolink starting with a digit whose local part holds punctuation`() = runTest {
+        // given
+        val textFlow = "<1a+b@x.com> <1a_b@x.com>".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "a"("href" to "mailto:1a+b@x.com") { +"1a+b@x.com" }
+                +" "
+                "a"("href" to "mailto:1a_b@x.com") { +"1a_b@x.com" }
+            }
+        }
+    }
+
+    @Test
     fun `should keep a less-than sign starting no email autolink literal`() = runTest {
         // given
         val textFlow = "I <3 you *a* <-b *c* x <== y".chunkedRandomly().asFlow()

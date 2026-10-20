@@ -548,16 +548,21 @@ private fun Char.canFollowInlineHtmlOpen(): Boolean =
 /**
  * Whether the buffered `<…` starts with a digit, `-` or `=`, which only an
  * email autolink does (`<1user@example.com>`): the speculation goes on only
- * over the chars of a plain address (continuesEmailAutolinkCandidate), so
- * `<3 you`, `a <- b`, `a <= b` turn literal at the first other char. None of the chars
- * held this way is inline syntax, so emitting them as text is their parse.
+ * over the chars of an address (continuesEmailAutolinkCandidate), so
+ * `<3 you`, `a <- b`, `a <= b` turn literal at the first other char, its
+ * held chars as text — as any failed speculation emits them.
  */
 private fun CharSequence.isEmailAutolinkCandidate(): Boolean =
     length > 1 && this[1].let { it in '0'..'9' || it == '-' || it == '=' }
 
-/** Whether this char continues an email autolink candidate (see [isEmailAutolinkCandidate]). */
-private fun Char.continuesEmailAutolinkCandidate(): Boolean =
-    this in 'a'..'z' || this in 'A'..'Z' || this in '0'..'9' || this == '.' || this == '-' || this == '@'
+/**
+ * Whether this char continues an email autolink candidate (see
+ * [isEmailAutolinkCandidate]) held so far as [candidate]: a char of the local
+ * part before the `@`, of the domain after it.
+ */
+private fun Char.continuesEmailAutolinkCandidate(candidate: CharSequence): Boolean =
+    this in 'a'..'z' || this in 'A'..'Z' || this in '0'..'9' || this == '.' || this == '-' ||
+        if ('@' in candidate) false else this == '@' || this in EMAIL_LOCAL_PART_PUNCT
 
 /**
  * GFM §6.8 URI-autolink validation: scheme `[A-Za-z][A-Za-z0-9+.-]{1,31}`,
@@ -5914,7 +5919,11 @@ private class ParserState(
             // run's true prev would be the resolved run's last delimiter char, but
             // tracking that adds complexity for marginal correctness gain on
             // adjacent-delimiter cases. Most cases are well-served by char.
-            prevInlineChar = char
+            // A char handed back for re-delivery (pendingDeferredChar) is not yet
+            // processed: the char before it stays the previous one, or a `_`
+            // after a flushed `<1` would see itself as the char before it and
+            // open an intraword em (`<1_000`).
+            if (pendingDeferredChar == null) prevInlineChar = char
             // If the implementation set `pendingDeferredChar`, the same char will
             // be delivered again by the chunk-loop's re-process protocol. Mark
             // that so the next call can skip duplicate label-source accumulation.
@@ -6347,7 +6356,7 @@ private class ParserState(
                 pendingDeferredChar = char
                 return
             } else if (inlineBuffer.isEmailAutolinkCandidate() &&
-                !char.continuesEmailAutolinkCandidate()
+                !char.continuesEmailAutolinkCandidate(inlineBuffer)
             ) {
                 // Only an email autolink starts `<1`, `<-`, `<=`; this char ends
                 // that candidate (`<3 you`, `a <- b`), so it is literal text.
@@ -6414,8 +6423,8 @@ private class ParserState(
                 toggleInlineSpan(if (run[0] == '~') "del" else "mark", run[0], run, runPrevChar)
                 pendingDeferredChar = char
             }
-            // A `~`/`~~`/`==` run before a code span or an emphasis run toggles
-            // like one before a letter (`~~**a**~~`, `~~`a`~~`, issue #133) —
+            // A `~~`/`==` run (SPAN_TOGGLE_RUNS — a single `~` stays literal)
+            // before a code span or an emphasis run toggles like one before a letter (`~~**a**~~`, `~~`a`~~`, issue #133) —
             // the branches below would flush it as literal text first. Not before
             // a `*` that may close an enclosing em/strong (`*a~~*`): that run is
             // the closer's content, not the start of a span.
