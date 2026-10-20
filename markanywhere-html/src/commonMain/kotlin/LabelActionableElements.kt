@@ -216,7 +216,7 @@ private val NOT_CONTENT_NAMED_TAGS = setOf(
  * `<main>` is wrong whatever role the author gave it.
  *
  * An `<a>` without `href` is a placeholder, not a link, and [simplifyHtml]
- * unwraps it whatever its role — a label inserted into it would be left behind
+ * unwraps it whatever its role (or keeps a named-anchor target as a plain tag) — a label inserted into it would be left behind
  * as stray text, or as a `![:svg:]()` pointing at nothing — unless the capture
  * found it actionable anyway (a scripted control carrying a ref), which keeps
  * it a link — under [RefMode.ENCODE] only: [RefMode.STRIP] drops the ref, and

@@ -458,6 +458,52 @@ class SimplifyHtmlTest {
     }
 
     @Test
+    fun `should keep an a without href carrying an id as a fragment target tag`() = runTest {
+        // given - a named-anchor target: a `#sec2` link elsewhere points at
+        // its `id`, which an unwrap would lose (issue #138)
+        val input = semanticEvents(tagged = true) {
+            "h2" {
+                "a"("id" to "sec2", "class" to "anchor") { }
+                +"Section 2"
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then - a tag, not a Markdown link: there is no destination
+        output sameAs semanticEvents {
+            "h2" {
+                tag("a", "id" to "sec2") { }
+                +"Section 2"
+            }
+        }
+    }
+
+    @Test
+    fun `should keep an a without href carrying a name as a fragment target tag`() = runTest {
+        // given - the legacy named anchor: fragment navigation resolves an
+        // `a` element's `name` like an `id` (issue #138)
+        val input = semanticEvents(tagged = true) {
+            "p" {
+                "a"("name" to "intro") { +"Introduction" }
+                +" text"
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "p" {
+                tag("a", "name" to "intro") { +"Introduction" }
+                +" text"
+            }
+        }
+    }
+
+    @Test
     fun `should unwrap an a without href wrapping block content`() = runTest {
         // given
         val input = semanticEvents(tagged = true) {

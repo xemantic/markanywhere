@@ -744,6 +744,38 @@ class HtmlToMarkdownTest {
     }
 
     @Test
+    fun `should round-trip a named-anchor target through parse and render`() = runTest {
+        // given - issue #138: an hrefless `<a>` carrying an `id` or `name` is a
+        // fragment target, kept as a raw tag that must survive re-reading
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "h2" {
+                    "a"("id" to "sec2") { }
+                    +"Section 2"
+                }
+                "p" {
+                    "a"("name" to "intro") { +"Introduction" }
+                    +" and the "
+                    "a"("href" to "#sec2") { +"link" }
+                    +" to it."
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown(refMode = RefMode.STRIP).renderMarkdown()
+        val reRendered = flowOf(markdown).parse().renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            ## <a id="sec2"></a>Section 2
+
+            <a name="intro">Introduction</a> and the [link](#sec2) to it.
+        """.trimIndent()
+        reRendered sameAs markdown
+    }
+
+    @Test
     fun `should separate adjacent links when the second is wrapped in formatting`() = runTest {
         // given — issue #96: no whitespace between the links, the second in a <b>
         val page = semanticEvents(tagged = true) {
