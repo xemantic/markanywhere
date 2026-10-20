@@ -20,6 +20,7 @@ import com.xemantic.kotlin.test.assert
 import com.xemantic.kotlin.test.sameAs
 import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.flow.semanticEvents
+import com.xemantic.markanywhere.render.MARKDOWN_BLOCK_CONTENT_TAGS
 import com.xemantic.markanywhere.render.renderMarkdown
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -906,4 +907,144 @@ class InlineSyntaxEscapingRoundTripTest {
         assertMarkdownFixpoint(markdown)
     }
 
+    // --- round 5: text that may be read raw or as Markdown ------------------
+
+    private val spanNames = setOf("em", "strong", "code", "sup", "del", "mark", "math", "a")
+
+    private suspend fun Flow<SemanticEvent>.spanCount(): Int =
+        toList().count { it is SemanticEvent.Mark && it.name in spanNames }
+
+    // The first render is a fixpoint — or, where the parser reads a raw tag
+    // back as literal text ([exact] false), the second one is — and
+    // re-parsing it invents no span the events did not have.
+    private suspend fun assertStableWithoutInventedSpans(events: Flow<SemanticEvent>, exact: Boolean = true) {
+        // when
+        val (once, twice, thrice) = renderThreePasses(events)
+        // then
+        if (exact) twice sameAs once
+        thrice sameAs twice
+        assert(flowOf(once).parse().spanCount() <= events.spanCount())
+        assert(flowOf(twice).parse().spanCount() <= events.spanCount())
+    }
+
+    @Test
+    fun `should stay stable with Markdown and inline tags in a div closed on a content line`() = runTest {
+        // given — an inline-written HTML block: raw text or Markdown, depending
+        // on the line its closer lands on
+        val cases = listOf(
+            semanticEvents { tag("div") { "p" { +"c" }; tag("span") { +"e *f*" } } },
+            semanticEvents { tag("div") { "p" { +"c" }; tag("span") { +"e *f*" }; +" g *h*" } },
+            semanticEvents { tag("div") { "p" { +"c" }; "em" { +"x" }; +" e *f*" } },
+            semanticEvents { tag("div") { "p" { +"c" }; "a"("href" to "u") { +"e *f*" } } },
+            semanticEvents { tag("div") { tag("div") { "p" { +"c" }; tag("span") { +"e *f*" } } } },
+            semanticEvents { tag("div") { "p" { +"c" }; "img"("src" to "i") {}; +" e *f*" } },
+        )
+        for (events in cases) {
+            // when / then
+            assertStableWithoutInventedSpans(events)
+        }
+    }
+
+    @Test
+    fun `should stay stable with a div whose last line ends with its closer`() = runTest {
+        for (markdown in listOf("<div>\n\nc\n\n<span>e *f*</span></div>", "<div>\n\nc\n\n[e *f*](u)</div>")) {
+            // given
+            val events = flowOf(markdown).parse()
+            // when / then
+            assertStableWithoutInventedSpans(events)
+        }
+    }
+
+    @Test
+    fun `should invent no emphasis in custom markup the parser reads as Markdown`() = runTest {
+        // given — single-line custom markup in a list item, after a soft
+        // break, and a div in a blockquote, which detects no HTML block: the
+        // parser reads the tags back as literal text
+        val cases = listOf(
+            semanticEvents { "ul" { "li" { tag("x:think") { +"a *b* c" } } } },
+            semanticEvents { "p" { +"a\n"; tag("x:ref") { +"b *c*" } } },
+            semanticEvents { "blockquote" { tag("div") { +"a *b* `c`" } } },
+        )
+        for (events in cases) {
+            // when / then
+            assertStableWithoutInventedSpans(events, exact = false)
+        }
+    }
+
+    @Test
+    fun `should keep image alt text in an html block in a list item verbatim`() = runTest {
+        // given
+        val events = semanticEvents {
+            "ul" { "li" { "p" { +"x" }; tag("div") { "img"("src" to "i", "alt" to "a_b *c*") {} } } }
+        }
+        // when
+        val markdown = events.renderMarkdown()
+        // then
+        markdown sameAs "- x\n  <div>![a_b *c*](i)</div>"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should decide a less-than sign before a digit the same however the text is split`() = runTest {
+        // given
+        val split = semanticEvents { "p" { +"a <1"; +"*b* c" } }
+        val whole = semanticEvents { "p" { +"a <1*b* c" } }
+        // when
+        val splitMarkdown = split.renderMarkdown()
+        val wholeMarkdown = whole.renderMarkdown()
+        // then
+        splitMarkdown sameAs wholeMarkdown
+        assertMarkdownFixpoint(wholeMarkdown)
+    }
+
+    // Pins the renderer's type-6 tag set (`HTML_BLOCK_START_TAGS`) to the
+    // parser's (`HTML_BLOCK_TYPE6_TAGS`), which live in sibling modules: a
+    // type-6 tag interrupts a paragraph on re-parse, so the renderer writes the
+    // rest of its line verbatim; any other tag after a soft break is inline
+    // Markdown, so the renderer escapes it.
+    @Test
+    fun `should agree with the parser on every html block start tag`() = runTest {
+        // given
+        val failures = mutableListOf<String>()
+
+        // when
+        for (name in ELEMENT_NAMES) {
+            if (name in MARKDOWN_BLOCK_CONTENT_TAGS || name in VOID_NAMES || name in OTHER_RAW_NAMES) continue
+            val parsed = flowOf("x\n<$name>\ny").parse().toList()
+            val paragraphEnd = parsed.indexOfFirst { it is SemanticEvent.Unmark && it.name == "p" }
+            val tagStart = parsed.indexOfFirst { it is SemanticEvent.Mark && it.name == name }
+            val parserType6 = tagStart >= 0 && paragraphEnd in 0 until tagStart
+            val markdown = semanticEvents { "p" { +"x\n"; tag(name) { +"a *b*" } } }.renderMarkdown()
+            val rendererType6 = "a *b*" in markdown
+            if (parserType6 != rendererType6) failures += "$name: parser=$parserType6 renderer=$rendererType6"
+        }
+
+        // then
+        assert(failures.isEmpty())
+    }
+
 }
+
+// Written verbatim by the renderer, or dropped / kept literal by the parser
+// (GFM §6.11 disallowed raw HTML): no HTML block start question.
+private val OTHER_RAW_NAMES = setOf(
+    "code", "pre", "textarea", "script", "style", "title", "xmp", "iframe", "noembed", "noframes", "plaintext"
+)
+
+private val VOID_NAMES = setOf(
+    "area", "base", "br", "col", "embed", "hr", "img", "input", "keygen", "link", "meta", "param", "source", "track", "wbr"
+)
+
+// Every HTML element name, current and obsolete, that a block tag set may hold.
+private val ELEMENT_NAMES = listOf(
+    "a", "abbr", "address", "area", "article", "aside", "audio", "b", "base", "basefont", "bdi", "bdo",
+    "blockquote", "body", "br", "button", "canvas", "caption", "center", "cite", "code", "col", "colgroup",
+    "data", "datalist", "dd", "del", "details", "dfn", "dialog", "dir", "div", "dl", "dt", "em", "embed",
+    "fieldset", "figcaption", "figure", "font", "footer", "form", "frame", "frameset", "h1", "h2", "h3", "h4",
+    "h5", "h6", "head", "header", "hgroup", "hr", "html", "i", "iframe", "img", "input", "ins", "kbd", "label",
+    "legend", "li", "link", "main", "map", "mark", "menu", "menuitem", "meta", "meter", "nav", "noframes",
+    "noscript", "object", "ol", "optgroup", "option", "output", "p", "param", "picture", "pre", "progress", "q",
+    "rp", "rt", "ruby", "s", "samp", "script", "search", "section", "select", "slot", "small", "source", "span",
+    "strong", "style", "sub", "summary", "sup", "table", "tbody", "td", "template", "textarea", "tfoot", "th",
+    "thead", "time", "title", "tr", "track", "u", "ul", "var", "video", "wbr"
+)
