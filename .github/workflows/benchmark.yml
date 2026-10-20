@@ -1,0 +1,78 @@
+# Runs the JMH benchmarks on demand, on a runner which, unlike a developer's
+# machine, has nothing else competing for the CPU
+name: Benchmark
+
+on:
+  workflow_dispatch:
+    inputs:
+      configuration:
+        description: 'Benchmark configuration ("main" is the full run, "smoke" a quick sanity pass)'
+        required: true
+        type: choice
+        options:
+          - main
+          - smoke
+        default: main
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v7
+
+      - name: Setup Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: ${{ vars.DEFAULT_JAVA_DISTRIBUTION }}
+          java-version: ${{ vars.DEFAULT_JAVA_VERSION }}
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Benchmark
+        run: ./gradlew :markanywhere-xml:${{ inputs.configuration == 'main' && 'benchmark' || 'smokeBenchmark' }}
+
+      - name: Summarize
+        if: always()
+        env:
+          CONFIGURATION: ${{ inputs.configuration }}
+        shell: python3 {0}
+        run: |
+          import glob, json, os
+          reports = sorted(glob.glob(f"markanywhere-xml/build/reports/benchmarks/{os.environ['CONFIGURATION']}/*/*.json"))
+          lines = []
+          for report in reports:
+              results = json.load(open(report))
+              if not results:
+                  continue
+              first = results[0]
+              params = list(first.get("params", {}).keys())
+              lines.append(f"### {os.path.basename(report)}")
+              lines.append("")
+              lines.append(f"JVM {first['jdkVersion']} ({first['vmName']}), {first['forks']} fork(s), {first['measurementIterations']} iterations, args `{' '.join(first['jvmArgs'])}`")
+              lines.append("")
+              lines.append("| Benchmark | " + " | ".join(params) + " | Score | Error | Unit |")
+              lines.append("|---|" + "---|" * len(params) + "---:|---:|---|")
+              for result in results:
+                  metric = result["primaryMetric"]
+                  name = result["benchmark"].rsplit(".", 2)[-2:]
+                  values = [result["params"][p] for p in params]
+                  lines.append(
+                      f"| {'.'.join(name)} | " + " | ".join(values) +
+                      f" | {metric['score']:.3f} | ± {metric['scoreError']:.3f} | {metric['scoreUnit']} |"
+                  )
+              lines.append("")
+          if not lines:
+              lines.append("No benchmark report was produced.")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
+              summary.write("\n".join(lines) + "\n")
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: benchmark-${{ inputs.configuration }}
+          path: markanywhere-xml/build/reports/benchmarks/
+          if-no-files-found: ignore

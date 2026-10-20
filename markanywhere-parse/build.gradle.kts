@@ -15,6 +15,9 @@
  */
 
 import com.xemantic.markanywhere.buildlogic.allTargets
+import com.xemantic.markanywhere.buildlogic.appendKotlinEscaped
+import com.xemantic.markanywhere.buildlogic.currentYear
+import com.xemantic.markanywhere.buildlogic.licenseHeader
 import groovy.json.JsonSlurper
 import java.net.URI
 
@@ -81,6 +84,7 @@ val namedEntitiesSourceFile =
     layout.projectDirectory.file("src/commonMain/kotlin/NamedEntities.kt")
 val namedEntitiesCacheFile =
     layout.buildDirectory.file("named-entities/entities.json")
+val copyrightProfileDir = rootProject.layout.projectDirectory.dir(".idea/copyright")
 
 val generateNamedEntities = tasks.register("generateNamedEntities") {
     description = "Rewrites src/commonMain/kotlin/NamedEntities.kt from $namedEntitiesUrl"
@@ -90,8 +94,13 @@ val generateNamedEntities = tasks.register("generateNamedEntities") {
     val pkg = namedEntitiesPackage
     val cacheFile = namedEntitiesCacheFile
     val outFile = namedEntitiesSourceFile
+    val copyrightDir = copyrightProfileDir
+    val year = providers.currentYear()
 
     inputs.property("url", url)
+    inputs.property("year", year)
+    inputs.files(fileTree(copyrightDir) { include("*.xml") })
+        .withPropertyName("copyrightProfiles")
     outputs.file(outFile)
 
     doLast {
@@ -117,6 +126,7 @@ val generateNamedEntities = tasks.register("generateNamedEntities") {
             .toList()
 
         val kotlin = StringBuilder().apply {
+            append(licenseHeader(copyrightDir.asFile, outFile.asFile, year.get()))
             append(
                 """
                 |// Auto-generated from $url. Do not edit by hand.
@@ -129,29 +139,14 @@ val generateNamedEntities = tasks.register("generateNamedEntities") {
             )
             for ((name, chars) in entries) {
                 append("    \"")
-                appendEscaped(name)
+                appendKotlinEscaped(name)
                 append("\" to \"")
-                appendEscaped(chars)
+                appendKotlinEscaped(chars)
                 append("\",\n")
             }
             append(")\n")
         }
 
         outFile.asFile.writeText(kotlin.toString())
-    }
-}
-
-fun StringBuilder.appendEscaped(s: String) {
-    for (c in s) {
-        when {
-            c == '\\' -> append("\\\\")
-            c == '"' -> append("\\\"")
-            c == '$' -> append("\\\$")
-            c.code in 0x20..0x7E -> append(c)
-            else -> {
-                append("\\u")
-                append(c.code.toString(16).padStart(4, '0').uppercase())
-            }
-        }
     }
 }

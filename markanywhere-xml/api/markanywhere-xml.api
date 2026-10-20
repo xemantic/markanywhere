@@ -1,0 +1,26 @@
+public final class com/xemantic/markanywhere/xml/MarkanywhereXmlParser : com/xemantic/markanywhere/xml/XmlParser {
+	public fun <init> ()V
+	public fun parse (Lkotlinx/coroutines/flow/Flow;)Lkotlinx/coroutines/flow/Flow;
+}
+
+public final class com/xemantic/markanywhere/xml/StaxXmlParser : com/xemantic/markanywhere/xml/XmlParser {
+	public fun <init> ()V
+	public fun <init> (Lkotlin/jvm/functions/Function0;)V
+	public synthetic fun <init> (Lkotlin/jvm/functions/Function0;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun parse (Lkotlinx/coroutines/flow/Flow;)Lkotlinx/coroutines/flow/Flow;
+}
+
+public final class com/xemantic/markanywhere/xml/StaxXmlParserKt {
+	public static final fun defaultXmlInputFactory ()Ljavax/xml/stream/XMLInputFactory;
+}
+
+public abstract interface class com/xemantic/markanywhere/xml/XmlParser {
+	public abstract fun parse (Lkotlinx/coroutines/flow/Flow;)Lkotlinx/coroutines/flow/Flow;
+}
+
+public final class com/xemantic/markanywhere/xml/XmlParserKt {
+	public static final fun parse (Lcom/xemantic/markanywhere/xml/XmlParser;Ljava/lang/String;)Lkotlinx/coroutines/flow/Flow;
+	public static final fun parseXml (Lkotlinx/coroutines/flow/Flow;Lcom/xemantic/markanywhere/xml/XmlParser;)Lkotlinx/coroutines/flow/Flow;
+	public static synthetic fun parseXml$default (Lkotlinx/coroutines/flow/Flow;Lcom/xemantic/markanywhere/xml/XmlParser;ILjava/lang/Object;)Lkotlinx/coroutines/flow/Flow;
+}
+

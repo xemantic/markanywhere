@@ -49,6 +49,29 @@ A raw event stream is hard to read, so to regenerate the human-readable HTML a d
 
 This renders every dump back to pretty-printed HTML under `markanywhere-html/build/renderedDumps/<name>.html`.
 
+## Benchmarks
+
+`markanywhere-xml` has [JMH](https://github.com/openjdk/jmh) benchmarks, run through [kotlinx-benchmark](https://github.com/Kotlin/kotlinx-benchmark), comparing `MarkanywhereXmlParser` with `StaxXmlParser` across document sizes and chunk sizes.
+They live in the `jvmBenchmark` source set, a JVM compilation of their own, so neither the published artifact nor the tests depend on JMH, and `build` does not run them.
+
+```shell
+./gradlew :markanywhere-xml:benchmark
+```
+
+The full run takes about ten minutes: 12 parameter combinations, each measured in 3 forks.
+For a quick check that the benchmarks still run, use the `smoke` configuration, which has few iterations and wide error bars:
+
+```shell
+./gradlew :markanywhere-xml:smokeBenchmark
+```
+
+Reports land in `markanywhere-xml/build/reports/benchmarks/<configuration>/<timestamp>/`.
+
+A busy developer machine (an IDE, a browser) skews the results, the parsers that hand work between threads most of all.
+For numbers to compare, run the **Benchmark** workflow from the repository's *Actions* tab (or `gh workflow run benchmark.yml -f configuration=main`):
+it writes the results as a table into the run's summary and uploads the raw JMH reports as an artifact.
+A hosted runner is a shared virtual machine, so compare runs with one another rather than reading absolute numbers.
+
 ## Update gradlew wrapper
 
 ```shell

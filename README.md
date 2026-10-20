@@ -349,6 +349,7 @@ See [markanywhere-parse/README.md](markanywhere-parse/README.md) for a full list
 | `markanywhere-dump`      | Injectable browser bundle exposing `window.markanywhere.dump()` — captures a live page's DOM as `SemanticEventDump` JSON |
 | `markanywhere-browse`    | Drives real Chrome over CDP (via `kdriver`) to capture a live page as a `SemanticEventDump` and act on it by element reference |
 | `markanywhere-html`      | HTML→Markdown pipeline `transformHtmlToMarkdown` (`resolveIcons`, `simplifyHtml`, `dropBlankInlineFormatting`, whitespace normalization, `encodeActionableRefs`), plus `applyAccessibility`, `wrapInHtmlDocument`, `wrapInSections` (rank-nested sectioning with an optional table-of-contents `nav`), and `ensureFrontmatterTitle` (derives a missing front matter `title` from the first `h1`) |
+| [`markanywhere-xml`](markanywhere-xml/README.md) | `XmlParser` — XML source → `Flow<SemanticEvent>`: a multiplatform contract plus a shared conformance suite every engine must pass. `MarkanywhereXmlParser` is the multiplatform streaming engine; the JVM-only StAX binding is a reference implementation that pins the contract |
 | `markanywhere-test`      | Test helpers: `sameAs` for asserting `Flow<SemanticEvent>` equality |
 
 You can depend only on `markanywhere-parse` and consume the `Flow<SemanticEvent>` with your own renderer — the API surface is a single three-variant sealed class.

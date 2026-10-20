@@ -58,3 +58,25 @@ fun String.toKotlinStringLiteral(): String =
             val prefix = "$".repeat(longestDollarRun + 1)
             "$prefix\"\"\"$chunk\"\"\""
         }
+
+/**
+ * Appends [s] escaped for a regular (`"…"`) Kotlin string literal, writing every
+ * character outside printable ASCII as a `\u` escape so the generated source
+ * stays plain ASCII.
+ *
+ * Lives here for the same configuration cache reason as [fixturePropertyName].
+ */
+fun StringBuilder.appendKotlinEscaped(s: String) {
+    for (c in s) {
+        when {
+            c == '\\' -> append("\\\\")
+            c == '"' -> append("\\\"")
+            c == '$' -> append("\\\$")
+            c.code in 0x20..0x7E -> append(c)
+            else -> {
+                append("\\u")
+                append(c.code.toString(16).padStart(4, '0').uppercase())
+            }
+        }
+    }
+}

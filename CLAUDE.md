@@ -651,6 +651,10 @@ If the fix is bounded (one inline construct, one or two lines of lookahead), it'
   Duplicate keys deliberately resolve differently per direction (`simplifyHtml` first `<meta>` wins as in HTML, `wrapInHtmlDocument` later entry wins as in Psych/PyYAML): each side emits one entry per name, so neither sees the other's duplicates — "aligning" them once made `wrapInHtmlDocument` show a title no front matter reader shows.
   `ensureFrontmatterTitle` never leaves duplicate title entries rather than reordering them for later-wins readers, because js-yaml (gray-matter: Eleventy, Astro, Gatsby) rejects a duplicate key and loses the whole front matter.
   The one exception is a nested title entry (localized titles): it is content, so a usable variant beside it is kept as found rather than collapsing the two into one.
+- A coroutine `launch`ed with the default start and cancelled **before it is first dispatched** runs no code at all — its `try`/`finally` included — so cleanup another thread waits on (closing the channel `StaxXmlParser`'s blocked pull thread reads) belongs in `invokeOnCompletion`, not in the coroutine's own `finally`.
+  On a single-threaded dispatcher this is the common case, not a race: `merge(parse, other).first()` cancelled the feeder while it was still queued and hung the parse — and `runTest`'s timeout cannot rescue such a hang, since its cleanup waits for the stuck child too.
+- A test belongs in `markanywhere-xml`'s shared `XmlParserTest` suite **only when both engines pass it** — run `:markanywhere-xml:jvmTest` first, or one engine's behaviour silently becomes the contract.
+  Before calling an engine difference a bug or a divergence, probe what the JDK StAX actually does — two behaviours are written nowhere in the source: it fails the **whole text run** it was scanning when an error occurs inside it (a literal U+0000, a truncated document's trailing text), so the engines legitimately disagree on how much of an interrupted run survives; and with DTD support off it does **not check the internal subset at all** (a stray quote, a target-less `<??>`, a `--` in a comment there all read on), ending it at the first `]` it meets, even inside a literal.
 
 ## Test conventions
 
@@ -679,4 +683,6 @@ If the fix is bounded (one inline construct, one or two lines of lookahead), it'
 
 ## Anti-patterns to avoid
 
+- Do not replace the `+"…"` string builder (`com.xemantic.kotlin.core.text.unaryPlus`, used inside `buildString`) with `append` / `appendLine`, or drop `xemantic-kotlin-core` from a source set to get rid of it — it is the project's own builder idiom, not a stray dependency.
+  An automated code review once flagged it as "an extra dependency only for `+"…"`" and an agent applied that; when a review finding goes against a house idiom, raise it with the developer instead of applying it.
 - Do not add content to this file that is already discoverable by reading the source or build scripts — that inflates context without adding signal, reducing AI agent task success rates (see [arxiv 2602.11988](https://arxiv.org/abs/2602.11988)).
