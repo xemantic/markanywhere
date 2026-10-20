@@ -340,6 +340,175 @@ class ResolveLazyImagesTest {
     }
 
     @Test
+    fun `should prefer a lazy attribute over a real-url placeholder src`() = runTest {
+        // when — WordPress a3-lazy-load and jQuery lazyload keep a real
+        // placeholder image in `src` and the image itself in `data-src`, which
+        // the library swaps in on load (issue #142)
+        val output = semanticEvents(tagged = true) {
+            "img"(
+                "src" to "/wp-content/plugins/a3-lazy-load/assets/images/lazy_placeholder.gif",
+                "data-src" to "/real.jpg",
+                "alt" to "Real",
+            ) { }
+            "img"("src" to "grey.gif", "data-original" to "https://cdn.example.com/b.jpg") { }
+        }.resolveLazyImages()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "img"("src" to "/real.jpg", "data-src" to "/real.jpg", "alt" to "Real") { }
+            "img"("src" to "https://cdn.example.com/b.jpg", "data-original" to "https://cdn.example.com/b.jpg") { }
+        }
+    }
+
+    @Test
+    fun `should not let a srcset replace a real src`() = runTest {
+        // given — only the lazy `src` attributes name what a library swaps
+        // into `src`; a `srcset` beside a real `src` is a responsive image
+        val input = semanticEvents(tagged = true) {
+            "img"("src" to "a-480.jpg", "data-srcset" to "a-960.jpg 960w", "alt" to "A") { }
+        }
+
+        // when
+        val output = input.resolveLazyImages()
+
+        // then
+        output sameAs input
+    }
+
+    @Test
+    fun `should treat about blank and an empty host and blob as placeholders`() = runTest {
+        // when — none of these names an image a reader could fetch
+        val output = semanticEvents(tagged = true) {
+            "img"("src" to "about:blank", "srcset" to "a.jpg") { }
+            "img"("src" to "//:0", "data-src" to "b.jpg") { }
+            "img"("src" to "blob:https://example.com/0f9a6c1e", "alt" to "C") { }
+            "img"("src" to "BLOB:https://example.com/0f9a6c1e") { }
+        }.resolveLazyImages()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "img"("src" to "a.jpg", "srcset" to "a.jpg") { }
+            "img"("src" to "b.jpg", "data-src" to "b.jpg") { }
+            "img"("alt" to "C") { }
+        }
+    }
+
+    @Test
+    fun `should only accept http and https and relative candidates`() = runTest {
+        // when — a candidate in any other scheme is no image URL
+        val output = semanticEvents(tagged = true) {
+            "img"(
+                "src" to TRANSPARENT_GIF,
+                "data-src" to "javascript:alert(1)",
+                "data-original" to "HTTPS://cdn.example.com/a.jpg",
+            ) { }
+            "img"("srcset" to "javascript:alert(2) 2x, //cdn.example.com/b.jpg 1x") { }
+            "img"("data-src" to "ftp://example.com/c.jpg", "alt" to "C") { }
+        }.resolveLazyImages()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "img"(
+                "src" to "HTTPS://cdn.example.com/a.jpg",
+                "data-src" to "javascript:alert(1)",
+                "data-original" to "HTTPS://cdn.example.com/a.jpg",
+            ) { }
+            "img"("srcset" to "javascript:alert(2) 2x, //cdn.example.com/b.jpg 1x", "src" to "//cdn.example.com/b.jpg") { }
+            "img"("data-src" to "ftp://example.com/c.jpg", "alt" to "C") { }
+        }
+    }
+
+    @Test
+    fun `should drop a src in another scheme when nothing replaces it`() = runTest {
+        // when
+        val output = semanticEvents(tagged = true) {
+            "img"("src" to "javascript:alert(1)", "alt" to "A") { }
+        }.resolveLazyImages()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "img"("alt" to "A") { }
+        }
+    }
+
+    @Test
+    fun `should prefer the unconditional source of a picture`() = runTest {
+        // when — a `media` source is a variant (motion, dark mode, a mobile
+        // crop); the one without `media` is the picture's default
+        val output = semanticEvents(tagged = true) {
+            "picture" {
+                "source"("media" to "(prefers-reduced-motion: no-preference)", "srcset" to "anim.gif") { }
+                "source"("srcset" to "still.png") { }
+                "img"("src" to TRANSPARENT_GIF, "alt" to "A") { }
+            }
+            "picture" {
+                "source"("media" to "(prefers-color-scheme: dark)", "srcset" to "dark.png") { }
+                "source"("media" to "all", "srcset" to "light.png") { }
+                "img"("src" to TRANSPARENT_GIF, "alt" to "B") { }
+            }
+        }.resolveLazyImages()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "picture" {
+                "source"("media" to "(prefers-reduced-motion: no-preference)", "srcset" to "anim.gif") { }
+                "source"("srcset" to "still.png") { }
+                "img"("src" to "still.png", "alt" to "A") { }
+            }
+            "picture" {
+                "source"("media" to "(prefers-color-scheme: dark)", "srcset" to "dark.png") { }
+                "source"("media" to "all", "srcset" to "light.png") { }
+                "img"("src" to "light.png", "alt" to "B") { }
+            }
+        }
+    }
+
+    @Test
+    fun `should fall back to the first conditional source of a picture`() = runTest {
+        // when — art direction with no default: a variant beats no image
+        val output = semanticEvents(tagged = true) {
+            "picture" {
+                "source"("media" to "(max-width: 600px)", "srcset" to "crop.jpg") { }
+                "source"("media" to "(min-width: 601px)", "srcset" to "wide.jpg") { }
+                "img"("src" to TRANSPARENT_GIF, "alt" to "A") { }
+            }
+        }.resolveLazyImages()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "picture" {
+                "source"("media" to "(max-width: 600px)", "srcset" to "crop.jpg") { }
+                "source"("media" to "(min-width: 601px)", "srcset" to "wide.jpg") { }
+                "img"("src" to "crop.jpg", "alt" to "A") { }
+            }
+        }
+    }
+
+    @Test
+    fun `should skip a source of an image type browsers do not support`() = runTest {
+        // when — a browser passes over a `<source>` whose `type` it cannot
+        // decode, so its URL is not the picture's image
+        val output = semanticEvents(tagged = true) {
+            "picture" {
+                "source"("type" to "image/jxl", "srcset" to "a.jxl") { }
+                "source"("type" to "video/mp4", "srcset" to "a.mp4") { }
+                "source"("type" to "Image/WebP; codecs=x", "srcset" to "a.webp") { }
+                "img"("src" to TRANSPARENT_GIF, "alt" to "A") { }
+            }
+        }.resolveLazyImages()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "picture" {
+                "source"("type" to "image/jxl", "srcset" to "a.jxl") { }
+                "source"("type" to "video/mp4", "srcset" to "a.mp4") { }
+                "source"("type" to "Image/WebP; codecs=x", "srcset" to "a.webp") { }
+                "img"("src" to "a.webp", "alt" to "A") { }
+            }
+        }
+    }
+
+    @Test
     fun `should render the real image of a lazy-loaded link card`() = runTest {
         // given — the shape reported in issue #88 (Ben & Jerry's flavor graveyard)
         val page = semanticEvents(tagged = true) {
