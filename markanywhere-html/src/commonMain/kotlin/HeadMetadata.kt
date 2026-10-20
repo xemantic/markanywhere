@@ -93,10 +93,13 @@ internal fun frontMatterKeySupersedes(existing: String, candidate: String): Bool
 
 // Whether a front matter reader reads this entry's value over that of an
 // earlier entry of the same name spelled `existingKey`, if any: it must be
-// head metadata ([FrontMatterEntry.isHeadMetadata]), and must then
+// head metadata ([FrontMatterEntry.isHeadMetadata]) or a value the YAML
+// parser kept as source ([FrontMatterEntry.isVerbatim] — the readers know
+// it, so it takes part in resolving duplicates as any other value does,
+// leaving the value read unknown when it wins), and must then
 // [supersede][frontMatterKeySupersedes] the earlier one.
 internal fun FrontMatterEntry.readOver(existingKey: String?): Boolean =
-    isHeadMetadata && (existingKey == null || frontMatterKeySupersedes(existingKey, key))
+    (isHeadMetadata || isVerbatim) && (existingKey == null || frontMatterKeySupersedes(existingKey, key))
 
 // A metadata entry: its name, spelled as where its value was read, and the
 // value.
@@ -105,22 +108,30 @@ internal data class MetadataEntry(val key: String, val value: String)
 // The `<head>` metadata a front matter holds, in insertion order and keyed
 // the way HTML reads `<meta>` names: ASCII case-insensitively (HTML §4.2.5).
 // A blank value carries nothing for a reader, so it is never added, and
-// cannot shadow a variant holding one. Duplicates resolve the way readers of
+// cannot shadow a variant holding one; a value kept as source can, and then
+// leaves its name without a value. Duplicates resolve the way readers of
 // the format they were read from resolve them — [simplifyHtml] reads HTML,
 // [wrapInHtmlDocument] YAML. The two policies need not agree for the two to
 // stay inverses: each emits a single entry per name.
 internal class HeadMetadata {
 
-    private val entries = LinkedHashMap<String, MetadataEntry>()
+    // keyed by folded name, in the order names first occur; a null value is
+    // one only the readers know (kept as source), which still holds the name
+    // and its spelling against later duplicates
+    private val entries = LinkedHashMap<String, Slot>()
 
-    val values: Collection<MetadataEntry> get() = entries.values
+    private class Slot(val key: String, val value: String?)
 
-    fun isNotEmpty(): Boolean = entries.isNotEmpty()
+    val values: List<MetadataEntry>
+        get() = entries.values.mapNotNull { slot -> slot.value?.let { MetadataEntry(slot.key, it) } }
+
+    fun isNotEmpty(): Boolean = entries.values.any { it.value != null }
 
     // Every lookup takes a name as spelled; folding it is this class's job.
-    operator fun contains(name: String): Boolean = name.asciiLowercase() in entries
+    operator fun contains(name: String): Boolean = get(name) != null
 
-    operator fun get(name: String): MetadataEntry? = entries[name.asciiLowercase()]
+    operator fun get(name: String): MetadataEntry? =
+        entries[name.asciiLowercase()]?.let { slot -> slot.value?.let { MetadataEntry(slot.key, it) } }
 
     // Whether [addFromHtml] would add this `<meta>`: it carries something
     // for a reader and, the first of duplicate elements being the one a
@@ -132,23 +143,24 @@ internal class HeadMetadata {
     // Adds a `<meta>` read from HTML when it [acceptsFromHtml] — the first
     // occurrence of a name wins, spelling and value.
     fun addFromHtml(key: String, value: String) {
-        if (acceptsFromHtml(key, value)) entries[key.asciiLowercase()] = MetadataEntry(key, value)
+        if (acceptsFromHtml(key, value)) entries[key.asciiLowercase()] = Slot(key, value)
     }
 
     // Adds a front matter entry the way its readers resolve a duplicate key
-    // ([readOver], the rule ensureFrontmatterTitle picks the title entry by).
-    // The name keeps the position of its first occurrence.
+    // ([readOver], the rule ensureFrontmatterTitle picks the title entry by);
+    // one kept as source leaves the name without a value. The name keeps the
+    // position of its first occurrence.
     fun addFromFrontMatter(entry: FrontMatterEntry) {
         val name = entry.key.asciiLowercase()
         if (entry.readOver(entries[name]?.key)) {
-            entries[name] = MetadataEntry(entry.key, entry.text)
+            entries[name] = Slot(entry.key, entry.text.takeUnless { entry.isVerbatim })
         }
     }
 
     // Sets the entry whether or not its name is present, keeping the position
     // of an existing one.
     operator fun set(key: String, value: String) {
-        entries[key.asciiLowercase()] = MetadataEntry(key, value)
+        entries[key.asciiLowercase()] = Slot(key, value)
     }
 
 }

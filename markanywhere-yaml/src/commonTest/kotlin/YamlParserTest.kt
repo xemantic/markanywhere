@@ -1388,6 +1388,71 @@ class YamlParserTest {
     }
 
     @Test
+    fun `should mark a block scalar continued past a less indented comment as verbatim`() = runTest {
+        // given — a comment less indented than the content ends the block
+        // scalar, and a line after it more indented than the key is one the
+        // readers refuse: PyYAML, Psych and go-yaml v2 refuse each document,
+        // so the value stays source — read as the block scalar `x\n` with
+        // `y` at the root, it would render as `a: |\n  x\n    y\n`, which
+        // the readers accept as `x\n  y\n`
+        val sources = listOf(
+            "a: |\n    x\n  # c\n    y\nz: 1\n",
+            "a: |\n    x\n# c\n\n    y\nz: 1\n",
+            "a: |\n# c\n  x\nz: 1\n",
+        )
+
+        for (source in sources) {
+            // when
+            val parsed = source.chunkedRandomly().asFlow().parseYaml()
+
+            // then
+            parsed.mergeAdjacentText() sameAs semanticEvents {
+                "entry"("key" to "a", "type" to "verbatim") {
+                    +(" |\n" + source.removePrefix("a: |\n").removeSuffix("z: 1\n"))
+                }
+                "entry"("key" to "z", "type" to "int") { +"1" }
+            }
+        }
+    }
+
+    @Test
+    fun `should end a block scalar at a less indented comment`() = runTest {
+        // given — the readers read `{a: "x\n", b: 1}` and, keeping the empty
+        // line ahead of the comment, `{k: "x\n\n", b: 1}`
+        val textFlow = "a: |\n    x\n  # c\n\nb: 1\nk: |+\n  x\n\n# c\n\nb: 1\n"
+            .chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parseYaml()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "entry"("key" to "a") { +"x\n" }
+            "entry"("key" to "b", "type" to "int") { +"1" }
+            "entry"("key" to "k") { +"x\n\n" }
+            "entry"("key" to "b", "type" to "int") { +"1" }
+        }
+    }
+
+    @Test
+    fun `DIVERGENCE - should continue an open quote on a tab-led line`() = runTest {
+        // given — a tab is no indentation, yet an open quoted scalar
+        // continues on any line: the readers read `{p: {a: "x y", b: 1}}`
+        val textFlow = "p:\n  a: \"x\n\ty\"\n  b: 1\n".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parseYaml()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "entry"("key" to "p") {
+                "entry"("key" to "a", "type" to "verbatim") { +" \"x\n\ty\"\n" }
+                "entry"("key" to "b", "type" to "int") { +"1" }
+            }
+        }
+    }
+
+    @Test
     fun `DIVERGENCE - should mark a sequence item continued on indented lines as verbatim`() = runTest {
         // given — the readers read `a b`, and `v x` for the compact entry
         val textFlow = """

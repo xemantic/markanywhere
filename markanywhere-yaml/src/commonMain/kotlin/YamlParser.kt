@@ -91,7 +91,8 @@ import kotlinx.coroutines.flow.FlowCollector
  * blank or a comment, which decides whether the value continues (and is
  * verbatim). A bare `key:` (or `-`) is held for one line to decide between a
  * nested block, a verbatim value and a null value. A block scalar is
- * buffered until it closes — never past the enclosing construct. A verbatim
+ * buffered until it closes — never past the enclosing construct; one a
+ * comment ends is held like a `key: value` line. A verbatim
  * value streams line by line. Never throws.
  */
 public class YamlParser(
@@ -147,6 +148,10 @@ public class YamlParser(
         val lines = mutableListOf<String>()
         // the same lines as source, should the value turn out verbatim
         val sourceLines = mutableListOf<String>()
+        // whether a comment less indented than the content ended it: it is
+        // then held, like a single-line value, until the next line that is
+        // not blank or a comment decides whether it is continued
+        var ended = false
     }
 
     private sealed interface Value {
@@ -417,6 +422,13 @@ public class YamlParser(
     private suspend fun feedBlock(b: BlockScalar, line: String): Boolean {
         val indent = leadingSpaces(line)
         val blank = indent == line.length
+        if (b.ended) {
+            if (blank || line[indent] == '#') {
+                b.sourceLines += sourceLine(line, b.parentIndent)
+                return true
+            }
+            return endBlock(b, line, indent)
+        }
         if (b.contentIndent < 0) {
             if (blank) {
                 b.lines += ""
@@ -444,10 +456,20 @@ public class YamlParser(
 
     // Ends the block scalar at a line indented less than its content; true
     // when that line is consumed. A line still more indented than the key or
-    // dash (not a comment, which the readers take as one) is one the readers
-    // refuse, so the value becomes verbatim, that line included.
+    // dash is one the readers refuse, so the value becomes verbatim, that
+    // line included. A comment ends the scalar for the readers, yet a line
+    // after it more indented than the key or dash is refused all the same:
+    // the scalar is held until the next line that is not blank or a comment
+    // (its lines kept as source meanwhile) — read as ended, it would leave
+    // that line to the root, which renders as a continuation of the scalar
+    // the readers accept.
     private suspend fun endBlock(b: BlockScalar, line: String, indent: Int): Boolean {
-        if (indent > b.parentIndent && line[indent] != '#') {
+        if (line[indent] == '#') {
+            b.ended = true
+            b.sourceLines += sourceLine(line, b.parentIndent)
+            return true
+        }
+        if (indent > b.parentIndent) {
             block = null
             openVerbatim(b.owner, b.key, b.parentIndent, b.source)
             for (s in b.sourceLines) emitText(s)

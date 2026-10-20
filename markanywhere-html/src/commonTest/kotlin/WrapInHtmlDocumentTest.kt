@@ -594,6 +594,67 @@ class WrapInHtmlDocumentTest {
     }
 
     @Test
+    fun `should read no value of a key whose later duplicate the YAML parser kept as source`() = runTest {
+        // given — `title: A` then `title: "B\n  C"`: a later-wins reader
+        // (Psych, PyYAML, go-yaml v2) reads `B C`, a value only the readers
+        // know, so neither `A` nor any title is read
+        val document = flowOf(
+            """
+            ---
+            title: A
+            description: D
+            title: "B
+              C"
+            description: "E
+              F"
+            author: Alice
+            ---
+            """.trimIndent()
+        )
+
+        // when
+        val output = document.parse().wrapInHtmlDocument()
+
+        // then
+        output sameAs semanticEvents {
+            "html" {
+                "head" {
+                    "meta"("name" to "author", "content" to "Alice") { }
+                }
+                "body" { }
+            }
+        }
+    }
+
+    @Test
+    fun `should resolve a key kept as source among duplicates as any other`() = runTest {
+        // given — the lowercase spelling, kept as source, beats a later
+        // variant for a case-sensitive reader (Jekyll); a later usable
+        // duplicate of the same spelling is read over it
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title", "type" to "verbatim") { +" \"B\n  C\"\n" }
+                "entry"("key" to "Title") { +"Variant" }
+                "entry"("key" to "author", "type" to "verbatim") { +" \"x\n  y\"\n" }
+                "entry"("key" to "author") { +"Alice" }
+            }
+        }
+
+        // when
+        val output = input.wrapInHtmlDocument()
+
+        // then
+        output sameAs semanticEvents {
+            "html" {
+                "head" {
+                    "meta"("name" to "author", "content" to "Alice") { }
+                }
+                "body" { }
+            }
+        }
+    }
+
+    @Test
     fun `should reconstruct head metadata extracted by simplifyHtml`() = runTest {
         // given — a captured (tagged) HTML document whose head simplifyHtml
         // reduces to a frontmatter block; wrapping the result back should

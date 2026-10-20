@@ -1044,6 +1044,57 @@ class EnsureFrontmatterTitleTest {
     }
 
     @Test
+    fun `should drop a usable title entry a later one kept as source supersedes`() = runTest {
+        // given — `title: A` then `title: "B\n  C"`: a later-wins reader
+        // reads `B C`, so does wrapInHtmlDocument read no title; keeping `A`
+        // would be a duplicate key, which js-yaml rejects
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"A" }
+                "entry"("key" to "author") { +"Alice" }
+                "entry"("key" to "title", "type" to "verbatim") { +" \"B\n  C\"\n" }
+            }
+            "h1" { +"Heading" }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then — the value kept as source is content, so no title is derived
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "author") { +"Alice" }
+                "entry"("key" to "title", "type" to "verbatim") { +" \"B\n  C\"\n" }
+            }
+            "h1" { +"Heading" }
+        }
+    }
+
+    @Test
+    fun `should drop a later title variant an entry kept as source beats`() = runTest {
+        // given — a case-sensitive reader (Jekyll) reads `title`, kept as
+        // source, whatever variant follows it
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title", "type" to "verbatim") { +" \"B\n  C\"\n" }
+                "entry"("key" to "Title") { +"Variant" }
+            }
+            "h1" { +"Heading" }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title", "type" to "verbatim") { +" \"B\n  C\"\n" }
+            }
+            "h1" { +"Heading" }
+        }
+    }
+
+    @Test
     fun `should drop an unreadable title entry following a usable one`() = runTest {
         // given — `title: Real` then `title: []`: a later-wins reader would
         // read the collection, and js-yaml rejects the duplicate key outright
