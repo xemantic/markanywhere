@@ -417,7 +417,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
     // start, a hard break or a deferred space reads as whitespace.
     fun prevWrittenChar(): Char = when {
         inLabel() -> lastChar
-        pendingHardBreak || atLineStart -> '\n'
+        pendingHardBreak || pendingParagraph || atLineStart -> '\n'
         pendingSpaces > 0 || headingSpacePending -> ' '
         pendingWhitespace.isNotEmpty() -> pendingWhitespace.last()
         else -> lastChar
@@ -425,9 +425,6 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
 
     // Whether text here is verbatim — code, preformatted text, front matter or
     // a raw verbatim tag — where a backslash is literal, never an escape.
-    fun inVerbatimText(): Boolean = inPreCode || blockStack.any {
-        it is Code || it is Pre || it is Frontmatter || (it is TaggedInline && it.verbatim)
-    }
 
     // The emphasis delimiter chars (`*`/`~`/`=`/`^`, as delimiterBit bits) to
     // escape wherever they stand in the current text: every one of them when
@@ -464,17 +461,34 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         else 0
 
     // Escapes [text] written here, given [next], the char written right after
-    // it (see escapeInlineSyntax). Suppressed in verbatim text
-    // (inVerbatimText), where a backslash is literal — real code-span content
-    // never gets here.
+    // it (see escapeInlineSyntax). Suppressed in verbatim text, where a
+    // backslash is literal: code, preformatted text, front matter, a raw
+    // verbatim tag, and an HTML block in a list item.
     fun escapeInlineText(text: String, next: Char?): String {
-        // Pre-scan so plain words return without the stack scans below.
-        if (text.none { it in INLINE_SYNTAX_CHARS }) return text
-        if (inVerbatimText()) return text
-        // The parser never opens an em (strong) while one is open, even outside
+        // Pre-scan so plain words return without the stack scan below.
+        if (inPreCode || text.none { it in INLINE_SYNTAX_CHARS }) return text
+        // One scan for the verbatim contexts and the open em / strong: the
+        // parser never opens an em (strong) while one is open, even outside
         // the label the text is in, so `*x [a*b](u) y*` keeps its `*` as is.
-        val emOpen = blockStack.any { it is Inline && it.delimiter == "*" }
-        val strongOpen = blockStack.any { it is Inline && it.delimiter == "**" }
+        // Text in an HTML block in a list item is raw on re-parse — the parser
+        // never sub-parses one — so a backslash there would be literal and
+        // grow on every pass: a raw tag starting a line in a list item is
+        // treated as verbatim.
+        var emOpen = false
+        var strongOpen = false
+        var inItem = false
+        for (frame in blockStack) {
+            when (frame) {
+                is Code, Pre, Frontmatter -> return text
+                is ListItem -> inItem = true
+                is TaggedInline -> if (frame.verbatim || (inItem && frame.startsLine)) return text
+                is Inline -> when (frame.delimiter) {
+                    "*" -> emOpen = true
+                    "**" -> strongOpen = true
+                }
+                else -> {}
+            }
+        }
         return escapeInlineSyntax(
             text = text,
             before = prevWrittenChar(),
@@ -630,7 +644,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         // CONTRACT: escapeInlineText runs for ALL text, including label and
         // inline-code content (it's invoked *before* the inLabel() guard below —
         // inline code is captured into a label buffer). It must therefore
-        // self-guard every context where escaping is wrong (inVerbatimText), and
+        // self-guard every context where escaping is wrong (verbatim text), and
         // handle `inLabel()` scoping itself. Any new label-style capture must
         // keep that guarantee or move this call after the appropriate guard.
         val text = escapeInlineText(rawText, next)
@@ -774,7 +788,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
             writeTag(event.renderOpenTag())
             ensureLineStart()
             lastBlock = BLOCK_TAG
-            blockStack.addLast(BlockFrame.TaggedInline(block = true))
+            blockStack.addLast(BlockFrame.TaggedInline(block = true, startsLine = true))
             return
         }
         // A deferred non-list paragraph whose first content is a raw tag starts
@@ -801,6 +815,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
             if (blockLevelTag) separateBeforeBlockTag()
             else if (atLineStart && pendingSpaces == 0) ensureBlankLine()
         }
+        val startsLine = atLineStart && !inLabel()
         writeTag(event.renderOpenTag())
         // Block decision captured before writeTag cleared atLineStart. A void
         // element also ends its line outside a heading (a soft break there);
@@ -813,7 +828,8 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
             if (isVoid) BlockFrame.SelfClosed
             else BlockFrame.TaggedInline(
                 block = blockLevelTag,
-                verbatim = event.name in VERBATIM_RAW_TAGS
+                verbatim = event.name in VERBATIM_RAW_TAGS,
+                startsLine = startsLine
             )
         )
     }
@@ -1460,6 +1476,18 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                 heldOpeners += current as Mark
                 return
             }
+            // Whitespace with nothing yet to open the span for moves out in
+            // front of it, and the openers stay held; a span closing with only
+            // whitespace in it is dropped — its delimiters around nothing would
+            // re-parse as literal text, or as a span around what follows.
+            if (current is Text && current.text.all { it.isFlankWhitespace() }) {
+                emitMovedWhitespace(current.text)
+                return
+            }
+            if (current is Unmark && current.isEmphasisUnmark() && current.name == heldOpeners.last().name) {
+                heldOpeners.removeLast()
+                return
+            }
             val leading = (current as? Text)?.text?.takeWhile { it.isFlankWhitespace() } ?: ""
             if (leading.isNotEmpty()) emitMovedWhitespace(leading)
             for (opener in heldOpeners) processEvent(opener, wrapsBlock = false, next = null)
@@ -1625,7 +1653,13 @@ private sealed interface BlockFrame {
     // decided once at the open (rendersAsBlockTag, or forced by handleRawOpen's
     // `wrapsBlock` when it wraps a block); every close mirrors it.
     // `verbatim`: a raw tag whose text is kept as written (see VERBATIM_RAW_TAGS).
-    class TaggedInline(val block: Boolean = false, val verbatim: Boolean = false) : BlockFrame
+    // `startsLine`: its open tag was written at a line start, where it may start
+    // an HTML block on re-parse (see inRawHtmlText).
+    class TaggedInline(
+        val block: Boolean = false,
+        val verbatim: Boolean = false,
+        val startsLine: Boolean = false
+    ) : BlockFrame
     data object Frontmatter : BlockFrame
     class Table(var columnCount: Int = 0, var headerEmitted: Boolean = false) : BlockFrame
     class TableSection(val name: String) : BlockFrame
@@ -1956,7 +1990,9 @@ private fun escapeInlineSyntax(
     emOpen: Boolean = false,
     strongOpen: Boolean = false,
     brackets: Boolean = false
-): String = buildString(text.length + 4) {
+): String {
+    // Allocated at the first escape: most text has none.
+    var out: StringBuilder? = null
     var i = 0
     while (i < text.length) {
         val c = text[i]
@@ -1981,19 +2017,34 @@ private fun escapeInlineSyntax(
                 2 -> !strongOpen
                 else -> true
             })
-            '$' -> after == null || after.isMathOpen() || after == '$'
+            // `$\` opens math too, so a `$` before a char written escaped is.
+            '$' -> after == null || after.isMathOpen() || after in INLINE_SYNTAX_CHARS ||
+                (brackets && (after == '[' || after == ']'))
             '\\' -> after == null || after == '\n' || after in BACKSLASH_ESCAPED_SYNTAX
-            '<' -> after == null || !after.isFlankWhitespace()
+            // Only before a char that keeps the parser's inline-HTML speculation
+            // going (`canFollowInlineHtmlOpen` in `MarkanywhereParser.kt`), which
+            // holds the rest of the line as raw text — `a < b`, `<3`, `a <= b`
+            // are literal at once.
+            '<' -> after == null || after.continuesInlineHtmlOpen()
             '[', ']' -> brackets
             else -> false
         }
-        for (k in i until end) {
-            if (escape) +'\\'
-            +text[k]
+        if (escape && out == null) out = StringBuilder(text.length + 8).append(text, 0, i)
+        if (out != null) {
+            for (k in i until end) {
+                if (escape) out.append('\\')
+                out.append(text[k])
+            }
         }
         i = end
     }
+    return out?.toString() ?: text
 }
+
+// The parser's `canFollowInlineHtmlOpen`: whether this char, right after a
+// `<`, lets the parser go on reading a tag, an autolink or an email autolink.
+private fun Char.continuesInlineHtmlOpen(): Boolean =
+    this in 'a'..'z' || this in 'A'..'Z' || this == '$' || this in ".!#%&'*+/?^_`{|}~"
 
 // Escapes an image's alt text for its `![alt](src)` description, which the
 // parser reads as inline content before reducing it to plain text.
@@ -2041,11 +2092,15 @@ private fun SemanticEvent.leadingChar(): Char? = when (this) {
         "a" -> '['
         "img" -> '!'
         "code" -> '`'
-        "br", "th", "td", in BLOCK_LEVEL_MARK_NAMES -> '\n'
+        // A hard break is written `  \n`.
+        "br" -> ' '
+        "th", "td", in BLOCK_LEVEL_MARK_NAMES -> '\n'
         in MARKDOWN_NATIVE_MARK_NAMES -> null
         else -> '<'
     }
-    is Unmark -> if (isTagged) '<' else emphasisDelimiter(name)?.get(0) ?: when (name) {
+    // An emphasis closer is held, and dropped when the same span reopens right
+    // after it (pendingInlineClose), so what follows it is unknown.
+    is Unmark -> if (isTagged) '<' else if (emphasisDelimiter(name) != null) null else when (name) {
         "a" -> ']'
         "code" -> '`'
         "th", "td", in BLOCK_LEVEL_MARK_NAMES -> '\n'
