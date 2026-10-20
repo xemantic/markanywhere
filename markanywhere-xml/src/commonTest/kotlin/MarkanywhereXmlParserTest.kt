@@ -266,6 +266,18 @@ class MarkanywhereXmlParserTest : XmlParserTest() {
     }
 
     @Test
+    fun `DIVERGENCE - should read an XML declaration of a later 1 dot x version`() = runTest {
+        // when — XML 1.0 (fifth edition) lets a 1.0 processor read any `1.x`
+        // document as 1.0; the JDK's StAX rejects every version but `1.0`
+        val events = parse("<?xml version=\"1.1\"?><a/>")
+
+        // then
+        events sameAs semanticEvents(tagged = true) {
+            "a" { }
+        }
+    }
+
+    @Test
     fun `DIVERGENCE - should skip a DOCTYPE whose internal subset holds brackets in a comment and an instruction`() = runTest {
         // when — a `]` followed by `>` inside a comment or an instruction ends
         // nothing. The JDK's StAX, with DTD support off, ends the DOCTYPE at the

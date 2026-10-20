@@ -66,6 +66,8 @@ import kotlinx.coroutines.flow.takeWhile
  * - **Names** follow the XML 1.0 fifth-edition productions, whose ranges are
  *   broader than the older tables some platform parsers still apply — a name
  *   one of those rejects is an error the contract lets us read past.
+ * - An **XML declaration** of any `1.x` version is read as 1.0, as the fifth
+ *   edition prescribes, where some platform parsers accept only `1.0`.
  * - **Whitespace outside every element** is held only up to
  *   1024 characters; the rest of a longer run is dropped,
  *   whether it turns out to be layout or to precede a fragment's text.
@@ -145,14 +147,13 @@ private class XmlDocumentReader(
      */
     private var contentBrackets = 0
 
-    /** Whether nothing but a byte order mark has been read yet. */
-    private var atDocumentStart = true
+    private var documentStart: DocumentStart = BYTE_ORDER_MARK_DUE
 
     /** Whether the markup being read opens the document, so it may be an XML declaration. */
     private var markupOpensDocument = false
 
-    /** Whether an element has been read, after which no DOCTYPE may follow. */
-    private var hasReadElement = false
+    /** Whether no element and no DOCTYPE has been read, so a DOCTYPE may follow. */
+    private var isDoctypeAllowed = true
 
     /** Whether a leading zero of the character reference being read was skipped. */
     private var referenceZeroSkipped = false
@@ -169,11 +170,20 @@ private class XmlDocumentReader(
     /** Whether the previous character of a processing instruction was `?`. */
     private var questionMark = false
 
-    /** The quote which opened a literal of the DOCTYPE being skipped, if any. */
+    /** The pseudo-attributes of the XML declaration being read, checked once it ends. */
+    private val xmlDeclaration = StringBuilder()
+
+    /** Which part of the DOCTYPE being skipped the reader stands in. */
+    private var doctypePart: DoctypePart = NAME_START
+
+    /** The quote which opened the literal of the DOCTYPE being skipped, if any. */
     private var doctypeQuote: Char? = null
 
-    /** Whether the DOCTYPE being skipped stands in its internal subset. */
-    private var inInternalSubset = false
+    /** How many literals the external identifier of the DOCTYPE still needs. */
+    private var doctypeLiterals = 0
+
+    /** Whether the literal being read is a public identifier, restricted to `PubidChar`. */
+    private var isPublicIdLiteral = false
 
     /**
      * The [COMMENT] or [PROCESSING_INSTRUCTION] of the internal subset being
@@ -186,9 +196,6 @@ private class XmlDocumentReader(
 
     /** Set by a carriage return, so that the line feed of a CRLF is not read twice. */
     private var skipLineFeed = false
-
-    /** Whether no character has been read yet, so a byte order mark is due. */
-    private var atStart = true
 
     /**
      * A high surrogate waiting for the low one which makes it a character —
@@ -215,8 +222,8 @@ private class XmlDocumentReader(
                 continue
             }
             val char = chunk[index++]
-            if (atStart) {
-                atStart = false
+            if (documentStart == BYTE_ORDER_MARK_DUE) {
+                documentStart = OPENING
                 // Skipped per the XmlParser contract: a UTF-8 file decoded the
                 // usual way keeps its BOM, which is no character data.
                 if (char == '\uFEFF') continue
@@ -263,7 +270,7 @@ private class XmlDocumentReader(
     private fun ordinaryTextEnd(chunk: String, start: Int): Int {
         // Inside an element, whitespace needs no judging, so the run is plain.
         if (
-            state != CONTENT || open.isEmpty() || atStart || skipLineFeed ||
+            state != CONTENT || open.isEmpty() || skipLineFeed ||
             highSurrogate != null || contentBrackets != 0
         ) {
             return start
@@ -422,16 +429,20 @@ private class XmlDocumentReader(
             COMMENT -> if (endsComment(char)) state = CONTENT
             CDATA -> readCdata(char)
             INSTRUCTION_TARGET -> readInstructionTarget(char)
+            INSTRUCTION_END -> if (char == '>') state = CONTENT else stop()
             PROCESSING_INSTRUCTION -> if (endsInstruction(char)) state = CONTENT
+            XML_DECLARATION -> readXmlDeclaration(char)
             DOCTYPE -> readDoctype(char)
         }
-        atDocumentStart = false
+        documentStart = PASSED
     }
 
     /**
      * Reads the target naming a processing instruction, which every one must
-     * have. The target `xml` is the XML declaration's, allowed only where it
-     * opens the document; any other casing of it is reserved altogether.
+     * have, followed either by whitespace or by the `?>` of an instruction
+     * holding no data. The target `xml` is the XML declaration's, allowed only
+     * where it opens the document; any other casing of it is reserved
+     * altogether.
      */
     private suspend fun readInstructionTarget(char: Char) {
         when {
@@ -439,30 +450,58 @@ private class XmlDocumentReader(
             char.isXmlNameChar() -> elementName.append(char)
             char.isXmlWhitespace() || char == '?' -> {
                 val target = elementName.toString()
-                if (target.equals("xml", ignoreCase = true) && !(target == "xml" && markupOpensDocument)) {
-                    stop()
-                    return
+                when {
+                    !target.equals("xml", ignoreCase = true) -> {
+                        questionMark = false
+                        state = if (char == '?') INSTRUCTION_END else PROCESSING_INSTRUCTION
+                    }
+                    // The declaration needs at least its version.
+                    target == "xml" && markupOpensDocument && char != '?' -> {
+                        xmlDeclaration.clear()
+                        xmlDeclaration.append(char)
+                        questionMark = false
+                        state = XML_DECLARATION
+                    }
+                    else -> stop()
                 }
-                questionMark = char == '?'
-                state = PROCESSING_INSTRUCTION
             }
             else -> stop()
         }
     }
 
     /**
+     * Reads the XML declaration up to its `?>`, then checks its
+     * pseudo-attributes — held, since only the whole tells whether they are
+     * well formed, but never beyond [MAX_XML_DECLARATION_LENGTH].
+     */
+    private suspend fun readXmlDeclaration(char: Char) {
+        if (char == '>' && questionMark) {
+            xmlDeclaration.setLength(xmlDeclaration.length - 1)
+            if (XML_DECLARATION_PSEUDO_ATTRIBUTES.matches(xmlDeclaration)) state = CONTENT else stop()
+            return
+        }
+        if (xmlDeclaration.length == MAX_XML_DECLARATION_LENGTH) {
+            stop()
+            return
+        }
+        questionMark = char == '?'
+        xmlDeclaration.append(char)
+    }
+
+    /**
      * Identifies the `<!` construct being read from the characters seen so far
      * — `--` a comment, `[CDATA[` a section of character data, and `DOCTYPE`
      * the declaration, the only one of the three which is neither content nor
-     * dropped wholesale by a single terminator. A DOCTYPE is only read before
-     * the first element: anywhere else it is as malformed as any other `<!`.
+     * dropped wholesale by a single terminator. A DOCTYPE is only read once,
+     * before the first element: anywhere else it is as malformed as any other
+     * `<!`.
      */
     private suspend fun readDeclaration(char: Char) {
         if (declarationLength == 0) {
             declarationOpening = when {
                 char == '-' -> COMMENT_DASHES
                 char == '[' -> CDATA_OPENING
-                char == 'D' && !hasReadElement -> DOCTYPE_KEYWORD
+                char == 'D' && isDoctypeAllowed -> DOCTYPE_KEYWORD
                 else -> {
                     stop()
                     return
@@ -493,10 +532,11 @@ private class XmlDocumentReader(
     }
 
     private fun startDoctype() {
+        doctypePart = NAME_START
         doctypeQuote = null
-        inInternalSubset = false
         subsetMarkup = null
         subsetOpeningLength = 0
+        isDoctypeAllowed = false
         state = DOCTYPE
     }
 
@@ -532,18 +572,23 @@ private class XmlDocumentReader(
     }
 
     /**
-     * Skips a DOCTYPE declaration, which the event model cannot carry.
+     * Skips a DOCTYPE declaration, which the event model cannot carry — though
+     * not blindly: up to the internal subset it is read against its
+     * production, so that a stray quote cannot open a literal swallowing the
+     * rest of the document.
      *
      * Its terminating `>` is found rather than assumed: a system literal may
      * hold one, and so may the internal subset — whose comments and processing
      * instructions are skipped whole, since a quote, `]` or `>` inside one is
-     * neither a literal nor the end of anything.
+     * neither a literal nor the end of anything. The declarations of the
+     * subset are not checked, as `StaxXmlParser`, with DTD support off, does
+     * not check them either.
      */
-    private fun readDoctype(char: Char) {
+    private suspend fun readDoctype(char: Char) {
         when (subsetMarkup) {
             COMMENT -> if (endsComment(char)) subsetMarkup = null
             PROCESSING_INSTRUCTION -> if (endsInstruction(char)) subsetMarkup = null
-            else -> readDoctypeDeclaration(char)
+            else -> readDoctypePart(char)
         }
     }
 
@@ -573,18 +618,100 @@ private class XmlDocumentReader(
         return ends
     }
 
-    private fun readDoctypeDeclaration(char: Char) {
+    /**
+     * Follows `<!DOCTYPE` S Name (S ExternalID)? S? ('[' intSubset ']' S?)? '>',
+     * where ExternalID is `SYSTEM` S SystemLiteral or `PUBLIC` S PubidLiteral S
+     * SystemLiteral.
+     */
+    private suspend fun readDoctypePart(char: Char) {
+        when (doctypePart) {
+            NAME_START -> when {
+                char.isXmlWhitespace() -> {}
+                char.isXmlNameStart() -> doctypePart = NAME
+                else -> stop()
+            }
+            NAME -> when {
+                char.isXmlNameChar() -> {}
+                char.isXmlWhitespace() -> doctypePart = AFTER_NAME
+                else -> endDoctypeHeader(char)
+            }
+            AFTER_NAME -> when {
+                char.isXmlWhitespace() -> {}
+                char == 'S' || char == 'P' -> {
+                    elementName.clear()
+                    elementName.append(char)
+                    doctypePart = KEYWORD
+                }
+                else -> endDoctypeHeader(char)
+            }
+            KEYWORD -> when {
+                char.isXmlWhitespace() -> {
+                    doctypeLiterals = when {
+                        elementName.contentEquals(SYSTEM_KEYWORD) -> 1
+                        elementName.contentEquals(PUBLIC_KEYWORD) -> 2
+                        else -> {
+                            stop()
+                            return
+                        }
+                    }
+                    isPublicIdLiteral = doctypeLiterals == 2
+                    doctypePart = LITERAL_START
+                }
+                elementName.length < PUBLIC_KEYWORD.length -> elementName.append(char)
+                else -> stop()
+            }
+            LITERAL_START -> when {
+                char.isXmlWhitespace() -> {}
+                char == '"' || char == '\'' -> {
+                    doctypeQuote = char
+                    doctypePart = LITERAL
+                }
+                else -> stop()
+            }
+            LITERAL -> when {
+                char == doctypeQuote -> {
+                    doctypeQuote = null
+                    doctypeLiterals--
+                    doctypePart = if (doctypeLiterals == 0) AFTER_EXTERNAL_ID else BETWEEN_LITERALS
+                }
+                isPublicIdLiteral && !char.isPublicIdChar() -> stop()
+                else -> {}
+            }
+            BETWEEN_LITERALS -> if (char.isXmlWhitespace()) {
+                isPublicIdLiteral = false
+                doctypePart = LITERAL_START
+            } else {
+                stop()
+            }
+            AFTER_EXTERNAL_ID -> if (!char.isXmlWhitespace()) endDoctypeHeader(char)
+            INTERNAL_SUBSET -> readInternalSubset(char)
+            AFTER_INTERNAL_SUBSET -> when {
+                char.isXmlWhitespace() -> {}
+                char == '>' -> state = CONTENT
+                else -> stop()
+            }
+        }
+    }
+
+    /** Reads what may follow the name or external identifier: the internal subset, or the end. */
+    private suspend fun endDoctypeHeader(char: Char) {
+        when (char) {
+            '[' -> doctypePart = INTERNAL_SUBSET
+            '>' -> state = CONTENT
+            else -> stop()
+        }
+    }
+
+    private fun readInternalSubset(char: Char) {
         val quote = doctypeQuote
         if (quote != null) {
             if (char == quote) doctypeQuote = null
             return
         }
-        if (inInternalSubset && startsSubsetMarkup(char)) return
+        if (startsSubsetMarkup(char)) return
         when (char) {
             '"', '\'' -> doctypeQuote = char
-            '[' -> inInternalSubset = true
-            ']' -> inInternalSubset = false
-            '>' -> if (!inInternalSubset) state = CONTENT
+            ']' -> doctypePart = AFTER_INTERNAL_SUBSET
         }
     }
 
@@ -657,9 +784,12 @@ private class XmlDocumentReader(
 
     private fun endAttribute() {
         val name = attributeName.toString()
-        // A repeated attribute is reported where the value kept was written.
-        attributes.remove(name)
-        attributes[name] = attributeValue.toString()
+        val value = attributeValue.toString()
+        if (attributes.put(name, value) != null) {
+            // A repeated attribute is reported where the value kept was written.
+            attributes.remove(name)
+            attributes[name] = value
+        }
         state = ATTRIBUTE_END
     }
 
@@ -674,7 +804,7 @@ private class XmlDocumentReader(
             )
         )
         if (attributes.isNotEmpty()) attributes = LinkedHashMap()
-        hasReadElement = true
+        isDoctypeAllowed = false
         if (isEmpty) {
             collector.emit(SemanticEvent.Unmark(name = name, isTagged = true))
         } else {
@@ -686,16 +816,14 @@ private class XmlDocumentReader(
 
     private suspend fun endElement() {
         flushText()
-        val name = elementName.toString()
-        if (open.lastOrNull() != name) {
+        if (!open.lastOrNull().contentEquals(elementName)) {
             // An end tag which does not close the innermost open element cannot
             // be reported without emitting an unmark crossing a mark, so the
             // read gives up here and lets the open elements be closed in order.
             stop()
             return
         }
-        open.removeLast()
-        collector.emit(SemanticEvent.Unmark(name = name, isTagged = true))
+        collector.emit(SemanticEvent.Unmark(name = open.removeLast(), isTagged = true))
         textHasContent = false
         state = CONTENT
     }
@@ -710,7 +838,7 @@ private class XmlDocumentReader(
             flushText()
             textHasContent = false
         }
-        markupOpensDocument = atDocumentStart
+        markupOpensDocument = documentStart == OPENING
         state = MARKUP
     }
 
@@ -781,10 +909,36 @@ private enum class ReaderState {
     REFERENCE,
     DECLARATION,
     INSTRUCTION_TARGET,
+    INSTRUCTION_END,
     COMMENT,
     CDATA,
     PROCESSING_INSTRUCTION,
+    XML_DECLARATION,
     DOCTYPE
+}
+
+/** How far into the document the reader has got — what a BOM and an XML declaration depend on. */
+private enum class DocumentStart {
+    /** No character has been read, so a byte order mark may come. */
+    BYTE_ORDER_MARK_DUE,
+
+    /** Nothing but a byte order mark has been read, so an XML declaration may come. */
+    OPENING,
+    PASSED
+}
+
+/** The parts of a DOCTYPE declaration, up to the end of its internal subset. */
+private enum class DoctypePart {
+    NAME_START,
+    NAME,
+    AFTER_NAME,
+    KEYWORD,
+    LITERAL_START,
+    LITERAL,
+    BETWEEN_LITERALS,
+    AFTER_EXTERNAL_ID,
+    INTERNAL_SUBSET,
+    AFTER_INTERNAL_SUBSET
 }
 
 private const val CDATA_OPENING = "[CDATA["
@@ -794,6 +948,29 @@ private const val COMMENT_DASHES = "--"
 private const val DOCTYPE_KEYWORD = "DOCTYPE"
 
 private const val COMMENT_OPENING = "<!--"
+
+private const val SYSTEM_KEYWORD = "SYSTEM"
+
+private const val PUBLIC_KEYWORD = "PUBLIC"
+
+/**
+ * The pseudo-attributes an XML declaration may hold after its target, in the
+ * order they must be written: `version` (`1.x`, which XML 1.0 fifth edition
+ * reads as 1.0), then optionally `encoding` and `standalone`. The encoding is
+ * not checked against `EncName`: the characters are already decoded, so it
+ * names nothing, and `StaxXmlParser` does not check it either.
+ *
+ * No group repeats, so matching cannot recurse once per repetition.
+ */
+private val XML_DECLARATION_PSEUDO_ATTRIBUTES = Regex(
+    "^[ \\t\\r\\n]+version[ \\t\\r\\n]*=[ \\t\\r\\n]*(?:\"1\\.[0-9]+\"|'1\\.[0-9]+')" +
+        "(?:[ \\t\\r\\n]+encoding[ \\t\\r\\n]*=[ \\t\\r\\n]*(?:\"[^\"]*\"|'[^']*'))?" +
+        "(?:[ \\t\\r\\n]+standalone[ \\t\\r\\n]*=[ \\t\\r\\n]*(?:\"(?:yes|no)\"|'(?:yes|no)'))?" +
+        "[ \\t\\r\\n]*$"
+)
+
+/** How much of an XML declaration is held — far more than any well-formed one needs. */
+private const val MAX_XML_DECLARATION_LENGTH = 1024
 
 /**
  * The longest reference body which can resolve, leading zeros aside —
@@ -868,6 +1045,12 @@ private fun Char.isAsciiDigit(): Boolean = this in '0'..'9'
 
 private fun Char.isAsciiHexDigit(): Boolean =
     isAsciiDigit() || (this in 'a'..'f') || (this in 'A'..'F')
+
+/** The `PubidChar` production of XML 1.0, the characters a public identifier may hold. */
+private fun Char.isPublicIdChar(): Boolean =
+    (this == ' ') || (this == '\r') || (this == '\n') ||
+        (this in 'a'..'z') || (this in 'A'..'Z') || (this in '0'..'9') ||
+        (this in "-'()+,./:=?;!*#@\$_%")
 
 private fun Char.isXmlWhitespace(): Boolean =
     (this == ' ') || (this == '\t') || (this == '\n') || (this == '\r')

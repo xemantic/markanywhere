@@ -559,14 +559,17 @@ abstract class XmlParserTest {
     @Test
     fun `should stop at malformed markup`() = runTest {
         // given — a declaration no keyword opens, a DOCTYPE inside an element,
-        // an instruction without a target, an XML declaration not opening the
-        // document, and the end of a CDATA section outside one
+        // an instruction without a target or with no whitespace after it, an
+        // XML declaration not opening the document, and the end of a CDATA
+        // section outside one
         val markup = listOf(
             "<!foo>",
             "<!x'>",
             "<!DOCTYPE a>",
             "<??>",
             "<? pi?>",
+            "<?pi?data?>",
+            "<?a??>",
             "<?xml version=\"1.0\"?>",
             "<?XML version=\"1.0\"?>",
             "]]>"
@@ -592,6 +595,138 @@ abstract class XmlParserTest {
 
         // then
         assert(events.isEmpty())
+    }
+
+    @Test
+    fun `should read an instruction holding no data`() = runTest {
+        // when — the `?>` may follow the target directly
+        val events = parse("<a>x<?pi?>y</a>")
+
+        // then
+        events sameAs semanticEvents(tagged = true) {
+            "a" { +"xy" }
+        }
+    }
+
+    @Test
+    fun `should read an XML declaration holding every pseudo-attribute`() = runTest {
+        // given
+        val declarations = listOf(
+            "<?xml version = \"1.0\" encoding='UTF-8' standalone=\"no\" ?>\n",
+            "<?xml\tversion='1.0'\r\n?>"
+        )
+
+        declarations.forEach { declaration ->
+            // when
+            val events = parse("$declaration<a/>")
+
+            // then
+            events sameAs semanticEvents(tagged = true) {
+                "a" { }
+            }
+        }
+    }
+
+    @Test
+    fun `should stop at a malformed XML declaration`() = runTest {
+        // given — no version, an unknown pseudo-attribute, pseudo-attributes
+        // out of order or not separated, and values outside their productions
+        val declarations = listOf(
+            "<?xml?>",
+            "<?xml foo?>",
+            "<?xml encoding=\"UTF-8\"?>",
+            "<?xml version=\"1.0\" foo=\"x\"?>",
+            "<?xml version=\"1.0\"encoding=\"UTF-8\"?>",
+            "<?xml version=\"1.0\" standalone=\"yes\" encoding=\"UTF-8\"?>",
+            "<?xml version=\"1.0\" standalone=\"maybe\"?>",
+            "<?xml version=\"1.\"?>",
+            "<?xml version=1.0?>"
+        )
+
+        declarations.forEach { declaration ->
+            // when
+            val events = parse("$declaration<a/>").toList()
+
+            // then
+            assert(events.isEmpty())
+        }
+    }
+
+    @Test
+    fun `should read a DOCTYPE in each of its forms`() = runTest {
+        // given
+        val doctypes = listOf(
+            "<!DOCTYPE a>",
+            "<!DOCTYPE a[]>",
+            "<!DOCTYPE  a  SYSTEM  \"s\"  >",
+            "<!DOCTYPE a PUBLIC \"-//p\" 's'>",
+            "<!DOCTYPE a SYSTEM \"s\"[<!ENTITY e 'v'>] >"
+        )
+
+        doctypes.forEach { doctype ->
+            // when
+            val events = parse("$doctype<a>text</a>")
+
+            // then
+            events sameAs semanticEvents(tagged = true) {
+                "a" { +"text" }
+            }
+        }
+    }
+
+    @Test
+    fun `should stop at a malformed DOCTYPE`() = runTest {
+        // given — a literal where none may stand, an unknown or lowercase
+        // keyword, literals missing, extra or not separated, a public
+        // identifier holding a character it may not, and anything after the
+        // internal subset
+        val doctypes = listOf(
+            "<!DOCTYPE a'b>",
+            "<!DOCTYPE 'a'>",
+            "<!DOCTYPE a FOO \"s\">",
+            "<!DOCTYPE a system \"s\">",
+            "<!DOCTYPE a SYSTEM\"s\">",
+            "<!DOCTYPE a SYSTEM \"s\" 'x'>",
+            "<!DOCTYPE a SYSTEM \"s\"x>",
+            "<!DOCTYPE a PUBLIC \"p\">",
+            "<!DOCTYPE a PUBLIC \"p\"\"s\">",
+            "<!DOCTYPE a PUBLIC \"<\" \"s\">",
+            "<!DOCTYPE a [] x>",
+            "<!DOCTYPE a><!DOCTYPE a>"
+        )
+
+        doctypes.forEach { doctype ->
+            // when
+            val events = parse("$doctype<a>text</a>").toList()
+
+            // then
+            assert(events.isEmpty())
+        }
+    }
+
+    @Test
+    fun `should stop reading a source which never ends at a quote opening no literal in a DOCTYPE`() = runTest {
+        // given — the apostrophe must not be taken for a literal swallowing
+        // everything after it
+        val chunks = flow {
+            emit("<!DOCTYPE a'b><a>text</a>")
+            awaitCancellation()
+        }
+
+        // when
+        val events = parser.parse(chunks).toList()
+
+        // then
+        assert(events.isEmpty())
+    }
+
+    @Test
+    fun `should emit no empty text for an empty CDATA section`() = runTest {
+        // when — not merged, so that an empty event would show
+        val events = parser.parse("<a>x<![CDATA[]]>y</a>").toList()
+
+        // then
+        assert(events.none { it is SemanticEvent.Text && it.text.isEmpty() })
     }
 
     @Test

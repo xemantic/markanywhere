@@ -123,7 +123,10 @@ public class StaxXmlParser(
                     XMLStreamConstants.CDATA,
                     XMLStreamConstants.SPACE,
                     XMLStreamConstants.ENTITY_REFERENCE -> {
-                        emit(SemanticEvent.Text(reader.text))
+                        // An empty CDATA section is reported as empty text,
+                        // which carries nothing.
+                        val text = reader.text
+                        if (text.isNotEmpty()) emit(SemanticEvent.Text(text))
                     }
                     // COMMENT, PROCESSING_INSTRUCTION, DTD, START_DOCUMENT and
                     // END_DOCUMENT carry nothing the event model can express.

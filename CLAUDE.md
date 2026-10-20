@@ -684,4 +684,6 @@ If the fix is bounded (one inline construct, one or two lines of lookahead), it'
 
 ## Anti-patterns to avoid
 
+- Do not replace the `+"…"` string builder (`com.xemantic.kotlin.core.text.unaryPlus`, used inside `buildString`) with `append` / `appendLine`, or drop `xemantic-kotlin-core` from a source set to get rid of it — it is the project's own builder idiom, not a stray dependency.
+  An automated code review once flagged it as "an extra dependency only for `+"…"`" and an agent applied that; when a review finding goes against a house idiom, raise it with the developer instead of applying it.
 - Do not add content to this file that is already discoverable by reading the source or build scripts — that inflates context without adding signal, reducing AI agent task success rates (see [arxiv 2602.11988](https://arxiv.org/abs/2602.11988)).

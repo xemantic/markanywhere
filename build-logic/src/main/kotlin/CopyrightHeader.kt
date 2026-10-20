@@ -109,8 +109,8 @@ private fun decodeXmlEntities(s: String): String =
     Regex("""&(?:#(\d+)|#x([0-9a-fA-F]+)|(amp|lt|gt|quot|apos));""").replace(s) { match ->
         val (decimal, hex, named) = match.destructured
         when {
-            decimal.isNotEmpty() -> decimal.toInt().toChar().toString()
-            hex.isNotEmpty() -> hex.toInt(16).toChar().toString()
+            decimal.isNotEmpty() -> codePointText(decimal, radix = 10) ?: match.value
+            hex.isNotEmpty() -> codePointText(hex, radix = 16) ?: match.value
             else -> when (named) {
                 "amp" -> "&"
                 "lt" -> "<"
@@ -120,3 +120,10 @@ private fun decodeXmlEntities(s: String): String =
             }
         }
     }
+
+// A code point outside the basic plane takes a surrogate pair, which `toChar()`
+// would truncate; a reference to no code point at all is left as written.
+private fun codePointText(digits: String, radix: Int): String? =
+    digits.toIntOrNull(radix)
+        ?.takeIf { Character.isValidCodePoint(it) }
+        ?.let { Character.toString(it) }
