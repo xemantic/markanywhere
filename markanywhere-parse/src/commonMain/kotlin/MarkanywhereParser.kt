@@ -529,8 +529,21 @@ private val TOGGLE_DELIMITERS = setOf('~', '=', '^')
  */
 private val ESCAPE_HELD_RUNS = setOf("*", "**", "***", "_", "__", "___", "~~", "==")
 
-// The buffered runs that toggle a `del` / `mark` span.
-private val SPAN_TOGGLE_RUNS = setOf("~", "~~", "==")
+// The double runs that toggle a `del` / `mark` span — the renderer's own
+// delimiters, opened even before a code span or an emphasis run. A single
+// `~` there stays literal: `~**2 hours**` is prose ("approximately").
+private val SPAN_TOGGLE_RUNS = setOf("~~", "==")
+
+/**
+ * Whether this char, right after a `<`, may continue an inline tag, a closing
+ * tag, an autolink or an email autolink: an ASCII letter, `/`, `!`, `?`, or a
+ * punctuation char of an email local part other than `=` and `-`. Whitespace,
+ * a digit, `=` and `-` (`a < b`, `<3`, `<=`, `<-`) never start one in practice,
+ * and nothing else can.
+ */
+private fun Char.canFollowInlineHtmlOpen(): Boolean =
+    this in 'a'..'z' || this in 'A'..'Z' || this == '/' ||
+        (this in EMAIL_LOCAL_PART_PUNCT && this != '=' && this != '-')
 
 /**
  * GFM §6.8 URI-autolink validation: scheme `[A-Za-z][A-Za-z0-9+.-]{1,31}`,
@@ -6303,6 +6316,14 @@ private class ParserState(
                         }
                     }
                 }
+                return
+            } else if (inlineBuffer.length == 1 && !char.canFollowInlineHtmlOpen()) {
+                // A `<` no tag, autolink or email autolink can start with (`a < b`,
+                // `<3`, `a <= b`, `a <- b`) is literal at once: speculating would
+                // hold the rest of the line as raw text, emphasis and code included.
+                +"<"
+                inlineBuffer.clear()
+                pendingDeferredChar = char
                 return
             } else {
                 inlineBuffer.append(char)

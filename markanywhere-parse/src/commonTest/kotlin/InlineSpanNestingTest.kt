@@ -1013,6 +1013,103 @@ class InlineSpanNestingTest {
     }
 
     @Test
+    fun `should keep a single tilde before strong literal`() = runTest {
+        // given — `~` as "approximately", common in LLM output
+        val textFlow = "takes ~**2 hours** now".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                +"takes ~"
+                "strong" { +"2 hours" }
+                +" now"
+            }
+        }
+    }
+
+    @Test
+    fun `should keep a single tilde before inline code literal`() = runTest {
+        // given
+        val textFlow = "about ~`5` ms".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                +"about ~"
+                "code" { +"5" }
+                +" ms"
+            }
+        }
+    }
+
+    @Test
+    fun `DIVERGENCE - should open a mark at an unclosed equals pair before inline code`() = runTest {
+        // GFM keeps an unclosed `==` literal, but whether a closer follows is
+        // only known at the line end. A double run before code or emphasis
+        // opens like one before a letter — it is what the renderer writes for a
+        // mark or del wrapping code or strong (`==`a`==`) — so an unclosed one
+        // marks the rest of the line, as before a letter.
+        // given
+        val textFlow = "x ==`y` z".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                +"x "
+                "mark" {
+                    "code" { +"y" }
+                    +" z"
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep a less-than sign before a space literal and parse the rest of the line`() = runTest {
+        // given — speculating on an inline tag would hold the rest of the line
+        val textFlow = "when n < 10, use `x` and *y*".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                +"when n < 10, use "
+                "code" { +"x" }
+                +" and "
+                "em" { +"y" }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep a less-than sign before a digit or an equals sign literal`() = runTest {
+        // given
+        val textFlow = "<3 a <= b **c**".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                +"<3 a <= b "
+                "strong" { +"c" }
+            }
+        }
+    }
+
+    @Test
     fun `should keep an equals pair before an underscore literal`() = runTest {
         // given
         val textFlow = "==_".chunkedRandomly().asFlow()
