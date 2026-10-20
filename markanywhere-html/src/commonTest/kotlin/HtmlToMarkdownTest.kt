@@ -744,20 +744,35 @@ class HtmlToMarkdownTest {
     }
 
     @Test
-    fun `should round-trip a named-anchor target through parse and render`() = runTest {
-        // given - issue #138: an hrefless `<a>` carrying an `id` or `name` is a
-        // fragment target, kept as a raw tag that must survive re-reading
+    fun `should drop named-anchor targets from the Markdown`() = runTest {
+        // given - issue #138: a raw `<a>` starting a line is a block-level tag
+        // to the Markdown renderer, so a kept anchor would split a list item,
+        // land as literal text inside a fence, or orphan its `</a>` around a
+        // block — the pipeline unwraps every one of these shapes instead
         val page = semanticEvents(tagged = true) {
             "body" {
                 "h2" {
                     "a"("id" to "sec2") { }
                     +"Section 2"
                 }
-                "p" {
-                    "a"("name" to "intro") { +"Introduction" }
-                    +" and the "
-                    "a"("href" to "#sec2") { +"link" }
-                    +" to it."
+                "pre" {
+                    "code" {
+                        "a"("id" to "L1") { }
+                        +"val x = 1\n"
+                        "a"("name" to "L2") { }
+                        +"val y = 2"
+                    }
+                }
+                "ul" {
+                    "li" {
+                        "a"("id" to "x") { }
+                        +"item"
+                    }
+                    "li" { +"two" }
+                }
+                "div" {
+                    +"Lead "
+                    "a"("id" to "card") { "h2" { +"Headline" } }
                 }
             }
         }
@@ -768,9 +783,18 @@ class HtmlToMarkdownTest {
 
         // then
         markdown sameAsMarkdown """
-            ## <a id="sec2"></a>Section 2
-
-            <a name="intro">Introduction</a> and the [link](#sec2) to it.
+            ## Section 2
+            
+            ```
+            val x = 1
+            val y = 2
+            ```
+            - item
+            - two
+            
+            Lead
+            
+            ## Headline
         """.trimIndent()
         reRendered sameAs markdown
     }

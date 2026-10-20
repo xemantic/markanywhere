@@ -67,8 +67,8 @@ public final class com/xemantic/markanywhere/html/SeparateUnwrappedBlocksKt {
 }
 
 public final class com/xemantic/markanywhere/html/SimplifyHtmlKt {
-	public static final fun simplifyHtml (Lkotlinx/coroutines/flow/Flow;Ljava/util/Set;Lcom/xemantic/markanywhere/html/SvgMode;)Lkotlinx/coroutines/flow/Flow;
-	public static synthetic fun simplifyHtml$default (Lkotlinx/coroutines/flow/Flow;Ljava/util/Set;Lcom/xemantic/markanywhere/html/SvgMode;ILjava/lang/Object;)Lkotlinx/coroutines/flow/Flow;
+	public static final fun simplifyHtml (Lkotlinx/coroutines/flow/Flow;Ljava/util/Set;Lcom/xemantic/markanywhere/html/SvgMode;Z)Lkotlinx/coroutines/flow/Flow;
+	public static synthetic fun simplifyHtml$default (Lkotlinx/coroutines/flow/Flow;Ljava/util/Set;Lcom/xemantic/markanywhere/html/SvgMode;ZILjava/lang/Object;)Lkotlinx/coroutines/flow/Flow;
 }
 
 public final class com/xemantic/markanywhere/html/SvgMode : java/lang/Enum {

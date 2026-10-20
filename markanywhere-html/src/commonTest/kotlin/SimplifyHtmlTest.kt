@@ -17,9 +17,11 @@
 package com.xemantic.markanywhere.html
 
 import com.xemantic.kotlin.test.assert
+import com.xemantic.kotlin.test.sameAsHtml
 import com.xemantic.markanywhere.dump.AccessibilityAnnotations
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.render.MARKDOWN_NATIVE_MARK_NAMES
+import com.xemantic.markanywhere.render.renderHtml
 import com.xemantic.markanywhere.test.sameAs
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -458,9 +460,28 @@ class SimplifyHtmlTest {
     }
 
     @Test
-    fun `should keep an a without href carrying an id as a fragment target tag`() = runTest {
-        // given - a named-anchor target: a `#sec2` link elsewhere points at
-        // its `id`, which an unwrap would lose (issue #138)
+    fun `should unwrap an a without href carrying an id by default`() = runTest {
+        // given - a named-anchor target: kept only on request, since the
+        // Markdown renderer cannot carry it (issue #138)
+        val input = semanticEvents(tagged = true) {
+            "h2" {
+                "a"("id" to "sec2") { }
+                +"Section 2"
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "h2" { +"Section 2" }
+        }
+    }
+
+    @Test
+    fun `should keep a fragment target a with its id when asked to`() = runTest {
+        // given - a `#sec2` link elsewhere points at the anchor's `id` (issue #138)
         val input = semanticEvents(tagged = true) {
             "h2" {
                 "a"("id" to "sec2", "class" to "anchor") { }
@@ -469,7 +490,7 @@ class SimplifyHtmlTest {
         }
 
         // when
-        val output = input.simplifyHtml()
+        val output = input.simplifyHtml(keepFragmentTargets = true)
 
         // then - a tag, not a Markdown link: there is no destination
         output sameAs semanticEvents {
@@ -481,9 +502,9 @@ class SimplifyHtmlTest {
     }
 
     @Test
-    fun `should keep an a without href carrying a name as a fragment target tag`() = runTest {
+    fun `should keep a fragment target a with its name when asked to`() = runTest {
         // given - the legacy named anchor: fragment navigation resolves an
-        // `a` element's `name` like an `id` (issue #138)
+        // `a` element's `name` like an `id`
         val input = semanticEvents(tagged = true) {
             "p" {
                 "a"("name" to "intro") { +"Introduction" }
@@ -492,7 +513,7 @@ class SimplifyHtmlTest {
         }
 
         // when
-        val output = input.simplifyHtml()
+        val output = input.simplifyHtml(keepFragmentTargets = true)
 
         // then
         output sameAs semanticEvents {
@@ -501,6 +522,74 @@ class SimplifyHtmlTest {
                 +" text"
             }
         }
+    }
+
+    @Test
+    fun `should unwrap an a without href whose id is blank even when keeping fragment targets`() = runTest {
+        // given - a whitespace-only id names nothing a link can point at
+        val input = semanticEvents(tagged = true) {
+            "p" { "a"("id" to " ") { +"x" } }
+        }
+
+        // when
+        val output = input.simplifyHtml(keepFragmentTargets = true)
+
+        // then
+        output sameAs semanticEvents {
+            "p" { +"x" }
+        }
+    }
+
+    @Test
+    fun `should unwrap a scripted a without href even when keeping fragment targets`() = runTest {
+        // given - an `id` on a scripted control is a hook for code, not a
+        // target (the Bing `sw_clx` shape), whichever signal gives it away
+        val input = semanticEvents(tagged = true) {
+            "p" {
+                "a"("id" to "sw_clx", "role" to "button") { +"a" }
+                "a"("id" to "b", "tabindex" to "0") { +"b" }
+                "a"("id" to "c", "onclick" to "go()") { +"c" }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml(keepFragmentTargets = true)
+
+        // then
+        output sameAs semanticEvents {
+            "p" {
+                +"a"
+                +"b"
+                +"c"
+            }
+        }
+    }
+
+    @Test
+    fun `should keep a fragment target in the rendered HTML when asked to`() = runTest {
+        // given
+        val input = semanticEvents(tagged = true) {
+            "body" {
+                "h2" {
+                    "a"("id" to "sec2") { }
+                    +"Section 2"
+                }
+                "p" { "a"("href" to "#sec2") { +"back" } }
+            }
+        }
+
+        // when
+        val html = input.simplifyHtml(keepFragmentTargets = true).renderHtml()
+
+        // then
+        html sameAsHtml """
+            <h2>
+              <a id="sec2"></a>Section 2
+            </h2>
+            <p>
+              <a href="#sec2">back</a>
+            </p>
+        """.trimIndent()
     }
 
     @Test
