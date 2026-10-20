@@ -1319,6 +1319,63 @@ class HtmlToMarkdownTest {
     }
 
     @Test
+    fun `should keep the space at the leading edge of a link`() = runTest {
+        // given — issue #144
+        val page = semanticEvents(tagged = true) {
+            "p" { +"Menu"; "a"("href" to "/x") { +" Home" } }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then
+        markdown sameAs "Menu [Home](/x)"
+    }
+
+    @Test
+    fun `should keep the gap of an invisible element at the leading edge of a link`() = runTest {
+        // given — issue #144: the gap applyAccessibility writes for the hidden
+        // icon (#111) lands inside the link, at its leading edge
+        val page = semanticEvents(tagged = true) {
+            "p"(AccessibilityAnnotations.DISPLAY to "block") {
+                +"Menu"
+                "a"("href" to "/x", AccessibilityAnnotations.DISPLAY to "inline") {
+                    "span"(
+                        AccessibilityAnnotations.DISPLAY to "inline",
+                        AccessibilityAnnotations.VISIBILITY to "hidden"
+                    ) { +"icon" }
+                    +"Home"
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown(refMode = RefMode.STRIP).renderMarkdown()
+
+        // then
+        markdown sameAs "Menu [Home](/x)"
+    }
+
+    @Test
+    fun `should keep the space at the start of kept emphasis in a flex item`() = runTest {
+        // given — issue #169: the space is inside the <b>, after its opening tag
+        val page = semanticEvents(tagged = true) {
+            "div"(AccessibilityAnnotations.DISPLAY to "flex") {
+                "div"(AccessibilityAnnotations.DISPLAY to "block") { +"Pro" }
+                "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                    "b"(AccessibilityAnnotations.DISPLAY to "inline") { +" teams" }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then
+        markdown sameAs "Pro **teams**"
+    }
+
+    @Test
     fun `should not glue the words around a dropped invisible element`() = runTest {
         // given — issue #111: `visibility:hidden` keeps the element's box, so
         // the browser shows a gap where the hidden text was

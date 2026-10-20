@@ -69,6 +69,86 @@ class HtmlWhitespaceNormalizationTest {
     }
 
     @Test
+    fun `should move a leading space out of an inline open`() = runTest {
+        // given — issue #144: `Menu<a> Home</a>` reads "Menu Home" in a browser
+        val input = semanticEvents(tagged = true) {
+            "p" { +"Menu"; "a"("href" to "/x") { +" Home" } }
+        }
+
+        // when
+        val output = input.dropHtmlStructuralWhitespace()
+
+        // then — the space lands before the open, where a Markdown link label
+        // and an opening emphasis delimiter need it
+        output sameAs semanticEvents(tagged = true) {
+            "p" { +"Menu "; "a"("href" to "/x") { +"Home" } }
+        }
+    }
+
+    @Test
+    fun `should move a leading space out of nested inline opens`() = runTest {
+        // given — the space after two opening tags, as its own text event
+        val input = semanticEvents(tagged = true) {
+            "p" { +"Menu"; "b" { "a"("href" to "/x") { +" "; +"Home" } } }
+        }
+
+        // when
+        val output = input.dropHtmlStructuralWhitespace()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "p" { +"Menu "; "b" { "a"("href" to "/x") { +"Home" } } }
+        }
+    }
+
+    @Test
+    fun `should keep the space after an image at the leading edge of an inline element`() = runTest {
+        // given — an image is content, not an opening tag to hold: the space
+        // after it separates it from the text that follows
+        val input = semanticEvents(tagged = true) {
+            "p" { +"Logo"; "b" { +" "; "img"("alt" to "x") { }; +" text" } }
+        }
+
+        // when
+        val output = input.dropHtmlStructuralWhitespace()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "p" { +"Logo "; "b" { "img"("alt" to "x") { }; +" text" } }
+        }
+    }
+
+    @Test
+    fun `should drop a leading space inside an inline open at a block boundary`() = runTest {
+        // given — nothing before the link to separate it from
+        val input = semanticEvents(tagged = true) {
+            "p" { "a"("href" to "/x") { +" Home" } }
+        }
+
+        // when
+        val output = input.dropHtmlStructuralWhitespace()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "p" { "a"("href" to "/x") { +"Home" } }
+        }
+    }
+
+    @Test
+    fun `should keep a leading space inside an inline code region`() = runTest {
+        // given — whitespace in a tagged <code> is significant
+        val input = semanticEvents(tagged = true) {
+            "p" { +"Run"; "code" { +" x" } }
+        }
+
+        // when
+        val output = input.dropHtmlStructuralWhitespace()
+
+        // then
+        output sameAs input
+    }
+
+    @Test
     fun `should drop a space carried past an inline close at a block boundary`() = runTest {
         // given
         val input = semanticEvents(tagged = true) {

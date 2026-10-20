@@ -19,6 +19,7 @@ package com.xemantic.markanywhere.html
 import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.dump.AccessibilityAnnotations
 import com.xemantic.markanywhere.flow.mergeAdjacentText
+import com.xemantic.markanywhere.html.spec.HTML_VOID_ELEMENTS
 import com.xemantic.markanywhere.html.spec.isHtmlBlank
 import com.xemantic.markanywhere.html.spec.isHtmlWhitespace
 import com.xemantic.markanywhere.html.spec.stripAndCollapseHtmlWhitespace
@@ -48,7 +49,10 @@ import kotlinx.coroutines.flow.flow
  *   `</a> <a>` → `</a>` `" "` `<a>` rather than the two links running together,
  *   and the interior runs of `A\n\t\tB` collapse to `A B`. A run right before
  *   an inline *closing* tag is carried past it (`<b>Note: </b>text` →
- *   `<b>Note:</b>` `" text"`), where a Markdown closing delimiter needs it.
+ *   `<b>Note:</b>` `" text"`), where a Markdown closing delimiter needs it;
+ *   symmetrically, a run right after inline *opening* tags that follow
+ *   content is moved before them (`Menu<a> Home</a>` → `"Menu "` `<a>`
+ *   `"Home"`), where a link label or an opening delimiter needs it.
  *
  * The asymmetry mirrors HTML: a closing inline tag or non-whitespace text can
  * be the *left* side of a kept space (content just ended), and an opening inline
@@ -84,6 +88,14 @@ public fun Flow<SemanticEvent>.dropHtmlStructuralWhitespace(): Flow<SemanticEven
     // back its open-tag verdict — Unmark carries no attributes).
     val inlineStack = ArrayDeque<Boolean>()
     val displays = CapturedDisplayReader()
+    // The inline opening tags since the last content, held until the next
+    // event decides whether a whitespace run right after them (`Menu<a> Home`)
+    // separates the content before them from the content inside: such a run
+    // is written *before* the tags, where a Markdown link label or an opening
+    // emphasis delimiter needs it (issue #144). Only opening tags are held,
+    // never content.
+    val heldOpens = mutableListOf<SemanticEvent>()
+    var leftBeforeHeld = false // could the content before the held tags be a left side?
 
     // Resolve a buffered whitespace run now that its right neighbour is known:
     // keep a single collapsed space if inline content flanks both sides, else
@@ -93,6 +105,18 @@ public fun Flow<SemanticEvent>.dropHtmlStructuralWhitespace(): Flow<SemanticEven
             if (leftQualifies && rightQualifies) emit(SemanticEvent.Text(" "))
             pending = false
         }
+    }
+
+    // Writes the held opening tags, preceded by the whitespace run that
+    // followed them when inline content flanks the run on both sides.
+    suspend fun releaseHeldOpens(rightQualifies: Boolean) {
+        if (heldOpens.isEmpty()) return
+        if (pending) {
+            if (leftBeforeHeld && rightQualifies) emit(SemanticEvent.Text(" "))
+            pending = false
+        }
+        heldOpens.forEach { emit(it) }
+        heldOpens.clear()
     }
 
     collect { event ->
@@ -112,6 +136,7 @@ public fun Flow<SemanticEvent>.dropHtmlStructuralWhitespace(): Flow<SemanticEven
                     // other whitespace run (kept as a space only between inline
                     // content, dropped at a block boundary).
                     if (event.text.first().isHtmlWhitespace()) pending = true
+                    releaseHeldOpens(rightQualifies = true)
                     resolvePending(rightQualifies = true)
                     emit(SemanticEvent.Text(event.text.stripAndCollapseHtmlWhitespace()))
                     leftQualifies = true
@@ -121,24 +146,45 @@ public fun Flow<SemanticEvent>.dropHtmlStructuralWhitespace(): Flow<SemanticEven
 
             is Mark -> {
                 val inline = event.isInlineLevel(displays.open(event))
-                resolvePending(rightQualifies = inline)
+                val opensPreserve = preserveFrom < 0 && event.isPreserveRegion()
                 // Strip the display annotation we consumed (and the capture
                 // format saying how to read it) so it can't leak into the
                 // rendered output.
-                emit(
-                    if (CONSUMED_ANNOTATIONS.any { it in event.attributes })
-                        event.copy(attributes = event.attributes - CONSUMED_ANNOTATIONS)
-                    else event
-                )
+                val stripped = if (CONSUMED_ANNOTATIONS.any { it in event.attributes })
+                    event.copy(attributes = event.attributes - CONSUMED_ANNOTATIONS)
+                else event
+                // A void element (`<img>`) is content, not a tag to hold.
+                if (inline && !opensPreserve && preserveFrom < 0 && event.name !in HTML_VOID_ELEMENTS) {
+                    if (heldOpens.isEmpty()) {
+                        // A run before the first tag already separates: the
+                        // content before the tags ends in a space now.
+                        val separated = pending && leftQualifies
+                        resolvePending(rightQualifies = true)
+                        leftBeforeHeld = leftQualifies && !separated
+                    }
+                    heldOpens += stripped
+                } else {
+                    // A run after held tags and before an image or a preserve
+                    // region's opening tag (`Run<b> <code>`) still separates
+                    // content; one before a block's touches a block boundary.
+                    releaseHeldOpens(rightQualifies = inline)
+                    resolvePending(rightQualifies = inline)
+                    emit(stripped)
+                }
                 depth++
                 inlineStack.addLast(inline)
-                if (preserveFrom < 0 && event.isPreserveRegion()) {
+                if (opensPreserve) {
                     preserveFrom = depth
                 }
                 leftQualifies = false // an opening tag is not the end of content
             }
 
             is Unmark -> {
+                // An empty inline element (`<b> </b>`) is written as it was.
+                if (heldOpens.isNotEmpty()) {
+                    heldOpens.forEach { emit(it) }
+                    heldOpens.clear()
+                }
                 displays.close()
                 if (depth == preserveFrom) preserveFrom = -1
                 depth--
@@ -160,6 +206,7 @@ public fun Flow<SemanticEvent>.dropHtmlStructuralWhitespace(): Flow<SemanticEven
             }
         }
     }
+    heldOpens.forEach { emit(it) }
     // End-of-stream (a block boundary): any trailing whitespace run is dropped.
 }.mergeAdjacentText()
 
