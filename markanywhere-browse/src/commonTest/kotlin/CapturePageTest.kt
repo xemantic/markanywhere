@@ -937,6 +937,154 @@ class CapturePageTest {
     }
 
     /**
+     * A snapshot without `optionSelected` leaves the selection to the markup,
+     * read as the browser reads it: a single-choice select (no `multiple`, a
+     * `size` of at most 1) selects the last option marked `selected`, else
+     * its first option that is not disabled — itself or through its
+     * `<optgroup>` — which a secret select then reports `filled`, since that
+     * is the value the form submits. A list box selects only what the markup
+     * marks. Issue #131.
+     */
+    @Test
+    fun `should select the first enabled option of a single select when the snapshot omits selection`() = runTest {
+        // given
+        val strings = mutableListOf<String>()
+        fun string(value: String): Int =
+            strings.indexOf(value).takeIf { it >= 0 } ?: strings.size.also { strings += value }
+        fun attributes(vararg pairs: Pair<String, String>): List<Int> =
+            pairs.flatMap { (name, value) -> listOf(string(name), string(value)) }
+
+        val names = listOf(
+            "HTML", "BODY",
+            "SELECT", "OPTION", "OPTION", "OPTION",
+            "SELECT", "OPTGROUP", "OPTION", "OPTION",
+            "SELECT", "OPTION", "OPTION", "OPTION",
+            "SELECT", "OPTION",
+            "SELECT", "OPTION",
+            "SELECT", "OPTION",
+        )
+        val snapshot = DOMSnapshot.CaptureSnapshotReturn(
+            documents = listOf(
+                document(
+                    nodeType = names.map { 1 },
+                    nodeName = names.map(::string),
+                    parentIndex = listOf(
+                        -1, 0,
+                        1, 2, 2, 2,
+                        1, 6, 7, 6,
+                        1, 10, 10, 10,
+                        1, 14,
+                        1, 16,
+                        1, 18,
+                    ),
+                    backendNodeId = names.indices.map { it + 1 },
+                    attributes = listOf(
+                        emptyList(),
+                        emptyList(),
+                        attributes("autocomplete" to "cc-exp-month"),
+                        attributes("value" to "", "disabled" to ""),
+                        attributes("value" to "01"),
+                        attributes("value" to "02"),
+                        emptyList(),
+                        attributes("label" to "Off", "disabled" to ""),
+                        attributes("value" to "a"),
+                        attributes("value" to "b"),
+                        emptyList(),
+                        attributes("value" to "c", "selected" to ""),
+                        attributes("value" to "d", "selected" to ""),
+                        attributes("value" to "e"),
+                        attributes("multiple" to ""),
+                        attributes("value" to "f"),
+                        attributes("size" to "3"),
+                        attributes("value" to "g"),
+                        attributes("size" to " +1"),
+                        attributes("value" to "h"),
+                    ),
+                    optionSelected = null,
+                    layoutNodeIndex = names.indices.toList(),
+                    layoutStyles = names.map {
+                        listOf("block", "visible", "none").map(::string)
+                    },
+                ),
+            ),
+            strings = strings,
+        )
+
+        // when
+        val events = captureEvents(
+            snapshot = snapshot,
+            axNodes = emptyList(),
+            refAttribute = null,
+            isActionable = { false },
+        ).events
+
+        // then
+        events.asFlow() sameAs semanticEvents(tagged = true) {
+            "html"(DISPLAY to "block", CAPTURE to "layout-3") {
+                "body"(DISPLAY to "block") {
+                    "select"("autocomplete" to "cc-exp-month", REDACTED to "filled", DISPLAY to "block") {
+                        "option"("value" to "", "disabled" to "", DISPLAY to "block") { }
+                        "option"("value" to "01", DISPLAY to "block") { }
+                        "option"("value" to "02", DISPLAY to "block") { }
+                    }
+                    "select"(DISPLAY to "block") {
+                        "optgroup"("label" to "Off", "disabled" to "", DISPLAY to "block") {
+                            "option"("value" to "a", DISPLAY to "block") { }
+                        }
+                        "option"("value" to "b", "selected" to "", DISPLAY to "block") { }
+                    }
+                    "select"(DISPLAY to "block") {
+                        "option"("value" to "c", DISPLAY to "block") { }
+                        "option"("value" to "d", "selected" to "", DISPLAY to "block") { }
+                        "option"("value" to "e", DISPLAY to "block") { }
+                    }
+                    "select"("multiple" to "", DISPLAY to "block") {
+                        "option"("value" to "f", DISPLAY to "block") { }
+                    }
+                    "select"("size" to "3", DISPLAY to "block") {
+                        "option"("value" to "g", DISPLAY to "block") { }
+                    }
+                    "select"("size" to " +1", DISPLAY to "block") {
+                        "option"("value" to "h", "selected" to "", DISPLAY to "block") { }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * The option a single secret select selects implicitly is its secret as
+     * much as one the snapshot reports selected, so it is taken out of a name
+     * too when the snapshot omits `optionSelected`. Issue #131.
+     */
+    @Test
+    fun `should take the implicitly selected option of a secret select out of a name`() = runTest {
+        // given
+        val page = NamedNodes(
+            Node("SELECT", parent = 1, attributes = mapOf("autocomplete" to "cc-exp-month")),
+            Node("OPTION", parent = 2, laidOut = false),
+            Node("#text", parent = 3, text = "March"),
+            Node("OPTION", parent = 2, laidOut = false),
+            Node("#text", parent = 5, text = "April"),
+            Node("BUTTON", parent = 1, attributes = mapOf("aria-labelledby" to "x")),
+            reportsSelection = false,
+        )
+        val axNames = mapOf(7 to "Expires March")
+
+        // when
+        val events = page.capture(axNames)
+
+        // then
+        events sameAs page.expected {
+            "select"("autocomplete" to "cc-exp-month", REDACTED to "filled", DISPLAY to "block") {
+                "option"(DISPLAY to "none") { +"March" }
+                "option"(DISPLAY to "none") { +"April" }
+            }
+            "button"("aria-labelledby" to "x", DISPLAY to "block", "aria-label" to "Expires") { }
+        }
+    }
+
+    /**
      * Blink names a date, time or number control from the value it displays,
      * formatted in the browser's locale — `May 2027` for `2027-05`, `987,50`
      * for `987.50`, in whatever digits the locale writes — so the value string
@@ -1526,8 +1674,12 @@ class CapturePageTest {
         val textSecurityReported: Boolean = true,
     )
 
-    /** A one-document snapshot of [nodes], every element laid out as a block unless told otherwise. */
-    private inner class NamedNodes(vararg nodes: Node) {
+    /**
+     * A one-document snapshot of [nodes], every element laid out as a block
+     * unless told otherwise, reporting `optionSelected` only when
+     * [reportsSelection].
+     */
+    private inner class NamedNodes(vararg nodes: Node, private val reportsSelection: Boolean = true) {
 
         private val nodes = listOf(Node("HTML", parent = -1), Node("BODY", parent = 0)) + nodes
 
@@ -1612,7 +1764,7 @@ class CapturePageTest {
                             index = values,
                             value = values.map { string(nodes[it].value!!) }
                         ),
-                        optionSelected = DOMSnapshot.RareBooleanData(index = selected),
+                        optionSelected = if (reportsSelection) DOMSnapshot.RareBooleanData(index = selected) else null,
                         layoutNodeIndex = laidOut,
                         layoutStyles = laidOut.map {
                             val node = nodes[it]
