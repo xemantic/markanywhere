@@ -616,8 +616,11 @@ internal class SnapshotDom(
      * form submits that implicit choice, so a secret select left on it is
      * `filled`.
      *
-     * Only for judging a secret select: the options of a capture keep their
-     * markup `selected` when the snapshot did not read the selection.
+     * It stands in for the unread selection only in a `<select>`'s
+     * [selectedValue], computed for every select but recorded only as a
+     * secret select's `filled` / `empty` marker: the options of a capture
+     * keep their markup `selected`, and a secret select lends every option
+     * as a secret (see [secretTextsOf]), the markup bounding no live choice.
      */
     private fun markupSelection(select: Int): Set<Int> = markupSelections.getOrPut(select) {
         val options = options(select).toList()
@@ -860,19 +863,21 @@ internal class SnapshotDom(
 
     /**
      * The [secretValueTexts] of a redacted control — of a `<select>`, those of
-     * its options, which hold its secret: which one is chosen.
+     * its options, which hold its secret: which one is chosen. When the
+     * snapshot did not read the selection, every option is lent, any of them
+     * possibly the one chosen.
      */
     private fun secretTextsOf(index: Int): List<String> = when (val name = name(index)) {
         "select" -> {
             val select = attributeMap(index)
-            // selected as the browser selected it, the implicit choice included,
-            // so the option a secret select submits is a secret however it was read
+            // With the selection unread, every option counts as chosen: the markup
+            // cannot bound what the user picked, so the capture fails closed.
             options(index)
                 .flatMap { option ->
                     secretValueTexts(
                         "option",
                         attributeMap(option),
-                        optionState(option, select, selected = isSelected(option, index), withText = true)
+                        optionState(option, select, selected = selectedOptions?.let { option in it } ?: true, withText = true)
                     )
                 }
                 .toList()

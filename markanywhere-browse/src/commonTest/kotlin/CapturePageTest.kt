@@ -1092,8 +1092,9 @@ class CapturePageTest {
 
     /**
      * The option a single secret select selects implicitly is its secret as
-     * much as one the snapshot reports selected, so it is taken out of a name
-     * too when the snapshot omits `optionSelected`. Issue #131.
+     * much as one the snapshot reports selected — and with the selection
+     * unread any other option may be the one chosen — so every option is
+     * taken out of a name when the snapshot omits `optionSelected`. Issue #131.
      */
     @Test
     fun `should take the implicitly selected option of a secret select out of a name`() = runTest {
@@ -1105,9 +1106,10 @@ class CapturePageTest {
             Node("OPTION", parent = 2, laidOut = false),
             Node("#text", parent = 5, text = "April"),
             Node("BUTTON", parent = 1, attributes = mapOf("aria-labelledby" to "x")),
+            Node("BUTTON", parent = 1, attributes = mapOf("aria-labelledby" to "y")),
             reportsSelection = false,
         )
-        val axNames = mapOf(7 to "Expires March")
+        val axNames = mapOf(7 to "Expires March", 8 to "Expires April")
 
         // when
         val events = page.capture(axNames)
@@ -1119,6 +1121,46 @@ class CapturePageTest {
                 "option"(DISPLAY to "none") { +"April" }
             }
             "button"("aria-labelledby" to "x", DISPLAY to "block", "aria-label" to "Expires") { }
+            "button"("aria-labelledby" to "y", DISPLAY to "block", "aria-label" to "Expires") { }
+        }
+    }
+
+    /**
+     * With the selection unread the markup cannot tell which option the user
+     * picked: not the last one marked `selected`, which is what the markup
+     * selects, nor any marked one at all. So a secret select lends every
+     * option — marked or not — to be taken out of a name, while its marker
+     * still follows the markup's selection. Issue #131.
+     */
+    @Test
+    fun `should take every option of a secret select out of a name when the snapshot omits selection`() = runTest {
+        // given
+        val page = NamedNodes(
+            Node("SELECT", parent = 1, attributes = mapOf("autocomplete" to "cc-exp-month")),
+            Node("OPTION", parent = 2, laidOut = false, attributes = mapOf("selected" to "")),
+            Node("#text", parent = 3, text = "March"),
+            Node("OPTION", parent = 2, laidOut = false, attributes = mapOf("selected" to "", "value" to "05")),
+            Node("#text", parent = 5, text = "May"),
+            Node("OPTION", parent = 2, laidOut = false, attributes = mapOf("value" to "06", "label" to "Jun")),
+            Node("#text", parent = 7, text = "June"),
+            Node("BUTTON", parent = 1, attributes = mapOf("aria-labelledby" to "x")),
+            Node("BUTTON", parent = 1, attributes = mapOf("aria-labelledby" to "y")),
+            reportsSelection = false,
+        )
+        val axNames = mapOf(9 to "Expires March", 10 to "Expires Jun or June")
+
+        // when
+        val events = page.capture(axNames)
+
+        // then
+        events sameAs page.expected {
+            "select"("autocomplete" to "cc-exp-month", REDACTED to "filled", DISPLAY to "block") {
+                "option"(DISPLAY to "none") { +"March" }
+                "option"("value" to "05", DISPLAY to "none") { +"May" }
+                "option"("value" to "06", "label" to "Jun", DISPLAY to "none") { +"June" }
+            }
+            "button"("aria-labelledby" to "x", DISPLAY to "block", "aria-label" to "Expires") { }
+            "button"("aria-labelledby" to "y", DISPLAY to "block", "aria-label" to "Expires or") { }
         }
     }
 
