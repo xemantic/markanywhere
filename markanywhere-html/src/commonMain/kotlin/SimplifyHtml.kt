@@ -95,9 +95,10 @@ import kotlinx.coroutines.flow.onEach
  *   - `a` — `href`, `title`, `id`; an `a` with no `href` at all is a
  *     placeholder, not a link (HTML §4.5.1), and is unwrapped unless the
  *     capture found it actionable (it carries a kept ref, and stays a link for
- *     [encodeActionableRefs] to fold the ref into) or a caller keep-attribute
- *     promotes it (kept as a tag, not a Markdown link). An empty `href=""`
- *     names the current document and stays a link.
+ *     [encodeActionableRefs] to fold the ref into), it is a named-anchor
+ *     target (an `id` or `name`, kept with `title` as a tag) or a caller
+ *     keep-attribute promotes it (kept as a tag, not a Markdown link). An
+ *     empty `href=""` names the current document and stays a link.
  *   - `img` — `src`, `alt`, `title`, `id`
  *   - `code` — `class` (language hint), `id`
  *   - `ol` — `start`, `id`
@@ -408,9 +409,11 @@ private fun Flow<SemanticEvent>.simplifyHtmlRules(
             // destination (`[more](ref:5:)`) and the reader can still act on it.
             AccessibilityAnnotations.REF in kept ->
                 preserve("a", preserveAttrs(event, "title", "id")) { children() }
-            // Kept for a caller's attribute, like an unwrapped `<span>` is — as a
+            // Kept for a caller's attribute, like an unwrapped `<span>` is, or
+            // as a fragment target a `#name` link elsewhere points at — as a
             // tag, since a Markdown link would claim a destination there is none.
-            promotes(kept) -> tag("a", preserveAttrs(event, "title", "id")) { children() }
+            promotes(kept) || event.isFragmentTarget() ->
+                tag("a", preserveAttrs(event, "title", "id", "name")) { children() }
             // Otherwise it is no link at all (tag lists, scripting hooks): only
             // its content survives.
             else -> children()
@@ -849,6 +852,15 @@ internal fun Map<String, String>.carriesContentAttribute(): Boolean =
  * document and is a real, if useless, link.
  */
 internal fun SemanticEvent.Mark.isHyperlink(): Boolean = "href" in attributes
+
+/**
+ * Whether this placeholder `<a>` is a named-anchor target: fragment navigation
+ * resolves a `#name` against an element's `id` and, for an `<a>` alone, its
+ * `name` (HTML "find a potential indicated element") — so unwrapping it would
+ * orphan every link to it (issue #138).
+ */
+private fun SemanticEvent.Mark.isFragmentTarget(): Boolean =
+    !this["id"].isNullOrEmpty() || !this["name"].isNullOrEmpty()
 
 // The short LLM-facing name of [AccessibilityAnnotations.REDACTED] on a form
 // control whose secret value the capture left out (`filled` / `empty`).
