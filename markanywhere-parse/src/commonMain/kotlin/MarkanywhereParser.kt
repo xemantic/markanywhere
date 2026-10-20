@@ -529,6 +529,9 @@ private val TOGGLE_DELIMITERS = setOf('~', '=', '^')
  */
 private val ESCAPE_HELD_RUNS = setOf("*", "**", "***", "_", "__", "___", "~~", "==")
 
+// The buffered runs that toggle a `del` / `mark` span.
+private val SPAN_TOGGLE_RUNS = setOf("~", "~~", "==")
+
 /**
  * GFM §6.8 URI-autolink validation: scheme `[A-Za-z][A-Za-z0-9+.-]{1,31}`,
  * a `:`, then any chars except space, ASCII control, `<`, `>`. Backslash
@@ -6351,6 +6354,15 @@ private class ParserState(
             // before a `*` would never close. An *opening* run keeps its original
             // position below (literal before `` ` ``/`*`, etc.).
             isPendingSpanCloser() && char != inlineBuffer[0] -> {
+                val run = inlineBuffer.toString()
+                inlineBuffer.clear()
+                toggleInlineSpan(if (run[0] == '~') "del" else "mark", run[0], run, runPrevChar)
+                pendingDeferredChar = char
+            }
+            // A `~`/`~~`/`==` run before a code span or an emphasis run toggles
+            // like one before a letter (`~~**a**~~`, `~~`a`~~`, issue #133) —
+            // the branches below would flush it as literal text first.
+            (char == '`' || char == '*') && inlineBuffer.toString() in SPAN_TOGGLE_RUNS -> {
                 val run = inlineBuffer.toString()
                 inlineBuffer.clear()
                 toggleInlineSpan(if (run[0] == '~') "del" else "mark", run[0], run, runPrevChar)

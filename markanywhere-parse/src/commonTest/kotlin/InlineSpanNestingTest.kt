@@ -854,6 +854,74 @@ class InlineSpanNestingTest {
         }
     }
 
+    // A span opening on code or emphasis — the renderer writes `~~`a`~~` for a
+    // del wrapping code — must open like one opening on a letter (issue #133).
+
+    @Test
+    fun `should open a del whose run is followed by inline code`() = runTest {
+        // given
+        val textFlow = "~~`a~b`~~ c".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "del" { "code" { +"a~b" } }
+                +" c"
+            }
+        }
+    }
+
+    @Test
+    fun `should open a del whose run is followed by strong`() = runTest {
+        // given
+        val textFlow = "~~**a**~~".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "del" { "strong" { +"a" } }
+            }
+        }
+    }
+
+    @Test
+    fun `should open a mark whose run is followed by emphasis`() = runTest {
+        // given
+        val textFlow = "==*a*==".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "mark" { "em" { +"a" } }
+            }
+        }
+    }
+
+    @Test
+    fun `should open a mark whose run is followed by inline code`() = runTest {
+        // given
+        val textFlow = "==`a`==".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "mark" { "code" { +"a" } }
+            }
+        }
+    }
+
     @Test
     fun `should keep an equals pair before an underscore literal`() = runTest {
         // given
