@@ -82,14 +82,61 @@ class DropBlankInlineFormattingTest {
     }
 
     @Test
-    fun `should drop an element whose only content is whitespace`() = runTest {
+    fun `should drop an element whose only content is whitespace but keep the whitespace`() = runTest {
         // when
         val output = semanticEvents {
             "strong" { +"  \n " }
         }.dropBlankInlineFormatting()
 
+        // then — the whitespace separates the content around the element
+        // (`Hi<b> </b>there`, issue #144), which the whitespace normalizer
+        // decides on
+        output sameAs semanticEvents { +"  \n " }
+    }
+
+    @Test
+    fun `should keep the leading whitespace of a formatting element with content`() = runTest {
+        // given — issue #144: the element turns out non-empty, so the blank
+        // text it started with is its content
+        val input = semanticEvents {
+            "p" {
+                +"Run"
+                "strong" {
+                    +" "
+                    "img"("src" to "x.png", "alt" to "x") { }
+                }
+            }
+        }
+
+        // when
+        val output = input.dropBlankInlineFormatting()
+
         // then
-        output sameAs semanticEvents { }
+        output sameAs input
+    }
+
+    @Test
+    fun `should keep the whitespace of nested empty formatting elements in place`() = runTest {
+        // given — `Hi<em><b> </b></em>there`
+        val input = semanticEvents {
+            "p" {
+                +"Hi"
+                "em" { "strong" { +" " } }
+                +"there"
+            }
+        }
+
+        // when
+        val output = input.dropBlankInlineFormatting()
+
+        // then
+        output sameAs semanticEvents {
+            "p" {
+                +"Hi"
+                +" "
+                +"there"
+            }
+        }
     }
 
     @Test

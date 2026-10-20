@@ -1545,6 +1545,34 @@ class HtmlToMarkdownTest {
     }
 
     @Test
+    fun `should keep the space of an empty bold element`() = runTest {
+        // given — issue #144
+        val page = semanticEvents(tagged = true) {
+            "p" { +"Hi"; "b" { +" " }; +"there" }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then
+        markdown sameAs "Hi there"
+    }
+
+    @Test
+    fun `should keep the space at the leading edge of bold wrapping an image`() = runTest {
+        // given — issue #144
+        val page = semanticEvents(tagged = true) {
+            "p" { +"Run"; "b" { +" "; "img"("src" to "x.png", "alt" to "x") { } } }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then
+        markdown sameAs "Run **![x](x.png)**"
+    }
+
+    @Test
     fun `should keep the space at the leading edge of a link`() = runTest {
         // given — issue #144
         val page = semanticEvents(tagged = true) {
