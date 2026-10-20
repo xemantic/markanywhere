@@ -157,10 +157,12 @@ private class XmlDocumentReader(
     private var declarationLength = 0
 
     /**
-     * Consecutive `]` read in content, held back until the following character
-     * tells whether they end with the `]]>` content may not hold.
+     * Consecutive `]` read in content or in a CDATA section, held back until
+     * the following character tells whether they end with a `]]>` — the end of
+     * the section, or what content may not hold — and released by
+     * [releaseBrackets] wherever they turn out to be text.
      */
-    private var contentBrackets = 0
+    private var brackets = 0
 
     private var documentStart: DocumentStart = BYTE_ORDER_MARK_DUE
 
@@ -183,8 +185,8 @@ private class XmlDocumentReader(
     /** Whether the reference being read stands in an attribute value. */
     private var referenceInAttribute = false
 
-    /** Consecutive `-` of a comment, or `]` of a CDATA section. */
-    private var repeats = 0
+    /** Consecutive `-` of a comment. */
+    private var dashes = 0
 
     /** Whether the previous character of a processing instruction was `?`. */
     private var questionMark = false
@@ -327,12 +329,12 @@ private class XmlDocumentReader(
         return when (state) {
             // Whitespace outside every element needs judging until text has
             // content, after which the run is plain.
-            CONTENT -> if (contentBrackets != 0 || isOutsideElementsWhitespace()) {
+            CONTENT -> if (brackets != 0 || isOutsideElementsWhitespace()) {
                 start
             } else {
                 chunk.appendRun(start, text) { it.isOrdinaryText() }
             }
-            CDATA -> if (repeats != 0) {
+            CDATA -> if (brackets != 0) {
                 start
             } else {
                 chunk.appendRun(start, text) { it.isOrdinaryCharacterData() }.also { end ->
@@ -362,7 +364,7 @@ private class XmlDocumentReader(
      * the next `-`, unless one was just read.
      */
     private fun commentRunEnd(chunk: String, start: Int): Int =
-        if (repeats != 0) start else chunk.skipRun(start) { it != '-' && it.isXmlCharacter() }
+        if (dashes != 0) start else chunk.skipRun(start) { it != '-' && it.isXmlCharacter() }
 
     /**
      * Where the run of a processing instruction's characters which cannot end
@@ -380,10 +382,9 @@ private class XmlDocumentReader(
         // A high surrogate the document ends with is as unpaired as one
         // followed by any other character.
         if (highSurrogate != null) stop()
-        // The `]` held back in a CDATA section cut short were read as content
-        // as much as anything before them.
-        if (state == CDATA) repeat(repeats) { appendText(']') }
-        releaseContentBrackets()
+        // The `]` held back in content or in a CDATA section cut short were
+        // read as text as much as anything before them.
+        releaseBrackets()
         flushText()
         emitCompleted()
         collector.unmarkAll(open)
@@ -392,18 +393,18 @@ private class XmlDocumentReader(
     private fun process(char: Char) {
         when (state) {
             CONTENT -> when (char) {
-                ']' -> contentBrackets++
-                '>' -> if (contentBrackets >= 2) {
+                ']' -> brackets++
+                '>' -> if (brackets >= 2) {
                     // Only the last two brackets are the `]]>`.
-                    contentBrackets -= 2
-                    releaseContentBrackets()
+                    brackets -= 2
+                    releaseBrackets()
                     stop()
                 } else {
-                    releaseContentBrackets()
+                    releaseBrackets()
                     appendText(char)
                 }
                 else -> {
-                    releaseContentBrackets()
+                    releaseBrackets()
                     when (char) {
                         '<' -> startMarkup()
                         '&' -> startReference(inAttribute = false)
@@ -619,7 +620,7 @@ private class XmlDocumentReader(
         }
         declarationLength++
         if (declarationLength < declarationOpening.length) return
-        repeats = 0
+        dashes = 0
         if (declarationOpening == DOCTYPE_KEYWORD) return
         state = if (declarationOpening == COMMENT_DASHES) COMMENT else CDATA
     }
@@ -648,15 +649,15 @@ private class XmlDocumentReader(
      */
     private fun readCdata(char: Char) {
         when (char) {
-            ']' -> repeats++
-            '>' if repeats >= 2 -> {
-                repeat(repeats - 2) { appendCharacterData(']') }
-                repeats = 0
+            ']' -> brackets++
+            '>' if brackets >= 2 -> {
+                // Only the last two brackets are the `]]>`.
+                brackets -= 2
+                releaseBrackets()
                 state = CONTENT
             }
             else -> {
-                repeat(repeats) { appendCharacterData(']') }
-                repeats = 0
+                releaseBrackets()
                 if (char == '\r') {
                     appendCharacterData('\n')
                     skipLineFeed = true
@@ -690,20 +691,20 @@ private class XmlDocumentReader(
     }
 
     /**
-     * Follows a comment, counting its consecutive `-` in [repeats], up to the
+     * Follows a comment, counting its consecutive `-` in [dashes], up to the
      * `-->` which ends it — wherever the comment stands. Where [isChecked], a
      * `--` anywhere but in that `-->` stops the read, as XML requires; in the
      * internal subset, which is not checked, the first `-->` ends it.
      */
     private fun endsComment(char: Char, isChecked: Boolean): Boolean {
         when {
-            char == '>' && repeats >= 2 -> {
-                repeats = 0
+            char == '>' && dashes >= 2 -> {
+                dashes = 0
                 return true
             }
-            isChecked && repeats >= 2 -> stop()
-            char == '-' -> repeats++
-            else -> repeats = 0
+            isChecked && dashes >= 2 -> stop()
+            char == '-' -> dashes++
+            else -> dashes = 0
         }
         return false
     }
@@ -842,7 +843,7 @@ private class XmlDocumentReader(
             }
         }
         subsetOpeningLength = 0
-        repeats = 0
+        dashes = 0
         questionMark = false
         subsetMarkup = markup
         return true
@@ -950,10 +951,14 @@ private class XmlDocumentReader(
         }
     }
 
-    /** Appends the `]` held back in [contentBrackets], once they turn out to be text. */
-    private fun releaseContentBrackets() {
-        repeat(contentBrackets) { appendText(']') }
-        contentBrackets = 0
+    /**
+     * Appends the `]` held back in [brackets], once they turn out to be text —
+     * character data alike in content and in a CDATA section, a `]` being no
+     * whitespace which could be layout.
+     */
+    private fun releaseBrackets() {
+        repeat(brackets) { appendCharacterData(']') }
+        brackets = 0
     }
 
     private fun appendText(char: Char) {
