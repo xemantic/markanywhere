@@ -624,6 +624,97 @@ class HtmlToMarkdownTest {
     }
 
     @Test
+    fun `should break the stacked boxes inside a display contents wrapper into paragraphs`() = runTest {
+        // given — issue #154
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "div"(AccessibilityAnnotations.DISPLAY to "block") { +"X" }
+                "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                    +"Intro"
+                    "div"(AccessibilityAnnotations.DISPLAY to "contents") {
+                        "div"(AccessibilityAnnotations.DISPLAY to "block") { +"A" }
+                        "div"(AccessibilityAnnotations.DISPLAY to "block") { +"B" }
+                    }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            X
+
+            Intro
+
+            A
+
+            B
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should break the loose text after a formatting element displayed as a block`() = runTest {
+        // given — issue #154
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "div" {
+                    +"X"
+                    "strong"(AccessibilityAnnotations.DISPLAY to "block") { +"A" }
+                    +"tail"
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            X
+
+            **A**
+
+            tail
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should break the document a same-origin frame embeds into paragraphs`() = runTest {
+        // given — issue #154
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "p" { +"x" }
+                "iframe"("src" to "f") {
+                    "html" {
+                        "body" {
+                            "div" { +"A" }
+                            "div" { +"B" }
+                        }
+                    }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            x
+
+            <iframe src="f">
+
+            A
+
+            B
+
+            </iframe>
+        """.trimIndent()
+    }
+
+    @Test
     fun `should keep the cells of a CSS table row on one line`() = runTest {
         // given — a table laid out by CSS on divs, not a data table
         val page = semanticEvents(tagged = true) {
