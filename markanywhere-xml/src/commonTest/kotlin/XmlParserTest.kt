@@ -376,6 +376,27 @@ abstract class XmlParserTest {
     }
 
     @Test
+    fun `should parse a document split in two at any position`() = runTest {
+        // given — CDATA sections and attribute values holding every character
+        // their runs stop at
+        val xml = "<a b=\"x &amp; y\tz\r\n'\" c='\"q\"'><![CDATA[1 ]] ]x]>]<&\r\n2]]]>tail\r\n</a>"
+        val whole = parse(xml).toList()
+
+        (1 until xml.length).forEach { index ->
+            // when
+            val events = parser.parse(flowOf(xml.take(index), xml.drop(index)))
+                .mergeAdjacentText()
+                .toList()
+
+            // then
+            assert(events == whole)
+        }
+        whole.asFlow() sameAs semanticEvents(tagged = true) {
+            "a"("b" to "x & y z '", "c" to "\"q\"") { +"1 ]] ]x]>]<&\n2]tail\n" }
+        }
+    }
+
+    @Test
     fun `should parse a document delivered one character at a time`() = runTest {
         // given — far more chunks than any internal buffer holds, so a parser
         // bridging to a blocking reader has to survive back-pressure both ways
@@ -572,7 +593,9 @@ abstract class XmlParserTest {
             "<?a??>",
             "<?xml version=\"1.0\"?>",
             "<?XML version=\"1.0\"?>",
-            "]]>"
+            "]]>",
+            "<!-- x -- y -->",
+            "<!-- x --->"
         )
 
         markup.forEach { construct ->
@@ -718,6 +741,32 @@ abstract class XmlParserTest {
 
         // then
         assert(events.isEmpty())
+    }
+
+    @Test
+    fun `should skip an internal subset without checking what stands between its declarations`() = runTest {
+        // given — DTDs are not processed, so the subset is not checked: a quote
+        // outside a declaration opens no literal, and neither a target-less
+        // instruction nor a comment holding `--` stops the read there
+        val doctypes = listOf(
+            "<!DOCTYPE a [ \" ]>",
+            "<!DOCTYPE a [<!ENTITY e 'v'> ' ]>",
+            "<!DOCTYPE a [ x ]>",
+            "<!DOCTYPE a [% e;]>",
+            "<!DOCTYPE a [<??>]>",
+            "<!DOCTYPE a [<?xml version=\"1.0\"?>]>",
+            "<!DOCTYPE a [<!-- x -- y -->]>"
+        )
+
+        doctypes.forEach { doctype ->
+            // when
+            val events = parse("$doctype<a>text</a>")
+
+            // then
+            events sameAs semanticEvents(tagged = true) {
+                "a" { +"text" }
+            }
+        }
     }
 
     @Test

@@ -23,6 +23,7 @@ import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.flow.mergeAdjacentText
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.test.sameAs
+import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -86,7 +87,7 @@ class MarkanywhereXmlParserTest : XmlParserTest() {
     }
 
     @Test
-    fun `should keep whitespace continuing text outside any element across chunks`() = runTest {
+    fun `DIVERGENCE - should keep whitespace continuing text outside any element across chunks`() = runTest {
         // when — split right before the space, so that the chunk ending in
         // `foo` has already flushed it when the space arrives
         val beforeElement = parser.parse(flowOf("foo", " <a/>")).mergeAdjacentText()
@@ -103,7 +104,7 @@ class MarkanywhereXmlParserTest : XmlParserTest() {
     }
 
     @Test
-    fun `should drop whitespace between markup outside any element after text`() = runTest {
+    fun `DIVERGENCE - should drop whitespace between markup outside any element after text`() = runTest {
         // when — the line break after the comment stands between markup, like
         // the prolog's, although text was read before it
         val events = parse("x\n<!-- c -->\n<a/>\n<!-- d -->\n")
@@ -116,7 +117,7 @@ class MarkanywhereXmlParserTest : XmlParserTest() {
     }
 
     @Test
-    fun `should keep whitespace written as character data outside any element`() = runTest {
+    fun `DIVERGENCE - should keep whitespace written as character data outside any element`() = runTest {
         // when — a reference or a CDATA section is character data, not layout
         val events = parse("&#32;<a/><![CDATA[ ]]>")
 
@@ -129,20 +130,52 @@ class MarkanywhereXmlParserTest : XmlParserTest() {
     }
 
     @Test
-    fun `should drop whitespace after a CDATA section outside any element`() = runTest {
-        // when — the line break after the section stands between markup, as
-        // it would after a comment
-        val betweenElements = parse("<a/><![CDATA[]]>\n<b/>")
-        val atEnd = parse("<a/><![CDATA[x]]>\n")
+    fun `DIVERGENCE - should drop whitespace around an empty CDATA section outside any element`() = runTest {
+        // when — a section holding no character data stands between the line
+        // breaks as a comment would
+        val events = parse("<a/>\n<![CDATA[]]>\n<b/>")
 
         // then
-        betweenElements sameAs semanticEvents(tagged = true) {
+        events sameAs semanticEvents(tagged = true) {
             "a" { }
             "b" { }
         }
-        atEnd sameAs semanticEvents(tagged = true) {
-            "a" { }
-            +"x"
+    }
+
+    @Test
+    fun `DIVERGENCE - should read whitespace around character data outside any element however it is written`() = runTest {
+        // given — the same character written literally, as a reference and in
+        // a CDATA section: the whitespace around it continues the same text
+        val documents = listOf(
+            "<a/>\n \n<b/>",
+            "<a/>\n&#160;\n<b/>",
+            "<a/>\n<![CDATA[ ]]>\n<b/>"
+        )
+
+        documents.forEach { document ->
+            // when
+            val events = parse(document)
+
+            // then
+            events sameAs semanticEvents(tagged = true) {
+                "a" { }
+                +"\n \n"
+                "b" { }
+            }
+        }
+    }
+
+    @Test
+    fun `should stop at a high surrogate the document ends with`() = runTest {
+        // when — cut short or followed by more text, the unpaired half ends
+        // the read the same way
+        val truncated = parse("<a>x\uD83D").toList()
+        val followed = parse("<a>x\uD83Dy</a>").toList()
+
+        // then
+        assert(truncated == followed)
+        truncated.asFlow() sameAs semanticEvents(tagged = true) {
+            "a" { +"x" }
         }
     }
 
@@ -165,7 +198,7 @@ class MarkanywhereXmlParserTest : XmlParserTest() {
     }
 
     @Test
-    fun `should bound the whitespace held outside any element`() = runTest {
+    fun `DIVERGENCE - should bound the whitespace held outside any element`() = runTest {
         // when — only what follows the run tells whether it is layout
         val events = parse("<a/>" + " ".repeat(100_000) + "y").toList()
 
@@ -245,8 +278,8 @@ class MarkanywhereXmlParserTest : XmlParserTest() {
 
     @Test
     fun `should read a comment holding markup-like content`() = runTest {
-        // when — everything up to the first `-->` is comment, dashes included
-        val events = parse("<a><!-- <b/> & -- text --></a>")
+        // when — everything up to the `-->` is comment, a single dash included
+        val events = parse("<a><!-- <b/> & - text --></a>")
 
         // then
         events sameAs semanticEvents(tagged = true) {

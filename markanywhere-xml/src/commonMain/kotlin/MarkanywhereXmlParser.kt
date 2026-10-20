@@ -71,6 +71,8 @@ import kotlinx.coroutines.flow.takeWhile
  * - **Whitespace outside every element** is held only up to
  *   1024 characters; the rest of a longer run is dropped,
  *   whether it turns out to be layout or to precede a fragment's text.
+ *   Next to character data — however written: literally, as a reference or in
+ *   a CDATA section — it is that text's; between other markup, layout.
  */
 public class MarkanywhereXmlParser : XmlParser {
 
@@ -194,6 +196,9 @@ private class XmlDocumentReader(
     /** How many characters of a `<!--` or `<?` opener in the internal subset have been read. */
     private var subsetOpeningLength = 0
 
+    /** Whether the reader stands in a markup declaration of the internal subset, such as `<!ENTITY`. */
+    private var isInSubsetDeclaration = false
+
     /** Set by a carriage return, so that the line feed of a CRLF is not read twice. */
     private var skipLineFeed = false
 
@@ -215,10 +220,9 @@ private class XmlDocumentReader(
         var index = 0
         while (index < chunk.length) {
             if (isStopped) return
-            val textEnd = ordinaryTextEnd(chunk, index)
-            if (textEnd > index) {
-                text.appendRange(chunk, index, textEnd)
-                index = textEnd
+            val runEnd = readOrdinaryRun(chunk, index)
+            if (runEnd > index) {
+                index = runEnd
                 continue
             }
             val char = chunk[index++]
@@ -261,23 +265,37 @@ private class XmlDocumentReader(
     }
 
     /**
-     * Where the run of ordinary character data starting at [start] in [chunk]
-     * ends — [start] itself unless the reader stands in an element's content,
-     * where such a run can be appended whole rather than character by
-     * character. Ordinary is anything [process] would only append: no markup,
-     * reference or line end, and nothing [read] must check first.
+     * Appends the run of ordinary characters starting at [start] in [chunk]
+     * whole rather than character by character, returning where it ends —
+     * [start] itself where no such run can be taken. Ordinary is anything
+     * [process] would only append: in content, text which is no markup,
+     * reference or line end; in a CDATA section, anything but a `]` or a line
+     * end; in an attribute value, anything but its quote, a reference, a `<`
+     * or the whitespace normalized away — and never anything [read] must
+     * check first.
      */
-    private fun ordinaryTextEnd(chunk: String, start: Int): Int {
-        // Inside an element, whitespace needs no judging, so the run is plain.
-        if (
-            state != CONTENT || open.isEmpty() || skipLineFeed ||
-            highSurrogate != null || contentBrackets != 0
-        ) {
-            return start
+    private fun readOrdinaryRun(chunk: String, start: Int): Int {
+        if (skipLineFeed || highSurrogate != null) return start
+        return when (state) {
+            // Whitespace outside every element needs judging until text has
+            // content, after which the run is plain.
+            CONTENT -> if (contentBrackets != 0 || isOutsideElementsWhitespace()) {
+                start
+            } else {
+                chunk.appendRun(start, text) { it.isOrdinaryText() }
+            }
+            CDATA -> if (repeats != 0) {
+                start
+            } else {
+                chunk.appendRun(start, text) { it.isOrdinaryCharacterData() }.also { end ->
+                    if (end > start) textHasContent = true
+                }
+            }
+            ATTRIBUTE_VALUE -> chunk.appendRun(start, attributeValue) {
+                it != valueQuote && it.isOrdinaryAttributeValue()
+            }
+            else -> start
         }
-        var end = start
-        while (end < chunk.length && chunk[end].isOrdinaryText()) end++
-        return end
     }
 
     /**
@@ -286,6 +304,9 @@ private class XmlDocumentReader(
      * the input was.
      */
     suspend fun closeOpenElements() {
+        // A high surrogate the document ends with is as unpaired as one
+        // followed by any other character.
+        if (highSurrogate != null) stop()
         // The `]` held back in a CDATA section cut short were read as content
         // as much as anything before them.
         if (state == CDATA) repeat(repeats) { appendText(']') }
@@ -317,26 +338,30 @@ private class XmlDocumentReader(
                     }
                 }
             }
-            MARKUP -> when {
-                char == '/' -> {
-                    elementName.clear()
-                    state = END_TAG
+            MARKUP -> {
+                // Only a `<!` may yet turn out to be a CDATA section.
+                if (char != '!') endTextAtMarkup()
+                when {
+                    char == '/' -> {
+                        elementName.clear()
+                        state = END_TAG
+                    }
+                    char == '!' -> {
+                        declarationLength = 0
+                        state = DECLARATION
+                    }
+                    char == '?' -> {
+                        elementName.clear()
+                        state = INSTRUCTION_TARGET
+                    }
+                    char.isXmlNameStart() -> {
+                        elementName.clear()
+                        elementName.append(char)
+                        attributes.clear()
+                        state = START_TAG
+                    }
+                    else -> stop()
                 }
-                char == '!' -> {
-                    declarationLength = 0
-                    state = DECLARATION
-                }
-                char == '?' -> {
-                    elementName.clear()
-                    state = INSTRUCTION_TARGET
-                }
-                char.isXmlNameStart() -> {
-                    elementName.clear()
-                    elementName.append(char)
-                    attributes.clear()
-                    state = START_TAG
-                }
-                else -> stop()
             }
             START_TAG -> when {
                 char.isXmlNameChar() -> elementName.append(char)
@@ -426,7 +451,7 @@ private class XmlDocumentReader(
                 else -> stop()
             }
             DECLARATION -> readDeclaration(char)
-            COMMENT -> if (endsComment(char)) state = CONTENT
+            COMMENT -> if (endsComment(char, isChecked = true)) state = CONTENT
             CDATA -> readCdata(char)
             INSTRUCTION_TARGET -> readInstructionTarget(char)
             INSTRUCTION_END -> if (char == '>') state = CONTENT else stop()
@@ -498,6 +523,7 @@ private class XmlDocumentReader(
      */
     private suspend fun readDeclaration(char: Char) {
         if (declarationLength == 0) {
+            if (char != '[') endTextAtMarkup()
             declarationOpening = when {
                 char == '-' -> COMMENT_DASHES
                 char == '[' -> CDATA_OPENING
@@ -521,14 +547,7 @@ private class XmlDocumentReader(
         if (declarationLength < declarationOpening.length) return
         repeats = 0
         if (declarationOpening == DOCTYPE_KEYWORD) return
-        if (declarationOpening == COMMENT_DASHES) {
-            state = COMMENT
-        } else {
-            // Character data even where it is all whitespace, so never
-            // dropped as the layout outside every element.
-            textHasContent = true
-            state = CDATA
-        }
+        state = if (declarationOpening == COMMENT_DASHES) COMMENT else CDATA
     }
 
     private fun startDoctype() {
@@ -536,6 +555,7 @@ private class XmlDocumentReader(
         doctypeQuote = null
         subsetMarkup = null
         subsetOpeningLength = 0
+        isInSubsetDeclaration = false
         isDoctypeAllowed = false
         state = DOCTYPE
     }
@@ -547,26 +567,28 @@ private class XmlDocumentReader(
      * A `]` is held back until the following character tells whether it ends
      * the section or is content, which is what makes `]]]>` a `]` followed by
      * the end of the section.
+     *
+     * Outside every element the section continues the text around it, as a
+     * reference does: its characters are character data even where they are
+     * all whitespace, and so is the whitespace next to them.
      */
-    private suspend fun readCdata(char: Char) {
+    private fun readCdata(char: Char) {
         when {
             char == ']' -> repeats++
             char == '>' && repeats >= 2 -> {
-                repeat(repeats - 2) { appendText(']') }
+                repeat(repeats - 2) { appendCharacterData(']') }
                 repeats = 0
                 state = CONTENT
-                // Outside every element the section ends a piece of markup,
-                // so the whitespace after it is judged on its own, as it is
-                // after a comment.
-                if (open.isEmpty()) {
-                    flushText()
-                    textHasContent = false
-                }
             }
             else -> {
-                repeat(repeats) { appendText(']') }
+                repeat(repeats) { appendCharacterData(']') }
                 repeats = 0
-                if (char == '\r') appendLineFeed() else appendText(char)
+                if (char == '\r') {
+                    appendCharacterData('\n')
+                    skipLineFeed = true
+                } else {
+                    appendCharacterData(char)
+                }
             }
         }
     }
@@ -580,13 +602,14 @@ private class XmlDocumentReader(
      * Its terminating `>` is found rather than assumed: a system literal may
      * hold one, and so may the internal subset — whose comments and processing
      * instructions are skipped whole, since a quote, `]` or `>` inside one is
-     * neither a literal nor the end of anything. The declarations of the
-     * subset are not checked, as `StaxXmlParser`, with DTD support off, does
-     * not check them either.
+     * neither a literal nor the end of anything. Nothing else of the subset is
+     * checked — neither its declarations, nor what stands between them, nor
+     * the target of an instruction or the `--` of a comment in it — as
+     * `StaxXmlParser`, with DTD support off, does not check them either.
      */
     private suspend fun readDoctype(char: Char) {
         when (subsetMarkup) {
-            COMMENT -> if (endsComment(char)) subsetMarkup = null
+            COMMENT -> if (endsComment(char, isChecked = false)) subsetMarkup = null
             PROCESSING_INSTRUCTION -> if (endsInstruction(char)) subsetMarkup = null
             else -> readDoctypePart(char)
         }
@@ -594,15 +617,18 @@ private class XmlDocumentReader(
 
     /**
      * Follows a comment, counting its consecutive `-` in [repeats], up to the
-     * `-->` which ends it — wherever the comment stands.
+     * `-->` which ends it — wherever the comment stands. Where [isChecked], a
+     * `--` anywhere but in that `-->` stops the read, as XML requires; in the
+     * internal subset, which is not checked, the first `-->` ends it.
      */
-    private fun endsComment(char: Char): Boolean {
+    private suspend fun endsComment(char: Char, isChecked: Boolean): Boolean {
         when {
-            char == '-' -> repeats++
             char == '>' && repeats >= 2 -> {
                 repeats = 0
                 return true
             }
+            isChecked && repeats >= 2 -> stop()
+            char == '-' -> repeats++
             else -> repeats = 0
         }
         return false
@@ -702,6 +728,13 @@ private class XmlDocumentReader(
         }
     }
 
+    /**
+     * Skips the internal subset up to its `]`. Only within a markup
+     * declaration — a `<!` other than a comment, up to its `>` — can a quote
+     * open a literal, the one place the subset's grammar has one; a quote
+     * anywhere else is skipped like any other character, so that it cannot
+     * swallow the rest of the document.
+     */
     private fun readInternalSubset(char: Char) {
         val quote = doctypeQuote
         if (quote != null) {
@@ -710,14 +743,16 @@ private class XmlDocumentReader(
         }
         if (startsSubsetMarkup(char)) return
         when (char) {
-            '"', '\'' -> doctypeQuote = char
+            '"', '\'' -> if (isInSubsetDeclaration) doctypeQuote = char
+            '>' -> isInSubsetDeclaration = false
             ']' -> doctypePart = AFTER_INTERNAL_SUBSET
         }
     }
 
     /**
      * Follows a `<!--` or `<?` opener in the internal subset, entering the
-     * comment or processing instruction it starts once complete.
+     * comment or processing instruction it starts once complete. Any other
+     * `<!` opens a markup declaration.
      */
     private fun startsSubsetMarkup(char: Char): Boolean {
         if (char == '<') {
@@ -733,6 +768,7 @@ private class XmlDocumentReader(
                 COMMENT
             }
             else -> {
+                if (subsetOpeningLength >= 2) isInSubsetDeclaration = true
                 subsetOpeningLength = 0
                 return false
             }
@@ -776,20 +812,16 @@ private class XmlDocumentReader(
             state = ATTRIBUTE_VALUE
         } else {
             // A reference to whitespace is character data all the same.
-            textHasContent = true
-            resolved.forEach { appendText(it) }
+            resolved.forEach { appendCharacterData(it) }
             state = CONTENT
         }
     }
 
     private fun endAttribute() {
         val name = attributeName.toString()
-        val value = attributeValue.toString()
-        if (attributes.put(name, value) != null) {
-            // A repeated attribute is reported where the value kept was written.
-            attributes.remove(name)
-            attributes[name] = value
-        }
+        // A repeated attribute is reported where the value kept was written.
+        attributes.remove(name)
+        attributes[name] = attributeValue.toString()
         state = ATTRIBUTE_END
     }
 
@@ -828,18 +860,22 @@ private class XmlDocumentReader(
         state = CONTENT
     }
 
+    private fun startMarkup() {
+        markupOpensDocument = documentStart == OPENING
+        state = MARKUP
+    }
+
     /**
-     * Enters markup. Outside every element the text read so far ends here, so
-     * that the whitespace between this markup and the next is judged on its
-     * own — dropped as layout even after text a fragment carries.
+     * Called once the markup being entered is known to be no CDATA section.
+     * Outside every element the text read so far ends here, so that the
+     * whitespace between this markup and the next is judged on its own —
+     * dropped as layout even after text a fragment carries.
      */
-    private suspend fun startMarkup() {
+    private suspend fun endTextAtMarkup() {
         if (open.isEmpty()) {
             flushText()
             textHasContent = false
         }
-        markupOpensDocument = documentStart == OPENING
-        state = MARKUP
     }
 
     /** Appends the `]` held back in [contentBrackets], once they turn out to be text. */
@@ -854,6 +890,15 @@ private class XmlDocumentReader(
         } else {
             textHasContent = true
         }
+        text.append(char)
+    }
+
+    /**
+     * Appends a character written as character data — in a CDATA section or
+     * as a reference — which is never layout, even where it is whitespace.
+     */
+    private fun appendCharacterData(char: Char) {
+        textHasContent = true
         text.append(char)
     }
 
@@ -1040,6 +1085,38 @@ private fun Char.isXmlCharacter(): Boolean =
 private fun Char.isOrdinaryText(): Boolean =
     (this != '<') && (this != '&') && (this != '\r') && (this != ']') && (this != '>') &&
         isXmlCharacter()
+
+/**
+ * Whether this UTF-16 unit is one [XmlDocumentReader.process] would only append
+ * in a CDATA section — any [isXmlCharacter] but the `]` of a possible end and
+ * the carriage return read as a line feed.
+ */
+private fun Char.isOrdinaryCharacterData(): Boolean =
+    (this != ']') && (this != '\r') && isXmlCharacter()
+
+/**
+ * Whether this UTF-16 unit is one [XmlDocumentReader.process] would only append
+ * in an attribute value — any [isXmlCharacter] but a reference, a `<` and the
+ * whitespace normalized to a space; the closing quote is left to the caller.
+ */
+private fun Char.isOrdinaryAttributeValue(): Boolean =
+    (this != '&') && (this != '<') && (this != '\r') && (this != '\n') && (this != '\t') &&
+        isXmlCharacter()
+
+/**
+ * Appends to [target] the run of characters from [start] which are
+ * [isOrdinary], returning the index the run ends at.
+ */
+private inline fun String.appendRun(
+    start: Int,
+    target: StringBuilder,
+    isOrdinary: (Char) -> Boolean
+): Int {
+    var end = start
+    while (end < length && isOrdinary(this[end])) end++
+    target.appendRange(this, start, end)
+    return end
+}
 
 private fun Char.isAsciiDigit(): Boolean = this in '0'..'9'
 
