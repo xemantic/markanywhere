@@ -736,6 +736,41 @@ abstract class XmlParserTest {
     }
 
     @Test
+    fun `should read a DOCTYPE preceded by whitespace and comments and instructions`() = runTest {
+        // when — the only things XML allows before the doctype declaration
+        val events = parse("\n<!-- c -->\n<?pi x?>\n<!DOCTYPE a>\n<a>text</a>")
+
+        // then
+        events sameAs semanticEvents(tagged = true) {
+            "a" { +"text" }
+        }
+    }
+
+    @Test
+    fun `should stop at a DOCTYPE preceded by character data`() = runTest {
+        // given — text, a reference (even to whitespace) and a CDATA section
+        // are content, after which a DOCTYPE is as malformed as after an element
+        val prologs = listOf(
+            "junk",
+            "junk<!-- c -->",
+            "&#32;",
+            "<![CDATA[x]]>"
+        )
+
+        prologs.forEach { prolog ->
+            // when
+            val events = parse("$prolog<!DOCTYPE a [<!ENTITY x 'y'>]><a>text</a>").toList()
+
+            // then
+            events should {
+                have(markNames().isEmpty())
+                have("text" !in textContent())
+                have(isBalanced())
+            }
+        }
+    }
+
+    @Test
     fun `should stop reading a source which never ends at a quote opening no literal in a DOCTYPE`() = runTest {
         // given — the apostrophe must not be taken for a literal swallowing
         // everything after it
