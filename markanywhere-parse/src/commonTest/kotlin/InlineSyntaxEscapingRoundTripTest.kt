@@ -256,4 +256,135 @@ class InlineSyntaxEscapingRoundTripTest {
         assertMarkdownFixpoint(markdown)
     }
 
+    // --- #162: an inline-syntax char right after a closer -------------------
+
+    private suspend fun renderAfterCloser(text: String): String =
+        semanticEvents { "p" { "strong" { +"a:" }; +text } }.renderMarkdown()
+
+    @Test
+    fun `should escape a dollar after a closer`() = runTest {
+        // when
+        val markdown = renderAfterCloser($$"$b")
+        // then
+        markdown sameAs $$"""**a:**\$b"""
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should escape a tilde after a closer`() = runTest {
+        // when
+        val markdown = renderAfterCloser("~b")
+        // then
+        markdown sameAs """**a:**\~b"""
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should escape an underscore after a closer`() = runTest {
+        // when
+        val markdown = renderAfterCloser("_b")
+        // then
+        markdown sameAs """**a:**\_b"""
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should escape a caret after a closer`() = runTest {
+        // when
+        val markdown = renderAfterCloser("^b")
+        // then
+        markdown sameAs """**a:**\^b"""
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should escape a backtick after a closer`() = runTest {
+        // when
+        val markdown = renderAfterCloser("`b")
+        // then
+        markdown sameAs """**a:**\`b"""
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should escape an asterisk after a closer`() = runTest {
+        // when
+        val markdown = renderAfterCloser("*b")
+        // then
+        markdown sameAs """**a:**\*b"""
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should escape a backslash before punctuation after a closer`() = runTest {
+        // when
+        val markdown = renderAfterCloser("""\*b""")
+        // then
+        markdown sameAs """**a:**\\\*b"""
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should escape a less-than sign that would start a tag after a closer`() = runTest {
+        // when
+        val markdown = renderAfterCloser("<b>")
+        // then
+        markdown sameAs """**a:**\<b>"""
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should escape a less-than sign ending the content of a span`() = runTest {
+        // given — unescaped, the `<` starts inline-HTML speculation on
+        // re-parse that swallows the closer
+        val events = semanticEvents { "p" { "strong" { +"a<" }; +"b" } }
+        // when
+        val markdown = events.renderMarkdown()
+        // then
+        markdown sameAs """**a\<**&#98;"""
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should keep a less-than sign before a space unescaped`() = runTest {
+        assertMarkdownFixpoint("a < b")
+    }
+
+    @Test
+    fun `should keep a backslash before a letter unescaped`() = runTest {
+        assertMarkdownFixpoint("""C:\Users""")
+    }
+
+    @Test
+    fun `should round-trip an escaped backslash ending a paragraph`() = runTest {
+        assertMarkdownFixpoint("""a\\""")
+    }
+
+    @Test
+    fun `should round-trip an escaped backslash before an asterisk`() = runTest {
+        assertMarkdownFixpoint("""a \\* b""")
+    }
+
+    @Test
+    fun `should escape an asterisk that would open emphasis in plain text`() = runTest {
+        // given
+        val events = semanticEvents { "p" { +"*a* 2 * 3" } }
+        // when
+        val markdown = events.renderMarkdown()
+        // then
+        markdown sameAs """\*a* 2 * 3"""
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should escape an asterisk in image alt text`() = runTest {
+        // given
+        val events = semanticEvents { "p" { "img"("src" to "i.png", "alt" to "*a*") {} } }
+        // when
+        val markdown = events.renderMarkdown()
+        // then
+        markdown sameAs """![\*a*](i.png)"""
+        assertMarkdownFixpoint(markdown)
+    }
+
 }

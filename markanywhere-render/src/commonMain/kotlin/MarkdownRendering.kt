@@ -39,7 +39,9 @@ import kotlinx.coroutines.flow.flow
  * (cell content is held until the cell closes so the trailing ` |` lands
  * after it), and inline code spans (content is held until the close so the
  * backtick fence can be made longer than any internal backtick run). These
- * match the parser's own buffering constraints.
+ * match the parser's own buffering constraints. A text event ending in a char
+ * whose escaping depends on the char after it (`$b` is math, `$5` is not) is
+ * held for one event.
  *
  * Untagged events (Markdown-derived) are emitted using Markdown syntax —
  * headings as `#`-prefixed lines, emphasis as `*…*` / `**…**`, links as
@@ -462,27 +464,24 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         else 0
 
     // Escapes [text] written here, given [next], the char written right after
-    // it (see escapeInlineSyntax). A literal backtick is escaped inside a span
-    // or a label even where no other delimiter is: inside `<em>`/`<strong>`/…
-    // it eagerly opens an inline code span on re-parse that `flushInline`
-    // LIFO-closes *before* the emphasis (`<em>a`b</em>` →
-    // `<em>a<code>b</code></em>`, growing every round-trip); inside a link/image
-    // label it opens a code span that consumes the `]`/`(url)` so the link never
-    // forms (`*[a`b](u)*` — the outer em's `*` is excluded from the label mask,
-    // so mask is 0 yet the backtick must still be escaped). Suppressed in
-    // verbatim text (inVerbatimText), where a backslash is literal — real
-    // code-span *content* never gets here.
+    // it (see escapeInlineSyntax). Suppressed in verbatim text
+    // (inVerbatimText), where a backslash is literal — real code-span content
+    // never gets here.
     fun escapeInlineText(text: String, next: Char?): String {
         // Pre-scan so plain words return without the stack scans below.
         if (text.none { it in INLINE_SYNTAX_CHARS }) return text
         if (inVerbatimText()) return text
-        val mask = spanEscapeMask()
+        // The parser never opens an em (strong) while one is open, even outside
+        // the label the text is in, so `*x [a*b](u) y*` keeps its `*` as is.
+        val emOpen = blockStack.any { it is Inline && it.delimiter == "*" }
+        val strongOpen = blockStack.any { it is Inline && it.delimiter == "**" }
         return escapeInlineSyntax(
             text = text,
             before = prevWrittenChar(),
             next = next,
-            mask = mask,
-            backtick = mask != 0 || inLabel()
+            mask = spanEscapeMask(),
+            emOpen = emOpen,
+            strongOpen = strongOpen
         )
     }
 
@@ -1830,13 +1829,19 @@ private fun Char.isFlankPunctuation(): Boolean =
 // unknown — then a char is escaped whenever some next char could make it
 // syntax). Two layers:
 //  - every emphasis delimiter in [mask] (delimiterBit bits — all of them while
-//    a span is open, see spanEscapeMask), and a backtick when [backtick];
+//    a span is open, see spanEscapeMask);
 //  - anywhere, a char that opens a construct at its position: a tilde run not
 //    ending a line (#133), an `==` run not ending a line and every `^` (#135),
-//    a `$` before a math opener, an underscore run that can open emphasis by
-//    the parser's flanking rules (#133). A run right after its own char (a
-//    closer, or that char written escaped), or followed by its own char
-//    written next, would join that run, so it is escaped too.
+//    a `$` before a math opener (#133), every backtick, a `\` before a line
+//    end or a char it would escape that is inline syntax itself, a `<` before
+//    anything but whitespace (#162), and a `*` / `_` run that can open
+//    emphasis by the parser's flanking rules — unless the em ([emOpen]) or
+//    strong ([strongOpen]) it would open is open already. A run right after
+//    its own char (a closer, or that char written escaped), or followed by its
+//    own char written next, would join that run, so it is escaped too.
+// A `\` before other punctuation (`\-`) is left as is: re-parsed, it loses
+// the backslash, while escaping it would make it grow on every pass where
+// the text lands in an HTML block's raw text (an HTML block in a list item).
 // [brackets] also escapes `[` / `]`, for image alt text, where an unbalanced
 // one ends the description early.
 //
@@ -1849,12 +1854,23 @@ private fun Char.isFlankPunctuation(): Boolean =
 // lone `=` (a harmless `\=` in `<mark>x=5</mark>`) keeps the round-trip stable,
 // which the append-only stream cannot trade away. Outside a span the pair is
 // seen across events, as a text ending in `=` is judged by the next event.
+//
+// A literal backtick is escaped everywhere, as it opens an inline code span
+// eagerly: inside `<em>`/`<strong>`/… one that `flushInline` LIFO-closes
+// *before* the emphasis (`<em>a`b</em>` → `<em>a<code>b</code></em>`, growing
+// every round-trip); inside a link/image label one that consumes the
+// `]`/`(url)`, so the link never forms.
+//
+// A `<` before anything but whitespace starts inline-HTML speculation that, on
+// a line with no `>`, swallows the rest of it as text — a closer included
+// (`**a<**&#98;`).
 private fun escapeInlineSyntax(
     text: String,
     before: Char,
     next: Char?,
     mask: Int,
-    backtick: Boolean,
+    emOpen: Boolean = false,
+    strongOpen: Boolean = false,
     brackets: Boolean = false
 ): String = buildString(text.length + 4) {
     var i = 0
@@ -1868,7 +1884,7 @@ private fun escapeInlineSyntax(
         // would join it, so it is escaped like the char before.
         val joinsRun = prev == c || after == c || after == null
         val escape = (delimiterBit(c) and mask) != 0 || when (c) {
-            '`' -> backtick
+            '`', '^' -> true
             // A `~` / `~~` run toggles a del wherever it stands, except at the
             // end of a line, where it stays literal — unless it starts the
             // line, where three of them open a fence.
@@ -1876,10 +1892,14 @@ private fun escapeInlineSyntax(
             // Only an `==` run toggles a mark, and it too stays literal at the
             // end of a line.
             '=' -> joinsRun || (end - i == 2 && after != '\n')
-            // A `^` toggles a sup wherever it stands, even at a line end.
-            '^' -> true
-            '_' -> joinsRun || canOpenEmphasis(c, prev, after)
+            '*', '_' -> joinsRun || (canOpenEmphasis(c, prev, after) && when (end - i) {
+                1 -> !emOpen
+                2 -> !strongOpen
+                else -> true
+            })
             '$' -> after == null || after.isMathOpen() || after == '$'
+            '\\' -> after == null || after == '\n' || after in BACKSLASH_ESCAPED_SYNTAX
+            '<' -> after == null || !after.isFlankWhitespace()
             '[', ']' -> brackets
             else -> false
         }
@@ -1895,14 +1915,7 @@ private fun escapeInlineSyntax(
 // parser reads as inline content before reducing it to plain text.
 private fun escapeAltText(alt: String): String =
     if (alt.none { it in INLINE_SYNTAX_CHARS || it == '[' || it == ']' }) alt
-    else escapeInlineSyntax(
-        text = alt,
-        before = '[',
-        next = ']',
-        mask = 0,
-        backtick = true,
-        brackets = true
-    )
+    else escapeInlineSyntax(text = alt, before = '[', next = ']', mask = 0, brackets = true)
 
 // Whether a `*` / `_` run between [before] and [after] can open emphasis on
 // re-parse — the parser's flanking rules (`emphasisFlanking` in
@@ -1923,14 +1936,18 @@ private fun canOpenEmphasis(c: Char, before: Char, after: Char?): Boolean {
 private fun Char.isMathOpen(): Boolean = isLetter() || this == '\\' || this == '{'
 
 // Chars escapeInlineText may have to escape; text without any is written as is.
-private const val INLINE_SYNTAX_CHARS = "*~=^`_$"
+private const val INLINE_SYNTAX_CHARS = "*~=^`_$\\<"
 
 // Chars whose escaping depends on the char written after them — a text event
 // ending in one is held until the next event (see heldText).
-private const val LOOKAHEAD_CHARS = "~=_$"
+private const val LOOKAHEAD_CHARS = "*~=_$\\<"
+
+// The chars after a `\` that make it an escape the renderer must keep literal
+// (see escapeInlineSyntax): inline syntax chars, brackets, `!` and `&`.
+private const val BACKSLASH_ESCAPED_SYNTAX = "$INLINE_SYNTAX_CHARS[]!&"
 
 // Chars escapeInlineSyntax judges as a run of the same char.
-private const val RUN_SYNTAX_CHARS = "~=_"
+private const val RUN_SYNTAX_CHARS = "*~=_"
 
 // The first char the renderer writes for this event, as far as escaping the
 // text right before it is concerned (see escapeInlineText); null when unknown.
