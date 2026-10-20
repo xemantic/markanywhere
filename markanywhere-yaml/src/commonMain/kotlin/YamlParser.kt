@@ -92,7 +92,10 @@ import kotlinx.coroutines.flow.FlowCollector
  * verbatim). A bare `key:` (or `-`) is held for one line to decide between a
  * nested block, a verbatim value and a null value. A block scalar is
  * buffered until it closes — never past the enclosing construct; one a
- * comment ends is held like a `key: value` line. A verbatim
+ * comment ends is held like a `key: value` line. The lines outside the
+ * subset ahead of the first entry or item of an indented root are held until
+ * it arrives (they are then written relative to the root) or cannot arrive
+ * any more (they keep their own indentation). A verbatim
  * value streams line by line. Never throws.
  */
 public class YamlParser(
@@ -173,10 +176,14 @@ public class YamlParser(
     // open, which continues on any line, whatever its indentation, until it
     // closes; null when none is open
     private var openValue: OpenValueScan? = null
-    // whether an entry / item was emitted at the root: the lines ahead of
-    // the first one keep their own indentation, which is what keeps an
-    // indented root indented once the writer writes them back
+    // whether an entry / item was emitted at the root
     private var rootHasNode = false
+    // the lines outside the subset ahead of the first root entry / item of
+    // an indented root, held until it is known how they are written back:
+    // relative to the root once an entry or item follows (the writer writes
+    // it at column 0, so must they be), with their own indentation if none
+    // does (which is then what keeps the root indented)
+    private val leadingLines = mutableListOf<String>()
     // whether a line less indented than the root was read
     private var rootBroken = false
 
@@ -223,6 +230,7 @@ public class YamlParser(
         held = null
         pending?.let { resolvePendingAsNull(it) }
         pending = null
+        flushLeadingLines(indent = 0)
         while (frames.size > 1) closeTopFrame()
         frames.clear()
         rootHasNode = false
@@ -260,7 +268,10 @@ public class YamlParser(
         // line after it is text at the root, with its own indentation. The
         // writer writes the root at column 0, so such a document loses the
         // fixpoint, but no entry is read that the readers do not see.
-        if (frames.last().indent > indent) rootBroken = true
+        if (frames.last().indent > indent && !rootBroken) {
+            rootBroken = true
+            flushLeadingLines(indent = 0)
+        }
         if (rootBroken) return verbatim(line)
         // a sequence at its key's own indentation ends at the first non-`-` line
         while (frames.size > 1 && frames.last().isSequence && !seqLine
@@ -371,12 +382,24 @@ public class YamlParser(
     // A line outside the subset that is no entry or item: a text child of the
     // top container, its indentation up to the container's entries removed
     // (a line indented less keeps its own), so the writer can re-indent it
-    // along with the container. At the root, a line ahead of the first entry
-    // or item, or after the root was broken, keeps its own indentation.
+    // along with the container. At the root, a line after the root was
+    // broken keeps its own indentation, and one ahead of the first entry or
+    // item of an indented root is held until that entry or item, or its
+    // absence, decides ([leadingLines]).
     private suspend fun verbatim(line: String) {
-        val root = frames.size == 1
-        val indent = if (root && (rootBroken || !rootHasNode)) 0 else frames.last().indent
-        emitText(sourceLine(line, indent))
+        val top = frames.last()
+        when {
+            frames.size > 1 -> emitText(sourceLine(line, top.indent))
+            rootBroken -> emitText(sourceLine(line, 0))
+            !rootHasNode && top.indent > 0 -> leadingLines += line
+            else -> emitText(sourceLine(line, top.indent))
+        }
+    }
+
+    // Emits the held [leadingLines], their indentation up to [indent] removed.
+    private suspend fun flushLeadingLines(indent: Int) {
+        for (line in leadingLines) emitText(sourceLine(line, indent))
+        leadingLines.clear()
     }
 
     // Opens an entry / item at column [indent] whose value is outside the
@@ -711,7 +734,10 @@ public class YamlParser(
     // --- emission ---------------------------------------------------------
 
     private suspend fun emitMark(name: String, key: String?, type: String?) {
-        if (frames.size == 1) rootHasNode = true
+        if (frames.size == 1 && !rootHasNode) {
+            rootHasNode = true
+            flushLeadingLines(indent = frames.last().indent)
+        }
         val attributes = LinkedHashMap<String, String>(2)
         if (key != null) attributes["key"] = key
         if (type != null) attributes["type"] = type

@@ -1541,6 +1541,41 @@ class YamlParserTest {
     }
 
     @Test
+    fun `should keep a line ahead of the first entry of an indented root relative to the root`() = runTest {
+        // given — the writer writes the root at column 0, so a line outside
+        // the subset ahead of the first root entry must lose the root's
+        // indentation as well: kept as is, `  ? x` would sit above `a: 1`
+        // and turn it into a line less indented than the root. The readers
+        // read `{x y: null, a: 1}` either way
+        val textFlow = "  ? x\n    y\n  a: 1\n".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parseYaml()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            +"? x\n  y\n"
+            "entry"("key" to "a", "type" to "int") { +"1" }
+        }
+    }
+
+    @Test
+    fun `should keep the lines of an indented root holding no entry as written`() = runTest {
+        // given — no entry follows the lines outside the subset, so nothing
+        // is written at column 0 and their own indentation is what keeps the
+        // root indented
+        val textFlow = "  ? x\n    y\n".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parseYaml()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            +"  ? x\n    y\n"
+        }
+    }
+
+    @Test
     fun `DIVERGENCE - should keep a quoted or flow value open below its key as source`() = runTest {
         // given — an open quote or flow collection continues on any line
         // until it closes, whatever its indentation: the readers read
