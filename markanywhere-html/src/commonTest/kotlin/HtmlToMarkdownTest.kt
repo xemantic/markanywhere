@@ -744,6 +744,300 @@ class HtmlToMarkdownTest {
     }
 
     @Test
+    fun `should round-trip block roles inside running text`() = runTest {
+        // given — issue #165: promoted to blocks, these broke the paragraph
+        // into lines the next parse reads differently (`Hello\n## World`)
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "p" {
+                    +"Hello "
+                    "x-name"("role" to "heading") { +"World" }
+                    +" end"
+                }
+                "p" {
+                    +"See "
+                    "span"("role" to "listitem") { +"A" }
+                }
+                "p" {
+                    +"a "
+                    "span"("role" to "separator") { }
+                    +" b"
+                }
+                "p" {
+                    +"x "
+                    "span"("role" to "gridcell") { +"A" }
+                    +" y"
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+        val reRendered = flowOf(markdown).parse().renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            Hello World end
+
+            See A
+
+            a b
+
+            x A y
+        """.trimIndent()
+        reRendered sameAs markdown
+    }
+
+    @Test
+    fun `should round-trip a heading role inside a table cell`() = runTest {
+        // given — issue #165: a heading in a cell broke the row
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "table" {
+                    "tr" { "th" { +"Item" } }
+                    "tr" { "td" { "div"("role" to "heading") { +"Total" } } }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+        val reRendered = flowOf(markdown).parse().renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            | Item |
+            | --- |
+            | Total |
+        """.trimIndent()
+        reRendered sameAs markdown
+    }
+
+    @Test
+    fun `should round-trip container roles on an inline box and in formatting`() = runTest {
+        // given — issue #165: a container role on an inline box, or inside
+        // inline formatting, still holds blocks
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "app-nav"("role" to "navigation", AccessibilityAnnotations.DISPLAY to "inline") {
+                    "div"("role" to "list", AccessibilityAnnotations.DISPLAY to "block") {
+                        "div"("role" to "listitem", AccessibilityAnnotations.DISPLAY to "block") { +"Home" }
+                        "div"("role" to "listitem", AccessibilityAnnotations.DISPLAY to "block") { +"News" }
+                    }
+                }
+                "b"(AccessibilityAnnotations.DISPLAY to "inline") {
+                    "div"("role" to "list", AccessibilityAnnotations.DISPLAY to "block") {
+                        "div"("role" to "listitem", AccessibilityAnnotations.DISPLAY to "block") { +"a" }
+                    }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+        val reRendered = flowOf(markdown).parse().renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            <nav>
+            
+            - Home
+            - News
+            
+            </nav>
+            <b>
+            
+            - a
+            
+            </b>
+        """.trimIndent()
+        reRendered sameAs markdown
+    }
+
+    @Test
+    fun `should keep every column after an empty ref-bearing first row`() = runTest {
+        // given - issue #165: an empty first row carrying a ref, native and
+        // promoted from roles
+        val native = semanticEvents(tagged = true) {
+            "body" {
+                "table" {
+                    "tr"(AccessibilityAnnotations.REF to "1") { }
+                    "tr" {
+                        "td" { +"A" }
+                        "td" { +"B" }
+                    }
+                    "tr" {
+                        "td" { +"C" }
+                        "td" { +"D" }
+                    }
+                }
+            }
+        }
+        val promoted = semanticEvents(tagged = true) {
+            "body" {
+                "div"("role" to "table") {
+                    "div"("role" to "row", AccessibilityAnnotations.REF to "1") { }
+                    "div"("role" to "row") {
+                        "div"("role" to "cell") { +"A" }
+                        "div"("role" to "cell") { +"B" }
+                    }
+                    "div"("role" to "row") {
+                        "div"("role" to "cell") { +"C" }
+                        "div"("role" to "cell") { +"D" }
+                    }
+                }
+            }
+        }
+
+        for (page in listOf(native, promoted)) {
+            // when
+            val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+            val reRendered = flowOf(markdown).parse().renderMarkdown()
+
+            // then
+            markdown sameAsMarkdown """
+                |  |  |
+                | --- | --- |
+                | <span ref="1"></span>A | B |
+                | C | D |
+            """.trimIndent()
+            reRendered sameAs markdown
+        }
+    }
+
+    @Test
+    fun `should keep a modal dialog role inside running text`() = runTest {
+        // given - issue #165: a blocking modal is the first thing to act on,
+        // even where no block can go; a real one holds a button
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "p" {
+                    +"Text "
+                    "my-dialog"("role" to "dialog", "aria-modal" to "true") {
+                        +"Sure? "
+                        "button" { +"OK" }
+                    }
+                }
+                "table" {
+                    "tr" { "th" { +"H" } }
+                    "tr" {
+                        "td" {
+                            "my-dialog"("role" to "dialog", "aria-modal" to "true") {
+                                +"Sure? "
+                                "button" { +"OK" }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown(refMode = RefMode.STRIP).renderMarkdown()
+        val reRendered = flowOf(markdown).parse().renderMarkdown()
+
+        // then - an empty marker, the content after it
+        assert("""<span role="dialog" aria-modal="true"></span>Sure?""" in markdown)
+        reRendered sameAs markdown
+    }
+
+    @Test
+    fun `should unwrap a non-modal dialog role inside running text`() = runTest {
+        // given - a non-modal role dialog is usually a hidden drawer
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "p" {
+                    +"Hi "
+                    "div"("role" to "dialog") { +"Menu" }
+                    +" end"
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then
+        markdown sameAs "Hi Menu end"
+    }
+
+    @Test
+    fun `should keep a row's ref on its own content and not on a later row`() = runTest {
+        // given - issue #165: a grid row holding a link, not a cell
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "div"("role" to "grid") {
+                    "div"("role" to "row", AccessibilityAnnotations.REF to "5") {
+                        "a"("href" to "/x") { +"Inbox" }
+                    }
+                    "div"("role" to "row") {
+                        "div"("role" to "cell") { +"A" }
+                        "div"("role" to "cell") { +"B" }
+                    }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then - the ref stays with the link, the later row's cells stay bare
+        // (no render-parse check: content directly in a row, outside any
+        // cell, does not round-trip with or without a ref)
+        assert("""[<span ref="5"></span>Inbox](/x)""" in markdown)
+        assert("| A | B |" in markdown)
+    }
+
+    @Test
+    fun `should keep the refs of a focusable separator an image and a row`() = runTest {
+        // given — issue #165: role promotion used to drop each of these refs
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "p" { +"a" }
+                "x-splitter"(
+                    "role" to "separator",
+                    "tabindex" to "0",
+                    "aria-valuenow" to "50",
+                    "aria-label" to "Resize",
+                    AccessibilityAnnotations.REF to "7",
+                ) { }
+                "p" {
+                    +"By "
+                    "x-avatar"(
+                        "role" to "img",
+                        "aria-label" to "Jane",
+                        "tabindex" to "0",
+                        AccessibilityAnnotations.REF to "8",
+                    ) { +"JD" }
+                }
+                "div"("role" to "table") {
+                    "x-row"("role" to "row", AccessibilityAnnotations.REF to "11") {
+                        "div"("role" to "cell", AccessibilityAnnotations.REF to "12") { +"A" }
+                    }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+        val reRendered = flowOf(markdown).parse().renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            a
+
+            <x-splitter role="separator" aria-valuenow="50" aria-label="Resize" ref="7"></x-splitter>
+
+            By <span ref="8">![Jane]()</span>
+
+            |  |
+            | --- |
+            | <span ref="11"></span><span ref="12">A</span> |
+        """.trimIndent()
+        reRendered sameAs markdown
+    }
+
+    @Test
     fun `should separate adjacent links when the second is wrapped in formatting`() = runTest {
         // given — issue #96: no whitespace between the links, the second in a <b>
         val page = semanticEvents(tagged = true) {

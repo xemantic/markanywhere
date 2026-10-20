@@ -118,7 +118,11 @@ import kotlinx.coroutines.flow.onEach
  *   exception — it deliberately strips an element's own semantics, so it
  *   applies to any element. The now-redundant `role` is dropped — except
  *   where it still tells more than the tag (an alert dialog, a non-modal
- *   dialog kept as a `section`).
+ *   dialog kept as a `section`). A role promoting to a block is promoted only
+ *   where Markdown can hold a block — not in running text (a paragraph, a
+ *   heading, inline formatting) and not on an element captured as an inline
+ *   box (see [BlockRoleContext]) — and a separator the capture found
+ *   actionable is a splitter widget, kept as a control rather than a `---`.
  * - **ARIA keep-set (every preserved element)**: on top of each element's own
  *   whitelist, the accessible name and actionable state survive — `aria-label`,
  *   `aria-expanded`, `aria-haspopup`, `aria-current`, `aria-checked`,
@@ -131,7 +135,7 @@ import kotlinx.coroutines.flow.onEach
  *   generic `div`/`span` or custom element kept for its actionable ref (a
  *   control the page built out of one — a checkbox, a star toggle, a
  *   `<sl-tab>`) keeps its `role`, the only thing saying what kind of control
- *   it is.
+ *   it is, and its value (`aria-valuenow` and the like) when it is a range.
  * - **Caller keep-set ([keepAttributes])**: a generic escape hatch for
  *   application-specific attributes the caller wants to survive simplification
  *   — e.g. a `golemId` correlation id mapping events back to their source DOM
@@ -212,14 +216,19 @@ private fun Flow<SemanticEvent>.simplifyHtmlElements(
     // element showing an unmarked stream is a capture only if no earlier rule
     // claimed it — and so current for the element a rule is matching.
     val displays = CapturedDisplayReader()
+    // Likewise whether the element sits where a block role may promote it.
+    val blockContext = BlockRoleContext()
     emitAll(
         onEach {
             when (it) {
-                is Mark -> displays.open(it)
-                is Unmark -> displays.close()
+                is Mark -> blockContext.open(it, displays.open(it))
+                is Unmark -> {
+                    displays.close()
+                    blockContext.close()
+                }
                 is Text -> { /* no element */ }
             }
-        }.simplifyHtmlRules(keepAttributes, svgMode, displays)
+        }.simplifyHtmlRules(keepAttributes, svgMode, displays, blockContext)
     )
 }
 
@@ -227,6 +236,7 @@ private fun Flow<SemanticEvent>.simplifyHtmlRules(
     keepAttributes: Set<String>,
     svgMode: SvgMode,
     displays: CapturedDisplayReader,
+    blockContext: BlockRoleContext,
 ): Flow<SemanticEvent> = transform {
 
     // A value that tells a reader nothing is never added — judged by
@@ -480,7 +490,7 @@ private fun Flow<SemanticEvent>.simplifyHtmlRules(
     }
 
     // `role="heading"` + `aria-level` → `h1`–`h6` (see [ariaHeadingLevel]).
-    match({ isGenericContainer() && explicitRole() == "heading" }) { event ->
+    match({ isGenericContainer() && explicitRole() == "heading" && blockContext.promotes }) { event ->
         preserve("h${event.ariaHeadingLevel()}", preserveAttrs(event, "id")) { children() }
     }
 
@@ -499,9 +509,21 @@ private fun Flow<SemanticEvent>.simplifyHtmlRules(
     // capture sees as laid out. Without the claim it is a labelled region. The
     // `role` survives wherever it tells more than the tag: an alert dialog, or
     // a dialog that is a `<section>`.
-    match({ isGenericContainer() && explicitRole() in DIALOG_ROLES }) { event ->
+    //
+    // In running text, where no block can go, a modal one is still marked —
+    // by an empty `span` carrying the role and `aria-modal` before its
+    // content, since a blocking modal is the first thing an agent must act on
+    // and a raw `span` cannot wrap the button it nearly always holds. A
+    // non-modal one there (usually a hidden drawer) is unwrapped.
+    match({
+        isGenericContainer() && explicitRole() in DIALOG_ROLES &&
+                (blockContext.promotes || isModal())
+    }) { event ->
         val role = event.explicitRole()!!
-        if (event["aria-modal"]?.lowercase() == "true") {
+        if (!blockContext.promotes) {
+            preserve("span", mapOf("role" to role) + preserveAttrs(event, "id")) { /* a marker */ }
+            children()
+        } else if (event.isModal()) {
             val attrs = if (role == "alertdialog") {
                 mapOf("role" to role) + preserveAttrs(event, "id")
             } else preserveAttrs(event, "id")
@@ -529,14 +551,22 @@ private fun Flow<SemanticEvent>.simplifyHtmlRules(
         preserve("dialog", if (shown) DIALOG_SHOWN + attrs else attrs) { children() }
     }
 
-    // `role="separator"` → thematic break (void).
-    match({ isGenericContainer() && explicitRole() == "separator" }) { event ->
+    // `role="separator"` → thematic break (void). A focusable one — the
+    // capture found it actionable — is a splitter widget instead (ARIA): it
+    // stays a control, carrying its ref, name and value, which a `---` cannot.
+    match({
+        isGenericContainer() && explicitRole() == "separator" && blockContext.promotes &&
+                AccessibilityAnnotations.REF !in extraKept(this)
+    }) { event ->
         preserve("hr", preserveAttrs(event, "id")) { /* void */ }
     }
 
     // Remaining promotable roles are straight renames to the semantic tag,
     // keeping `id` (+ ARIA name/state via preserveAttrs); children flow through.
-    match({ isGenericContainer() && explicitRole() in ROLE_TO_TAG }) { event ->
+    match({
+        isGenericContainer() && explicitRole() in ROLE_TO_TAG &&
+                (explicitRole() in INLINE_ROLES || blockContext.promotes)
+    }) { event ->
         val target = ROLE_TO_TAG.getValue(event.explicitRole()!!)
         preserve(target, preserveAttrs(event, "id")) { children() }
     }
@@ -557,7 +587,7 @@ private fun Flow<SemanticEvent>.simplifyHtmlRules(
         // `role` and `aria-label`, so without them the agent reads an empty
         // `<div ref="…">` it cannot tell from any other.
         else if (AccessibilityAnnotations.REF in kept) {
-            preserve(event.name, preserveAttrs(event, "role")) { children() }
+            preserve(event.name, preserveAttrs(event, "role", *ARIA_VALUE)) { children() }
         }
         else preserve(event.name, kept) { children() }
     }
@@ -749,6 +779,94 @@ private val ROLE_TO_TAG = mapOf(
 // Roles a generic container promotes to a `<dialog>` (modal) or a `<section>`.
 private val DIALOG_ROLES = setOf("dialog", "alertdialog")
 
+// Whether this dialog claims to block the page.
+private fun SemanticEvent.Mark.isModal(): Boolean = this["aria-modal"]?.lowercase() == "true"
+
+// Roles a generic container promotes to Markdown inline content, which may sit
+// anywhere text does.
+private val INLINE_ROLES = setOf("img", "code")
+
+// Roles a generic container promotes to a block (see [BlockRoleContext]).
+private val BLOCK_ROLES =
+    ROLE_TO_TAG.keys + DIALOG_ROLES + setOf("heading", "separator") - INLINE_ROLES
+
+// Promoted roles whose own content is running text: a block role inside one
+// is not promoted either. A cell counts, as a GFM cell holds one line.
+private val RUNNING_TEXT_ROLES = setOf(
+    "heading", "paragraph", "code", "cell", "gridcell", "columnheader", "rowheader",
+)
+
+// Block roles holding running text rather than other blocks — the only ones
+// an inline-level box keeps on a line of text. A container role on an inline
+// box is block-in-inline layout (an unstyled custom element computes `inline`
+// whatever it holds), and one on `inline-flex` / `inline-grid` /
+// `inline-table` lays out its items as blocks, so it is promoted either way.
+private val LEAF_BLOCK_ROLES = setOf("heading", "paragraph", "separator")
+
+// Elements whose content is running text that Markdown cannot break with a
+// block: a paragraph, a heading, preformatted or inline code, a table cell (a
+// GFM cell holds one line). Not inline formatting: a raw `<b>` wrapping a
+// block is opened as a block, so a block role inside one is promoted as a
+// native `<ul>` or `<h2>` there is kept.
+private val RUNNING_TEXT_TAGS = setOf(
+    "p", "h1", "h2", "h3", "h4", "h5", "h6", "pre", "code", "td", "th", "caption",
+)
+
+/**
+ * Whether a generic element's block role ([BLOCK_ROLES]) is promoted to a
+ * block — fed every element ahead of the decision, like
+ * [CapturedDisplayReader]. A block in running text is no fixpoint: promoted,
+ * `<p>Hello <span role="heading">World</span> end</p>` renders as
+ * `Hello\n## World\n\nend`, which the next parse reads as three blocks (and
+ * a cell there as a stray `|`). So a block role is promoted only outside
+ * running text ([RUNNING_TEXT_TAGS], a role promoted to one —
+ * [RUNNING_TEXT_ROLES] — or a leaf role left unpromoted), and a role holding
+ * text ([LEAF_BLOCK_ROLES]) not on an element the capture laid out on a line
+ * of text, an `inline` or `inline-block` box. Not promoted, the element is the
+ * generic container it otherwise is.
+ *
+ * [simplifyHtml] promotes by it, and `separateUnwrappedBlocks` asks it which
+ * elements will come out as blocks, so the two cannot disagree.
+ */
+internal class BlockRoleContext {
+
+    // per open element, whether its children sit in running text
+    private val runningText = ArrayDeque<Boolean>()
+
+    /** Whether the element most recently opened may promote a block role. */
+    var promotes: Boolean = true
+        private set
+
+    /**
+     * Opens [mark], laid out as [display], returning whether it is a generic
+     * element whose block role is promoted to a block.
+     */
+    fun open(mark: SemanticEvent.Mark, display: CapturedDisplay): Boolean {
+        val inRunningText = runningText.lastOrNull() ?: false
+        val role = if (mark.isGenericContainer()) mark.explicitRole() else null
+        val blockRole = role in BLOCK_ROLES
+        val box = (display as? CapturedDisplay.Known)?.value
+        val onTextLine = box == "inline" || box == "inline-block"
+        promotes = !inRunningText && !(onTextLine && role in LEAF_BLOCK_ROLES)
+        val promoted = role != null && (!blockRole || promotes)
+        runningText.addLast(
+            inRunningText || mark.name in RUNNING_TEXT_TAGS ||
+                    (blockRole && !promotes) || (promoted && role in RUNNING_TEXT_ROLES)
+        )
+        return blockRole && promotes
+    }
+
+    /** Closes the element most recently opened. */
+    fun close() {
+        runningText.removeLastOrNull()
+    }
+
+}
+
+// The value of a range widget built on a generic element (a slider, a
+// splitter, a progress bar): its state, like `aria-checked` is a checkbox's.
+private val ARIA_VALUE = arrayOf("aria-valuenow", "aria-valuemin", "aria-valuemax", "aria-valuetext")
+
 // Every `<dialog>` this operator emits is on screen, so it carries `open`.
 private val DIALOG_SHOWN = mapOf("open" to "")
 
@@ -763,7 +881,7 @@ private val UNWRAPPED_TAGS = setOf(
  * `md-list`, whose host carries its semantics only as a `role`), which the
  * catch-all unwraps. A native semantic tag is never overridden.
  */
-private fun SemanticEvent.Mark.isGenericContainer(): Boolean =
+internal fun SemanticEvent.Mark.isGenericContainer(): Boolean =
     name in UNWRAPPED_TAGS || name.isCustomElementName()
 
 // The shape of a valid custom element name (HTML §4.13.2): a lowercase ASCII

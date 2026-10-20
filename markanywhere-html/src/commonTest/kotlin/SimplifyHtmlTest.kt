@@ -871,6 +871,386 @@ class SimplifyHtmlTest {
     }
 
     @Test
+    fun `should keep a focusable separator as a control carrying its ref and value`() = runTest {
+        // given — a focusable separator is a splitter widget (ARIA), not a
+        // thematic break: a `---` would drop the ref, the name and the value
+        val input = semanticEvents(tagged = true) {
+            "x-splitter"(
+                "role" to "separator",
+                "tabindex" to "0",
+                "aria-valuenow" to "50",
+                "aria-label" to "Resize",
+                AccessibilityAnnotations.REF to "7",
+            ) { }
+        }
+
+        // when
+        val output = input.simplifyHtml(keepAttributes = setOf(AccessibilityAnnotations.REF))
+
+        // then
+        output sameAs semanticEvents {
+            tag(
+                "x-splitter",
+                "role" to "separator",
+                "aria-valuenow" to "50",
+                "aria-label" to "Resize",
+                AccessibilityAnnotations.REF to "7",
+            ) { }
+        }
+    }
+
+    @Test
+    fun `should keep the value of a generic control built on a div`() = runTest {
+        // given — a slider made of a `<div>`: its value is its state
+        val input = semanticEvents(tagged = true) {
+            "div"(
+                "role" to "slider",
+                "aria-valuenow" to "3",
+                "aria-valuemin" to "1",
+                "aria-valuemax" to "5",
+                "aria-valuetext" to "3 stars",
+                AccessibilityAnnotations.REF to "4",
+            ) { }
+        }
+
+        // when
+        val output = input.simplifyHtml(keepAttributes = setOf(AccessibilityAnnotations.REF))
+
+        // then
+        output sameAs semanticEvents {
+            tag(
+                "div",
+                "role" to "slider",
+                "aria-valuenow" to "3",
+                "aria-valuemin" to "1",
+                "aria-valuemax" to "5",
+                "aria-valuetext" to "3 stars",
+                AccessibilityAnnotations.REF to "4",
+            ) { }
+        }
+    }
+
+    @Test
+    fun `should not promote a block role inside running text`() = runTest {
+        // given — a paragraph holds only inline content, so a heading, a list
+        // item, a separator or a cell there cannot become a Markdown block
+        val input = semanticEvents(tagged = true) {
+            "p" {
+                +"Hello "
+                "x-name"("role" to "heading") { +"World" }
+                +" and "
+                "span"("role" to "listitem") { +"A" }
+                +" "
+                "span"("role" to "separator") { }
+                +" "
+                "span"("role" to "gridcell") { +"x" }
+                +" end"
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then — the elements unwrap into the running text
+        output sameAs semanticEvents {
+            "p" {
+                +"Hello "
+                +"World"
+                +" and "
+                +"A"
+                +" "
+                +" "
+                +"x"
+                +" end"
+            }
+        }
+    }
+
+    @Test
+    fun `should not promote a block role nested deeper inside running text`() = runTest {
+        // given — inside emphasis inside a heading, and inside a role heading
+        val input = semanticEvents(tagged = true) {
+            "h3" { "b" { "span"("role" to "heading") { +"a" } } }
+            "div"("role" to "heading") { "span"("role" to "separator") { } }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "h3" { "strong" { +"a" } }
+            "h2" { }
+        }
+    }
+
+    @Test
+    fun `should not promote a block role on an inline box`() = runTest {
+        // given — the capture laid the element out inline, inside a line of text
+        val input = semanticEvents(tagged = true) {
+            "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                +"Hello "
+                "span"("role" to "heading", AccessibilityAnnotations.DISPLAY to "inline") { +"World" }
+                +" end"
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            +"Hello "
+            +"World"
+            +" end"
+        }
+    }
+
+    @Test
+    fun `should promote a block role on a block box`() = runTest {
+        // given — a `span` the capture laid out as a block is one
+        val input = semanticEvents(tagged = true) {
+            "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                "span"("role" to "heading", AccessibilityAnnotations.DISPLAY to "block") { +"World" }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "h2" { +"World" }
+        }
+    }
+
+    @Test
+    fun `should not promote a heading role on an inline-block box`() = runTest {
+        // given — an inline-block sits on the line of text around it
+        val input = semanticEvents(tagged = true) {
+            "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                +"Hello "
+                "span"("role" to "heading", AccessibilityAnnotations.DISPLAY to "inline-block") { +"World" }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            +"Hello "
+            +"World"
+        }
+    }
+
+    @Test
+    fun `should promote a list laid out as an inline flex or inline-block container`() = runTest {
+        // given — the container lays its items out as blocks whatever its own
+        // box is
+        val input = semanticEvents(tagged = true) {
+            "div"("role" to "list", AccessibilityAnnotations.DISPLAY to "inline-flex") {
+                "div"("role" to "listitem", AccessibilityAnnotations.DISPLAY to "block") { +"A" }
+                "div"("role" to "listitem", AccessibilityAnnotations.DISPLAY to "block") { +"B" }
+            }
+            "div"("role" to "list", AccessibilityAnnotations.DISPLAY to "inline-block") {
+                "div"("role" to "listitem", AccessibilityAnnotations.DISPLAY to "block") { +"C" }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "ul" {
+                "li" { +"A" }
+                "li" { +"B" }
+            }
+            "ul" {
+                "li" { +"C" }
+            }
+        }
+    }
+
+    @Test
+    fun `should promote a table and a grid laid out as inline table or inline grid`() = runTest {
+        // given
+        val input = semanticEvents(tagged = true) {
+            "div"("role" to "table", AccessibilityAnnotations.DISPLAY to "inline-table") {
+                "div"("role" to "row", AccessibilityAnnotations.DISPLAY to "table-row") {
+                    "div"("role" to "cell", AccessibilityAnnotations.DISPLAY to "table-cell") { +"a" }
+                }
+            }
+            "div"("role" to "grid", AccessibilityAnnotations.DISPLAY to "inline-grid") {
+                "div"("role" to "row", AccessibilityAnnotations.DISPLAY to "contents") {
+                    "div"("role" to "gridcell", AccessibilityAnnotations.DISPLAY to "block") { +"b" }
+                }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "table" { "tr" { "td" { +"a" } } }
+            "table" { "tr" { "td" { +"b" } } }
+        }
+    }
+
+    @Test
+    fun `should not promote a block role inside a table cell`() = runTest {
+        // given — a GFM cell holds one line, native or promoted
+        val input = semanticEvents(tagged = true) {
+            "table" {
+                "tr" {
+                    "td" { "div"("role" to "heading") { +"Total" } }
+                }
+            }
+            "div"("role" to "table") {
+                "div"("role" to "row") {
+                    "div"("role" to "cell") {
+                        "div"("role" to "separator") { }
+                        +"x"
+                    }
+                }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "table" { "tr" { "td" { +"Total" } } }
+            "table" { "tr" { "td" { +"x" } } }
+        }
+    }
+
+    @Test
+    fun `should promote container roles on an inline box holding blocks`() = runTest {
+        // given — an unstyled custom element computes `display: inline`
+        // whatever it holds: block children make it block-in-inline layout,
+        // not a line of text
+        val input = semanticEvents(tagged = true) {
+            "app-nav"("role" to "navigation", AccessibilityAnnotations.DISPLAY to "inline") {
+                "div"("role" to "list", AccessibilityAnnotations.DISPLAY to "block") {
+                    "div"("role" to "listitem", AccessibilityAnnotations.DISPLAY to "block") { +"Home" }
+                }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            tag("nav") {
+                "ul" {
+                    "li" { +"Home" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should promote a list and its items all laid out as inline boxes`() = runTest {
+        // given — only a heading, a paragraph or a separator sits in a line of
+        // text; a list keeps its items whatever boxes they are
+        val input = semanticEvents(tagged = true) {
+            "span"("role" to "list", AccessibilityAnnotations.DISPLAY to "inline") {
+                "span"("role" to "listitem", AccessibilityAnnotations.DISPLAY to "inline") { +"A" }
+                "span"("role" to "listitem", AccessibilityAnnotations.DISPLAY to "inline") { +"B" }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "ul" {
+                "li" { +"A" }
+                "li" { +"B" }
+            }
+        }
+    }
+
+    @Test
+    fun `should promote block roles inside inline formatting as native blocks are`() = runTest {
+        // given — a `<b><ul>` keeps its list and a `<strong><h2>` its heading
+        // (the renderer opens the raw tag as a block), so roles do the same
+        val input = semanticEvents(tagged = true) {
+            "b" {
+                "div"("role" to "list") {
+                    "div"("role" to "listitem") { +"a" }
+                }
+            }
+            "strong" {
+                "div"("role" to "heading") { +"b" }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            tag("b") {
+                "ul" {
+                    "li" { +"a" }
+                }
+            }
+            tag("strong") {
+                "h2" { +"b" }
+            }
+        }
+    }
+
+    @Test
+    fun `should not promote a block role inside a code role`() = runTest {
+        // given — inline code holds running text
+        val input = semanticEvents(tagged = true) {
+            "span"("role" to "code") { "span"("role" to "heading") { +"x" } }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "code" { +"x" }
+        }
+    }
+
+    @Test
+    fun `should promote the cells of a grid laid out as inline boxes`() = runTest {
+        // given — a cell's place is decided by its row, whatever box it is
+        val input = semanticEvents(tagged = true) {
+            "div"("role" to "table", AccessibilityAnnotations.DISPLAY to "block") {
+                "div"("role" to "row", AccessibilityAnnotations.DISPLAY to "block") {
+                    "span"("role" to "cell", AccessibilityAnnotations.DISPLAY to "inline-block") { +"a" }
+                    "span"("role" to "cell", AccessibilityAnnotations.DISPLAY to "inline-block") { +"b" }
+                }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "table" {
+                "tr" {
+                    "td" { +"a" }
+                    "td" { +"b" }
+                }
+            }
+        }
+    }
+
+    @Test
     fun `should unwrap a role presentation element keeping its children`() = runTest {
         // given — role="presentation" strips this element's own semantics (a
         // normally-preserved nav) while its content still flows through. Note we

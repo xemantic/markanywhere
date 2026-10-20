@@ -669,6 +669,282 @@ class EncodeActionableRefsTest {
     }
 
     @Test
+    fun `should carry a table row's ref on a span in its first cell`() = runTest {
+        // given - a `| … |` row carries no attributes, and no span can sit
+        // between cells, so the ref goes into the row's first cell - on a span
+        // of its own, apart from the cell's own ARIA state
+        val input = semanticEvents {
+            "table" {
+                "tr"(AccessibilityAnnotations.REF to "1", "aria-selected" to "true") {
+                    "td"("aria-selected" to "false") { +"a" }
+                    "td" { +"b" }
+                }
+            }
+        }
+
+        // when
+        val output = input.encodeActionableRefs()
+
+        // then
+        output sameAs semanticEvents {
+            "table" {
+                "tr" {
+                    "td"("aria-selected" to "false") {
+                        tag("span", "aria-selected" to "true", "ref" to "1") { }
+                        +"a"
+                    }
+                    "td" { +"b" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep a table row's ref when its first cell is a tagged one`() = runTest {
+        // given - a literal `<td>` tag, which no span is moved onto
+        val input = semanticEvents {
+            "table" {
+                "tr"(AccessibilityAnnotations.REF to "1") {
+                    tag("td") { +"a" }
+                }
+            }
+        }
+
+        // when
+        val output = input.encodeActionableRefs()
+
+        // then
+        output sameAs semanticEvents {
+            "table" {
+                "tr" {
+                    tag("td") {
+                        tag("span", "ref" to "1") { }
+                        +"a"
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should carry the ref of a table row with no cell into the next row`() = runTest {
+        // given - a cell made for it would set the table's column count when
+        // the row is the first one
+        val input = semanticEvents {
+            "table" {
+                "tr"(AccessibilityAnnotations.REF to "1") { }
+                "tr" {
+                    "td" { +"A" }
+                    "td" { +"B" }
+                }
+            }
+        }
+
+        // when
+        val output = input.encodeActionableRefs()
+
+        // then
+        output sameAs semanticEvents {
+            "table" {
+                "tr" { }
+                "tr" {
+                    "td" {
+                        tag("span", "ref" to "1") { }
+                        +"A"
+                    }
+                    "td" { +"B" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep the ref of a last table row with no cell after the table`() = runTest {
+        // given
+        val input = semanticEvents {
+            "table" {
+                "tr" { "td" { +"A" } }
+                "tr"(AccessibilityAnnotations.REF to "1") { }
+            }
+        }
+
+        // when
+        val output = input.encodeActionableRefs()
+
+        // then
+        output sameAs semanticEvents {
+            "table" {
+                "tr" { "td" { +"A" } }
+                "tr" { }
+            }
+            tag("span", "ref" to "1") { }
+        }
+    }
+
+    @Test
+    fun `should put a table row's ref before its own content that is no cell`() = runTest {
+        // given - a row holding a link and a row holding text, neither in a
+        // cell: the ref belongs to that content, never to a later row's cell
+        val input = semanticEvents {
+            "table" {
+                "tr"(AccessibilityAnnotations.REF to "5") {
+                    "a"("href" to "/x") { +"Inbox" }
+                }
+                "tr"(AccessibilityAnnotations.REF to "6") { +"Sent" }
+                "tr"(AccessibilityAnnotations.REF to "7") {
+                    "img"("alt" to "x") { }
+                }
+                "tr" {
+                    "td" { +"A" }
+                }
+            }
+        }
+
+        // when
+        val output = input.encodeActionableRefs()
+
+        // then
+        output sameAs semanticEvents {
+            "table" {
+                "tr" {
+                    "a"("href" to "/x") {
+                        tag("span", "ref" to "5") { }
+                        +"Inbox"
+                    }
+                }
+                "tr" {
+                    tag("span", "ref" to "6") { }
+                    +"Sent"
+                }
+                "tr" {
+                    tag("span", "ref" to "7") { }
+                    "img"("alt" to "x") { }
+                }
+                "tr" {
+                    "td" { +"A" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep the ref of an empty row outside a table after its parent`() = runTest {
+        // given - no table to hand it on in: an unrelated later table must
+        // not take it
+        val input = semanticEvents {
+            "section" {
+                "tr"(AccessibilityAnnotations.REF to "7") { }
+            }
+            "p" { +"Lots of text" }
+            "table" {
+                "tr" { "td" { +"A" } }
+            }
+        }
+
+        // when
+        val output = input.encodeActionableRefs()
+
+        // then
+        output sameAs semanticEvents {
+            "section" {
+                "tr" { }
+            }
+            tag("span", "ref" to "7") { }
+            "p" { +"Lots of text" }
+            "table" {
+                "tr" { "td" { +"A" } }
+            }
+        }
+    }
+
+    @Test
+    fun `should hand an empty row's ref only to a cell of its own table`() = runTest {
+        // given - the next cell belongs to a table nested in a caption
+        val input = semanticEvents {
+            "table" {
+                "tr"(AccessibilityAnnotations.REF to "1") { }
+                "caption" {
+                    "table" { "tr" { "td" { +"inner" } } }
+                }
+                "tr" { "td" { +"A" } }
+            }
+        }
+
+        // when
+        val output = input.encodeActionableRefs()
+
+        // then
+        output sameAs semanticEvents {
+            "table" {
+                "tr" { }
+                "caption" {
+                    "table" { "tr" { "td" { +"inner" } } }
+                }
+                "tr" {
+                    "td" {
+                        tag("span", "ref" to "1") { }
+                        +"A"
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep a table row's ref beside its first cell's own ref`() = runTest {
+        // given - the row and its first cell are both actionable
+        val input = semanticEvents {
+            "table" {
+                "tr"(AccessibilityAnnotations.REF to "11") {
+                    "td"(AccessibilityAnnotations.REF to "12") { +"a" }
+                }
+            }
+        }
+
+        // when
+        val output = input.encodeActionableRefs()
+
+        // then - each keeps its own span
+        output sameAs semanticEvents {
+            "table" {
+                "tr" {
+                    "td" {
+                        tag("span", "ref" to "11") { }
+                        tag("span", "ref" to "12") { +"a" }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should carry an image's ref on a span around it`() = runTest {
+        // given - `![alt](src)` carries no attributes
+        val input = semanticEvents {
+            "p" {
+                "img"(
+                    "alt" to "Jane",
+                    "aria-label" to "Jane",
+                    "aria-pressed" to "false",
+                    AccessibilityAnnotations.REF to "8",
+                ) { }
+            }
+        }
+
+        // when
+        val output = input.encodeActionableRefs()
+
+        // then - the name the alt already says is not said twice
+        output sameAs semanticEvents {
+            "p" {
+                tag("span", "aria-pressed" to "false", "ref" to "8") {
+                    "img"("alt" to "Jane") { }
+                }
+            }
+        }
+    }
+
+    @Test
     fun `should carry the ref of a list item nested in a ref-bearing list item`() = runTest {
         // given
         val input = semanticEvents {
