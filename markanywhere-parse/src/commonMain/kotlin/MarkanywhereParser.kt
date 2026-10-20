@@ -2529,15 +2529,7 @@ private class ParserState(
                     replaceMode(BlockMode.IndentedCodeBlock)
                 }
                 // ATX heading allowing tab/space after #s
-                line matches Patterns.ATX_HEADING_LINE -> {
-                    val match = Patterns.ATX_HEADING_LINE.matchEntire(line)!!
-                    val level = match.groupValues[1].length
-                    val content = match.groupValues[2].trimEnd().removeSuffix("#").trimEnd()
-                    "h$level" {
-                        if (content.isNotEmpty()) processInlineContent(content)
-                        flushInline()
-                    }
-                }
+                line matches Patterns.ATX_HEADING_LINE -> emitAtxHeading(line)
                 // GFM thematic break: 3+ matching `-`/`*`/`_` separated by spaces/tabs
                 line matches Patterns.THEMATIC_BREAK -> {
                     "hr" {}
@@ -2835,6 +2827,17 @@ private class ParserState(
                 atLineStart = false
                 processInlineChar(char)
             }
+        }
+    }
+
+    /** Emit [line], which matches [Patterns.ATX_HEADING_LINE], as an `h1`…`h6`. */
+    private suspend fun SemanticEventScope.emitAtxHeading(line: String) {
+        val match = Patterns.ATX_HEADING_LINE.matchEntire(line)!!
+        val level = match.groupValues[1].length
+        val content = match.groupValues[2].trimEnd().removeSuffix("#").trimEnd()
+        "h$level" {
+            if (content.isNotEmpty()) processInlineContent(content)
+            flushInline()
         }
     }
 
@@ -3148,13 +3151,7 @@ private class ParserState(
         }
         // ATX heading as first content of a list item (example 278).
         if (trimmed matches Patterns.ATX_HEADING_LINE) {
-            val match = Patterns.ATX_HEADING_LINE.matchEntire(trimmed)!!
-            val level = match.groupValues[1].length
-            val content = match.groupValues[2].trimEnd().removeSuffix("#").trimEnd()
-            "h$level" {
-                if (content.isNotEmpty()) processInlineContent(content)
-                flushInline()
-            }
+            emitAtxHeading(trimmed)
             return
         }
         // Fenced code as first content of a list item (GFM §5.4 example 304).
@@ -3178,15 +3175,13 @@ private class ParserState(
             return
         }
         // Blockquote as first content of a list item (e.g. `1. > X`). Open the
-        // inner `<blockquote>` and its `<p>`; subsequent `>`-prefixed lines (or
-        // lazy-continuation lines) extend the same paragraph via the
+        // inner `<blockquote>` and emit the line's content into it; subsequent
+        // `>`-prefixed lines (or lazy-continuation lines) continue it via the
         // blockquote-handling branches in `processListBlock`.
         if (isBlockquoteOpener(trimmed)) {
             mark("blockquote")
             ctx.blockquoteOpen = true
-            mark("p")
-            ctx.blockquoteParagraphOpen = true
-            emitListParagraphLine(ctx, stripBlockquotePrefix(firstContent))
+            emitListBlockquoteLine(ctx, stripBlockquotePrefix(firstContent))
             return
         }
         // Table header as the first content of a list item (`- | a | b |`).
@@ -3351,15 +3346,51 @@ private class ParserState(
     private suspend fun SemanticEventScope.closeListBlockquoteIfOpen(mode: BlockMode.ListBlock) {
         val top = mode.stack.lastOrNull() ?: return
         if (top.blockquoteOpen) {
-            if (top.blockquoteParagraphOpen) {
-                flushInline()
-                endListParagraph(top)
-                unmark("p")
-                top.blockquoteParagraphOpen = false
-            }
+            closeListBlockquoteParagraphIfOpen(top)
             unmark("blockquote")
             top.blockquoteOpen = false
         }
+    }
+
+    /** Close the `<p>` of the blockquote open in [ctx], if any. */
+    private suspend fun SemanticEventScope.closeListBlockquoteParagraphIfOpen(ctx: ListContext) {
+        if (ctx.blockquoteParagraphOpen) {
+            flushInline()
+            endListParagraph(ctx)
+            unmark("p")
+            ctx.blockquoteParagraphOpen = false
+        }
+    }
+
+    /**
+     * Emit [content] — one line of the blockquote open in [ctx], its `>`
+     * prefix stripped. The blockquote lives on [ListContext] rather than as a
+     * sub-parse frame (see [ListContext.blockquoteOpen]), so the blocks it can
+     * hold are recognised here: an empty line ends its paragraph (GFM §5.4
+     * example 300), an ATX heading is emitted as such (issue #149), anything
+     * else is paragraph text.
+     */
+    private suspend fun SemanticEventScope.emitListBlockquoteLine(
+        ctx: ListContext,
+        content: String
+    ) {
+        ctx.hasContent = true
+        if (content.isBlank()) {
+            closeListBlockquoteParagraphIfOpen(ctx)
+            return
+        }
+        if (content matches Patterns.ATX_HEADING_LINE) {
+            closeListBlockquoteParagraphIfOpen(ctx)
+            emitAtxHeading(content)
+            return
+        }
+        if (!ctx.blockquoteParagraphOpen) {
+            mark("p")
+            ctx.blockquoteParagraphOpen = true
+        } else {
+            emitListParagraphLineBreak(ctx)
+        }
+        emitListParagraphLine(ctx, content)
     }
 
     /**
@@ -4271,7 +4302,8 @@ private class ParserState(
             closeListTableIfOpen(mode)
         }
 
-        if (innerIndent >= 4 && (mode.blankSeen || !ctx.paragraphOpen)) {
+        if (innerIndent >= 4
+            && (mode.blankSeen || (!ctx.paragraphOpen && !ctx.blockquoteParagraphOpen))) {
             // Open a new indented code block within the current item.
             closeListParagraphIfOpen(mode)
             closeListBlockquoteIfOpen(mode)
@@ -4291,7 +4323,7 @@ private class ParserState(
         // ATX, etc. — GFM §5.4 examples 300, 301): such lines must close any
         // open paragraph or inner blockquote and let the new block take over.
         val atBlockBoundary = mode.blankSeen
-            || (!ctx.paragraphOpen && !ctx.blockquoteOpen)
+            || (!ctx.paragraphOpen && !ctx.blockquoteParagraphOpen)
             || ((ctx.paragraphOpen || ctx.blockquoteParagraphOpen)
                 && lineInterruptsParagraph(stripped.trimStart()))
         if (atBlockBoundary) {
@@ -4312,13 +4344,7 @@ private class ParserState(
             if (stripped matches Patterns.ATX_HEADING_LINE) {
                 closeListParagraphIfOpen(mode)
                 closeListBlockquoteIfOpen(mode)
-                val match = Patterns.ATX_HEADING_LINE.matchEntire(stripped)!!
-                val level = match.groupValues[1].length
-                val content = match.groupValues[2].trimEnd().removeSuffix("#").trimEnd()
-                "h$level" {
-                    if (content.isNotEmpty()) processInlineContent(content)
-                    flushInline()
-                }
+                emitAtxHeading(stripped)
                 ctx.hasContent = true
                 mode.blankSeen = false
                 return
@@ -4408,31 +4434,22 @@ private class ParserState(
                     mark("blockquote")
                     ctx.blockquoteOpen = true
                 }
-                val bqContent = stripBlockquotePrefix(stripped)
-                // Empty `>` line: end the blockquote's open paragraph (GFM §5.4
-                // example 300) — the next blockquote line starts a fresh `<p>`.
-                if (bqContent.isBlank() && ctx.blockquoteParagraphOpen) {
-                    flushInline()
-                    endListParagraph(ctx)
-                    unmark("p")
-                    ctx.blockquoteParagraphOpen = false
+                emitListBlockquoteLine(ctx, stripBlockquotePrefix(stripped))
+                mode.blankSeen = false
+                return
+            }
+            // A non-`>` line lazily continues the blockquote's open paragraph
+            // (GFM §5.1) unless it interrupts it; anything else — including any
+            // line after a blockquote whose last block is not a paragraph —
+            // closes the blockquote.
+            if (ctx.blockquoteOpen) {
+                if (!atBlockBoundary) {
+                    emitListParagraphLineBreak(ctx)
+                    emitListParagraphLine(ctx, stripped)
                     ctx.hasContent = true
                     mode.blankSeen = false
                     return
                 }
-                if (!ctx.blockquoteParagraphOpen) {
-                    mark("p")
-                    ctx.blockquoteParagraphOpen = true
-                } else {
-                    emitListParagraphLineBreak(ctx)
-                }
-                emitListParagraphLine(ctx, bqContent)
-                ctx.hasContent = true
-                mode.blankSeen = false
-                return
-            }
-            // Non-`>` line at a block boundary closes the blockquote.
-            if (ctx.blockquoteOpen && atBlockBoundary) {
                 closeListBlockquoteIfOpen(mode)
             }
         }
