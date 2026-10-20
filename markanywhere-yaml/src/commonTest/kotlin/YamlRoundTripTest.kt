@@ -21,6 +21,8 @@ import com.xemantic.kotlin.test.sameAs
 import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.flow.mergeAdjacentText
 import com.xemantic.markanywhere.flow.semanticEvents
+import com.xemantic.markanywhere.flow.toJsonLines
+import com.xemantic.markanywhere.test.divergenceFrom
 import com.xemantic.markanywhere.test.sameAs
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -307,6 +309,10 @@ class YamlRoundTripTest {
             "-\n  k: \"x\n    y\"\n  m: 1\n" to "- k: \"x\n    y\"\n  m: 1\n",
             "a:\n  t: \"x\ny\"\n  m: 1\n" to "a:\n  t: \"x\n  y\"\n  m: 1\n",
             "p:\n  a: \"x\n\ty\"\n  b: 1\n" to "p:\n  a: \"x\n  \ty\"\n  b: 1\n",
+            "  ? x\n  a: 1\n" to "? x\na: 1\n",
+            "  ? x\n    y\n  a: 1\n" to "? x\n  y\na: 1\n",
+            "  ? x\n  a: \"y\nb: 1\"\n" to "? x\na: \"y\nb: 1\"\n",
+            "  ? x\n  a: [y,\nb]\n" to "? x\na: [y,\nb]\n",
         )
         for ((source, expected) in sources) {
             // when
@@ -627,6 +633,61 @@ class YamlRoundTripTest {
         assert(first == second)
     }
 
+    /**
+     * PyYAML refuses a line less indented than an indented root, Psych and
+     * go-yaml v2 read the document up to it: the parser keeps that line and
+     * every line after it as text with its own indentation, and reads no
+     * entry the readers do not see. The writer writes the root at column 0,
+     * though, so on re-parse that text no longer sits below the root: it
+     * reads as entries, or as the continuation of the last one. The rendered
+     * document is stable, its events are not. Closing the gap would mean
+     * reading entries no reader sees, or dropping the one-line hold of a
+     * `key: value` line (#158); a front matter's root is never indented.
+     */
+    @Test
+    fun `DIVERGENCE - should lose the fixpoint of an indented root broken by a less indented line`() = runTest {
+        // given
+        val brokenByEntry = "  a: 1\nb: 2\n"
+        val brokenByContinuation = "  a: 1\n x\n"
+
+        // when
+        val renderedBrokenByEntry = flowOf(brokenByEntry).parseYaml().renderYaml()
+        val renderedBrokenByContinuation = flowOf(brokenByContinuation).parseYaml().renderYaml()
+
+        // then — the rendered documents are stable
+        flowOf(renderedBrokenByEntry).parseYaml().renderYaml() sameAs renderedBrokenByEntry
+        flowOf(renderedBrokenByContinuation).parseYaml().renderYaml() sameAs renderedBrokenByContinuation
+        // the line less indented than the root reads as an entry
+        eventsOf(renderedBrokenByEntry).divergenceFrom(eventsOf(brokenByEntry)) sameAs """
+            --- expected
+            +++ actual
+            @@
+             {"type":"mark","name":"entry","attributes":{"key":"a","type":"int"}}
+             {"type":"text","text":"1"}
+             {"type":"unmark","name":"entry"}
+            -{"type":"text","text":"b: 2\n"}
+            +{"type":"mark","name":"entry","attributes":{"key":"b","type":"int"}}
+            +{"type":"text","text":"2"}
+            +{"type":"unmark","name":"entry"}
+        """.trimIndent()
+        // or as the continuation of the entry above it
+        eventsOf(renderedBrokenByContinuation).divergenceFrom(eventsOf(brokenByContinuation)) sameAs """
+            --- expected
+            +++ actual
+            @@
+            -{"type":"mark","name":"entry","attributes":{"key":"a","type":"int"}}
+            -{"type":"text","text":"1"}
+            +{"type":"mark","name":"entry","attributes":{"key":"a","type":"verbatim"}}
+            +{"type":"text","text":" 1\n x\n"}
+             {"type":"unmark","name":"entry"}
+            -{"type":"text","text":" x\n"}
+        """.trimIndent()
+    }
+
     private suspend fun Flow<SemanticEvent>.events(): List<SemanticEvent> =
         mergeAdjacentText().toList()
+
+    // The events parsed from [source], one JSON line each, to diff.
+    private suspend fun eventsOf(source: String): String =
+        flowOf(source).parseYaml().mergeAdjacentText().toJsonLines() + "\n"
 }
