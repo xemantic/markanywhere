@@ -25,9 +25,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 
 /**
- * Gives an actionable element that would otherwise render with **no label** one
- * taken from its accessible name, so a link or button never reaches the output
- * as a bare `[](…)`.
+ * Gives an actionable element — or a heading — that would otherwise render with
+ * **no label** one taken from its accessible name, so a link or button never
+ * reaches the output as a bare `[](…)`, nor a heading as a bare `#`.
  *
  * A control whose only content is an icon is everywhere on the modern web, and
  * the pieces that carry its name — a `title` on an inner `<div>`, an
@@ -103,11 +103,11 @@ public fun Flow<SemanticEvent>.labelActionableElements(
     svgMode: SvgMode = SvgMode.RESOLVE,
     refMode: RefMode = RefMode.ENCODE,
 ): Flow<SemanticEvent> = flow {
-    // One frame per open control, innermost last. An event arriving inside a
-    // control is offered to the innermost frame; a frame that has shown its
+    // One frame per open control or heading, innermost last. An event arriving
+    // inside one is offered to the innermost frame; a frame that has shown its
     // label passes events on to the frame below (or downstream when it is the
     // outermost), one that has not holds them until it is settled.
-    val frames = ArrayDeque<Control>()
+    val frames = ArrayDeque<NamedElement>()
 
     suspend fun pass(event: SemanticEvent, level: Int) {
         if (level < 0) {
@@ -130,9 +130,9 @@ public fun Flow<SemanticEvent>.labelActionableElements(
 
     collect { event ->
         if (event is Mark) {
-            val placeholder = event.isControl(refMode)
-            if (placeholder || event.isHeading()) {
-                frames.addLast(Control(placeholder).also { it.buffer.add(event) })
+            val isControl = event.isControl(refMode)
+            if (isControl || event.isHeading()) {
+                frames.addLast(NamedElement(isControl).also { it.buffer.add(event) })
                 return@collect
             }
         }
@@ -159,7 +159,7 @@ public fun Flow<SemanticEvent>.labelActionableElements(
             labelled(top, svgMode).forEach { pass(it, frames.lastIndex) }
         }
     }
-    // Controls unclosed at end-of-stream (synthetic edge): flush what we have,
+    // Elements unclosed at end-of-stream (synthetic edge): flush what we have,
     // innermost first so its events reach the enclosing frame's buffer.
     while (frames.isNotEmpty()) {
         val top = frames.removeLast()
@@ -170,20 +170,25 @@ public fun Flow<SemanticEvent>.labelActionableElements(
 
 /**
  * An open element this operator names — an actionable element, or a heading —
- * and what it has held back so far. Only a control is given the
- * [GRAPHIC_PLACEHOLDER_ALT] for a nameless graphic ([placeholder]).
+ * and what it has held back so far. Only a control ([isControl]) is given the
+ * [GRAPHIC_PLACEHOLDER_ALT] for a nameless graphic.
  */
-private class Control(val placeholder: Boolean) {
+private class NamedElement(val isControl: Boolean) {
     val buffer = mutableListOf<SemanticEvent>()
-    var depth = 1 // nesting depth inside the control, 1 = its own open mark
-    var labelled = false // the control has shown a label: nothing left to hold
+    var depth = 1 // nesting depth inside the element, 1 = its own open mark
+    var labelled = false // the element has shown a label: nothing left to hold
 }
 
 private val HEADING_TAGS = setOf("h1", "h2", "h3", "h4", "h5", "h6")
 
-/** Whether this element is a heading, by its tag or its explicit `role`. */
+/**
+ * Whether this element renders as a heading: by its tag, or by a
+ * `role="heading"` on a generic container — the only place [simplifyHtml]
+ * promotes that role to a heading (on an `<li>` it stays a list item, and a
+ * name written into it would read as the item's text).
+ */
 private fun Mark.isHeading(): Boolean =
-    name in HEADING_TAGS || (mayHoldItsName() && explicitRole() == "heading")
+    name in HEADING_TAGS || (isGenericContainer() && explicitRole() == "heading")
 
 /** Elements whose whole point is to be activated by the reader. */
 private val ACTIONABLE_TAGS = setOf("a", "button", "summary")
@@ -284,20 +289,20 @@ public const val GRAPHIC_PLACEHOLDER_ALT: String = ":svg:"
 private val NAME_ATTRIBUTES = listOf("aria-label", "title")
 
 /**
- * A control none of whose held events [rendersALabel] — the buffer is only ever
- * handed over here on that condition — with a label inserted where a name or a
- * vanishing graphic gives us something to say.
+ * A control or heading none of whose held events [rendersALabel] — the buffer
+ * is only ever handed over here on that condition — with a label inserted where
+ * a name or (for a control only) a vanishing graphic gives us something to say.
  */
 private fun labelled(
-    control: Control,
+    element: NamedElement,
     svgMode: SvgMode,
 ): List<SemanticEvent> {
-    val buffer = control.buffer
+    val buffer = element.buffer
     val open = buffer.first() as Mark
     val name = open.accessibleName() ?: buffer.descendantName()
     val label = when {
         name != null -> listOf(Text(name))
-        control.placeholder && svgMode == SvgMode.RESOLVE && buffer.holdsAVanishingGraphic() -> listOf(
+        element.isControl && svgMode == SvgMode.RESOLVE && buffer.holdsAVanishingGraphic() -> listOf(
             Mark("img", isTagged = open.isTagged,
                 attributes = mapOf("alt" to GRAPHIC_PLACEHOLDER_ALT)),
             Unmark("img", isTagged = open.isTagged),
