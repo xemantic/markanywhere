@@ -647,12 +647,13 @@ class SeparateUnwrappedBlocksTest {
     }
 
     @Test
-    fun `should not separate adjacent uncaptured inline controls each holding part of a word`() = runTest {
-        // given — issue #141 without a capture: a span is inline by UA default
+    fun `should separate adjacent uncaptured controls whose display is not known`() = runTest {
+        // given — without a capture nothing says the controls sit flush in the
+        // text flow, so they stay apart (a web component tab strip)
         val input = semanticEvents(tagged = true) {
-            "p" {
-                "span"("role" to "button") { +"Hel" }
-                "span"("role" to "button") { +"lo" }
+            "div" {
+                "sl-tab"("role" to "tab") { +"General" }
+                "sl-tab"("role" to "tab") { +"Advanced" }
             }
         }
 
@@ -660,7 +661,66 @@ class SeparateUnwrappedBlocksTest {
         val output = input.separateUnwrappedBlocks()
 
         // then
-        output sameAs input
+        output sameAs semanticEvents(tagged = true) {
+            "div" {
+                "sl-tab"("role" to "tab") { +"General" }
+                +" "
+                "sl-tab"("role" to "tab") { +"Advanced" }
+            }
+        }
+    }
+
+    @Test
+    fun `should separate adjacent controls of a dump that left their display out`() = runTest {
+        // given — an unmarked dump captured before every display was recorded:
+        // the paragraph's annotation shows a capture, the controls carry none
+        val input = semanticEvents(tagged = true) {
+            "body" {
+                "p"(AccessibilityAnnotations.DISPLAY to "block") { +"x" }
+                "div" {
+                    "div"("role" to "button", AccessibilityAnnotations.REF to "1") { +"Save" }
+                    "div"("role" to "button", AccessibilityAnnotations.REF to "2") { +"Cancel" }
+                }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "body" {
+                "p"(AccessibilityAnnotations.DISPLAY to "block") { +"x" }
+                "div" {
+                    "div"("role" to "button", AccessibilityAnnotations.REF to "1") { +"Save" }
+                    +" "
+                    "div"("role" to "button", AccessibilityAnnotations.REF to "2") { +"Cancel" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should separate adjacent inline elements with the link role`() = runTest {
+        // given — an ARIA link is a distinct thing to follow like an <a>
+        val input = semanticEvents(tagged = true) {
+            "p" {
+                "span"("role" to "link", AccessibilityAnnotations.REF to "1", AccessibilityAnnotations.DISPLAY to "inline") { +"Home" }
+                "span"("role" to "link", AccessibilityAnnotations.REF to "2", AccessibilityAnnotations.DISPLAY to "inline") { +"News" }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "p" {
+                "span"("role" to "link", AccessibilityAnnotations.REF to "1", AccessibilityAnnotations.DISPLAY to "inline") { +"Home" }
+                +" "
+                "span"("role" to "link", AccessibilityAnnotations.REF to "2", AccessibilityAnnotations.DISPLAY to "inline") { +"News" }
+            }
+        }
     }
 
     @Test
