@@ -268,7 +268,8 @@ class YamlRoundTripTest {
         // a multi-line quoted scalar with an empty line and a `#` line in it,
         // a scalar continued past an empty line, a multi-line flow sequence,
         // a block scalar followed by a line the readers refuse, a continued
-        // sequence item and compact entry
+        // sequence item and compact entry, a block scalar continued past a
+        // less indented comment
         val sources = listOf(
             "title: A long\n  title\nb: 1\n",
             "description:\n  first line\n  second\n",
@@ -281,6 +282,8 @@ class YamlRoundTripTest {
             "title: \"x\nauthor: y\"\nz: 1\n",
             "tags: [a, \"b,\n]\"]\nz: 1\n",
             "- k: \"x\n    y\"\n  m: 1\n",
+            "a: |\n    x\n  # c\n    y\nz: 1\n",
+            "a: |\n# c\n  x\nz: 1\n",
         )
         for (source in sources) {
             // when
@@ -303,6 +306,7 @@ class YamlRoundTripTest {
             "    >'\n  [|\nb:\n" to "    >'\n  [|\nb:\n",
             "-\n  k: \"x\n    y\"\n  m: 1\n" to "- k: \"x\n    y\"\n  m: 1\n",
             "a:\n  t: \"x\ny\"\n  m: 1\n" to "a:\n  t: \"x\n  y\"\n  m: 1\n",
+            "p:\n  a: \"x\n\ty\"\n  b: 1\n" to "p:\n  a: \"x\n  \ty\"\n  b: 1\n",
         )
         for ((source, expected) in sources) {
             // when

@@ -44,7 +44,9 @@ import kotlinx.coroutines.flow.Flow
  * readers (Jekyll, PyYAML) resolve them, except that a key spelled in
  * lowercase — the spelling a case-sensitive reader looks up — beats a
  * variant in another letter case wherever it occurs; the winner keeps the
- * position of the first duplicate.
+ * position of the first duplicate. A value kept as source takes part in
+ * this as any other — the readers know it — so when it wins, no value of
+ * its key is read.
  *
  * Passing the result back through [simplifyHtml] restores the front matter
  * except for what either side normalises or discards: skipped entries
