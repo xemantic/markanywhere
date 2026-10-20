@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Findable content</title>
+</head>
+<body>
+<h1>FAQ</h1>
+<!--
+  Inserted by the test right before the capture: Chrome lays skipped content
+  out on its own some time after load, which would hide the artifact.
+-->
+<template id="content">
+  <div id="faq" hidden="until-found">
+    <p id="answer">The answer is <strong id="answer-strong">findable</strong>.</p>
+    <img id="answer-img" alt="Diagram" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=">
+    <section id="answer-section" style="display:flex"><span id="answer-item">deep text</span></section>
+    <div id="answer-gone" style="display:none"><p id="answer-gone-p">really gone</p></div>
+    <span id="answer-invisible" style="visibility:hidden">invisible</span>
+    <div id="answer-skipped" style="content-visibility:hidden"><p id="answer-skipped-p">not findable</p></div>
+  </div>
+  <details id="closed-details">
+    <summary id="closed-summary">Question</summary>
+    <p id="details-answer">The details answer</p>
+    <a id="tip-link" href="/tip"><svg id="tip-svg" width="10" height="10"><title id="tip-title">Hidden tip</title><path id="tip-path" d="M0 0L5 5"/></svg></a>
+    <details id="nested-details">
+      <summary id="nested-summary">Nested question</summary>
+      <p id="nested-answer">The nested answer</p>
+    </details>
+  </details>
+  <details id="open-details" open>
+    <summary id="open-summary">Open question</summary>
+    <p id="open-answer">Shown</p>
+  </details>
+  <div id="plain-hidden" hidden><p id="plain-hidden-p">gone</p></div>
+  <div id="skipped" style="content-visibility:hidden">
+    <p id="skipped-p">not findable</p>
+    <details id="skipped-details"><summary>Skipped question</summary><p id="skipped-details-p">not findable</p></details>
+  </div>
+  <div id="gone" style="display:none">
+    <div id="gone-faq" hidden="until-found"><p id="gone-faq-p">gone</p></div>
+  </div>
+</template>
+</body>
+</html>
