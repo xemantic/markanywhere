@@ -818,4 +818,92 @@ class InlineSyntaxEscapingRoundTripTest {
         assert(failures.isEmpty())
     }
 
+    // --- round 4: raw text the parser reads back without escapes ------------
+
+    @Test
+    fun `should keep custom markup text verbatim`() = runTest {
+        // given — `<ns:name>` content is never parsed as Markdown
+        val events = semanticEvents { tag("x:think") { +"use `foo` *a* ^x \$z" } }
+        // when
+        val (once, twice, thrice) = renderThreePasses(events)
+        // then
+        once sameAs "<x:think>use `foo` *a* ^x \$z</x:think>"
+        twice sameAs once
+        thrice sameAs twice
+    }
+
+    @Test
+    fun `should keep a parsed custom markup block verbatim`() = runTest {
+        // given
+        val markdown = "<x:think>\nuse `foo` ^x \$z\n</x:think>"
+        // when
+        val once = flowOf(markdown).parse().renderMarkdown()
+        val twice = flowOf(once).parse().renderMarkdown()
+        val thrice = flowOf(twice).parse().renderMarkdown()
+        // then
+        assert("\\" !in once)
+        twice sameAs once
+        thrice sameAs twice
+    }
+
+    @Test
+    fun `should keep text on the line of a block html tag verbatim`() = runTest {
+        // given — `<div>` starts an HTML block whose first line is raw text
+        val events = semanticEvents { tag("div") { +"a `b` c" } }
+        // when
+        val (once, twice, thrice) = renderThreePasses(events)
+        // then
+        once sameAs "<div>a `b` c</div>"
+        twice sameAs once
+        thrice sameAs twice
+    }
+
+    @Test
+    fun `should escape Markdown after a blank line in a block html tag`() = runTest {
+        // given — after a blank line the parser sub-parses the block as Markdown
+        val events = semanticEvents { tag("section") { "p" { +"a `b` c" } } }
+        // when
+        val (once, twice, thrice) = renderThreePasses(events)
+        // then
+        once sameAs "<section>\n\na \\`b\\` c\n\n</section>"
+        twice sameAs once
+        thrice sameAs twice
+    }
+
+    @Test
+    fun `should keep the text of a link spilled to a raw tag in a list item verbatim`() = runTest {
+        // given
+        val events = semanticEvents {
+            "ul" { "li" { "a"("href" to "u") { "p" { +"a*b \$c `d`" } } } }
+        }
+        // when
+        val (once, twice, thrice) = renderThreePasses(events)
+        // then
+        assert("\\" !in once)
+        twice sameAs once
+        thrice sameAs twice
+    }
+
+    @Test
+    fun `should escape a less-than sign before an equals sign starting an email address`() = runTest {
+        // given
+        val events = semanticEvents { "p" { +"a <=x@y.com> b" } }
+        // when
+        val markdown = events.renderMarkdown()
+        // then
+        markdown sameAs """a \<=x@y.com> b"""
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should write one space after the marker of a heading starting with a span`() = runTest {
+        // given
+        val events = semanticEvents { "h2" { "em" { +" a" } } }
+        // when
+        val markdown = events.renderMarkdown()
+        // then
+        markdown sameAs "## *a*"
+        assertMarkdownFixpoint(markdown)
+    }
+
 }
