@@ -115,7 +115,10 @@ import kotlinx.coroutines.flow.flow
  * outside its label. Controls are distinct things to act on (see
  * [isDeclaredControl] — only a declared one: a bare ref-bearing `<span>` may
  * be half a word, `US` + `$5`), and nothing renders two of them flush against
- * each other on purpose — they would read as one.
+ * each other on purpose — they would read as one. Unless one of the two is a
+ * link or a box of its own (its display not `inline`), though: two controls
+ * in the inline text flow may be one word a page made a tap target per
+ * syllable (`<span role=button>Hel</span><span role=button>lo</span>`, #141).
  *
  * A separator goes *before* the marks opened since the previous token (`<b>`,
  * `<em>`, an inline `<a>`, a blockified `<strong>`, the box itself …), never
@@ -142,11 +145,10 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
     var crossedSurvivingBlock = false
     var seenInlineToken = false // suppresses a leading separator at stream start
     var previousEndedWithSpace = false // last token already ended in whitespace
-    // The open controls, innermost last, each by a serial number, and the
-    // control (0 = none) holding the last inline content token.
-    val openControls = ArrayDeque<Int>()
-    var controlSerial = 0
-    var previousTokenControl = 0
+    // The open controls, innermost last, and the control (null = none)
+    // holding the last inline content token.
+    val openControls = ArrayDeque<OpenControl>()
+    var previousTokenControl: OpenControl? = null
     // What each element's display is, the same reading every operator makes.
     // An old unmarked dump left the `block` of its `<html>`, `<body>` and
     // leading wrappers out, so those still read as their tag's UA default —
@@ -289,15 +291,17 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
         crossedSurvivingBlock = false
         seenInlineToken = true
         previousEndedWithSpace = text?.lastOrNull()?.isWhitespace() == true
-        previousTokenControl = openControls.lastOrNull() ?: 0
+        previousTokenControl = openControls.lastOrNull()
         turnDepth = stack.size
         stackedLevel = Int.MAX_VALUE
         sideBySideLevel = Int.MAX_VALUE
     }
 
-    // Separates a control opening right after the content of another, closed one.
-    suspend fun separateAdjacentControl() {
-        if (previousTokenControl != 0 && previousTokenControl !in openControls &&
+    // Separates a control opening right after the content of another, closed
+    // one, unless both are inline text flow (per-token tap targets, #141).
+    suspend fun separateAdjacentControl(control: OpenControl) {
+        val previous = previousTokenControl ?: return
+        if (previous !in openControls && (previous.distinct || control.distinct) &&
             !crossedSurvivingBlock && !previousEndedWithSpace
         ) {
             out(SemanticEvent.Text(" "), stack.size - heldMarks.size)
@@ -320,14 +324,18 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
                     if (block && stack.size == paragraphDepth) release(wrap = true)
                     else if (event.rendersAsBlock()) release(wrap = false)
                 }
-                val control = event.isDeclaredControl()
+                val control = if (event.isDeclaredControl()) OpenControl(
+                    // A link is a distinct thing to follow wherever it sits; any
+                    // other control only when it is a box of its own.
+                    distinct = event.name == "a" || boundary != BlockBoundary.INLINE
+                ) else null
                 if (preserveDepth == 0) {
                     cross(boundary)
                     crossBox(boundary, stack.size + 1)
                     // Held from before this mark, so a paragraph can open
                     // around the box when the box itself cannot hold one.
                     holdIfLineBreaks()
-                    if (control) separateAdjacentControl()
+                    if (control != null) separateAdjacentControl(control)
                 }
                 val opensPreserve = event.isPreserveRegion()
                 stack.addLast(
@@ -338,7 +346,7 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
                         // are laid out by its parent's display.
                         isFlexGridContainer = if (display == CapturedDisplay.Known("contents")) parentIsFlexGrid
                         else display.isFlexGridContainer(),
-                        control = control,
+                        control = control != null,
                         rendersAsBlock = event.rendersAsBlock(),
                         allowsParagraph = (parent?.allowsParagraph ?: true) &&
                             event.mayHoldParagraph(display)
@@ -349,7 +357,7 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
                 } else {
                     heldMarks += HeldEvent(event, stack.size)
                 }
-                if (control) openControls.addLast(++controlSerial)
+                if (control != null) openControls.addLast(control)
                 if (opensPreserve) preserveDepth++
             }
             is Unmark -> {
@@ -393,6 +401,14 @@ private val PARAGRAPH_MARK = SemanticEvent.Mark("p", isTagged = true)
 private val PARAGRAPH_UNMARK = SemanticEvent.Unmark("p", isTagged = true)
 
 private class HeldEvent(val event: SemanticEvent, val depthAfter: Int)
+
+/**
+ * An open declared control, compared by identity. A [distinct] one is
+ * separated from an adjacent control: a link, or a control that is a box of
+ * its own — two controls in the inline text flow may be the halves of one
+ * word (`<span role=button>Hel</span><span role=button>lo</span>`, #141).
+ */
+private class OpenControl(val distinct: Boolean)
 
 /** How crossing an element's boundary bears on separating adjacent inline content. */
 private enum class BlockBoundary {

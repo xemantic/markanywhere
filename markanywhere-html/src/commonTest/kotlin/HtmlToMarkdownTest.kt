@@ -1400,6 +1400,24 @@ class HtmlToMarkdownTest {
     }
 
     @Test
+    fun `should not split a word made of per-syllable controls`() = runTest {
+        // given — issue #141
+        val page = semanticEvents(tagged = true) {
+            "p" {
+                "span"("role" to "button", AccessibilityAnnotations.REF to "1", AccessibilityAnnotations.DISPLAY to "inline") { +"Hel" }
+                "span"("role" to "button", AccessibilityAnnotations.REF to "2", AccessibilityAnnotations.DISPLAY to "inline") { +"lo" }
+                +","
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown(refMode = RefMode.STRIP).renderMarkdown()
+
+        // then
+        markdown sameAs "Hello,"
+    }
+
+    @Test
     fun `should keep the space at the leading edge of a link`() = runTest {
         // given — issue #144
         val page = semanticEvents(tagged = true) {
