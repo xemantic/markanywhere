@@ -72,8 +72,32 @@ class HiddenMaskedFieldTest {
         assert(dump.element("b-step-pin")["aria-label"] == "PIN")
     }
 
-    private suspend fun openPage(browser: Browser): Tab =
-        browser.get(testPageUrl("hidden-masked.html")).also { it.waitUntilLoaded() }
+    @Test
+    fun `should redact a masked field that is not laid out on a page overriding style getters`() = runTest {
+        val dump = runInBrowser { browser ->
+            // given - getComputedStyle, getPropertyValue and ownerDocument all answer "unmasked"
+            val tab = openPage(browser, "hidden-masked-overriding.html")
+
+            // when
+            PageSession(tab).dump()
+        }
+
+        // then - Blink's own computed style decides, not the page's script (issue #134)
+        val ids = listOf("step-pin", "owner-pin", "frame-pin")
+        val leaked = ids.filter { id ->
+            val input = dump.element(id)
+            input[REDACTED] != "filled" || input["value"] != null
+        }
+        assert(leaked.isEmpty())
+        assert(dump.element("step-note")[REDACTED] == "filled")
+        assert(dump.textOf("step-note") == "")
+        // read, not failed closed: a hidden field nothing masks keeps its value, in a frame too
+        assert(dump.element("step-name")["value"] == "Alice" && dump.element("step-name")[REDACTED] == null)
+        assert(dump.element("frame-name")["value"] == "Bob" && dump.element("frame-name")[REDACTED] == null)
+    }
+
+    private suspend fun openPage(browser: Browser, page: String = "hidden-masked.html"): Tab =
+        browser.get(testPageUrl(page)).also { it.waitUntilLoaded() }
 
     private fun SemanticEventDump.element(id: String): SemanticEvent.Mark = events
         .filterIsInstance<SemanticEvent.Mark>()
