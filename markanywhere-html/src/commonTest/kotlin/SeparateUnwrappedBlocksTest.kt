@@ -628,6 +628,65 @@ class SeparateUnwrappedBlocksTest {
     }
 
     @Test
+    fun `should not separate adjacent inline controls each holding part of a word`() = runTest {
+        // given — issue #141: a language-learning page making each syllable
+        // its own tap target; nothing but inline text flow lies between them
+        val input = semanticEvents(tagged = true) {
+            "p" {
+                "span"("role" to "button", AccessibilityAnnotations.REF to "1", AccessibilityAnnotations.DISPLAY to "inline") { +"Hel" }
+                "span"("role" to "button", AccessibilityAnnotations.REF to "2", AccessibilityAnnotations.DISPLAY to "inline") { +"lo" }
+                +","
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs input
+    }
+
+    @Test
+    fun `should not separate adjacent uncaptured inline controls each holding part of a word`() = runTest {
+        // given — issue #141 without a capture: a span is inline by UA default
+        val input = semanticEvents(tagged = true) {
+            "p" {
+                "span"("role" to "button") { +"Hel" }
+                "span"("role" to "button") { +"lo" }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs input
+    }
+
+    @Test
+    fun `should separate an inline control adjacent to a link`() = runTest {
+        // given — a link is a distinct thing to follow whatever its display
+        val input = semanticEvents(tagged = true) {
+            "p" {
+                "a"("href" to "u", AccessibilityAnnotations.DISPLAY to "inline") { +"x" }
+                "span"("role" to "button", AccessibilityAnnotations.DISPLAY to "inline") { +"y" }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "p" {
+                "a"("href" to "u", AccessibilityAnnotations.DISPLAY to "inline") { +"x" }
+                +" "
+                "span"("role" to "button", AccessibilityAnnotations.DISPLAY to "inline") { +"y" }
+            }
+        }
+    }
+
+    @Test
     fun `should not separate adjacent ref-bearing generic elements`() = runTest {
         // given - a ref alone does not make a control a reader tells apart:
         // a price split into two clickable spans is still one word
