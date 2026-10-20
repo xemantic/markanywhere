@@ -413,8 +413,7 @@ If the fix is bounded (one inline construct, one or two lines of lookahead), it'
   Don't guess a captured element's display from its tag: a `<span style="display:block">` per line (rich editors) is a box, a `<div style="display:contents">` is not.
   An `<img>` is always an inline token, never a separated box, so a lazy-load placeholder `<img>` next to its real sibling isn't split.
   Adjacent **inline** elements (`<b>bold</b><i>italic</i>`) cross no separated box and stay merged.
-  Adjacent **controls** are the exception, and they stay apart unless the capture *records* both as `inline`/`contents` (#141: per-syllable `role=button` spans) — an `Unrecorded` or UA-default display must not remove a separation.
-  Links (`<a>`, `role=link`) are always separated, a deliberate policy: the Hacker News masthead's gap is a CSS margin no capture records, so a page making each syllable its own `<a>` gets split words.
+  Adjacent links are always separated, knowingly splitting a page that makes each syllable its own `<a>`: the Hacker News masthead's gap is a CSS margin no capture records, and an exemption read from an `Unrecorded`/UA-default display removed separations main made (#141).
   `LINK_BLOCK_CONTENT_TAGS` is the "renders as block" set reused from `EncodeActionableRefs.kt` (made `internal`).
   The operator **requires** the DISPLAY annotation to be accurate (captured dumps); it is suppressed inside `<pre>`/`<code>`/`<textarea>`.
   Content **below** another box gets a paragraph instead of a space (issue #109): the line breaks iff the *shallowest* box edge crossed between two tokens is a stacked box (block-level, parent not flex/grid) rather than a flex/grid item or `inline-block` — deeper edges don't count, or the stacked blocks inside two side-by-side flex items would split a metadata row (`3 hrs ago` / `Europe`).
