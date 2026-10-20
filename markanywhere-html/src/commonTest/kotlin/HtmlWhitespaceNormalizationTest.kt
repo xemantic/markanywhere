@@ -555,4 +555,36 @@ class HtmlWhitespaceNormalizationTest {
             }
         }
     }
+
+    @Test
+    fun `should move the space out of an inline element holding only a space`() = runTest {
+        // given — review of #144: `Hi<b> </b>there` reads "Hi there"
+        val input = semanticEvents(tagged = true) {
+            "p" { +"Hi"; "b" { +" " }; +"there" }
+        }
+
+        // when
+        val output = input.dropHtmlStructuralWhitespace()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "p" { +"Hi "; "b" { }; +"there" }
+        }
+    }
+
+    @Test
+    fun `should move a leading space out of inline opens before an empty element`() = runTest {
+        // given — review of #144: `x<b> <i></i>y</b>` reads "x y"
+        val input = semanticEvents(tagged = true) {
+            "p" { +"x"; "b" { +" "; "i" { }; +"y" } }
+        }
+
+        // when
+        val output = input.dropHtmlStructuralWhitespace()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "p" { +"x "; "b" { "i" { }; +"y" } }
+        }
+    }
 }
