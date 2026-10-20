@@ -130,8 +130,15 @@ private class XmlDocumentReader(
      * Whether the text read since the last mark or unmark holds anything but
      * whitespace — kept apart from [text], which is flushed at every chunk end,
      * so that whitespace continuing such text is never taken for the prolog's.
+     *
+     * Content ends the prolog, so it also ends [isDoctypeAllowed] — set here,
+     * where every way of reading character data passes.
      */
     private var textHasContent = false
+        set(value) {
+            if (value) isDoctypeAllowed = false
+            field = value
+        }
     private val elementName = StringBuilder()
 
     /** The target of the processing instruction being read. */
@@ -160,7 +167,11 @@ private class XmlDocumentReader(
     /** Whether the markup being read opens the document, so it may be an XML declaration. */
     private var markupOpensDocument = false
 
-    /** Whether no element and no DOCTYPE has been read, so a DOCTYPE may follow. */
+    /**
+     * Whether nothing but whitespace, comments and processing instructions has
+     * been read — no element, no character data and no DOCTYPE — so a DOCTYPE
+     * may follow.
+     */
     private var isDoctypeAllowed = true
 
     /** Whether a leading zero of the character reference being read was skipped. */
@@ -581,8 +592,8 @@ private class XmlDocumentReader(
      * — `--` a comment, `[CDATA[` a section of character data, and `DOCTYPE`
      * the declaration, the only one of the three which is neither content nor
      * dropped wholesale by a single terminator. A DOCTYPE is only read once,
-     * before the first element: anywhere else it is as malformed as any other
-     * `<!`.
+     * before the first element or character data: anywhere else it is as
+     * malformed as any other `<!`.
      */
     private fun readDeclaration(char: Char) {
         if (declarationLength == 0) {
