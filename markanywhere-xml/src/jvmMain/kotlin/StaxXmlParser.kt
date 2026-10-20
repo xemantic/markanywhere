@@ -145,14 +145,7 @@ public class StaxXmlParser(
                 // Closing a reader which already failed is of no interest.
             }
         }
-        while (open.isNotEmpty()) {
-            emit(
-                SemanticEvent.Unmark(
-                    name = open.removeLast(),
-                    isTagged = true
-                )
-            )
-        }
+        unmarkAll(open)
     }
 
 }

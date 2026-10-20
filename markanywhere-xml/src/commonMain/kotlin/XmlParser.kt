@@ -18,6 +18,7 @@ package com.xemantic.markanywhere.xml
 
 import com.xemantic.markanywhere.SemanticEvent
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.flowOf
 
 /**
@@ -108,3 +109,19 @@ public fun XmlParser.parse(
 public fun Flow<String>.parseXml(
     parser: XmlParser
 ): Flow<SemanticEvent> = parser.parse(this)
+
+/**
+ * Unmarks every element still in [open], innermost last, emptying it — how
+ * every engine keeps the balanced stream the contract promises when a document
+ * ends early or its read was stopped.
+ */
+internal suspend fun FlowCollector<SemanticEvent>.unmarkAll(open: ArrayDeque<String>) {
+    while (open.isNotEmpty()) {
+        emit(
+            SemanticEvent.Unmark(
+                name = open.removeLast(),
+                isTagged = true
+            )
+        )
+    }
+}

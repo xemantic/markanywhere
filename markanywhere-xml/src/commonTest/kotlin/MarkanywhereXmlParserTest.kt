@@ -60,7 +60,7 @@ class MarkanywhereXmlParserTest : XmlParserTest() {
     }
 
     @Test
-    fun `should read a fragment holding more than one root element`() = runTest {
+    fun `DIVERGENCE - should read a fragment holding more than one root element`() = runTest {
         // when — a fragment is what markanywhere is usually handed, so the
         // one-root rule is not enforced
         val events = parse("<a/><b>text</b>")
@@ -73,7 +73,7 @@ class MarkanywhereXmlParserTest : XmlParserTest() {
     }
 
     @Test
-    fun `should read text standing outside any element`() = runTest {
+    fun `DIVERGENCE - should read text standing outside any element`() = runTest {
         // when
         val events = parse("before<a/>after")
 
@@ -198,7 +198,7 @@ class MarkanywhereXmlParserTest : XmlParserTest() {
     }
 
     @Test
-    fun `should keep the last value of a repeated attribute`() = runTest {
+    fun `DIVERGENCE - should keep the last value of a repeated attribute`() = runTest {
         // when — a repeated attribute makes a document invalid, but leaves no
         // doubt about what was written
         val events = parse("""<a href="/first" href="/second"/>""")
@@ -206,6 +206,40 @@ class MarkanywhereXmlParserTest : XmlParserTest() {
         // then
         events sameAs semanticEvents(tagged = true) {
             "a"("href" to "/second") { }
+        }
+    }
+
+    @Test
+    fun `DIVERGENCE - should report a repeated attribute where its kept value was written`() = runTest {
+        // when
+        val events = parse("""<a x="1" y="2" x="3"/>""").toList()
+
+        // then — attributes stay in document order, the discarded value's
+        // position going with it
+        val mark = events.first() as SemanticEvent.Mark
+        assert(mark.attributes.toList() == listOf("y" to "2", "x" to "3"))
+    }
+
+    @Test
+    fun `should keep the text read before the end of a CDATA section in content`() = runTest {
+        // when — of three brackets only the last two can be the `]]>`
+        val events = parse("<a>x]]]>y</a>")
+
+        // then
+        events sameAs semanticEvents(tagged = true) {
+            "a" { +"x]" }
+        }
+    }
+
+    @Test
+    fun `should read right brackets in content which end nothing`() = runTest {
+        // when — split so that the brackets wait for the next chunk
+        val events = parser.parse(flowOf("<a>]] ]", "]", "x]]</a>]")).mergeAdjacentText()
+
+        // then
+        events sameAs semanticEvents(tagged = true) {
+            "a" { +"]] ]]x]]" }
+            +"]"
         }
     }
 
@@ -232,7 +266,7 @@ class MarkanywhereXmlParserTest : XmlParserTest() {
     }
 
     @Test
-    fun `should skip a DOCTYPE whose internal subset holds brackets in a comment and an instruction`() = runTest {
+    fun `DIVERGENCE - should skip a DOCTYPE whose internal subset holds brackets in a comment and an instruction`() = runTest {
         // when — a `]` followed by `>` inside a comment or an instruction ends
         // nothing. The JDK's StAX, with DTD support off, ends the DOCTYPE at the
         // first such pair and rejects the rest as content in the prolog, which

@@ -539,6 +539,73 @@ abstract class XmlParserTest {
     }
 
     @Test
+    fun `should stop at a decimal character reference continuing as a hexadecimal one`() = runTest {
+        // given — the `x` comes after a leading zero, so neither reads as hex
+        val references = listOf("&#0x41;", "&#000x0041;")
+
+        references.forEach { reference ->
+            // when
+            val events = parse("<a>x${reference}y</a>").toList()
+
+            // then
+            events should {
+                have(markNames() == listOf("a"))
+                have('A' !in textContent() && 'y' !in textContent())
+                have(isBalanced())
+            }
+        }
+    }
+
+    @Test
+    fun `should stop at malformed markup`() = runTest {
+        // given — a declaration no keyword opens, a DOCTYPE inside an element,
+        // an instruction without a target, an XML declaration not opening the
+        // document, and the end of a CDATA section outside one
+        val markup = listOf(
+            "<!foo>",
+            "<!x'>",
+            "<!DOCTYPE a>",
+            "<??>",
+            "<? pi?>",
+            "<?xml version=\"1.0\"?>",
+            "<?XML version=\"1.0\"?>",
+            "]]>"
+        )
+
+        markup.forEach { construct ->
+            // when
+            val events = parse("<a>x${construct}<b/>y</a>").toList()
+
+            // then
+            events should {
+                have(markNames() == listOf("a"))
+                have('y' !in textContent())
+                have(isBalanced())
+            }
+        }
+    }
+
+    @Test
+    fun `should stop at an XML declaration preceded by whitespace`() = runTest {
+        // when — the declaration must be the very first thing in the document
+        val events = parse("\n<?xml version=\"1.0\"?><a/>").toList()
+
+        // then
+        assert(events.isEmpty())
+    }
+
+    @Test
+    fun `should read an instruction whose target only starts with xml`() = runTest {
+        // when — only the target `xml` itself is reserved for the declaration
+        val events = parse("<a>x<?xml-stylesheet href=\"a.css\"?>y</a>")
+
+        // then
+        events sameAs semanticEvents(tagged = true) {
+            "a" { +"xy" }
+        }
+    }
+
+    @Test
     fun `should not throw on input which is not XML at all`() = runTest {
         // when
         val events = parse("just some text < & > with no markup").toList()
