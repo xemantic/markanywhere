@@ -179,6 +179,8 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
     // always the tail of the stream, behind the held run, so a separator (and
     // a paragraph) can still be placed before them.
     val heldMarks = mutableListOf<HeldEvent>()
+    // The open marks of an element with the `img` role, itself included.
+    var imageRoleDepth = 0
 
     // A tie goes to the stacked box: a block after an inline-block at the same
     // level still starts a line of its own.
@@ -329,6 +331,26 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
     }
 
     collect { event ->
+        // The children of an element with the `img` role describe the image
+        // simplifyHtml makes of it and are dropped there for its name, so
+        // they pass through as no content of their own (#169).
+        if (imageRoleDepth > 0 && !(event is Unmark && imageRoleDepth == 1)) {
+            when (event) {
+                is Mark -> {
+                    displays.open(event)
+                    stack.addLast(IMAGE_DESCRIPTION_FRAME)
+                    imageRoleDepth++
+                }
+                is Unmark -> {
+                    displays.close()
+                    stack.removeLastOrNull()
+                    imageRoleDepth--
+                }
+                else -> {}
+            }
+            out(event)
+            return@collect
+        }
         when (event) {
             is Mark -> {
                 val parent = stack.lastOrNull()
@@ -387,6 +409,7 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
                 // `img` role, which simplifyHtml turns into one (#169).
                 if (preserveDepth == 0 && (event.name == "img" || event.isImageRole())) {
                     emitInlineToken(event, stack.size)
+                    if (event.isImageRole()) imageRoleDepth = 1
                 } else {
                     heldMarks += HeldEvent(event, stack.size)
                 }
@@ -394,6 +417,7 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
                 if (opensPreserve) preserveDepth++
             }
             is Unmark -> {
+                imageRoleDepth = 0
                 displays.close()
                 releaseHeldMarks()
                 if (paragraphDepth >= 0 && stack.size == paragraphDepth) release(wrap = true)
@@ -438,6 +462,18 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
 
 private val PARAGRAPH_MARK = SemanticEvent.Mark("p", isTagged = true)
 private val PARAGRAPH_UNMARK = SemanticEvent.Unmark("p", isTagged = true)
+
+// The frame of an element inside an `img` role's description: no box edge,
+// no paragraph.
+private val IMAGE_DESCRIPTION_FRAME = BlockBoundaryFrame(
+    boundary = BlockBoundary.INLINE,
+    opensPreserve = false,
+    isFlexGridContainer = false,
+    control = false,
+    rendersAsBlock = false,
+    allowsParagraph = false,
+    insidePhrasingHost = true,
+)
 
 private class HeldEvent(val event: SemanticEvent, val depthAfter: Int)
 
@@ -611,9 +647,6 @@ private fun CapturedDisplay.isFlexGridContainer(): Boolean =
 // the text flow of its parent, flush against its neighbours.
 private fun CapturedDisplay.isCapturedInlineFlow(): Boolean =
     this is Known && (value == "inline" || value == "contents")
-
-private fun SemanticEvent.Mark.isImageRole(): Boolean =
-    isGenericContainer() && explicitRole() == "img"
 
 private fun SemanticEvent.Mark.isPreserveRegion(): Boolean =
     isTagged && name in WHITESPACE_PRESERVE_TAGS
