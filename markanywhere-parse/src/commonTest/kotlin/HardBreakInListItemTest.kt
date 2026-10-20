@@ -334,6 +334,81 @@ class HardBreakInListItemTest {
     }
 
     @Test
+    fun `should keep the source order of a delimiter run held by a backslash before a trailing space`() = runTest {
+        // given — each run is held by the `\`, which escapes nothing
+        val textFlow = buildString {
+            +"- a ~~\\ \n"
+            +"- a **\\ \n"
+            +"- a *\\ \n"
+            +"- a __\\ \n"
+            +"- a ==\\ \n"
+            +"  b\n"
+        }.chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ul" {
+                "li" { "p" { +"a ~~\\" } }
+                "li" { "p" { +"a **\\" } }
+                "li" { "p" { +"a *\\" } }
+                "li" { "p" { +"a __\\" } }
+                "li" { "p" { +"a ==\\\nb" } }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep the source order of an entity ref before a backslash and a trailing space`() = runTest {
+        // given
+        val textFlow = "- a &amp\\ \n".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ul" {
+                "li" { "p" { +"a &amp\\" } }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep the source order of a held run before a backslash and a trailing space in other line-buffered paragraphs`() = runTest {
+        // given — a line-buffered first line, a rejected table header, a
+        // blockquote, and a line-buffered continuation
+        val textFlow = buildString {
+            +"[a ~~\\ \n"
+            +"\n"
+            +"| a ~~\\ \n"
+            +"b\n"
+            +"\n"
+            +"> [a ~~\\ \n"
+            +"> b\n"
+            +"\n"
+            +"x\n"
+            +"[a ~~\\ \n"
+            +"y\n"
+        }.chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" { +"[a ~~\\" }
+            "p" { +"| a ~~\\\nb" }
+            "blockquote" {
+                "p" { +"[a ~~\\\nb" }
+            }
+            "p" { +"x\n[a ~~\\\ny" }
+        }
+    }
+
+    @Test
     fun `should not carry a hard break across a blank line into a blockquote paragraph`() = runTest {
         // given — a blank line ends the blockquote in the item
         val textFlow = buildString {
