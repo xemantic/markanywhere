@@ -1071,6 +1071,34 @@ class EnsureFrontmatterTitleTest {
     }
 
     @Test
+    fun `should move a superseding title kept as source ahead of a verbatim line`() = runTest {
+        // given — `title: A\n? x\ntitle: "B\n  C"`: dropping `A` would put
+        // `? x` first, which front matter detection refuses, and keeping it
+        // beside the later title would be a duplicate key js-yaml rejects;
+        // the readers read `{title: "B C", x: null}` either way
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"A" }
+                +"? x\n"
+                "entry"("key" to "title", "type" to "verbatim") { +" \"B\n  C\"\n" }
+            }
+            "h1" { +"Heading" }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title", "type" to "verbatim") { +" \"B\n  C\"\n" }
+                +"? x\n"
+            }
+            "h1" { +"Heading" }
+        }
+    }
+
+    @Test
     fun `should drop a later title variant an entry kept as source beats`() = runTest {
         // given — a case-sensitive reader (Jekyll) reads `title`, kept as
         // source, whatever variant follows it
