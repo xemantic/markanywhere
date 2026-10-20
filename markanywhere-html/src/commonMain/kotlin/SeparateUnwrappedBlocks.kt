@@ -352,7 +352,9 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
                             event.mayHoldParagraph(display)
                     )
                 )
-                if (preserveDepth == 0 && event.name == "img") {
+                // An image is a content token; so is a generic element with the
+                // `img` role, which simplifyHtml turns into one (#169).
+                if (preserveDepth == 0 && (event.name == "img" || event.isImageRole())) {
                     emitInlineToken(event, stack.size)
                 } else {
                     heldMarks += HeldEvent(event, stack.size)
@@ -556,6 +558,9 @@ private val BLOCK_ROLES = setOf(
 // child of one is a separated box. An absent display is never a flex container.
 private fun CapturedDisplay.isFlexGridContainer(): Boolean =
     this is Known && ("flex" in value || "grid" in value)
+
+private fun SemanticEvent.Mark.isImageRole(): Boolean =
+    isGenericContainer() && explicitRole() == "img"
 
 private fun SemanticEvent.Mark.isPreserveRegion(): Boolean =
     isTagged && name in WHITESPACE_PRESERVE_TAGS

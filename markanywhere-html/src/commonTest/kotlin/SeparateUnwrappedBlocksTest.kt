@@ -687,6 +687,33 @@ class SeparateUnwrappedBlocksTest {
     }
 
     @Test
+    fun `should separate an element with the img role like an image`() = runTest {
+        // given — issue #169: simplifyHtml turns the generic element into an
+        // image, so it is a content token of its own, not an empty wrapper
+        val input = semanticEvents(tagged = true) {
+            "p" {
+                +"Pro"
+                "div"("role" to "img", "aria-label" to "logo", AccessibilityAnnotations.DISPLAY to "block") { }
+                +"teams"
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "p" {
+                +"Pro"
+                +" "
+                "div"("role" to "img", "aria-label" to "logo", AccessibilityAnnotations.DISPLAY to "block") { }
+                +" "
+                +"teams"
+            }
+        }
+    }
+
+    @Test
     fun `should not separate adjacent ref-bearing generic elements`() = runTest {
         // given - a ref alone does not make a control a reader tells apart:
         // a price split into two clickable spans is still one word

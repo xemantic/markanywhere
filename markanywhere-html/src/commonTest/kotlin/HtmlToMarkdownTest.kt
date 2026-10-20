@@ -1456,6 +1456,63 @@ class HtmlToMarkdownTest {
     }
 
     @Test
+    fun `should separate links displayed as blocks in a flex row`() = runTest {
+        // given — issue #169: a Markdown link renders inline whatever its CSS
+        // display, so the separator between the two must survive
+        val page = semanticEvents(tagged = true) {
+            "div"(AccessibilityAnnotations.DISPLAY to "flex") {
+                "a"("href" to "u", AccessibilityAnnotations.DISPLAY to "block") { +"Home" }
+                "a"("href" to "v", AccessibilityAnnotations.DISPLAY to "block") { +"About" }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then
+        markdown sameAs "[Home](u) [About](v)"
+    }
+
+    @Test
+    fun `should separate a kept ref-bearing div displayed as a block from the text before it`() = runTest {
+        // given — issue #169: the div survives as a raw inline tag for its ref
+        val page = semanticEvents(tagged = true) {
+            "p"(AccessibilityAnnotations.DISPLAY to "block") {
+                +"Pro"
+                "div"(AccessibilityAnnotations.REF to "5", AccessibilityAnnotations.DISPLAY to "block") { +"teams" }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then
+        markdown sameAs $$"""Pro <div ref="5">teams</div>"""
+    }
+
+    @Test
+    fun `should separate an element with the img role from the text before it`() = runTest {
+        // given — issue #169: the generic element becomes a Markdown image
+        val page = semanticEvents(tagged = true) {
+            "p"(AccessibilityAnnotations.DISPLAY to "block") {
+                +"Pro"
+                "div"(
+                    "role" to "img",
+                    "aria-label" to "logo",
+                    AccessibilityAnnotations.DISPLAY to "block"
+                ) { }
+                +"teams"
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then
+        markdown sameAs "Pro ![logo]() teams"
+    }
+
+    @Test
     fun `should keep the space at the start of kept emphasis in a flex item`() = runTest {
         // given — issue #169: the space is inside the <b>, after its opening tag
         val page = semanticEvents(tagged = true) {
