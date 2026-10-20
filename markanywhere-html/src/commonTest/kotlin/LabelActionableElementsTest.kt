@@ -426,7 +426,26 @@ class LabelActionableElementsTest {
     }
 
     @Test
-    fun `should label a link through the heading it wraps, once`() = runTest {
+    fun `should name an element with a heading role only where it becomes a heading`() = runTest {
+        // given - simplifyHtml promotes `role="heading"` only on a generic
+        // container; on an `li` it stays a list item, so its tooltip is no name
+        val input = semanticEvents(tagged = true) {
+            "div"("role" to "heading", "title" to "Section") { }
+            "ul" { "li"("role" to "heading", "title" to "Tooltip") { } }
+        }
+
+        // when
+        val output = input.labelActionableElements()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "div"("role" to "heading", "title" to "Section") { +"Section" }
+            "ul" { "li"("role" to "heading", "title" to "Tooltip") { } }
+        }
+    }
+
+    @Test
+    fun `should label a link through the heading it wraps only once`() = runTest {
         // given - the Bing logo (issue #177): an empty link wrapping an empty
         // heading named only by its `title`, the picture a CSS background
         val input = semanticEvents(tagged = true) {

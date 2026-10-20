@@ -1195,9 +1195,9 @@ class HtmlToMarkdownTest {
         // then
         markdown sameAs """
             <a href="/home">
-
+            
             # Back to Bing search
-
+            
             </a>
         """.trimIndent()
     }
