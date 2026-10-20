@@ -1395,24 +1395,105 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         flush()
     }
 
-    // A text event whose last char is inline syntax or not depending on the
-    // char written after it (`$b` is math, `$5` is not), held for one event:
-    // the parser splits text at every such char (`\$` + `b`), so the next char
-    // is usually in the next event. Released, with that char, by the next
-    // event or the end of the stream.
+    // One event of lookahead, so that what follows an event can decide how it
+    // is written. Held, and released by the next event (or the stream's end):
+    //  - heldText: a text whose last char is inline syntax or not depending on
+    //    the char written after it (`$b` is math, `$5` is not) — the parser
+    //    splits text at every such char (`\$` + `b`), so the next char is
+    //    usually in the next event; or a text in an emphasis span ending in
+    //    whitespace, which moves after the span's closer if that comes next;
+    //  - heldOpeners: emphasis openers, which move after whitespace starting
+    //    the text that comes next (issue #167).
+    // The reordering keeps an opener left-flanking and a closer right-flanking
+    // wherever the text is written — also inside a link label or a table cell,
+    // where the whitespace the main output defers (pendingWhitespace) is not.
     var heldText: SemanticEvent.Text? = null
+    // The held text is whitespace moved past a closer: content, not the
+    // structural whitespace a blank text event usually is (see emitMovedWhitespace).
+    var heldTextMoved = false
+    val heldOpeners = mutableListOf<SemanticEvent.Mark>()
 
-    suspend fun process(event: SemanticEvent, wrapsBlock: Boolean = false) {
-        val held = heldText
-        if (held != null) {
-            heldText = null
-            processEvent(held, wrapsBlock = false, next = event.leadingChar())
-        }
-        if (event is Text && frontmatter == null && event.text.lastOrNull()?.let { it in LOOKAHEAD_CHARS } == true) {
-            heldText = event
+    // Writes whitespace moved out of an emphasis span, before its opener or
+    // after its closer. It is content: a tab or a no-break space is held like
+    // the whitespace ending a span's text (pendingWhitespace), never dropped
+    // as a blank text event's is. In a label, where nothing is deferred, it is
+    // ordinary label text.
+    suspend fun emitMovedWhitespace(ws: String) {
+        if (inLabel()) {
+            processEvent(SemanticEvent.Text(ws), wrapsBlock = false, next = null)
             return
         }
-        processEvent(event, wrapsBlock, next = null)
+        // A line break must not land before a closer still held.
+        if ('\n' in ws) closePendingInline(next = null)
+        for (c in ws) when (c) {
+            ' ' -> pendingSpaces++
+            '\n' -> if (!atLineStart && !pendingHardBreak) emitSoftBreak()
+            else -> {
+                pendingWhitespace += " ".repeat(pendingSpaces) + c
+                pendingSpaces = 0
+            }
+        }
+        flush()
+    }
+
+    fun SemanticEvent.isEmphasisMark(): Boolean =
+        this is Mark && !isTagged && emphasisDelimiter(name) != null
+
+    fun SemanticEvent.isEmphasisUnmark(): Boolean =
+        this is Unmark && !isTagged && emphasisDelimiter(name) != null
+
+    fun holdsText(event: SemanticEvent): Boolean {
+        if (event !is Text) return false
+        val last = event.text.lastOrNull() ?: return false
+        return last in LOOKAHEAD_CHARS ||
+            (last.isFlankWhitespace() && enclosingSpanDelimiter() != null)
+    }
+
+    suspend fun process(event: SemanticEvent, wrapsBlock: Boolean = false) {
+        if (frontmatter != null) {
+            processEvent(event, wrapsBlock, next = null)
+            return
+        }
+        var current = event
+        if (heldOpeners.isNotEmpty()) {
+            if (current.isEmphasisMark()) {
+                heldOpeners += current as Mark
+                return
+            }
+            val leading = (current as? Text)?.text?.takeWhile { it.isFlankWhitespace() } ?: ""
+            if (leading.isNotEmpty()) emitMovedWhitespace(leading)
+            for (opener in heldOpeners) processEvent(opener, wrapsBlock = false, next = null)
+            heldOpeners.clear()
+            if (leading.isNotEmpty()) {
+                val rest = (current as Text).text.substring(leading.length)
+                if (rest.isEmpty()) return
+                current = SemanticEvent.Text(rest)
+            }
+        }
+        val held = heldText
+        if (held != null) {
+            val moved = heldTextMoved
+            heldText = null
+            heldTextMoved = false
+            val content = held.text.trimEnd { it.isFlankWhitespace() }
+            if (current.isEmphasisUnmark() && content.length < held.text.length) {
+                if (content.isNotEmpty()) {
+                    processEvent(SemanticEvent.Text(content), wrapsBlock = false, next = current.leadingChar())
+                }
+                processEvent(current, wrapsBlock, next = null)
+                // The whitespace may move past an enclosing span's closer too.
+                heldText = SemanticEvent.Text(held.text.substring(content.length))
+                heldTextMoved = true
+                return
+            }
+            if (moved) emitMovedWhitespace(held.text)
+            else processEvent(held, wrapsBlock = false, next = current.leadingChar())
+        }
+        when {
+            holdsText(current) -> heldText = current as Text
+            current.isEmphasisMark() -> heldOpeners += current as Mark
+            else -> processEvent(current, wrapsBlock, next = null)
+        }
     }
 
     // An inline raw tag (a `<b>` kept a tag because it wraps a list) cannot know
@@ -1478,10 +1559,13 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         for (i in 1 until held.size) route(held[i])
     }
 
-    // A text held until the next event is the last thing in the stream.
+    // An event held until the next one is the last thing in the stream.
+    for (opener in heldOpeners) processEvent(opener, wrapsBlock = false, next = null)
+    heldOpeners.clear()
     heldText?.let {
         heldText = null
-        processEvent(it, wrapsBlock = false, next = '\n')
+        if (heldTextMoved) emitMovedWhitespace(it.text)
+        else processEvent(it, wrapsBlock = false, next = '\n')
     }
 
     // A stream ending on an emphasis close (no enclosing block) still owes it,

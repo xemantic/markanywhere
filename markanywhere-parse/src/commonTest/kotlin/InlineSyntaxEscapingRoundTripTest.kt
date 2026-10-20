@@ -376,6 +376,95 @@ class InlineSyntaxEscapingRoundTripTest {
         assertMarkdownFixpoint(markdown)
     }
 
+    // --- #167: whitespace at a span's edge, in labels and table cells -------
+
+    @Test
+    fun `should write a no-break space starting a span before its opener`() = runTest {
+        // given — after the opener, the no-break space would make it not
+        // left-flanking
+        val events = semanticEvents { "p" { +"a"; "strong" { +" x" } } }
+        // when
+        val markdown = events.renderMarkdown()
+        // then
+        markdown sameAs "a **x**"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should write a space starting a span before its opener`() = runTest {
+        // given
+        val events = semanticEvents { "p" { +"a"; "em" { +" x" }; +" b" } }
+        // when
+        val markdown = events.renderMarkdown()
+        // then
+        markdown sameAs "a *x* b"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should write a no-break space starting a nested span before both openers`() = runTest {
+        // given
+        val events = semanticEvents { "p" { +"a"; "strong" { "em" { +" x" } } } }
+        // when
+        val markdown = events.renderMarkdown()
+        // then
+        markdown sameAs "a ***x***"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should write a no-break space ending a span in a link label after its closer`() = runTest {
+        // given
+        val events = semanticEvents {
+            "p" { "a"("href" to "/u") { "strong" { +"a " }; +"b" } }
+        }
+        // when
+        val markdown = events.renderMarkdown()
+        // then
+        markdown sameAs "[**a** b](/u)"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should write a no-break space starting a span in a link label before its opener`() = runTest {
+        // given
+        val events = semanticEvents {
+            "p" { "a"("href" to "/u") { +"a"; "strong" { +" b" } } }
+        }
+        // when
+        val markdown = events.renderMarkdown()
+        // then
+        markdown sameAs "[a **b**](/u)"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should write a no-break space ending a span in a table cell after its closer`() = runTest {
+        // given
+        val events = semanticEvents {
+            "table" {
+                "tr" { "th" { +"h" } }
+                "tr" { "td" { "strong" { +"a " }; +"5" } }
+            }
+        }
+        // when
+        val markdown = events.renderMarkdown()
+        // then
+        markdown sameAs "| h |\n| --- |\n| **a** 5 |"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should write a line break ending a span after its closer`() = runTest {
+        // given
+        val events = semanticEvents { "p" { "em" { +"a\n" }; +"b" } }
+        // when
+        val markdown = events.renderMarkdown()
+        // then
+        markdown sameAs "*a*\nb"
+        assertMarkdownFixpoint(markdown)
+    }
+
     @Test
     fun `should escape an asterisk in image alt text`() = runTest {
         // given
