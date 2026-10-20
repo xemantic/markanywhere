@@ -1078,6 +1078,34 @@ class InlineSyntaxEscapingRoundTripTest {
     }
 
     @Test
+    fun `should end the raw text of an html block at a blank line spanning two text events`() = runTest {
+        // given — the first text ends its line, the second opens with a line
+        // break: a blank line, after which the parser reads Markdown
+        val events = semanticEvents { tag("div") { +"a\n"; +"\n*b*" } }
+        // when
+        val (once, twice, thrice) = renderThreePasses(events)
+        // then
+        assert(flowOf(once).parse().spanCount() == 0)
+        twice sameAs once
+        thrice sameAs twice
+    }
+
+    @Test
+    fun `should render a tilde pair before an asterisk opening nothing as text`() = runTest {
+        for (markdown in listOf("approx ~~*~~ y", "a ~~*~~ b *c*", "~~*~~")) {
+            // given
+            val events = flowOf(markdown).parse()
+            // when
+            val (once, twice, thrice) = renderThreePasses(events)
+            // then — no source char is lost
+            assert(once.count { it == '~' } >= markdown.count { it == '~' })
+            assert(once.count { it == '*' } >= markdown.count { it == '*' })
+            twice sameAs once
+            thrice sameAs twice
+        }
+    }
+
+    @Test
     fun `should keep custom markup that is the first content of a paragraph in a blockquote verbatim`() = runTest {
         // given
         val events = semanticEvents { "blockquote" { "p" { tag("x:note") { +"x*y* `c`" } } } }

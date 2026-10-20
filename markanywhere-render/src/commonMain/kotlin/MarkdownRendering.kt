@@ -494,8 +494,6 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         return context
     }
 
-    fun inVerbatimText(): Boolean = textContext() == TEXT_VERBATIM
-
     // Whether a raw tag written here, at a line start, opens an HTML block on
     // re-parse: a type-6 tag ([type6]) anywhere, as it interrupts a paragraph;
     // any other at a block start ([blockStart]). Never in a blockquote, where
@@ -674,6 +672,10 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
             pendingSpaces = 1
             return
         }
+        // A line break on a line with nothing written on it — the text event
+        // before ended its line, or this one has two in a row — writes a blank
+        // line, which ends an HTML block's raw text.
+        if (atLineStart && lastChar == '\n') markBlankLine()
         flushHeldWhitespaceAtLineEnd()
         out("\n")
         atLineStart = true
@@ -733,9 +735,13 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         val rawParts = rawText.split('\n')
         rawParts.forEachIndexed { i, rawPart ->
             if (i > 0) emitSoftBreak()
-            // An empty line between two others is a blank line written.
-            if (i > 1 && rawParts[i - 1].isBlank()) markBlankLine()
-            val context = textContext()
+            // Plain words need the context only at a line start (block markers,
+            // indentation) or to tell verbatim text from a span's trailing
+            // whitespace; the stack walk is skipped otherwise.
+            val needsContext = (atLineStart && freshBlockLine) || lineStartDigits ||
+                rawPart.any { it in INLINE_SYNTAX_CHARS || it == '[' || it == ']' } ||
+                (rawPart.lastOrNull()?.isFlankWhitespace() == true)
+            val context = if (needsContext) textContext() else TEXT_MARKDOWN
             val part = escapeInlineText(rawPart, if (i == rawParts.lastIndex) next else '\n', context)
             if (part.isNotEmpty()) {
                 // Split off the line's trailing ASCII spaces and defer them

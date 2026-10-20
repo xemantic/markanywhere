@@ -529,6 +529,10 @@ private val TOGGLE_DELIMITERS = setOf('~', '=', '^')
  */
 private val ESCAPE_HELD_RUNS = setOf("*", "**", "***", "_", "__", "___", "~~", "==")
 
+// A `~~`/`==` run followed by an emphasis run of `*` (see the inline dispatch).
+private fun CharSequence.isToggleThenEmphasisRun(): Boolean =
+    length > 2 && subSequence(0, 2).toString() in SPAN_TOGGLE_RUNS && (2 until length).all { this[it] == '*' }
+
 // The double runs that toggle a `del` / `mark` span — the renderer's own
 // delimiters, opened even before a code span or an emphasis run. A single
 // `~` there stays literal: `~**2 hours**` is prose ("approximately").
@@ -6424,15 +6428,36 @@ private class ParserState(
                 pendingDeferredChar = char
             }
             // A `~~`/`==` run (SPAN_TOGGLE_RUNS — a single `~` stays literal)
-            // before a code span or an emphasis run toggles like one before a letter (`~~**a**~~`, `~~`a`~~`, issue #133) —
-            // the branches below would flush it as literal text first. Not before
-            // a `*` that may close an enclosing em/strong (`*a~~*`): that run is
-            // the closer's content, not the start of a span.
-            (char == '`' || (char == '*' && !isInlineClosable("em") && !isInlineClosable("strong"))) &&
-                inlineBuffer.toString() in SPAN_TOGGLE_RUNS -> {
+            // before a code span toggles like one before a letter (`~~`a`~~`,
+            // issue #133) — the branches below would flush it as literal text first.
+            char == '`' && inlineBuffer.toString() in SPAN_TOGGLE_RUNS -> {
                 val run = inlineBuffer.toString()
                 inlineBuffer.clear()
                 toggleInlineSpan(if (run[0] == '~') "del" else "mark", run[0], run, runPrevChar)
+                pendingDeferredChar = char
+            }
+            // Before an emphasis run (`~~**a**~~`) it is held with that run until
+            // the char after it is known — not before a `*` that may close an
+            // enclosing em/strong (`*a~~*`): that run is the closer's content.
+            char == '*' && inlineBuffer.toString() in SPAN_TOGGLE_RUNS &&
+                !isInlineClosable("em") && !isInlineClosable("strong") -> {
+                runPrevChar = inlineBuffer[inlineBuffer.length - 1]
+                inlineBuffer.append('*')
+            }
+            // A held `~~*` / `==**` resolves on the char after the emphasis run:
+            // the span opens only when content follows, so an emphasis run that
+            // opens nothing (`~~*~~`) never leaves an empty span that deletes the
+            // source chars; otherwise the toggle run is literal, as before a space.
+            char != '*' && inlineBuffer.isToggleThenEmphasisRun() -> {
+                val toggle = inlineBuffer.substring(0, 2)
+                val stars = inlineBuffer.length - 2
+                inlineBuffer.clear()
+                val content = !char.isFlankWhitespace() && char !in "~=^*_`\\"
+                if (content) {
+                    toggleInlineSpan(if (toggle[0] == '~') "del" else "mark", toggle[0], toggle, runPrevChar)
+                } else +toggle
+                runPrevChar = toggle[1]
+                if (stars <= 3) resolveEmphasisRun('*', stars, char) else +"*".repeat(stars)
                 pendingDeferredChar = char
             }
             // Backtick run accumulation: keep appending backticks until a non-backtick

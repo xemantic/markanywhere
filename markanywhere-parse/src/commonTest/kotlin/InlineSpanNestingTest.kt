@@ -16,11 +16,14 @@
 
 package com.xemantic.markanywhere.parse
 
+import com.xemantic.kotlin.test.assert
 import com.xemantic.kotlin.test.text.chunkedRandomly
+import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.flow.mergeAdjacentText
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.test.sameAs
 import kotlinx.coroutines.flow.asFlow
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 
@@ -1015,6 +1018,26 @@ class InlineSpanNestingTest {
             "p" {
                 "mark" { "code" { +"a" } }
             }
+        }
+    }
+
+    @Test
+    fun `should keep a tilde pair before an asterisk opening nothing visible`() = runTest {
+        // given — opening the del there would leave it, and an em inside it,
+        // empty, and a renderer drops an empty span with its source chars
+        for (source in listOf("approx ~~*~~ y", "a ~~*~~ b *c*", "~~*~~")) {
+            val textFlow = source.chunkedRandomly().asFlow()
+
+            // when
+            val parsed = textFlow.parse().toList()
+
+            // then — the tilde pair stays text, and no span is empty
+            val text = parsed.filterIsInstance<SemanticEvent.Text>().joinToString("") { it.text }
+            assert(text.startsWith(source.substringBefore("~~") + "~~"))
+            val emptySpan = parsed.zipWithNext().any { (a, b) ->
+                a is SemanticEvent.Mark && b is SemanticEvent.Unmark && a.name == b.name
+            }
+            assert(!emptySpan)
         }
     }
 
