@@ -2734,7 +2734,17 @@ private class ParserState(
     private suspend fun SemanticEventScope.emitAtxHeading(line: String) {
         val match = Patterns.ATX_HEADING_LINE.matchEntire(line)!!
         val level = match.groupValues[1].length
-        val content = match.groupValues[2].trimEnd().removeSuffix("#").trimEnd()
+        // The regex leaves no trailing spaces/tabs on the content. A closing
+        // sequence (GFM §4.2) is a run of `#` that is the whole content or is
+        // preceded by a space or tab — `# foo#` and `# foo \#` keep theirs.
+        val raw = match.groupValues[2]
+        val withoutClosing = raw.trimEnd('#')
+        val content = when {
+            withoutClosing.isEmpty() -> ""
+            withoutClosing.last() == ' ' || withoutClosing.last() == '\t' ->
+                withoutClosing.trimEnd(' ', '\t')
+            else -> raw
+        }
         "h$level" {
             if (content.isNotEmpty()) processInlineContent(content)
             flushInline()
@@ -4318,6 +4328,9 @@ private class ParserState(
             // streaming divergences as the top-level path — multi-line shapes
             // and forward references are not supported.
             if (tryParseLinkDefinition(stripped)) {
+                // The definition line has no `>` prefix, so it ends a
+                // blockquote open in the item, like every block above.
+                closeListBlockquoteIfOpen(mode)
                 mode.blankSeen = false
                 return
             }
