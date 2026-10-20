@@ -738,7 +738,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
             // Plain words need the context only at a line start (block markers,
             // indentation) or to tell verbatim text from a span's trailing
             // whitespace; the stack walk is skipped otherwise.
-            val needsContext = (atLineStart && freshBlockLine) || lineStartDigits ||
+            val needsContext = freshBlockLine || atLineStart || lineStartDigits ||
                 rawPart.any { it in INLINE_SYNTAX_CHARS || it == '[' || it == ']' } ||
                 (rawPart.lastOrNull()?.isFlankWhitespace() == true)
             val context = if (needsContext) textContext() else TEXT_MARKDOWN

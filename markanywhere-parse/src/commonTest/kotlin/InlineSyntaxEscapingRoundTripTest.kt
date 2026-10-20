@@ -19,9 +19,11 @@ package com.xemantic.markanywhere.parse
 import com.xemantic.kotlin.test.assert
 import com.xemantic.kotlin.test.sameAs
 import com.xemantic.markanywhere.SemanticEvent
+import com.xemantic.markanywhere.flow.mergeAdjacentText
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.render.MARKDOWN_BLOCK_CONTENT_TAGS
 import com.xemantic.markanywhere.render.renderMarkdown
+import com.xemantic.markanywhere.test.sameAs
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.toList
@@ -1073,6 +1075,56 @@ class InlineSyntaxEscapingRoundTripTest {
             val markdown = events.renderMarkdown()
             // then
             markdown sameAs "<$name>x*y* `c`</$name>"
+            assertMarkdownFixpoint(markdown)
+        }
+    }
+
+    @Test
+    fun `should keep a block marker in raw text after a block starts verbatim`() = runTest {
+        // given — the marker opens a paragraph's first line inside an HTML
+        // block; in a list item the block stays raw, so the blank line before
+        // the paragraph is dropped once
+        val cases = listOf(
+            semanticEvents { "ul" { "li" { tag("div") { "p" { +"# x" } } } } } to false,
+            semanticEvents { tag("div") { "p" { +"1. x" } } } to true,
+        )
+        for ((events, exact) in cases) {
+            // when
+            val (once, twice, thrice) = renderThreePasses(events)
+            // then
+            assert("\\" !in once && "\\" !in thrice)
+            if (exact) twice sameAs once
+            thrice sameAs twice
+        }
+    }
+
+    @Test
+    fun `should not escape a block marker in custom markup on any pass`() = runTest {
+        // given — custom markup content is raw: its layout settles over passes
+        // (as on main), but a backslash written into it would stay and grow
+        val events = semanticEvents { tag("x:think") { "p" { +"- a" } } }
+        // when
+        val passes = renderThreePasses(events)
+        // then
+        assert(passes.none { "\\" in it })
+    }
+
+    @Test
+    fun `should round-trip a del or mark around emphasis starting with code or punctuation`() = runTest {
+        val cases = listOf(
+            semanticEvents { "p" { "del" { "em" { "code" { +"x" } } } } },
+            semanticEvents { "p" { "del" { "strong" { "code" { +"x" } } } } },
+            semanticEvents { "p" { "mark" { "em" { "code" { +"x" } } } } },
+            semanticEvents { "p" { "mark" { "strong" { "sup" { +"a" } } } } },
+            semanticEvents { "p" { "del" { "em" { +"_a" } } } },
+            semanticEvents { "p" { "del" { "em" { +"*a" } } } },
+            semanticEvents { "p" { "del" { "em" { +"\$x\$" } } } },
+        )
+        for (events in cases) {
+            // when
+            val markdown = events.renderMarkdown()
+            // then
+            flowOf(markdown).parse().mergeAdjacentText() sameAs events
             assertMarkdownFixpoint(markdown)
         }
     }

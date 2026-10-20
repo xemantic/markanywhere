@@ -5946,6 +5946,17 @@ private class ParserState(
                 val run = inlineBuffer.toString()
                 inlineBuffer.clear()
                 if (char !in ASCII_PUNCTUATION || !openHeldRun(run, char)) +run
+            } else if (inlineBuffer.isToggleThenEmphasisRun()) {
+                // A `~~*` run held by the `\`: before a real escape both spans
+                // open (`~~*\*a*~~`), before anything else both runs are literal.
+                val toggle = inlineBuffer.substring(0, 2)
+                val stars = inlineBuffer.substring(2)
+                inlineBuffer.clear()
+                if (char in ASCII_PUNCTUATION && stars.length <= 3) {
+                    toggleInlineSpan(if (toggle[0] == '~') "del" else "mark", toggle[0], toggle, runPrevChar)
+                    runPrevChar = toggle[1]
+                    if (!openHeldRun(stars, char)) +stars
+                } else +(toggle + stars)
             }
             // If we are inside an inline HTML tag accumulation, backslashes are literal.
             if (inlineBuffer.startsWith("<")) {
@@ -6041,7 +6052,7 @@ private class ParserState(
                 pendingDeferredChar = char
                 return
             }
-            if (inlineBuffer.toString() in ESCAPE_HELD_RUNS) {
+            if (inlineBuffer.toString() in ESCAPE_HELD_RUNS || inlineBuffer.isToggleThenEmphasisRun()) {
                 escaped = true
                 return
             }
@@ -6441,19 +6452,19 @@ private class ParserState(
             // enclosing em/strong (`*a~~*`): that run is the closer's content.
             char == '*' && inlineBuffer.toString() in SPAN_TOGGLE_RUNS &&
                 !isInlineClosable("em") && !isInlineClosable("strong") -> {
-                runPrevChar = inlineBuffer[inlineBuffer.length - 1]
                 inlineBuffer.append('*')
             }
             // A held `~~*` / `==**` resolves on the char after the emphasis run:
-            // the span opens only when content follows, so an emphasis run that
-            // opens nothing (`~~*~~`) never leaves an empty span that deletes the
-            // source chars; otherwise the toggle run is literal, as before a space.
+            // the span opens unless whitespace or its own delimiter follows, so
+            // an emphasis run that opens nothing (`~~*~~`) never leaves an empty
+            // span that deletes the source chars; the toggle run is literal then,
+            // as before a space. (Before a `\` the run is held further, see the
+            // escape handling.)
             char != '*' && inlineBuffer.isToggleThenEmphasisRun() -> {
                 val toggle = inlineBuffer.substring(0, 2)
                 val stars = inlineBuffer.length - 2
                 inlineBuffer.clear()
-                val content = !char.isFlankWhitespace() && char !in "~=^*_`\\"
-                if (content) {
+                if (!char.isFlankWhitespace() && char != toggle[0]) {
                     toggleInlineSpan(if (toggle[0] == '~') "del" else "mark", toggle[0], toggle, runPrevChar)
                 } else +toggle
                 runPrevChar = toggle[1]

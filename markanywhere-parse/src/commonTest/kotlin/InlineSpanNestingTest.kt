@@ -1042,6 +1042,50 @@ class InlineSpanNestingTest {
     }
 
     @Test
+    fun `should open a del around emphasis starting with code or punctuation`() = runTest {
+        // given — what the renderer writes for a del or mark wrapping emphasis
+        // whose content starts with a code span, an escape or punctuation
+        val cases = listOf(
+            "~~*`x`*~~" to semanticEvents { "p" { "del" { "em" { "code" { +"x" } } } } },
+            "~~*\\*a*~~" to semanticEvents { "p" { "del" { "em" { +"*a" } } } },
+            "~~*\\\$x\\\$*~~" to semanticEvents { "p" { "del" { "em" { +"\$x\$" } } } },
+            "~~*_a*~~" to semanticEvents { "p" { "del" { "em" { +"_a" } } } },
+            "==**^a^**==" to semanticEvents { "p" { "mark" { "strong" { "sup" { +"a" } } } } },
+        )
+        for ((source, expected) in cases) {
+            val textFlow = source.chunkedRandomly().asFlow()
+
+            // when
+            val parsed = textFlow.parse()
+
+            // then
+            parsed.mergeAdjacentText() sameAs expected
+        }
+    }
+
+    @Test
+    fun `should open a del around strong after the closer of a force-closed del`() = runTest {
+        // given
+        val textFlow = "*a ~~b* c ~~**d**~~ e".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "em" {
+                    +"a "
+                    "del" { +"b" }
+                }
+                +" c "
+                "del" { "strong" { +"d" } }
+                +" e"
+            }
+        }
+    }
+
+    @Test
     fun `should keep a single tilde before strong literal`() = runTest {
         // given — `~` as "approximately", common in LLM output
         val textFlow = "takes ~**2 hours** now".chunkedRandomly().asFlow()
