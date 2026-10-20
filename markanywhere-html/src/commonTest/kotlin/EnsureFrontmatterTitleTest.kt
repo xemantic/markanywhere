@@ -1099,6 +1099,58 @@ class EnsureFrontmatterTitleTest {
     }
 
     @Test
+    fun `should keep the order of the kept title entries moving one ahead of a verbatim line`() = runTest {
+        // given — readers keep the last of duplicate keys: `v2 b` here, and
+        // `B` in the second, so only the earliest kept title entry may move
+        // into the dropped first slot — moving the read one would put it
+        // ahead of the others
+        val keptAsSource = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"A" }
+                +"? x\n"
+                "entry"("key" to "title", "type" to "verbatim") { +" \"v1\n  a\"\n" }
+                "entry"("key" to "title", "type" to "verbatim") { +" \"v2\n  b\"\n" }
+            }
+            "h1" { +"Heading" }
+        }
+        val scalarLast = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"A" }
+                +"? x\n"
+                "entry"("key" to "title") {
+                    "entry"("key" to "en") { +"N" }
+                }
+                "entry"("key" to "title") { +"B" }
+            }
+            "h1" { +"Heading" }
+        }
+
+        // when
+        val keptAsSourceOutput = keptAsSource.ensureFrontmatterTitle()
+        val scalarLastOutput = scalarLast.ensureFrontmatterTitle()
+
+        // then
+        keptAsSourceOutput sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title", "type" to "verbatim") { +" \"v1\n  a\"\n" }
+                +"? x\n"
+                "entry"("key" to "title", "type" to "verbatim") { +" \"v2\n  b\"\n" }
+            }
+            "h1" { +"Heading" }
+        }
+        scalarLastOutput sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") {
+                    "entry"("key" to "en") { +"N" }
+                }
+                +"? x\n"
+                "entry"("key" to "title") { +"B" }
+            }
+            "h1" { +"Heading" }
+        }
+    }
+
+    @Test
     fun `should drop a later title variant an entry kept as source beats`() = runTest {
         // given — a case-sensitive reader (Jekyll) reads `title`, kept as
         // source, whatever variant follows it

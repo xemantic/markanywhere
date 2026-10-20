@@ -182,18 +182,17 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
         return false
     }
 
-    // `rewrite` keeping the first title slot: the one scalar title entry it
-    // keeps elsewhere, or the one kept as source that is read, moves there,
-    // or, keeping none, the slot stays as it came
+    // `rewrite` keeping the first title slot: the earliest title entry it
+    // keeps elsewhere moves there, or, keeping none, the slot stays as it
+    // came. Only the earliest keeps the kept entries in order: readers read
+    // the last of duplicate keys, so moving a later one ahead of another
+    // would change the title they read
     fun keepingFirstSlot(
         rewrite: Map<FrontMatterEntry, List<SemanticEvent>>
     ): Map<FrontMatterEntry, List<SemanticEvent>> {
         val first = titleSlots.first()
-        // the scalar title entry kept, or the one kept as source a reader
-        // reads over every other (left in place, it would leave the first
-        // slot's duplicate behind)
         val kept = rewrite.entries.firstOrNull { (slot, events) ->
-            slot != first && (!slot.isUnreadable || slot == read) && events.isNotEmpty()
+            slot != first && events.isNotEmpty()
         }
         return rewrite.mapValues { (slot, events) ->
             when (slot) {
