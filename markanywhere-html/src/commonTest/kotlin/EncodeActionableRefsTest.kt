@@ -671,11 +671,12 @@ class EncodeActionableRefsTest {
     @Test
     fun `should carry a table row's ref on a span in its first cell`() = runTest {
         // given - a `| … |` row carries no attributes, and no span can sit
-        // between cells, so the ref goes into the row's first cell
+        // between cells, so the ref goes into the row's first cell - on a span
+        // of its own, apart from the cell's own ARIA state
         val input = semanticEvents {
             "table" {
                 "tr"(AccessibilityAnnotations.REF to "1", "aria-selected" to "true") {
-                    "td" { +"a" }
+                    "td"("aria-selected" to "false") { +"a" }
                     "td" { +"b" }
                 }
             }
@@ -688,7 +689,10 @@ class EncodeActionableRefsTest {
         output sameAs semanticEvents {
             "table" {
                 "tr" {
-                    "td" { tag("span", "aria-selected" to "true", "ref" to "1") { +"a" } }
+                    "td"("aria-selected" to "false") {
+                        tag("span", "aria-selected" to "true", "ref" to "1") { }
+                        +"a"
+                    }
                     "td" { +"b" }
                 }
             }

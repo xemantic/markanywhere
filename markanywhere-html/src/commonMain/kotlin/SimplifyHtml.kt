@@ -775,9 +775,11 @@ private val INLINE_ROLES = setOf("img", "code")
 private val BLOCK_ROLES =
     ROLE_TO_TAG.keys + DIALOG_ROLES + setOf("heading", "separator") - INLINE_ROLES
 
-// Block roles whose own content is running text: a block role inside one is
-// not promoted either.
-private val RUNNING_TEXT_ROLES = setOf("heading", "paragraph")
+// Promoted roles whose own content is running text: a block role inside one
+// is not promoted either. A cell counts, as a GFM cell holds one line.
+private val RUNNING_TEXT_ROLES = setOf(
+    "heading", "paragraph", "code", "cell", "gridcell", "columnheader", "rowheader",
+)
 
 // Roles whose place is decided by the container owning them (a cell by its
 // row, an item by its list), not by the box they are laid out as: a grid of
@@ -786,29 +788,41 @@ private val OWNED_ROLES = setOf(
     "listitem", "row", "rowgroup", "cell", "gridcell", "columnheader", "rowheader",
 )
 
-// Elements whose content is running text (HTML phrasing content), so a block
-// cannot appear inside them in Markdown: a paragraph or a heading, and the
-// phrasing elements kept as inline formatting.
+// Block roles holding running text rather than other blocks, which an
+// `inline-block` box keeps on its line: a heading or a separator there sits
+// inside a line of text, while a list laid out as one still holds its items.
+private val LEAF_BLOCK_ROLES = setOf("heading", "paragraph", "separator")
+
+// Elements whose content is running text, so a block cannot appear inside
+// them in Markdown: a paragraph, a heading, a table cell (a GFM cell holds one
+// line) and the phrasing elements kept as inline formatting.
 private val RUNNING_TEXT_TAGS = setOf(
-    "p", "h1", "h2", "h3", "h4", "h5", "h6", "pre",
+    "p", "h1", "h2", "h3", "h4", "h5", "h6", "pre", "td", "th", "caption",
     "b", "i", "em", "strong", "s", "strike", "del", "ins", "u", "mark",
     "small", "sub", "sup", "q", "cite", "abbr", "dfn", "code", "kbd", "samp",
     "var", "time", "data", "bdi", "bdo",
 )
 
 /**
- * Whether the element most recently opened may promote a block role
- * ([BLOCK_ROLES]) — fed every event ahead of the rules, like
+ * Whether a generic element's block role ([BLOCK_ROLES]) is promoted to a
+ * block — fed every element ahead of the decision, like
  * [CapturedDisplayReader]. A block in running text is no fixpoint: promoted,
  * `<p>Hello <span role="heading">World</span> end</p>` renders as
- * `Hello\n## World\n\nend`, which the next parse reads as three blocks (and a
- * cell there as a stray `|`). So a block role is promoted only outside running
- * text ([RUNNING_TEXT_TAGS], or a role promoted to one, or a block role left
- * unpromoted), and not on an element the capture laid out as an inline box —
- * unless its container decides its place ([OWNED_ROLES]). Not promoted, the
- * element is the generic container it otherwise is.
+ * `Hello\n## World\n\nend`, which the next parse reads as three blocks (and
+ * a cell there as a stray `|`). So a block role is promoted only outside
+ * running text ([RUNNING_TEXT_TAGS], a role promoted to one —
+ * [RUNNING_TEXT_ROLES] — or a block role left unpromoted), and not on an
+ * element the capture laid out on a line of text: an `inline` box, or an
+ * `inline-block` one for a role holding text ([LEAF_BLOCK_ROLES]) — an
+ * `inline-flex` / `inline-grid` / `inline-table` container still lays out its
+ * items as blocks. A role whose container decides its place ([OWNED_ROLES])
+ * skips the box test. Not promoted, the element is the generic container it
+ * otherwise is.
+ *
+ * [simplifyHtml] promotes by it, and `separateUnwrappedBlocks` asks it which
+ * elements will come out as blocks, so the two cannot disagree.
  */
-private class BlockRoleContext {
+internal class BlockRoleContext {
 
     // per open element, whether its children sit in running text
     private val runningText = ArrayDeque<Boolean>()
@@ -817,19 +831,26 @@ private class BlockRoleContext {
     var promotes: Boolean = true
         private set
 
-    fun open(mark: SemanticEvent.Mark, display: CapturedDisplay) {
+    /**
+     * Opens [mark], laid out as [display], returning whether it is a generic
+     * element whose block role is promoted to a block.
+     */
+    fun open(mark: SemanticEvent.Mark, display: CapturedDisplay): Boolean {
         val inRunningText = runningText.lastOrNull() ?: false
-        val role = if (mark.isGenericContainer()) {
-            mark.explicitRole()?.takeIf { it in BLOCK_ROLES }
-        } else null
-        val inlineBox = display is CapturedDisplay.Known && display.value.startsWith("inline")
-        promotes = !inRunningText && !(inlineBox && role !in OWNED_ROLES)
+        val role = if (mark.isGenericContainer()) mark.explicitRole() else null
+        val blockRole = role in BLOCK_ROLES
+        val box = (display as? CapturedDisplay.Known)?.value
+        val onTextLine = box == "inline" || (box == "inline-block" && role in LEAF_BLOCK_ROLES)
+        promotes = !inRunningText && !(onTextLine && role !in OWNED_ROLES)
+        val promoted = role != null && (!blockRole || promotes)
         runningText.addLast(
             inRunningText || mark.name in RUNNING_TEXT_TAGS ||
-                    (role != null && (!promotes || role in RUNNING_TEXT_ROLES))
+                    (blockRole && !promotes) || (promoted && role in RUNNING_TEXT_ROLES)
         )
+        return blockRole && promotes
     }
 
+    /** Closes the element most recently opened. */
     fun close() {
         runningText.removeLastOrNull()
     }
@@ -854,7 +875,7 @@ private val UNWRAPPED_TAGS = setOf(
  * `md-list`, whose host carries its semantics only as a `role`), which the
  * catch-all unwraps. A native semantic tag is never overridden.
  */
-private fun SemanticEvent.Mark.isGenericContainer(): Boolean =
+internal fun SemanticEvent.Mark.isGenericContainer(): Boolean =
     name in UNWRAPPED_TAGS || name.isCustomElementName()
 
 // The shape of a valid custom element name (HTML §4.13.2): a lowercase ASCII

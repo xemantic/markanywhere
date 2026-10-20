@@ -789,6 +789,31 @@ class HtmlToMarkdownTest {
     }
 
     @Test
+    fun `should round-trip a heading role inside a table cell`() = runTest {
+        // given — issue #165: a heading in a cell broke the row
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "table" {
+                    "tr" { "th" { +"Item" } }
+                    "tr" { "td" { "div"("role" to "heading") { +"Total" } } }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+        val reRendered = flowOf(markdown).parse().renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            | Item |
+            | --- |
+            | Total |
+        """.trimIndent()
+        reRendered sameAs markdown
+    }
+
+    @Test
     fun `should keep the refs of a focusable separator an image and a row`() = runTest {
         // given — issue #165: role promotion used to drop each of these refs
         val page = semanticEvents(tagged = true) {

@@ -1025,6 +1025,126 @@ class SimplifyHtmlTest {
     }
 
     @Test
+    fun `should not promote a heading role on an inline-block box`() = runTest {
+        // given — an inline-block sits on the line of text around it
+        val input = semanticEvents(tagged = true) {
+            "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                +"Hello "
+                "span"("role" to "heading", AccessibilityAnnotations.DISPLAY to "inline-block") { +"World" }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            +"Hello "
+            +"World"
+        }
+    }
+
+    @Test
+    fun `should promote a list laid out as an inline flex or inline-block container`() = runTest {
+        // given — the container lays its items out as blocks whatever its own
+        // box is
+        val input = semanticEvents(tagged = true) {
+            "div"("role" to "list", AccessibilityAnnotations.DISPLAY to "inline-flex") {
+                "div"("role" to "listitem", AccessibilityAnnotations.DISPLAY to "block") { +"A" }
+                "div"("role" to "listitem", AccessibilityAnnotations.DISPLAY to "block") { +"B" }
+            }
+            "div"("role" to "list", AccessibilityAnnotations.DISPLAY to "inline-block") {
+                "div"("role" to "listitem", AccessibilityAnnotations.DISPLAY to "block") { +"C" }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "ul" {
+                "li" { +"A" }
+                "li" { +"B" }
+            }
+            "ul" {
+                "li" { +"C" }
+            }
+        }
+    }
+
+    @Test
+    fun `should promote a table and a grid laid out as inline table or inline grid`() = runTest {
+        // given
+        val input = semanticEvents(tagged = true) {
+            "div"("role" to "table", AccessibilityAnnotations.DISPLAY to "inline-table") {
+                "div"("role" to "row", AccessibilityAnnotations.DISPLAY to "table-row") {
+                    "div"("role" to "cell", AccessibilityAnnotations.DISPLAY to "table-cell") { +"a" }
+                }
+            }
+            "div"("role" to "grid", AccessibilityAnnotations.DISPLAY to "inline-grid") {
+                "div"("role" to "row", AccessibilityAnnotations.DISPLAY to "contents") {
+                    "div"("role" to "gridcell", AccessibilityAnnotations.DISPLAY to "block") { +"b" }
+                }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "table" { "tr" { "td" { +"a" } } }
+            "table" { "tr" { "td" { +"b" } } }
+        }
+    }
+
+    @Test
+    fun `should not promote a block role inside a table cell`() = runTest {
+        // given — a GFM cell holds one line, native or promoted
+        val input = semanticEvents(tagged = true) {
+            "table" {
+                "tr" {
+                    "td" { "div"("role" to "heading") { +"Total" } }
+                }
+            }
+            "div"("role" to "table") {
+                "div"("role" to "row") {
+                    "div"("role" to "cell") {
+                        "div"("role" to "separator") { }
+                        +"x"
+                    }
+                }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "table" { "tr" { "td" { +"Total" } } }
+            "table" { "tr" { "td" { +"x" } } }
+        }
+    }
+
+    @Test
+    fun `should not promote a block role inside a code role`() = runTest {
+        // given — inline code holds running text
+        val input = semanticEvents(tagged = true) {
+            "span"("role" to "code") { "span"("role" to "heading") { +"x" } }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "code" { +"x" }
+        }
+    }
+
+    @Test
     fun `should promote the cells of a grid laid out as inline boxes`() = runTest {
         // given — a cell's place is decided by its row, whatever box it is
         val input = semanticEvents(tagged = true) {

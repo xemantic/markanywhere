@@ -183,10 +183,11 @@ private val ATTRIBUTELESS_BLOCKS = setOf(
  *
  * Any other item with no leading inline content gets an empty span, since its
  * ref is still something to act on. A ref-bearing `tr` has no content of its
- * own and no span can sit between cells, so it hands its ref to its first
- * cell — an empty span ahead of that cell's own when it carries one. Bounded by one top-level inline child of
- * the innermost ref-bearing block at a time — which can be a whole card `<a>`
- * subtree, the same bound [encodeActionableLinkRefs] pays per link.
+ * own and no span can sit between cells, so its ref goes on an empty span at
+ * the start of its first cell, apart from anything the cell carries itself.
+ * Bounded by one top-level inline child of the innermost ref-bearing block at
+ * a time — which can be a whole card `<a>` subtree, the same bound
+ * [encodeActionableLinkRefs] pays per link.
  *
  * A tagged mark is a literal tag that keeps its attributes, so it is left to
  * the matcher pass like any other element.
@@ -293,36 +294,29 @@ private fun Flow<SemanticEvent>.moveRefsOffAttributelessBlocks(): Flow<SemanticE
             else -> { /* text does not nest */ }
         }
         val handed = handedToParagraph
-        // A ref-bearing row's moved attributes reach its first cell: a cell
-        // with no ref of its own takes them, one with a ref gets an empty span
-        // of the row's before its own.
+        // A ref-bearing row's moved attributes go on an empty span of their
+        // own at the start of its first cell, apart from the cell's own ref
+        // and ARIA state, which describe another control.
         val row = rowMoved
         if (event !is SemanticEvent.Text) rowMoved = null
-        var current = event
-        var rowSpanAfterCell: Map<String, String>? = null
-        if (row != null && current is Mark && !current.isTagged && current.name in TABLE_CELLS) {
-            if (current.carriesRef()) rowSpanAfterCell = row
-            else current = current.copy(attributes = current.attributes + row)
+        val rowSpan = row?.takeIf {
+            event is Mark && !event.isTagged && event.name in TABLE_CELLS
         }
         when {
-            handed != null && current is Mark -> {
+            handed != null && event is Mark -> {
                 handedToParagraph = null
-                emit(current)
+                emit(event)
                 holders.addLast(Holder(handed))
             }
-            current is Mark && !current.isTagged && current.name == "tr" && current.carriesRef() -> {
-                val (moved, kept) = current.attributes.entries.partition { it.key.isMovedToRefSpan() }
-                emit(current.copy(attributes = kept.associate { it.toPair() }))
+            event is Mark && !event.isTagged && event.name == "tr" && event.carriesRef() -> {
+                val (moved, kept) = event.attributes.entries.partition { it.key.isMovedToRefSpan() }
+                emit(event.copy(attributes = kept.associate { it.toPair() }))
                 rowMoved = moved.associate { it.toPair() }
             }
-            current is Mark && !current.isTagged && current.name in ATTRIBUTELESS_BLOCKS &&
-                current.carriesRef() -> {
-                val (moved, kept) = current.attributes.entries.partition { it.key.isMovedToRefSpan() }
-                emit(current.copy(attributes = kept.associate { it.toPair() }))
-                rowSpanAfterCell?.let {
-                    emit(Mark("span", isTagged = true, attributes = it))
-                    emit(Unmark("span", isTagged = true))
-                }
+            event is Mark && !event.isTagged && event.name in ATTRIBUTELESS_BLOCKS &&
+                event.carriesRef() -> {
+                val (moved, kept) = event.attributes.entries.partition { it.key.isMovedToRefSpan() }
+                emit(event.copy(attributes = kept.associate { it.toPair() }))
                 holders.addLast(Holder(moved.associate { it.toPair() }))
             }
             event is Unmark && holder != null && holder.depth < 0 -> {
@@ -330,6 +324,10 @@ private fun Flow<SemanticEvent>.moveRefsOffAttributelessBlocks(): Flow<SemanticE
                 emit(event)
             }
             else -> emit(event)
+        }
+        if (rowSpan != null) {
+            emit(Mark("span", isTagged = true, attributes = rowSpan))
+            emit(Unmark("span", isTagged = true))
         }
     }
 
