@@ -587,4 +587,40 @@ class HtmlWhitespaceNormalizationTest {
             "p" { +"x "; "b" { "i" { }; +"y" } }
         }
     }
+
+    @Test
+    fun `should drop the space of an empty inline element at a block end`() = runTest {
+        // given — second review of #144: nothing follows the empty link in its
+        // paragraph, so its space separates nothing
+        val input = semanticEvents(tagged = true) {
+            "p" { +"Hi"; "a"("href" to "/x") { +" " } }
+            "p" { +"Next" }
+        }
+
+        // when
+        val output = input.dropHtmlStructuralWhitespace()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "p" { +"Hi"; "a"("href" to "/x") { } }
+            "p" { +"Next" }
+        }
+    }
+
+    @Test
+    fun `should keep the space of an empty inline element closing inside another`() = runTest {
+        // given — `Hi<span><b> </b></span>there`: what follows the outer close
+        // decides, as for a run before any inline close
+        val input = semanticEvents(tagged = true) {
+            "p" { +"Hi"; "span" { "b" { +" " } }; +"there" }
+        }
+
+        // when
+        val output = input.dropHtmlStructuralWhitespace()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "p" { +"Hi "; "span" { "b" { } }; +"there" }
+        }
+    }
 }

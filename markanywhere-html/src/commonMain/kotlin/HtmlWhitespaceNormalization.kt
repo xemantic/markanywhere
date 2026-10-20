@@ -57,9 +57,9 @@ import kotlinx.coroutines.flow.flow
  * The asymmetry mirrors HTML: a closing inline tag or non-whitespace text can
  * be the *left* side of a kept space (content just ended), and an opening inline
  * tag or non-whitespace text can be its *right* side (content is about to
- * start). Whitespace that is merely the interior of an empty inline element
- * (`<code> </code>`) therefore drops, because its left neighbour is the *open*
- * tag, not content.
+ * start). Whitespace inside an empty inline element (`Hi<b> </b>there`) is a
+ * run between the content around the element, so it is written before the
+ * element when content follows and dropped at a block boundary.
  *
  * Only **ASCII whitespace** (space, tab, LF, CR, FF) is collapsed. Non-ASCII
  * spaces — NBSP (` `), narrow NBSP, en/em space, … — are content, never
@@ -88,13 +88,15 @@ public fun Flow<SemanticEvent>.dropHtmlStructuralWhitespace(): Flow<SemanticEven
     // back its open-tag verdict — Unmark carries no attributes).
     val inlineStack = ArrayDeque<Boolean>()
     val displays = CapturedDisplayReader()
-    // The inline opening tags since the last content, held until the next
-    // event decides whether a whitespace run right after them (`Menu<a> Home`)
-    // separates the content before them from the content inside: such a run
-    // is written *before* the tags, where a Markdown link label or an opening
-    // emphasis delimiter needs it (issue #144). Only opening tags are held,
-    // never content.
+    // The inline tags since the last content, held until the next content or
+    // block boundary decides whether a whitespace run after them
+    // (`Menu<a> Home`, `Hi<b> </b>there`) separates the content before them
+    // from what follows: such a run is written *before* the tags, where a
+    // Markdown link label or an opening emphasis delimiter needs it (issue
+    // #144). Only opening tags and the closes of elements emptied so far are
+    // held, never content.
     val heldOpens = mutableListOf<SemanticEvent>()
+    var heldOpenCount = 0 // the held opening tags not closed yet
     var leftBeforeHeld = false // could the content before the held tags be a left side?
 
     // Resolve a buffered whitespace run now that its right neighbour is known:
@@ -117,6 +119,7 @@ public fun Flow<SemanticEvent>.dropHtmlStructuralWhitespace(): Flow<SemanticEven
         }
         heldOpens.forEach { emit(it) }
         heldOpens.clear()
+        heldOpenCount = 0
     }
 
     collect { event ->
@@ -166,6 +169,7 @@ public fun Flow<SemanticEvent>.dropHtmlStructuralWhitespace(): Flow<SemanticEven
                         leftBeforeHeld = leftQualifies && !separated
                     }
                     heldOpens += stripped
+                    heldOpenCount++
                 } else {
                     // A run after held tags and before an image or a preserve
                     // region's opening tag (`Run<b> <code>`) still separates
@@ -183,10 +187,24 @@ public fun Flow<SemanticEvent>.dropHtmlStructuralWhitespace(): Flow<SemanticEven
             }
 
             is Unmark -> {
-                // An inline element closing with no content in it: a run
-                // after its opening tag (`Hi<b> </b>there`) still separates
-                // the content around it, so it goes before the held tags too.
-                releaseHeldOpens(rightQualifies = true)
+                if (heldOpenCount > 0) {
+                    // A held element closing with no content in it: what
+                    // follows still decides the run after its opening tag.
+                    displays.close()
+                    depth--
+                    inlineStack.removeLastOrNull()
+                    heldOpens += event
+                    heldOpenCount--
+                    return@collect
+                }
+                if (heldOpens.isNotEmpty()) {
+                    // Only emptied elements are held, and an enclosing element
+                    // closes: the run after them is carried past this close
+                    // (or dropped at a block one) like any run before a close.
+                    heldOpens.forEach { emit(it) }
+                    heldOpens.clear()
+                    if (pending) leftQualifies = leftBeforeHeld
+                }
                 displays.close()
                 if (depth == preserveFrom) preserveFrom = -1
                 depth--
