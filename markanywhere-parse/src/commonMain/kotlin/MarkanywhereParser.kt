@@ -2419,6 +2419,7 @@ private class ParserState(
             // frame, emitting unmarks for its open tags.
             if (tryCloseEnclosingHtmlBlock(line)) return
 
+            val atxHeading = Patterns.ATX_HEADING_LINE.matchEntire(line)
             when {
                 // Indented code block: ≥4 cols of leading whitespace (tabs count to tab stop 4).
                 leadingIndentCols(line) >= 4 -> {
@@ -2429,7 +2430,7 @@ private class ParserState(
                     replaceMode(BlockMode.IndentedCodeBlock)
                 }
                 // ATX heading allowing tab/space after #s
-                line matches Patterns.ATX_HEADING_LINE -> emitAtxHeading(line)
+                atxHeading != null -> emitAtxHeading(atxHeading)
                 // GFM thematic break: 3+ matching `-`/`*`/`_` separated by spaces/tabs
                 line matches Patterns.THEMATIC_BREAK -> {
                     "hr" {}
@@ -2730,9 +2731,8 @@ private class ParserState(
         }
     }
 
-    /** Emit [line], which matches [Patterns.ATX_HEADING_LINE], as an `h1`…`h6`. */
-    private suspend fun SemanticEventScope.emitAtxHeading(line: String) {
-        val match = Patterns.ATX_HEADING_LINE.matchEntire(line)!!
+    /** Emit the line matched by [Patterns.ATX_HEADING_LINE] as an `h1`…`h6`. */
+    private suspend fun SemanticEventScope.emitAtxHeading(match: MatchResult) {
         val level = match.groupValues[1].length
         // The regex leaves no trailing spaces/tabs on the content. A closing
         // sequence (GFM §4.2) is a run of `#` that is the whole content or is
@@ -2747,6 +2747,9 @@ private class ParserState(
         }
         "h$level" {
             if (content.isNotEmpty()) processInlineContent(content)
+            // A heading has no hard break, so a trailing `\` is literal text
+            // (GFM §6.7) — [flushInline] alone would drop it.
+            if (escaped) emitPendingEscapeAsLiteral()
             flushInline()
         }
     }
@@ -3095,8 +3098,9 @@ private class ParserState(
             return
         }
         // ATX heading as first content of a list item (example 278).
-        if (trimmed matches Patterns.ATX_HEADING_LINE) {
-            emitAtxHeading(trimmed)
+        val atxHeading = Patterns.ATX_HEADING_LINE.matchEntire(trimmed)
+        if (atxHeading != null) {
+            emitAtxHeading(atxHeading)
             return
         }
         // Fenced code as first content of a list item (GFM §5.4 example 304).
@@ -3307,9 +3311,10 @@ private class ParserState(
             closeListBlockquoteParagraphIfOpen(ctx)
             return
         }
-        if (content matches Patterns.ATX_HEADING_LINE) {
+        val atxHeading = Patterns.ATX_HEADING_LINE.matchEntire(content)
+        if (atxHeading != null) {
             closeListBlockquoteParagraphIfOpen(ctx)
-            emitAtxHeading(content)
+            emitAtxHeading(atxHeading)
             return
         }
         if (!ctx.blockquoteParagraphOpen) {
@@ -4272,10 +4277,11 @@ private class ParserState(
                 mode.blankSeen = false
                 return
             }
-            if (stripped matches Patterns.ATX_HEADING_LINE) {
+            val atxHeading = Patterns.ATX_HEADING_LINE.matchEntire(stripped)
+            if (atxHeading != null) {
                 closeListParagraphIfOpen(mode)
                 closeListBlockquoteIfOpen(mode)
-                emitAtxHeading(stripped)
+                emitAtxHeading(atxHeading)
                 ctx.hasContent = true
                 mode.blankSeen = false
                 return
