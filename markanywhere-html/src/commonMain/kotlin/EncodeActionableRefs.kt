@@ -143,7 +143,7 @@ internal val LINK_BLOCK_CONTENT_TAGS: Set<String> = setOf(
  * handled by the matcher pass that follows.
  */
 public fun Flow<SemanticEvent>.encodeActionableRefs(): Flow<SemanticEvent> =
-    encodeActionableLinkRefs().moveRefsOffAttributelessBlocks().transform {
+    encodeActionableLinkRefs().moveRefsOffAttributelessBlocks().moveRowRefs().transform {
         encodeActionableNonLinkRefs()
     }
 
@@ -182,13 +182,10 @@ private val ATTRIBUTELESS_BLOCKS = setOf(
  *   renderer writes as a line-start block tag: it goes before the span.
  *
  * Any other item with no leading inline content gets an empty span, since its
- * ref is still something to act on. A ref-bearing `tr` has no content of its
- * own and no span can sit between cells, so its ref goes on an empty span at
- * the start of its first cell, apart from anything the cell carries itself
- * (a row with no cell hands it on to the next row's, or after the table).
- * Bounded by one top-level inline child of the innermost ref-bearing block at
- * a time — which can be a whole card `<a>` subtree, the same bound
- * [encodeActionableLinkRefs] pays per link.
+ * ref is still something to act on. Bounded by one top-level inline child of
+ * the innermost ref-bearing block at a time — which can be a whole card `<a>`
+ * subtree, the same bound [encodeActionableLinkRefs] pays per link. A row's
+ * ref is [moveRowRefs]' concern.
  *
  * A tagged mark is a literal tag that keeps its attributes, so it is left to
  * the matcher pass like any other element.
@@ -206,19 +203,6 @@ private fun Flow<SemanticEvent>.moveRefsOffAttributelessBlocks(): Flow<SemanticE
     val holders = ArrayDeque<Holder>()
     // The span attributes a ref-bearing item hands to its first `p`.
     var handedToParagraph: Map<String, String>? = null
-    // The span attributes of ref-bearing rows waiting for a cell to hold them:
-    // a row's first cell, or, for a row with no cell, the next row's — a cell
-    // made for it would set the column count of a table it comes first in.
-    val rowSpans = mutableListOf<Map<String, String>>()
-
-    suspend fun emitRowSpans() {
-        for (attributes in rowSpans) {
-            emit(Mark("span", isTagged = true, attributes = attributes))
-            emit(Unmark("span", isTagged = true))
-        }
-        rowSpans.clear()
-    }
-
     suspend fun openSpan(holder: Holder, firstText: String?) {
         val label = holder.moved["aria-label"]
         val attributes = if (label != null && firstText != null &&
@@ -304,22 +288,11 @@ private fun Flow<SemanticEvent>.moveRefsOffAttributelessBlocks(): Flow<SemanticE
             else -> { /* text does not nest */ }
         }
         val handed = handedToParagraph
-        // A ref-bearing row's moved attributes go on an empty span of their
-        // own at the start of the next cell, apart from the cell's own ref and
-        // ARIA state, which describe another control — or after the table,
-        // when no cell follows.
-        val atCell = rowSpans.isNotEmpty() && event is Mark && event.name in TABLE_CELLS
-        val afterTable = rowSpans.isNotEmpty() && event is Unmark && event.name == "table"
         when {
             handed != null && event is Mark -> {
                 handedToParagraph = null
                 emit(event)
                 holders.addLast(Holder(handed))
-            }
-            event is Mark && !event.isTagged && event.name == "tr" && event.carriesRef() -> {
-                val (moved, kept) = event.attributes.entries.partition { it.key.isMovedToRefSpan() }
-                emit(event.copy(attributes = kept.associate { it.toPair() }))
-                rowSpans += moved.associate { it.toPair() }
             }
             event is Mark && !event.isTagged && event.name in ATTRIBUTELESS_BLOCKS &&
                 event.carriesRef() -> {
@@ -333,11 +306,9 @@ private fun Flow<SemanticEvent>.moveRefsOffAttributelessBlocks(): Flow<SemanticE
             }
             else -> emit(event)
         }
-        if (atCell || afterTable) emitRowSpans()
     }
 
     collect { process(it) }
-    emitRowSpans()
     // An unclosed block at end-of-stream (synthetic edge): flush what is held.
     holders.lastOrNull()?.let { holder ->
         if (holder.child.isNotEmpty()) {
@@ -346,6 +317,91 @@ private fun Flow<SemanticEvent>.moveRefsOffAttributelessBlocks(): Flow<SemanticE
         }
         settle(holder)
     }
+}
+
+/**
+ * Moves the ref of each ref-bearing untagged `tr`, with its ARIA state
+ * ([isMovedToRefSpan]), onto an empty tagged `span` — a `| … |` row carries no
+ * attributes, and no span can sit between cells. The span goes where the
+ * row's own content starts: inside its first cell, apart from anything the
+ * cell carries itself (the cell's ref and state describe another control), or
+ * at the start of whatever else comes first (a link directly in the row),
+ * before it when that cannot hold it (text, a void element).
+ * A row with no content at all hands it on to the first cell of a later row
+ * of the same table — a cell made for it would set the column count of a
+ * table it comes first in — or, when none follows, puts it right after that
+ * table (after the row's parent when it is in no table), so it never lands on
+ * unrelated content. Runs after [moveRefsOffAttributelessBlocks], so a cell's
+ * own ref span is already in place and the row's lands beside it. Holds
+ * nothing but the pending spans.
+ */
+private fun Flow<SemanticEvent>.moveRowRefs(): Flow<SemanticEvent> = flow {
+    // A ref-bearing row's span: [rowLevel] is the row's index in [open] while
+    // it waits for its own content; once the row closed empty, [ownerLevel] is
+    // the index of the table (or parent) whose cells may take it, -1 for none.
+    class PendingRow(val attributes: Map<String, String>, val rowLevel: Int, val ownerLevel: Int) {
+        var closedEmpty = false
+    }
+    val open = ArrayDeque<String>() // names of the open marks
+    val pending = mutableListOf<PendingRow>()
+
+    suspend fun emitSpans(rows: List<PendingRow>) {
+        for (row in rows) {
+            emit(Mark("span", isTagged = true, attributes = row.attributes))
+            emit(Unmark("span", isTagged = true))
+        }
+        pending.removeAll(rows)
+    }
+
+    // The index in [open] of the nearest open table, or -1.
+    fun tableLevel(): Int = open.lastIndexOf("table")
+
+    collect { event ->
+        when (event) {
+            is Text -> {
+                // text directly in a row is the row's own content
+                val own = pending.filter {
+                    !it.closedEmpty && it.rowLevel == open.size - 1 && event.text.isNotBlank()
+                }
+                emitSpans(own)
+                emit(event)
+            }
+            is Mark -> {
+                val level = open.size
+                val direct = pending.filter { !it.closedEmpty && it.rowLevel == level - 1 }
+                val cell = event.name in TABLE_CELLS
+                val handedOn = if (cell) pending.filter {
+                    it.closedEmpty && it.ownerLevel >= 0 && it.ownerLevel == tableLevel()
+                } else emptyList()
+                // a void element cannot hold the span: it goes before it
+                val inside = event.name !in HTML_VOID_ELEMENTS
+                if (!inside) emitSpans(direct)
+                if (!event.isTagged && event.name == "tr" && event.carriesRef()) {
+                    val (moved, kept) = event.attributes.entries.partition { it.key.isMovedToRefSpan() }
+                    emit(event.copy(attributes = kept.associate { it.toPair() }))
+                    val table = tableLevel()
+                    pending += PendingRow(
+                        attributes = moved.associate { it.toPair() },
+                        rowLevel = level,
+                        ownerLevel = if (table >= 0) table else level - 1,
+                    )
+                } else {
+                    emit(event)
+                }
+                open.addLast(event.name)
+                emitSpans(handedOn + if (inside) direct else emptyList())
+            }
+            is Unmark -> {
+                val level = open.size - 1
+                pending.filter { !it.closedEmpty && it.rowLevel == level }.forEach { it.closedEmpty = true }
+                open.removeLastOrNull()
+                emit(event)
+                emitSpans(pending.filter { it.closedEmpty && it.ownerLevel == level })
+            }
+        }
+    }
+    // An unclosed table or row at end-of-stream (synthetic edge).
+    emitSpans(pending.toList())
 }
 
 private val TABLE_CELLS = setOf("td", "th")

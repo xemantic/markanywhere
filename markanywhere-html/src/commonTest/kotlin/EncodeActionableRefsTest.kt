@@ -782,12 +782,19 @@ class EncodeActionableRefsTest {
     }
 
     @Test
-    fun `should keep a table row's ref pending past an image directly in the row`() = runTest {
-        // given - malformed, but a void image cannot hold the span
+    fun `should put a table row's ref before its own content that is no cell`() = runTest {
+        // given - a row holding a link and a row holding text, neither in a
+        // cell: the ref belongs to that content, never to a later row's cell
         val input = semanticEvents {
             "table" {
-                "tr"(AccessibilityAnnotations.REF to "1") {
+                "tr"(AccessibilityAnnotations.REF to "5") {
+                    "a"("href" to "/x") { +"Inbox" }
+                }
+                "tr"(AccessibilityAnnotations.REF to "6") { +"Sent" }
+                "tr"(AccessibilityAnnotations.REF to "7") {
                     "img"("alt" to "x") { }
+                }
+                "tr" {
                     "td" { +"A" }
                 }
             }
@@ -800,7 +807,80 @@ class EncodeActionableRefsTest {
         output sameAs semanticEvents {
             "table" {
                 "tr" {
+                    "a"("href" to "/x") {
+                        tag("span", "ref" to "5") { }
+                        +"Inbox"
+                    }
+                }
+                "tr" {
+                    tag("span", "ref" to "6") { }
+                    +"Sent"
+                }
+                "tr" {
+                    tag("span", "ref" to "7") { }
                     "img"("alt" to "x") { }
+                }
+                "tr" {
+                    "td" { +"A" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep the ref of an empty row outside a table after its parent`() = runTest {
+        // given - no table to hand it on in: an unrelated later table must
+        // not take it
+        val input = semanticEvents {
+            "section" {
+                "tr"(AccessibilityAnnotations.REF to "7") { }
+            }
+            "p" { +"Lots of text" }
+            "table" {
+                "tr" { "td" { +"A" } }
+            }
+        }
+
+        // when
+        val output = input.encodeActionableRefs()
+
+        // then
+        output sameAs semanticEvents {
+            "section" {
+                "tr" { }
+            }
+            tag("span", "ref" to "7") { }
+            "p" { +"Lots of text" }
+            "table" {
+                "tr" { "td" { +"A" } }
+            }
+        }
+    }
+
+    @Test
+    fun `should hand an empty row's ref only to a cell of its own table`() = runTest {
+        // given - the next cell belongs to a table nested in a caption
+        val input = semanticEvents {
+            "table" {
+                "tr"(AccessibilityAnnotations.REF to "1") { }
+                "caption" {
+                    "table" { "tr" { "td" { +"inner" } } }
+                }
+                "tr" { "td" { +"A" } }
+            }
+        }
+
+        // when
+        val output = input.encodeActionableRefs()
+
+        // then
+        output sameAs semanticEvents {
+            "table" {
+                "tr" { }
+                "caption" {
+                    "table" { "tr" { "td" { +"inner" } } }
+                }
+                "tr" {
                     "td" {
                         tag("span", "ref" to "1") { }
                         +"A"

@@ -908,12 +908,47 @@ class HtmlToMarkdownTest {
     @Test
     fun `should keep a modal dialog role inside running text`() = runTest {
         // given - issue #165: a blocking modal is the first thing to act on,
-        // even where no block can go
+        // even where no block can go; a real one holds a button
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "p" {
+                    +"Text "
+                    "my-dialog"("role" to "dialog", "aria-modal" to "true") {
+                        +"Sure? "
+                        "button" { +"OK" }
+                    }
+                }
+                "table" {
+                    "tr" { "th" { +"H" } }
+                    "tr" {
+                        "td" {
+                            "my-dialog"("role" to "dialog", "aria-modal" to "true") {
+                                +"Sure? "
+                                "button" { +"OK" }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown(refMode = RefMode.STRIP).renderMarkdown()
+        val reRendered = flowOf(markdown).parse().renderMarkdown()
+
+        // then - an empty marker, the content after it
+        assert("""<span role="dialog" aria-modal="true"></span>Sure?""" in markdown)
+        reRendered sameAs markdown
+    }
+
+    @Test
+    fun `should unwrap a non-modal dialog role inside running text`() = runTest {
+        // given - a non-modal role dialog is usually a hidden drawer
         val page = semanticEvents(tagged = true) {
             "body" {
                 "p" {
                     +"Hi "
-                    "div"("role" to "dialog", "aria-modal" to "true") { +"Agree" }
+                    "div"("role" to "dialog") { +"Menu" }
                     +" end"
                 }
             }
@@ -921,11 +956,36 @@ class HtmlToMarkdownTest {
 
         // when
         val markdown = page.transformHtmlToMarkdown().renderMarkdown()
-        val reRendered = flowOf(markdown).parse().renderMarkdown()
 
         // then
-        markdown sameAs """Hi <span role="dialog" aria-modal="true">Agree</span> end"""
-        reRendered sameAs markdown
+        markdown sameAs "Hi Menu end"
+    }
+
+    @Test
+    fun `should keep a row's ref on its own content and not on a later row`() = runTest {
+        // given - issue #165: a grid row holding a link, not a cell
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "div"("role" to "grid") {
+                    "div"("role" to "row", AccessibilityAnnotations.REF to "5") {
+                        "a"("href" to "/x") { +"Inbox" }
+                    }
+                    "div"("role" to "row") {
+                        "div"("role" to "cell") { +"A" }
+                        "div"("role" to "cell") { +"B" }
+                    }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then - the ref stays with the link, the later row's cells stay bare
+        // (no render-parse check: content directly in a row, outside any
+        // cell, does not round-trip with or without a ref)
+        assert("""[<span ref="5"></span>Inbox](/x)""" in markdown)
+        assert("| A | B |" in markdown)
     }
 
     @Test

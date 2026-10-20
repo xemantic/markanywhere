@@ -510,14 +510,20 @@ private fun Flow<SemanticEvent>.simplifyHtmlRules(
     // `role` survives wherever it tells more than the tag: an alert dialog, or
     // a dialog that is a `<section>`.
     //
-    // In running text, where no block can go, it is still kept — as an inline
-    // `span` carrying the role and `aria-modal`, since a blocking modal is the
-    // first thing an agent must act on.
-    match({ isGenericContainer() && explicitRole() in DIALOG_ROLES }) { event ->
+    // In running text, where no block can go, a modal one is still marked —
+    // by an empty `span` carrying the role and `aria-modal` before its
+    // content, since a blocking modal is the first thing an agent must act on
+    // and a raw `span` cannot wrap the button it nearly always holds. A
+    // non-modal one there (usually a hidden drawer) is unwrapped.
+    match({
+        isGenericContainer() && explicitRole() in DIALOG_ROLES &&
+                (blockContext.promotes || isModal())
+    }) { event ->
         val role = event.explicitRole()!!
         if (!blockContext.promotes) {
-            preserve("span", mapOf("role" to role) + preserveAttrs(event, "id")) { children() }
-        } else if (event["aria-modal"]?.lowercase() == "true") {
+            preserve("span", mapOf("role" to role) + preserveAttrs(event, "id")) { /* a marker */ }
+            children()
+        } else if (event.isModal()) {
             val attrs = if (role == "alertdialog") {
                 mapOf("role" to role) + preserveAttrs(event, "id")
             } else preserveAttrs(event, "id")
@@ -772,6 +778,9 @@ private val ROLE_TO_TAG = mapOf(
 
 // Roles a generic container promotes to a `<dialog>` (modal) or a `<section>`.
 private val DIALOG_ROLES = setOf("dialog", "alertdialog")
+
+// Whether this dialog claims to block the page.
+private fun SemanticEvent.Mark.isModal(): Boolean = this["aria-modal"]?.lowercase() == "true"
 
 // Roles a generic container promotes to Markdown inline content, which may sit
 // anywhere text does.
