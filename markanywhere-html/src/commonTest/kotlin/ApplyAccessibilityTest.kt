@@ -2262,6 +2262,67 @@ class ApplyAccessibilityTest {
     }
 
     @Test
+    fun `should ignore a presentation role on a scroll container`() = runTest {
+        // given — a browser makes a scroll container focusable (verified live
+        // in Chrome, which then keeps the list), and the capture says which
+        // element is one
+        val input = semanticEvents(tagged = true) {
+            "ul"("role" to "presentation", AccessibilityAnnotations.SCROLLABLE to "true") {
+                "li" { +"A" }
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then the list keeps its role and items, and the consumed
+        // annotation does not leak downstream
+        output sameAs semanticEvents(tagged = true) {
+            "ul" {
+                "li" { +"A" }
+            }
+        }
+    }
+
+    @Test
+    fun `should demote an item whose own role has no recognised token`() = runTest {
+        // given — a browser drops an unrecognised role token, so an item
+        // whose role holds no other has no explicit role and inherits its
+        // list's presentational one
+        val input = semanticEvents(tagged = true) {
+            "ul"("role" to "none") {
+                "li"("role" to "bogus") { +"C" }
+            }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "div" {
+                "div" { +"C" }
+            }
+        }
+    }
+
+    @Test
+    fun `should demote by a presentation role after an unrecognised token`() = runTest {
+        // given
+        val input = semanticEvents(tagged = true) {
+            "h2"("role" to "foo presentation") { +"Title" }
+        }
+
+        // when
+        val output = input.applyAccessibility()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "div" { +"Title" }
+        }
+    }
+
+    @Test
     fun `should keep an inherited item focusable within a presentational list`() = runTest {
         // given — conflict resolution applies to an inherited role too
         val input = semanticEvents(tagged = true) {

@@ -131,10 +131,12 @@ internal class CapturedDisplayReader {
 }
 
 // The annotations only the CDP capture writes. [AccessibilityAnnotations.REDACTED]
-// is not one of them: the in-page JS walker writes it too (the two producers
-// share `captureFormControl`), while recording no display at all — taking
-// it for a capture switched a JS dump's display fallback halfway down the page.
-private val CDP_CAPTURE_ANNOTATIONS = AccessibilityAnnotations.ALL + AccessibilityAnnotations.REF
+// and [AccessibilityAnnotations.SCROLLABLE] are not among them: the in-page JS
+// walker writes them too (the two producers share `captureFormControl` and
+// `isUserScrollable`), while recording no display at all — taking one for a
+// capture switched a JS dump's display fallback halfway down the page.
+private val CDP_CAPTURE_ANNOTATIONS =
+    AccessibilityAnnotations.ALL + AccessibilityAnnotations.REF - AccessibilityAnnotations.SCROLLABLE
 
 /**
  * Whether this element shows that an *unmarked* stream is a CDP capture (see

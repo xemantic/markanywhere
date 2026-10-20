@@ -419,6 +419,27 @@ class LabelActionableElementsTest {
     }
 
     @Test
+    fun `should read an interactive role after an unrecognised token`() = runTest {
+        // given - a browser takes the first role token it recognises
+        val input = semanticEvents(tagged = true) {
+            "div"("role" to "toggle menuitemcheckbox") {
+                "span"("class" to "check", "title" to "Show hidden files") { }
+            }
+        }
+
+        // when
+        val output = input.labelActionableElements()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "div"("role" to "toggle menuitemcheckbox") {
+                +"Show hidden files"
+                "span"("class" to "check", "title" to "Show hidden files") { }
+            }
+        }
+    }
+
+    @Test
     fun `should label a ref-bearing generic element from its own aria-label`() = runTest {
         // given - the browser found it actionable (it carries a ref), though
         // nothing in the markup says what kind of control it is

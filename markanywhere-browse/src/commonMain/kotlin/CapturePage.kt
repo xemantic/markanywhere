@@ -30,6 +30,7 @@ import com.xemantic.markanywhere.dump.inputType
 import com.xemantic.markanywhere.dump.isMaskingTextSecurity
 import com.xemantic.markanywhere.dump.isRedactableElement
 import com.xemantic.markanywhere.dump.isRedactedControl
+import com.xemantic.markanywhere.dump.isUserScrollable
 import com.xemantic.markanywhere.dump.readsMaskedState
 import com.xemantic.markanywhere.dump.secretValueTexts
 import com.xemantic.markanywhere.dump.unrecordedDisplayOfChildren
@@ -52,6 +53,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.math.roundToInt
 import kotlin.time.Clock
 
 private const val ELEMENT_NODE = 1
@@ -59,10 +61,14 @@ private const val TEXT_NODE = 3
 
 // The computed styles requested from the snapshot, in the order its per-node
 // style lists report them.
-private val COMPUTED_STYLES = listOf("display", "visibility", "-webkit-text-security")
+private val COMPUTED_STYLES = listOf(
+    "display", "visibility", "-webkit-text-security", "overflow-x", "overflow-y"
+)
 private const val DISPLAY_STYLE = 0
 private const val VISIBILITY_STYLE = 1
 private const val TEXT_SECURITY_STYLE = 2
+private const val OVERFLOW_X_STYLE = 3
+private const val OVERFLOW_Y_STYLE = 4
 
 // the elements whose text nodes are no visible text of the page: never
 // rendered, or form controls the capture writes its own text for
@@ -121,7 +127,9 @@ internal suspend fun Tab.capturePage(
     isActionable: (Accessibility.AXNode?) -> Boolean
 ): PageCapture {
     val snapshot = dOMSnapshot.captureSnapshot(
-        computedStyles = COMPUTED_STYLES
+        computedStyles = COMPUTED_STYLES,
+        // the scroll and client sizes telling a scroll container a user can scroll
+        includeDOMRects = true
     )
     val axNodes = accessibility.getAxTree(
         frameIds = snapshot.documents
@@ -335,6 +343,38 @@ internal class SnapshotDom(
      * [maskedOutsideLayout]).
      */
     private val textSecurity: Map<Int, String> = computedStyle(TEXT_SECURITY_STYLE)
+
+    /**
+     * The laid-out elements a user can scroll ([isUserScrollable]), judged from
+     * their computed `overflow` and the scroll and client sizes of their DOM
+     * rects — absent from a snapshot captured without them.
+     */
+    private val userScrollable: Set<Int> = buildSet {
+        val nodeIndex = layout.nodeIndex
+        val scrollRects = layout.scrollRects ?: return@buildSet
+        val clientRects = layout.clientRects ?: return@buildSet
+        val overflowX = computedStyle(OVERFLOW_X_STYLE)
+        val overflowY = computedStyle(OVERFLOW_Y_STYLE)
+        nodeIndex.forEachIndexed { i, node ->
+            if (!isElement(node)) return@forEachIndexed
+            val scroll = scrollRects.getOrNull(i) ?: return@forEachIndexed
+            val client = clientRects.getOrNull(i) ?: return@forEachIndexed
+            if (scroll.size < 4 || client.size < 4) return@forEachIndexed
+            if (isUserScrollable(
+                    element = name(node),
+                    overflowX = overflowX[node],
+                    overflowY = overflowY[node],
+                    scrollWidth = scroll[2].roundToInt(),
+                    scrollHeight = scroll[3].roundToInt(),
+                    clientWidth = client[2].roundToInt(),
+                    clientHeight = client[3].roundToInt(),
+                )
+            ) add(node)
+        }
+    }
+
+    /** Whether a user can scroll this element (see [userScrollable]). */
+    fun scrollsByUser(element: Int): Boolean = element in userScrollable
 
     /** The laid-out node indexes — those the snapshot reports computed styles for. */
     private val laidOut: Set<Int> = layout.nodeIndex.toSet()
@@ -1082,6 +1122,11 @@ internal class DomEventBuilder(
         // only — most other ignored nodes are structurally meaningful.
         if (dom.name(element) == "img" && element.axNode(dom)?.ignored == true) {
             result[AccessibilityAnnotations.IGNORED] = "true"
+        }
+        // A browser makes a scroll container focusable, which Blink's
+        // accessibility tree does not report, so it carries no ref.
+        if (dom.scrollsByUser(element)) {
+            result[AccessibilityAnnotations.SCROLLABLE] = "true"
         }
         return result.withResolvedAccessibleName(dom, element)
     }

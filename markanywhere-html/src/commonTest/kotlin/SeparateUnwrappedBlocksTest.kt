@@ -176,6 +176,34 @@ class SeparateUnwrappedBlocksTest {
     }
 
     @Test
+    fun `should not take a scroll container for a capture`() = runTest {
+        // given — the JS walker records no display at all, but it marks a
+        // scroll container scrollable by the producers' shared rule; the
+        // divs after it must still read as their UA default `block`
+        val input = semanticEvents(tagged = true) {
+            "body" {
+                "pre"(AccessibilityAnnotations.SCROLLABLE to "true") { +"code" }
+                "div" { +"Forgot password?" }
+                "div" { +"Sign up" }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "body" {
+                "pre"(AccessibilityAnnotations.SCROLLABLE to "true") { +"code" }
+                "div" { +"Forgot password?" }
+                "div" {
+                    "p" { +"Sign up" }
+                }
+            }
+        }
+    }
+
+    @Test
     fun `should not separate across an uncaptured element the browser never renders`() = runTest {
         // given — the UA stylesheet gives a `<script>` `display: none`: it
         // lays out no box, so there is no boundary to cross
