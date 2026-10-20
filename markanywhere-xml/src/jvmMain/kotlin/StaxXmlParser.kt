@@ -42,10 +42,10 @@ import javax.xml.stream.XMLStreamReader
  * [Channel] which a coroutine fills from [parse]'s chunks. Parsing is
  * therefore incremental, and memory stays bounded by the channel rather than
  * by the document — but the latency is the JDK reader's, coarser than
- * [MarkanywhereXmlParser]'s: it reports nothing until the first few characters
- * of the document have arrived, reading ahead for an XML declaration, so a
- * source delivering `<a>` and then waiting gets no event for `a` until more
- * input comes. Past that start an element is reported as soon as its tag has
+ * [MarkanywhereXmlParser]'s: it reports nothing until the first five characters
+ * of the document have arrived — the length of the `<?xml` it reads ahead for
+ * at the document start — so a source delivering `<a>` and then waiting gets
+ * no event for `a` until more input comes. Past that start an element is reported as soon as its tag has
  * been read, while text is reported only once the markup after it begins.
  *
  * What that costs, and what a native implementation would save: a thread

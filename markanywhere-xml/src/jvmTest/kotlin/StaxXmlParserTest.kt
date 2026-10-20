@@ -19,14 +19,18 @@ package com.xemantic.markanywhere.xml
 import com.xemantic.kotlin.test.assert
 import com.xemantic.kotlin.test.have
 import com.xemantic.kotlin.test.should
+import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.flow.mergeAdjacentText
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
@@ -105,22 +109,72 @@ class StaxXmlParserTest : XmlParserTest() {
     }
 
     @Test
-    fun `DIVERGENCE - should report nothing until the first few characters of the document arrive`() = runTest(timeout = 30.seconds) {
-        // given — a document whose opening tag is shorter than the look-ahead
-        // the JDK reader takes at the document start, sniffing for an XML
-        // declaration (MarkanywhereXmlParser reports `a` at once)
+    fun `DIVERGENCE - should report nothing until the first five characters of the document arrive`() = runTest(timeout = 30.seconds) {
+        // given — a document whose opening tag is shorter than the `<?xml` the
+        // JDK reader looks ahead for at the document start (MarkanywhereXmlParser
+        // reports `a` at once), followed by more input only once released
+        val more = CompletableDeferred<Unit>()
         val chunks = flow {
             emit("<a>")
+            more.await()
+            emit("<b/>")
             awaitCancellation()
         }
 
         // when
-        val event = withContext(Dispatchers.Default) {
-            withTimeoutOrNull(1.seconds) { parser.parse(chunks).first() }
+        val (early, late) = parseLive(chunks) { events ->
+            val early = withTimeoutOrNull(1.seconds) { events.receive() }
+            more.complete(Unit)
+            early to withTimeoutOrNull(10.seconds) { events.receive() }
+        }
+
+        // then — `a` was held by the look-ahead, not lost by a stuck parse
+        assert(early == null)
+        assert(late == SemanticEvent.Mark("a", isTagged = true))
+    }
+
+    @Test
+    fun `should report text only once the markup after it begins`() = runTest(timeout = 30.seconds) {
+        // given — text which may yet continue, followed by markup only once
+        // released (MarkanywhereXmlParser reports it at the chunk end)
+        val more = CompletableDeferred<Unit>()
+        val chunks = flow {
+            emit("<a>hello")
+            more.await()
+            emit("<b/>")
+            awaitCancellation()
+        }
+
+        // when
+        val (opening, early, late) = parseLive(chunks) { events ->
+            val opening = withTimeoutOrNull(10.seconds) { events.receive() }
+            val early = withTimeoutOrNull(1.seconds) { events.receive() }
+            more.complete(Unit)
+            Triple(opening, early, withTimeoutOrNull(10.seconds) { events.receive() })
         }
 
         // then
-        assert(event == null)
+        assert(opening == SemanticEvent.Mark("a", isTagged = true))
+        assert(early == null)
+        assert(late == SemanticEvent.Text("hello"))
+    }
+
+    /**
+     * Runs [block] against the events of parsing [chunks] as they arrive, on
+     * real time rather than the test's virtual clock, the parse cancelled once
+     * [block] returns.
+     */
+    private suspend fun <T> parseLive(
+        chunks: Flow<String>,
+        block: suspend (ReceiveChannel<SemanticEvent>) -> T
+    ): T = withContext(Dispatchers.Default) {
+        val events = Channel<SemanticEvent>(Channel.UNLIMITED)
+        val parse = launch { parser.parse(chunks).collect { events.send(it) } }
+        try {
+            block(events)
+        } finally {
+            parse.cancel()
+        }
     }
 
     @Test
