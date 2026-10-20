@@ -246,8 +246,8 @@ private class XmlDocumentReader(
      * Reads [chunk] from [start] until a character completes an event, the
      * read stops or the chunk ends, returning where it got to.
      *
-     * Nothing here suspends \u2014 the events are only collected in [completed],
-     * for [read] to emit \u2014 so reading a character allocates nothing.
+     * Nothing here suspends — the events are only collected in [completed],
+     * for [read] to emit — so reading a character allocates nothing.
      */
     private fun readUntilEvent(chunk: String, start: Int): Int {
         var index = start

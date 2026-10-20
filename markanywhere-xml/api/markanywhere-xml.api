@@ -5,8 +5,8 @@ public final class com/xemantic/markanywhere/xml/MarkanywhereXmlParser : com/xem
 
 public final class com/xemantic/markanywhere/xml/StaxXmlParser : com/xemantic/markanywhere/xml/XmlParser {
 	public fun <init> ()V
-	public fun <init> (Ljavax/xml/stream/XMLInputFactory;)V
-	public synthetic fun <init> (Ljavax/xml/stream/XMLInputFactory;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Lkotlin/jvm/functions/Function0;)V
+	public synthetic fun <init> (Lkotlin/jvm/functions/Function0;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun parse (Lkotlinx/coroutines/flow/Flow;)Lkotlinx/coroutines/flow/Flow;
 }
 

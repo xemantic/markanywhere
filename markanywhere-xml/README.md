@@ -18,6 +18,9 @@ The full mapping, and what happens to malformed input, is in the KDoc of `XmlPar
 
 The contract is pinned by one shared suite, the abstract `XmlParserTest` in `commonTest`, which every engine runs through a subclass of its own.
 Results are compared after `mergeAdjacentText()`, since where a run of text is split is up to the engine.
+The engines agree on well-formed documents only: how much of a malformed one is read before the read stops is up to the engine, and the `MarkanywhereXmlParser`-only leniencies (several roots, text outside the root, a repeated attribute, …) are pinned as `DIVERGENCE` tests in its own subclass.
+
+`StaxXmlParser` holds a thread for every parse in flight, without a cap, so it is a reference rather than an engine for serving many concurrent streams.
 
 ## Benchmarks
 

@@ -20,15 +20,23 @@ import com.xemantic.kotlin.test.assert
 import com.xemantic.kotlin.test.have
 import com.xemantic.kotlin.test.should
 import com.xemantic.markanywhere.flow.mergeAdjacentText
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.InputStream
 import java.io.Reader
 import javax.xml.stream.EventFilter
@@ -76,16 +84,96 @@ class StaxXmlParserTest : XmlParserTest() {
     }
 
     @Test
+    fun `should not hang when cancelled before its source is read`() = runTest(timeout = 30.seconds) {
+        // given — a parse merged with a flow which emits first, so that the
+        // parse is cancelled before the coroutine feeding its source ever runs
+        val other = flowOf("other")
+
+        // when
+        val first = merge(parser.parse("<a>x</a>").map { "event" }, other).first()
+
+        // then
+        assert(first == "other")
+    }
+
+    @Test
+    fun `should end the pull loop on cancellation while the source is suspended`() = runTest(timeout = 30.seconds) {
+        // given — a source which does not respond to cancellation, and a
+        // provider reporting when the pull loop closes its reader
+        val started = CompletableDeferred<Unit>()
+        val closed = CompletableDeferred<Unit>()
+        val gate = CompletableDeferred<Unit>()
+        val reporting = StaxXmlParser(
+            factory = {
+                object : DelegatingXmlInputFactory() {
+                    override fun createXMLStreamReader(reader: Reader): XMLStreamReader =
+                        object : StreamReaderDelegate(delegate.createXMLStreamReader(reader)) {
+                            override fun close() {
+                                super.close()
+                                closed.complete(Unit)
+                            }
+                        }
+                }
+            }
+        )
+        // long enough for the reader's look-ahead past `<?xml` to report `a`
+        val source = flow {
+            emit("<a><b>")
+            withContext(NonCancellable) { gate.await() }
+        }
+        val parse = launch(Dispatchers.Default) {
+            reporting.parse(source).collect { started.complete(Unit) }
+        }
+        val isClosed = try {
+            started.await()
+
+            // when
+            parse.cancel()
+
+            // then — the loop ends without waiting for the source to return
+            withContext(Dispatchers.Default) {
+                withTimeoutOrNull(5.seconds) { closed.await() } != null
+            }
+        } finally {
+            // Released either way, or the test could not even time out.
+            gate.complete(Unit)
+        }
+        parse.join()
+        assert(isClosed)
+    }
+
+    @Test
+    fun `should create a factory for every parse`() = runTest {
+        // given — XMLInputFactory promises no thread safety
+        var created = 0
+        val counting = StaxXmlParser(
+            factory = {
+                created++
+                defaultXmlInputFactory()
+            }
+        )
+
+        // when
+        counting.parse("<a/>").toList()
+        counting.parse("<b/>").toList()
+
+        // then
+        assert(created == 2)
+    }
+
+    @Test
     fun `should not throw when the provider fails with an unchecked exception`() = runTest {
         // given — a provider failing with an exception which is no
         // XMLStreamException, nor caused by one, once the first element is read
         val failing = StaxXmlParser(
-            factory = object : DelegatingXmlInputFactory() {
-                override fun createXMLStreamReader(reader: Reader): XMLStreamReader =
-                    object : StreamReaderDelegate(delegate.createXMLStreamReader(reader)) {
-                        override fun next(): Int =
-                            if (isStartElement) throw IllegalStateException("provider bug") else super.next()
-                    }
+            factory = {
+                object : DelegatingXmlInputFactory() {
+                    override fun createXMLStreamReader(reader: Reader): XMLStreamReader =
+                        object : StreamReaderDelegate(delegate.createXMLStreamReader(reader)) {
+                            override fun next(): Int =
+                                if (isStartElement) throw IllegalStateException("provider bug") else super.next()
+                        }
+                }
             }
         )
 
@@ -103,12 +191,14 @@ class StaxXmlParserTest : XmlParserTest() {
     fun `should not unmark an element whose attributes the provider failed to report`() = runTest {
         // given — a provider reporting an error lazily, from an accessor
         val failing = StaxXmlParser(
-            factory = object : DelegatingXmlInputFactory() {
-                override fun createXMLStreamReader(reader: Reader): XMLStreamReader =
-                    object : StreamReaderDelegate(delegate.createXMLStreamReader(reader)) {
-                        override fun getAttributeValue(index: Int): String =
-                            throw IllegalStateException("lazy error")
-                    }
+            factory = {
+                object : DelegatingXmlInputFactory() {
+                    override fun createXMLStreamReader(reader: Reader): XMLStreamReader =
+                        object : StreamReaderDelegate(delegate.createXMLStreamReader(reader)) {
+                            override fun getAttributeValue(index: Int): String =
+                                throw IllegalStateException("lazy error")
+                        }
+                }
             }
         )
 

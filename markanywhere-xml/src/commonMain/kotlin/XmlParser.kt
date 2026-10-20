@@ -28,9 +28,11 @@ import kotlinx.coroutines.flow.flowOf
  * different engines — the handwritten multiplatform [MarkanywhereXmlParser], or
  * a platform XML parser such as Java's StAX (`StaxXmlParser`, JVM only) — and
  * the two compared for conformance and throughput. Every
- * implementation is expected to honour the contract below, so a document
- * parsed by one is indistinguishable from the same document parsed by another
- * (after `mergeAdjacentText()` of `markanywhere-flow`, see *Text* below).
+ * implementation is expected to honour the contract below, so a well-formed
+ * document parsed by one is indistinguishable from the same document parsed by
+ * another (after `mergeAdjacentText()` of `markanywhere-flow`, see *Text
+ * granularity* below). A malformed one is not: how much of it is read before
+ * the read stops is up to the engine (see *Well-formedness*).
  *
  * ## Mapping of XML constructs onto semantic events
  *
@@ -78,6 +80,17 @@ import kotlinx.coroutines.flow.flowOf
  * consume the result. On an unrecoverable error the parser stops reading and
  * closes whatever marks are still open.
  *
+ * Where the read stops, and so how much of a malformed document is still
+ * reported, is implementation-specific. [MarkanywhereXmlParser] reads on
+ * where `StaxXmlParser` stops — several root elements, text or a CDATA
+ * section outside the root (kept, as a fragment may carry it), a repeated
+ * attribute (the last value kept), an XML declaration of a later 1.x
+ * version — and the JDK's reader also drops the
+ * whole text run an error interrupts (a literal `]]>`, a U+0000, a document
+ * cut short in its text). With DTD support off it does not check the
+ * internal subset either, so a `]` inside one of its literals makes it
+ * report nothing at all, where [MarkanywhereXmlParser] reads the document.
+ *
  * ## Encoding
  *
  * The input is already-decoded text, so the encoding declaration of an XML
@@ -111,7 +124,7 @@ public fun Flow<String>.parseXml(
 ): Flow<SemanticEvent> = parser.parse(this)
 
 /**
- * Unmarks every element still in [open], innermost last, emptying it — how
+ * Unmarks every element still in [open], innermost first, emptying it — how
  * every engine keeps the balanced stream the contract promises when a document
  * ends early or its read was stopped.
  */

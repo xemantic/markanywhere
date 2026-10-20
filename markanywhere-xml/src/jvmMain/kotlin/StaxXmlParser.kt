@@ -51,13 +51,24 @@ import javax.xml.stream.XMLStreamReader
  * push-mode one (Aalto's `AsyncXMLStreamReader`, say) would free the parked
  * thread at the price of a dependency.
  *
+ * The threads are not capped (see [PULL_DISPATCHER] for why they cannot be),
+ * so N concurrent parses of slow sources hold N threads. This parser is the
+ * reference for conformance and benchmarks; serve many concurrent streams —
+ * an LLM's output to many clients, say — with [MarkanywhereXmlParser], which
+ * holds no thread while it waits.
+ *
+ * [factory] is called once per parse: [XMLInputFactory] promises no thread
+ * safety, and the JDK's keeps the last reader it created, so a factory shared
+ * between concurrent parses would be written by all of them and would keep the
+ * last one's buffers alive.
+ *
  * Both DTD processing and external entities are disabled, so no external
  * resource is ever resolved (XXE) and no entity expansion can be nested
  * (billion laughs). Per the [XmlParser] contract a DOCTYPE is dropped rather
  * than rejected.
  */
 public class StaxXmlParser(
-    private val factory: XMLInputFactory = defaultXmlInputFactory()
+    private val factory: () -> XMLInputFactory = ::defaultXmlInputFactory
 ) : XmlParser {
 
     override fun parse(
@@ -65,16 +76,16 @@ public class StaxXmlParser(
     ): Flow<SemanticEvent> = channelFlow {
         val source = Channel<String>(Channel.BUFFERED)
         val feeder = launch {
-            try {
-                chunks.collect { chunk -> source.send(chunk) }
-            } finally {
-                source.close()
-            }
+            chunks.collect { chunk -> source.send(chunk) }
         }
+        // A completion handler rather than a `finally`: a feeder cancelled
+        // before it was ever dispatched runs no code of its own, and the pull
+        // loop would then wait for its next chunk forever.
+        feeder.invokeOnCompletion { source.close() }
         val collector = FlowCollector<SemanticEvent> { event -> send(event) }
         try {
             withContext(PULL_DISPATCHER) {
-                collector.readDocument(ChannelReader(source))
+                collector.readDocument(ChannelReader(source, coroutineContext.job))
             }
         } finally {
             // Releases the feeding coroutine when the reader stopped early —
@@ -97,7 +108,7 @@ public class StaxXmlParser(
         val open = ArrayDeque<String>()
         var reader: XMLStreamReader? = null
         try {
-            reader = factory.createXMLStreamReader(source)
+            reader = factory().createXMLStreamReader(source)
             while (reader.hasNext()) {
                 when (reader.next()) {
                     XMLStreamConstants.START_ELEMENT -> {
@@ -159,10 +170,14 @@ public class StaxXmlParser(
  *
  * It may only ever be read on a thread allowed to block, hence the
  * [PULL_DISPATCHER] confinement at its single call site. A closed or cancelled
- * channel reads as end of input, so a parse ends when its source does.
+ * channel reads as end of input, so a parse ends when its source does; a
+ * cancelled [parse] job ends the wait at once, throwing
+ * [CancellationException] through the pull parser, rather than once the
+ * source gets round to closing the channel.
  */
 private class ChannelReader(
-    private val chunks: ReceiveChannel<String>
+    private val chunks: ReceiveChannel<String>,
+    private val parse: Job
 ) : Reader() {
 
     private var chunk: String? = null
@@ -193,7 +208,9 @@ private class ChannelReader(
             val received = if (buffered.isSuccess || buffered.isClosed) {
                 buffered
             } else {
-                runBlocking { chunks.receiveCatching() }
+                // A child of the parse, which a plain `runBlocking` would not
+                // be: the blocked thread would not see the parse cancelled.
+                runBlocking(parse) { chunks.receiveCatching() }
             }
             val next = received.getOrNull() ?: return null
             if (next.isEmpty()) continue
