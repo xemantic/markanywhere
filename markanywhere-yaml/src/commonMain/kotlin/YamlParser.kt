@@ -95,7 +95,9 @@ import kotlinx.coroutines.flow.FlowCollector
  * comment ends is held like a `key: value` line. The lines outside the
  * subset ahead of the first entry or item of an indented root are held until
  * it arrives (they are then written relative to the root) or cannot arrive
- * any more (they keep their own indentation). A verbatim
+ * any more (they keep their own indentation) — at most 8 of them: past that
+ * they keep their own indentation and stream (DIVERGENCE: an entry after
+ * them then loses the fixpoint). A verbatim
  * value streams line by line. Never throws.
  */
 public class YamlParser(
@@ -182,8 +184,12 @@ public class YamlParser(
     // an indented root, held until it is known how they are written back:
     // relative to the root once an entry or item follows (the writer writes
     // it at column 0, so must they be), with their own indentation if none
-    // does (which is then what keeps the root indented)
+    // does (which is then what keeps the root indented). At most
+    // [MAX_LEADING_LINES] are held: past that they are emitted with their own
+    // indentation, as is every later one ahead of the first entry or item
+    // ([leadingLinesEmitted]), so a document of such lines still streams
     private val leadingLines = mutableListOf<String>()
+    private var leadingLinesEmitted = false
     // whether a line less indented than the root was read
     private var rootBroken = false
 
@@ -235,6 +241,7 @@ public class YamlParser(
         frames.clear()
         rootHasNode = false
         rootBroken = false
+        leadingLinesEmitted = false
     }
 
     private suspend fun processContent(line: String, indent: Int, content: String) {
@@ -388,10 +395,16 @@ public class YamlParser(
     // absence, decides ([leadingLines]).
     private suspend fun verbatim(line: String) {
         val top = frames.last()
+        val root = frames.size == 1
         when {
-            frames.size > 1 -> emitText(sourceLine(line, top.indent))
-            rootBroken -> emitText(sourceLine(line, 0))
-            !rootHasNode && top.indent > 0 -> leadingLines += line
+            root && (rootBroken || (leadingLinesEmitted && !rootHasNode)) -> emitText(sourceLine(line, 0))
+            root && !rootHasNode && top.indent > 0 -> {
+                leadingLines += line
+                if (leadingLines.size > MAX_LEADING_LINES) {
+                    flushLeadingLines(indent = 0)
+                    leadingLinesEmitted = true
+                }
+            }
             else -> emitText(sourceLine(line, top.indent))
         }
     }
@@ -753,6 +766,10 @@ public class YamlParser(
     }
 
 }
+
+// How many lines outside the subset ahead of the first entry or item of an
+// indented root are held ([YamlParser]'s `leadingLines`).
+private const val MAX_LEADING_LINES = 8
 
 private const val ENTRY = "entry"
 private const val ITEM = "item"

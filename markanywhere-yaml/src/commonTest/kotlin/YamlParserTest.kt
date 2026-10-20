@@ -17,6 +17,7 @@
 package com.xemantic.markanywhere.yaml
 
 import com.xemantic.kotlin.test.text.chunkedRandomly
+import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.flow.mergeAdjacentText
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.test.sameAs
@@ -1557,6 +1558,26 @@ class YamlParserTest {
             +"? x\n  y\n"
             "entry"("key" to "a", "type" to "int") { +"1" }
         }
+    }
+
+    @Test
+    fun `should hold only a few lines ahead of the first entry of an indented root`() = runTest {
+        // given — `  ? a\n  : 1` repeated, which the readers accept as
+        // `{a: 1, …}`: none of its lines is an entry the subset parses, so
+        // holding them all would buffer the whole document
+        val events = mutableListOf<SemanticEvent>()
+        val parser = YamlParser { events += it }
+        val lines = (1..5).flatMap { listOf("  ? k$it", "  : $it") }
+
+        // when
+        lines.take(8).forEach { parser.line(it) }
+        val heldEvents = events.toList()
+        lines.drop(8).forEach { parser.line(it) }
+
+        // then — the ninth line releases them with their own indentation,
+        // and every line after it streams
+        assert(heldEvents.isEmpty())
+        assert(events.joinToString("") { (it as SemanticEvent.Text).text } == lines.joinToString("") { "$it\n" })
     }
 
     @Test
