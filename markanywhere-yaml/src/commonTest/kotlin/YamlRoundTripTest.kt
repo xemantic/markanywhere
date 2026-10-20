@@ -684,6 +684,37 @@ class YamlRoundTripTest {
         """.trimIndent()
     }
 
+    /**
+     * The lines outside the subset ahead of the first entry of an indented
+     * root are held to be written relative to the root, but only a few of
+     * them (8), so the parser keeps streaming: past that they keep their own
+     * indentation, and the entry after them, written at column 0, reads as
+     * a line less indented than the root on re-parse (#158).
+     */
+    @Test
+    fun `DIVERGENCE - should lose the fixpoint of an entry after many lines ahead of an indented root`() = runTest {
+        // given — the readers read `{k1: null, …, k9: null, a: 1}`; the
+        // rendering loses `a` for Psych and go-yaml v2 and is refused by
+        // PyYAML, as every such document did before lines were held at all
+        val source = (1..9).joinToString("") { "  ? k$it\n" } + "  a: 1\n"
+
+        // when
+        val rendered = flowOf(source).parseYaml().renderYaml()
+
+        // then — the rendered document is stable, its events are not
+        flowOf(rendered).parseYaml().renderYaml() sameAs rendered
+        eventsOf(rendered).divergenceFrom(eventsOf(source)) sameAs """
+            --- expected
+            +++ actual
+            @@
+            -{"type":"text","text":"  ? k1\n  ? k2\n  ? k3\n  ? k4\n  ? k5\n  ? k6\n  ? k7\n  ? k8\n  ? k9\n"}
+            -{"type":"mark","name":"entry","attributes":{"key":"a","type":"int"}}
+            -{"type":"text","text":"1"}
+            -{"type":"unmark","name":"entry"}
+            +{"type":"text","text":"  ? k1\n  ? k2\n  ? k3\n  ? k4\n  ? k5\n  ? k6\n  ? k7\n  ? k8\n  ? k9\na: 1\n"}
+        """.trimIndent()
+    }
+
     private suspend fun Flow<SemanticEvent>.events(): List<SemanticEvent> =
         mergeAdjacentText().toList()
 
