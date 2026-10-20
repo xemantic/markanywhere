@@ -377,9 +377,12 @@ abstract class XmlParserTest {
 
     @Test
     fun `should parse a document split in two at any position`() = runTest {
-        // given — CDATA sections and attribute values holding every character
-        // their runs stop at
-        val xml = "<a b=\"x &amp; y\tz\r\n'\" c='\"q\"'><![CDATA[1 ]] ]x]>]<&\r\n2]]]>tail\r\n</a>"
+        // given — CDATA sections, attribute values, comments, instructions and
+        // the literals of an internal subset holding every character their
+        // runs stop at
+        val xml = "<!DOCTYPE a [<!-- c-d ?> --><?p q?r>?><!ENTITY e \"x-?y\">]>" +
+            "<a b=\"x &amp; y\tz\r\n'\" c='\"q\"'><!-- o - t --><?pi a?b>c ?>" +
+            "<![CDATA[1 ]] ]x]>]<&\r\n2]]]>tail\r\n</a>"
         val whole = parse(xml).toList()
 
         (1 until xml.length).forEach { index ->
@@ -538,8 +541,13 @@ abstract class XmlParserTest {
 
     @Test
     fun `should read a surrogate pair split across chunks`() = runTest {
+        // given — built at runtime: Kotlin/JS writes a lone surrogate in a
+        // string literal as U+FFFD
+        val high = Char(0xD83D)
+        val low = Char(0xDE00)
+
         // when — the chunk boundary falls between the two halves
-        val events = parser.parse(flowOf("<a b=\"\uD83D", "\uDE00\">\uD83D", "\uDE00</a>"))
+        val events = parser.parse(flowOf("<a b=\"$high", "$low\">$high", "$low</a>"))
             .mergeAdjacentText()
 
         // then

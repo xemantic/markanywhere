@@ -167,10 +167,14 @@ class MarkanywhereXmlParserTest : XmlParserTest() {
 
     @Test
     fun `should stop at a high surrogate the document ends with`() = runTest {
+        // given — built at runtime: Kotlin/JS writes a lone surrogate in a
+        // string literal as U+FFFD, a character XML allows
+        val high = Char(0xD83D)
+
         // when — cut short or followed by more text, the unpaired half ends
         // the read the same way
-        val truncated = parse("<a>x\uD83D").toList()
-        val followed = parse("<a>x\uD83Dy</a>").toList()
+        val truncated = parse("<a>x$high").toList()
+        val followed = parse("<a>x${high}y</a>").toList()
 
         // then
         assert(truncated == followed)
