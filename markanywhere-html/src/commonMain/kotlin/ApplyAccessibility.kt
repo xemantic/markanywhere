@@ -18,6 +18,7 @@ package com.xemantic.markanywhere.html
 
 import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.dump.AccessibilityAnnotations
+import com.xemantic.markanywhere.html.spec.isHiddenUntilFound
 import com.xemantic.markanywhere.html.spec.isHtmlBlank
 import com.xemantic.markanywhere.transform.MatcherScope
 import com.xemantic.markanywhere.transform.TransformerBuilder
@@ -823,13 +824,13 @@ private val DOCUMENT_ROOT_TAGS = setOf("html", "head", "body")
 
 /**
  * Whether this element is in the HTML `hidden` attribute's *hidden* state:
- * the attribute is present with any value but `until-found` (ASCII
- * case-insensitive) — the *hidden until found* state, whose content
- * find-in-page and fragment navigation reveal, so it is still page content.
+ * the attribute is present with any value but `until-found` — the *hidden
+ * until found* state ([isHiddenUntilFound]), whose content find-in-page and
+ * fragment navigation reveal, so it is still page content.
  */
 private fun SemanticEvent.Mark.hasHiddenAttribute(): Boolean {
     val value = this["hidden"] ?: return false
-    return !value.equals("until-found", ignoreCase = true)
+    return !isHiddenUntilFound(value)
 }
 
 /**

@@ -35,6 +35,7 @@ import com.xemantic.markanywhere.dump.secretValueTexts
 import com.xemantic.markanywhere.dump.unrecordedDisplayOfChildren
 import com.xemantic.markanywhere.dump.withCaptureFormat
 import com.xemantic.markanywhere.dump.withoutCaptureAnnotations
+import com.xemantic.markanywhere.html.spec.isHiddenUntilFound
 import com.xemantic.markanywhere.html.spec.stripAndCollapseHtmlWhitespace
 import dev.kdriver.cdp.domain.Accessibility
 import dev.kdriver.cdp.domain.CSS
@@ -96,7 +97,9 @@ internal class PageCapture(
  * `DOM.getDocument` — the latter silently omits whitespace-only text nodes
  * (DevTools-style filtering), and the downstream pipeline needs inter-tag
  * whitespace as a word separator. The snapshot also carries the computed
- * `display`/`visibility` per laid-out node, driving the display annotations.
+ * `display`/`visibility` per laid-out node, driving the display annotations —
+ * taken once Blink laid out the content find-in-page reveals (see
+ * [layOutFindableContent]).
  *
  * The walk is **lossless**: every element is captured, including the ones a
  * rendering- or accessibility-aware consumer will later drop or unwrap. The
@@ -120,9 +123,11 @@ internal suspend fun Tab.capturePage(
     refAttribute: String?,
     isActionable: (Accessibility.AXNode?) -> Boolean
 ): PageCapture {
-    val snapshot = dOMSnapshot.captureSnapshot(
-        computedStyles = COMPUTED_STYLES
-    )
+    val snapshot = layOutFindableContent {
+        dOMSnapshot.captureSnapshot(
+            computedStyles = COMPUTED_STYLES
+        )
+    }
     val axNodes = accessibility.getAxTree(
         frameIds = snapshot.documents
             .map { snapshot.strings.getOrNull(it.frameId) }
@@ -361,6 +366,48 @@ internal class SnapshotDom(
         readsMaskedState(name(index), attributes) &&
                 !isRedactedControl(name(index), attributes, FormControlState(masked = false))
     }.map { backendNodeId(it) }
+
+    /**
+     * The backend node ids of one element of each run of findable content
+     * Blink skipped laying out (see [layOutFindableContent]): content the
+     * browser skips rendering though find-in-page and fragment navigation
+     * reveal it — the children of a laid-out element hidden until found, and
+     * of a laid-out closed `<details>` but the `<summary>` it shows. Picked is
+     * the first element of the content, unless it is laid out already (Blink
+     * laid the content out itself, or an earlier round had it laid out) or it
+     * is in [forced] (forcing it changed nothing, as for a `display:none`
+     * element). A root that is not laid out itself — below a `display:none`
+     * or an author `content-visibility: hidden`, which find-in-page skips —
+     * is left alone, its content hidden for good.
+     */
+    fun findableContentOutsideLayout(forced: Set<Int> = emptySet()): List<Int> =
+        nodeType.indices.mapNotNull { index ->
+            if (index !in laidOut || !revealsContentOnFind(index)) return@mapNotNull null
+            val content = children[index].filter { isElement(it) }.let { elements ->
+                if (name(index) != "details") elements
+                else elements.minus(elements.firstOrNull { name(it) == "summary" } ?: -1)
+            }.firstOrNull() ?: return@mapNotNull null
+            backendNodeId(content).takeIf { content !in laidOut && it !in forced }
+        }
+
+    /**
+     * Whether this node is an element whose content the browser reveals on
+     * find: one hidden until found, or a closed `<details>`.
+     */
+    private fun revealsContentOnFind(index: Int): Boolean =
+        isElement(index) && (
+                attribute(index, "hidden")?.let { isHiddenUntilFound(it) } == true
+                        || (name(index) == "details" && attribute(index, "open") == null)
+                )
+
+    /** The value of the element's [name]d markup attribute, without decoding them all. */
+    private fun attribute(index: Int, name: String): String? {
+        val flat = attributes[index]
+        for (i in 0 until flat.size - 1 step 2) {
+            if (string(flat[i]) == name) return string(flat[i + 1]).orEmpty()
+        }
+        return null
+    }
 
     /**
      * One computed style per laid-out node index, [slot] indexing the
