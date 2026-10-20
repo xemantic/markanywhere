@@ -299,6 +299,70 @@ class CapturePageTest {
     }
 
     /**
+     * The content Blink skipped laying out though find-in-page reveals it —
+     * of a laid-out element hidden until found or closed `<details>` — is
+     * named by its first element (past the `<summary>` a `<details>` shows),
+     * for Blink to lay it out before the snapshot is retaken. Issue #179.
+     */
+    @Test
+    fun `should name one element of each run of findable content Blink did not lay out`() {
+        // given
+        val page = NamedNodes(
+            Node("DIV", parent = 1, attributes = mapOf("hidden" to "UNTIL-FOUND")),
+            Node("P", parent = 2, laidOut = false),
+            Node("P", parent = 2, laidOut = false),
+            Node("DETAILS", parent = 1),
+            Node("SUMMARY", parent = 5, display = "list-item"),
+            Node("DIV", parent = 5, laidOut = false),
+            Node("DETAILS", parent = 7, laidOut = false),
+            Node("P", parent = 8, laidOut = false),
+        )
+
+        // when - by backend node id, the node index + 1
+        val content = SnapshotDom(page.snapshot()).findableContentOutsideLayout()
+
+        // then - the nested details waits for its own root to be laid out
+        assert(content == listOf(4, 8))
+    }
+
+    /**
+     * Content that is laid out already, or was forced and still is not (a
+     * `display:none` element), is not named; nor is the content of a root
+     * that is not laid out itself — below a `display:none` or an author
+     * `content-visibility: hidden`, which find-in-page skips too — nor what
+     * the hidden state, an open `<details>` or a plain author
+     * `content-visibility: hidden` keeps out of the layout.
+     */
+    @Test
+    fun `should not name findable content laid out or hidden for good`() {
+        // given
+        val page = NamedNodes(
+            Node("DIV", parent = 1, attributes = mapOf("hidden" to "until-found")),
+            Node("P", parent = 2),
+            Node("DETAILS", parent = 1),
+            Node("SUMMARY", parent = 4, display = "list-item"),
+            Node("P", parent = 4, laidOut = false),
+            Node("DIV", parent = 1, laidOut = false),
+            Node("DIV", parent = 7, laidOut = false, attributes = mapOf("hidden" to "until-found")),
+            Node("P", parent = 8, laidOut = false),
+            Node("DIV", parent = 1, attributes = mapOf("hidden" to "")),
+            Node("P", parent = 10, laidOut = false),
+            Node("DETAILS", parent = 1, attributes = mapOf("open" to "")),
+            Node("P", parent = 12, laidOut = false),
+            Node("DIV", parent = 1, attributes = mapOf("style" to "content-visibility: hidden")),
+            Node("P", parent = 14, laidOut = false),
+            Node("DETAILS", parent = 1),
+            Node("#text", parent = 16, text = "text alone"),
+        )
+
+        // when - the details' paragraph forced in an earlier round
+        val content = SnapshotDom(page.snapshot()).findableContentOutsideLayout(forced = setOf(7))
+
+        // then
+        assert(content.isEmpty())
+    }
+
+    /**
      * The parts of an `<svg>` are not CSS boxes, so the capture leaves the
      * display of a laid-out part out — until a `<foreignObject>`, whose
      * children are HTML laid out by CSS again. A part laying out nothing is
