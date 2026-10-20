@@ -655,6 +655,42 @@ class HtmlToMarkdownTest {
     }
 
     @Test
+    fun `should break the stacked boxes inside an indented display contents wrapper into paragraphs`() = runTest {
+        // given — review of #154: the inter-tag whitespace a captured DOM carries
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "div"(AccessibilityAnnotations.DISPLAY to "block") { +"X" }
+                +"\n  "
+                "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                    +"Intro"
+                    +"\n  "
+                    "div"(AccessibilityAnnotations.DISPLAY to "contents") {
+                        +"\n    "
+                        "div"(AccessibilityAnnotations.DISPLAY to "block") { +"A" }
+                        +"\n    "
+                        "div"(AccessibilityAnnotations.DISPLAY to "block") { +"B" }
+                        +"\n  "
+                    }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            X
+
+            Intro
+
+            A
+
+            B
+        """.trimIndent()
+    }
+
+    @Test
     fun `should break the loose text after a formatting element displayed as a block`() = runTest {
         // given — issue #154
         val page = semanticEvents(tagged = true) {

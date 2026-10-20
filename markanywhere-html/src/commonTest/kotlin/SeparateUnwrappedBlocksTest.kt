@@ -1403,4 +1403,93 @@ class SeparateUnwrappedBlocksTest {
             }
         }
     }
+
+    @Test
+    fun `should end a paragraph at a stacked box inside a display contents wrapper indented by whitespace`() = runTest {
+        // given — review of #154: a captured DOM carries the source
+        // indentation between the tags, inside the wrapper too
+        val input = semanticEvents(tagged = true) {
+            "body" {
+                "div"(AccessibilityAnnotations.DISPLAY to "block") { +"X" }
+                +"\n  "
+                "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                    +"Intro"
+                    +"\n  "
+                    "div"(AccessibilityAnnotations.DISPLAY to "contents") {
+                        +"\n    "
+                        "div"(AccessibilityAnnotations.DISPLAY to "block") { +"A" }
+                        +"\n    "
+                        "div"(AccessibilityAnnotations.DISPLAY to "block") { +"B" }
+                        +"\n  "
+                    }
+                }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "body" {
+                "div"(AccessibilityAnnotations.DISPLAY to "block") { +"X" }
+                +"\n  "
+                "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                    "p" {
+                        +"Intro"
+                        +"\n  "
+                    }
+                    "div"(AccessibilityAnnotations.DISPLAY to "contents") {
+                        +"\n    "
+                        "div"(AccessibilityAnnotations.DISPLAY to "block") { "p" { +"A" } }
+                        +"\n    "
+                        "div"(AccessibilityAnnotations.DISPLAY to "block") { "p" { +"B" } }
+                        +"\n  "
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should not reset paragraphs for a document root outside a frame`() = runTest {
+        // given — only a frame element embeds a document whose root lays its
+        // content out on its own; an `html` mark anywhere else is an ordinary
+        // element of its inline parent, which holds no paragraph
+        val input = semanticEvents(tagged = true) {
+            "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                +"c"
+                "span"(AccessibilityAnnotations.DISPLAY to "inline") {
+                    "html"(AccessibilityAnnotations.DISPLAY to "block") {
+                        "body"(AccessibilityAnnotations.DISPLAY to "block") {
+                            "div"(AccessibilityAnnotations.DISPLAY to "block") { +"A" }
+                            "div"(AccessibilityAnnotations.DISPLAY to "block") { +"B" }
+                        }
+                    }
+                }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then — the paragraph opens around the span, as for any box inside
+        // an inline element, and B only gets a separator inside it
+        output sameAs semanticEvents(tagged = true) {
+            "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                +"c"
+                "p" {
+                    "span"(AccessibilityAnnotations.DISPLAY to "inline") {
+                        "html"(AccessibilityAnnotations.DISPLAY to "block") {
+                            "body"(AccessibilityAnnotations.DISPLAY to "block") {
+                                "div"(AccessibilityAnnotations.DISPLAY to "block") { +"A" }
+                                +" "
+                                "div"(AccessibilityAnnotations.DISPLAY to "block") { +"B" }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

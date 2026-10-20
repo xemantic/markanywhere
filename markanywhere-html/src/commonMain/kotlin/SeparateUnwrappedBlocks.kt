@@ -181,6 +181,8 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
     val heldMarks = mutableListOf<HeldEvent>()
     // The open marks of an element with the `img` role, itself included.
     var imageRoleDepth = 0
+    // The content tokens seen so far, to tell what opened since the last one.
+    var tokenCount = 0
 
     // A tie goes to the stacked box: a block after an inline-block at the same
     // level still starts a line of its own.
@@ -197,17 +199,20 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
         heldMarks.clear()
     }
 
-    suspend fun release(wrap: Boolean) {
+    // Writes the held run; a wrapped paragraph closes before the held event
+    // at [closeAt], or after the whole run.
+    suspend fun release(wrap: Boolean, closeAt: Int = Int.MAX_VALUE) {
         val buffer = held ?: return
         held = null
         for ((index, heldEvent) in buffer.withIndex()) {
             if (wrap && index == paragraphStart) emit(PARAGRAPH_MARK)
+            if (wrap && index == closeAt) emit(PARAGRAPH_UNMARK)
             if (!wrap && index == omittedSeparator) emit(SemanticEvent.Text(" "))
             emit(heldEvent.event)
         }
         // Left out right before the token, which is not held yet.
         if (!wrap && omittedSeparator == buffer.size) emit(SemanticEvent.Text(" "))
-        if (wrap) emit(PARAGRAPH_UNMARK)
+        if (wrap && closeAt >= buffer.size) emit(PARAGRAPH_UNMARK)
         paragraphDepth = -1
         omittedSeparator = -1
     }
@@ -255,10 +260,16 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
     // which the paragraph can still end (issue #154). A wrapper already
     // holding part of the paragraph cannot be crossed by its end.
     fun opensDirectlyInParagraph(): Boolean =
-        stack.size == paragraphDepth || (
-            stack.size - heldMarks.size <= paragraphDepth &&
-                (paragraphDepth + 1..stack.size).all { stack[it - 1].boundary == INLINE }
-            )
+        stack.size == paragraphDepth || (paragraphDepth + 1..stack.size).all {
+            stack[it - 1].boundary == INLINE && stack[it - 1].openedAtToken == tokenCount
+        }
+
+    // Where the held paragraph closes when a box opens directly in it: before
+    // the outermost wrapper opened since the last token — its mark is the
+    // last one at that depth, unless it is still among the held marks.
+    fun paragraphCloseIndex(buffer: List<HeldEvent>): Int =
+        if (heldMarks.size >= stack.size - paragraphDepth) buffer.size
+        else buffer.indexOfLast { it.event is Mark && it.depthAfter == paragraphDepth + 1 }
 
     fun cross(boundary: BlockBoundary) {
         when (boundary) {
@@ -313,6 +324,7 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
         previousEndedWithSpace = text?.lastOrNull()?.isWhitespace() == true
         previousTokenControl = openControls.lastOrNull()
         turnDepth = stack.size
+        tokenCount++
         stackedLevel = Int.MAX_VALUE
         sideBySideLevel = Int.MAX_VALUE
     }
@@ -361,7 +373,9 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
                 // anchor, and cannot hold one starting deeper inside its run.
                 if (paragraphDepth >= 0) {
                     val block = boundary == STACKED_BOX || event.rendersAsBlock()
-                    if (block && opensDirectlyInParagraph()) release(wrap = true)
+                    if (block && opensDirectlyInParagraph()) {
+                        release(wrap = true, closeAt = paragraphCloseIndex(held.orEmpty()))
+                    }
                     else if (event.rendersAsBlock()) release(wrap = false)
                 }
                 val control = if (event.isDeclaredControl()) OpenControl(
@@ -396,13 +410,15 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
                         // its own, like the page's (issue #154) — unless the
                         // frame sits in an element holding only phrasing.
                         allowsParagraph = (
-                            if (event.name == "html") parent?.insidePhrasingHost != true
+                            if (event.name == "html" && parent?.isFrame == true) !parent.insidePhrasingHost
                             else parent?.allowsParagraph ?: true
                             ) && event.mayHoldParagraph(display),
                         // The frame element itself is no such element: it
                         // renders as a block-level tag around its document.
                         insidePhrasingHost = parent?.insidePhrasingHost == true ||
-                            (event.name !in FRAME_TAGS && event.holdsOnlyPhrasing())
+                            (event.name !in FRAME_TAGS && event.holdsOnlyPhrasing()),
+                        isFrame = event.name in FRAME_TAGS,
+                        openedAtToken = tokenCount
                     )
                 )
                 // An image is a content token; so is a generic element with the
@@ -473,6 +489,8 @@ private val IMAGE_DESCRIPTION_FRAME = BlockBoundaryFrame(
     rendersAsBlock = false,
     allowsParagraph = false,
     insidePhrasingHost = true,
+    isFrame = false,
+    openedAtToken = -1,
 )
 
 private class HeldEvent(val event: SemanticEvent, val depthAfter: Int)
@@ -507,6 +525,9 @@ private class BlockBoundaryFrame(
     val rendersAsBlock: Boolean,
     val allowsParagraph: Boolean,
     val insidePhrasingHost: Boolean,
+    val isFrame: Boolean,
+    // The [tokenCount] when it opened: no content since, while it is unchanged.
+    val openedAtToken: Int,
 )
 
 private fun SemanticEvent.Mark.blockBoundary(
