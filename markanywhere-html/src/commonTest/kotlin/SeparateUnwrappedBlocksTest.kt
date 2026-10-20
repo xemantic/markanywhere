@@ -1326,4 +1326,50 @@ class SeparateUnwrappedBlocksTest {
             }
         }
     }
+
+    @Test
+    fun `should not break a frame document inside a table cell into paragraphs`() = runTest {
+        // given — review of #154: a cell's content is phrasing in Markdown, so
+        // a frame document embedded there cannot hold a paragraph either
+        val input = semanticEvents(tagged = true) {
+            "table" {
+                "tr" {
+                    "td" {
+                        +"c"
+                        "iframe"("src" to "f") {
+                            "html" {
+                                "body" {
+                                    "div" { +"A" }
+                                    "div" { +"B" }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then — the separator space, as before
+        output sameAs semanticEvents(tagged = true) {
+            "table" {
+                "tr" {
+                    "td" {
+                        +"c"
+                        "iframe"("src" to "f") {
+                            "html" {
+                                "body" {
+                                    "div" { +"A" }
+                                    +" "
+                                    "div" { +"B" }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

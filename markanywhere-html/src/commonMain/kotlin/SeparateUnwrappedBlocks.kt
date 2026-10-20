@@ -371,9 +371,16 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
                         rendersAsBlock = event.rendersAsBlock(),
                         // A document root (a same-origin frame's, nested in
                         // its inline frame element) lays its content out on
-                        // its own, like the page's (issue #154).
-                        allowsParagraph = (event.name == "html" || parent?.allowsParagraph ?: true) &&
-                            event.mayHoldParagraph(display)
+                        // its own, like the page's (issue #154) — unless the
+                        // frame sits in an element holding only phrasing.
+                        allowsParagraph = (
+                            if (event.name == "html") parent?.insidePhrasingHost != true
+                            else parent?.allowsParagraph ?: true
+                            ) && event.mayHoldParagraph(display),
+                        // The frame element itself is no such element: it
+                        // renders as a block-level tag around its document.
+                        insidePhrasingHost = parent?.insidePhrasingHost == true ||
+                            (event.name !in FRAME_TAGS && event.holdsOnlyPhrasing())
                     )
                 )
                 // An image is a content token; so is a generic element with the
@@ -463,6 +470,7 @@ private class BlockBoundaryFrame(
     val control: Boolean,
     val rendersAsBlock: Boolean,
     val allowsParagraph: Boolean,
+    val insidePhrasingHost: Boolean,
 )
 
 private fun SemanticEvent.Mark.blockBoundary(
@@ -520,16 +528,7 @@ private fun SemanticEvent.Mark.blockBoundary(
  * element itself is concerned (its ancestors must allow one too).
  */
 private fun SemanticEvent.Mark.mayHoldParagraph(display: CapturedDisplay): Boolean = when {
-    name in PHRASING_HOSTS -> false
-    // A control's content is its label, and a ref-bearing element is kept
-    // as a tag whose content the agent reads as one thing.
-    this[AccessibilityAnnotations.REF] != null || isDeclaredControl() -> false
-    explicitRole() in PHRASING_ROLES -> false
-    // An inline element [simplifyHtml] keeps (`strong`, `abbr`, `time`, …)
-    // stays a raw tag around a block, which does not re-parse, whatever
-    // display the page gave it (Bootstrap's `.d-block`). Only the generic
-    // wrappers and custom elements are unwrapped.
-    isInlineByUaDefault() && name !in UNWRAPPED_INLINE_WRAPPERS && '-' !in name -> false
+    holdsOnlyPhrasing() -> false
     else -> when (display) {
         // A block or a `contents` wrapper, which defers to its parent.
         Unrecorded -> true
@@ -540,6 +539,25 @@ private fun SemanticEvent.Mark.mayHoldParagraph(display: CapturedDisplay): Boole
             else -> !display.value.startsWith("inline")
         }
     }
+}
+
+/**
+ * Whether this element's content is phrasing once rendered, whatever its
+ * display — a heading, a table cell, a control's label, … — so no paragraph
+ * is expressible anywhere inside it.
+ */
+private fun SemanticEvent.Mark.holdsOnlyPhrasing(): Boolean = when {
+    name in PHRASING_HOSTS -> true
+    // A control's content is its label, and a ref-bearing element is kept
+    // as a tag whose content the agent reads as one thing.
+    this[AccessibilityAnnotations.REF] != null || isDeclaredControl() -> true
+    explicitRole() in PHRASING_ROLES -> true
+    // An inline element [simplifyHtml] keeps (`strong`, `abbr`, `time`, …)
+    // stays a raw tag around a block, which does not re-parse, whatever
+    // display the page gave it (Bootstrap's `.d-block`). Only the generic
+    // wrappers and custom elements are unwrapped.
+    isInlineByUaDefault() && name !in UNWRAPPED_INLINE_WRAPPERS && '-' !in name -> true
+    else -> false
 }
 
 /**
