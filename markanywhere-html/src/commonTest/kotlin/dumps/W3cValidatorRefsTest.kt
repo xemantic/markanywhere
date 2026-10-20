@@ -130,7 +130,7 @@ class W3cValidatorRefsTest {
             +++ actual
             @@
              </legend>
-
+            
              Show <label for="showsource"><input id="showsource" type="checkbox" name="showsource" value="yes" ref="2">
             -source</label><label for="showoutline"><input id="showoutline" type="checkbox" name="showoutline" value="yes" ref="3">
             -outline</label><label for="showimagereport"><input id="showimagereport" type="checkbox" name="showimagereport" value="yes" ref="4">
@@ -144,19 +144,19 @@ class W3cValidatorRefsTest {
             +image report\</label><label for="level"><input id="level" type="checkbox" name="level" value="warning" ref="5">
             +</label>
             +errors & warnings only\</label><input id="show_options" type="button" value="Options…" ref="6">
-
+            
             -<label id="inputlabel">Check by
             +<label id="inputlabel">Check by</label>
-
+            
              <select id="docselect" ref="7">
              <option value="" ref="8">
             @@
              </option>
              </select>
-
+            
             -</label><input id="doc" type="url" name="doc" placeholder="Enter the URL for an HTML, CSS, or SVG document" required="" pattern="(?:(?:https?://.+)|(?:data:.+))?" aria-label="address" ref="11">
             +\</label><input id="doc" type="url" name="doc" placeholder="Enter the URL for an HTML, CSS, or SVG document" required="" pattern="(?:(?:https?://.+)|(?:data:.+))?" aria-label="address" ref="11">
-
+            
              <input id="submit" type="submit" value="Check" ref="12">
             -
              </fieldset>

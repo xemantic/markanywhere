@@ -21,6 +21,7 @@ import com.xemantic.kotlin.test.sameAs
 import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.render.renderMarkdown
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
@@ -233,14 +234,14 @@ class InlineSyntaxEscapingRoundTripTest {
     }
 
     @Test
-    fun `should round-trip a del paired after the closer of a del force-closed by an em`() = runTest {
-        // given
+    fun `should escape the closer of a del force-closed by an em before a letter`() = runTest {
+        // given — the parser keeps the `~~` after `c` literal (a DIVERGENCE)
         val markdown = "*a ~~b* c~~d~~ e"
         // when
         val once = flowOf(markdown).parse().renderMarkdown()
         val twice = flowOf(once).parse().renderMarkdown()
         // then
-        once sameAs "*a ~~b~~* c~~d~~ e"
+        once sameAs """*a ~~b~~* c\~\~d ~~e~~"""
         twice sameAs once
     }
 
@@ -682,6 +683,139 @@ class InlineSyntaxEscapingRoundTripTest {
         // then
         markdown sameAs "A\n\n\\~\\~\\~"
         assertMarkdownFixpoint(markdown)
+    }
+
+    // --- round 3: less-than signs, HTML blocks in list items, line starts --
+
+    // The first render need not be canonical; every later one must be.
+    private suspend fun renderThreePasses(events: Flow<SemanticEvent>): List<String> {
+        val once = events.renderMarkdown()
+        val twice = flowOf(once).parse().renderMarkdown()
+        return listOf(once, twice, flowOf(twice).parse().renderMarkdown())
+    }
+
+    @Test
+    fun `should escape a less-than sign before an equals pair`() = runTest {
+        // given
+        val events = semanticEvents { "p" { +"x <== y" } }
+        // when
+        val markdown = events.renderMarkdown()
+        // then
+        markdown sameAs """x \<\=\= y"""
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should keep a mark closing after a less-than sign before an equals sign`() = runTest {
+        // given
+        val events = semanticEvents { "p" { "mark" { +"a <= b" } } }
+        // when
+        val markdown = events.renderMarkdown()
+        val reparsed = flowOf(markdown).parse().toList()
+        // then
+        assert(reparsed.count { it is SemanticEvent.Mark && it.name == "mark" } == 1)
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should stay stable with less-than signs before chars written escaped`() = runTest {
+        for (text in listOf("1 <<n", """a <\* b""", """a <\""", "a <` b", "a <^ b")) {
+            // given
+            val events = semanticEvents { "p" { +text } }
+            // when
+            val (_, twice, thrice) = renderThreePasses(events)
+            // then
+            thrice sameAs twice
+        }
+    }
+
+    @Test
+    fun `should stay stable with a less-than sign before a bracket in image alt text`() = runTest {
+        // given
+        val events = semanticEvents { "p" { "img"("src" to "i.png", "alt" to "a <[b]") {} } }
+        // when
+        val (once, twice, thrice) = renderThreePasses(events)
+        // then
+        twice sameAs once
+        thrice sameAs twice
+    }
+
+    @Test
+    fun `should escape a less-than sign that would start an email autolink`() = runTest {
+        // given
+        val events = semanticEvents { "p" { +"mail <1u@x.com> or I <3 you" } }
+        // when
+        val markdown = events.renderMarkdown()
+        // then
+        markdown sameAs """mail \<1u@x.com> or I <3 you"""
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should escape text in an inline raw tag starting a list item`() = runTest {
+        // given — a `<span>` at the line start is no HTML block: Markdown inside
+        val events = semanticEvents {
+            "ul" { "li" { "p" { tag("span") { +"a *b* c x^2" }; +" d" } } }
+        }
+        // when
+        val markdown = events.renderMarkdown()
+        // then
+        markdown sameAs """- <span>a \*b* c x\^2</span> d"""
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should not indent a span starting a paragraph with spaces`() = runTest {
+        // given
+        val events = semanticEvents { "p" { "em" { +"    a" } } }
+        // when
+        val markdown = events.renderMarkdown()
+        // then
+        markdown sameAs "*a*"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should escape a backslash before a space ending a line`() = runTest {
+        // given — the space is dropped at the line end, and a backslash right
+        // before a line break is a hard break
+        val events = semanticEvents { "p" { +"a\\ "; +"\n"; +"b" } }
+        // when
+        val markdown = events.renderMarkdown()
+        // then
+        markdown sameAs "a\\\\\nb"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    // Pins the renderer's `<` escaping (`lessThanStartsInlineHtml`) to the
+    // parser's inline-HTML speculation (`canFollowInlineHtmlOpen`,
+    // `isEmailAutolinkCandidate`), which live in sibling modules: for every
+    // printable ASCII char after a `<` in plain text, the rendering must keep
+    // the emphasis after it and be a fixpoint, and must escape the `<` exactly
+    // where the parser would speculate on it.
+    @Test
+    fun `should agree with the parser on every char after a less-than sign`() = runTest {
+        // given — chars written escaped themselves get an escaped `<` anyway
+        val escapedAnyway = """\<=[]`^~*_$"""
+        val failures = mutableListOf<String>()
+
+        // when
+        for (c in '!'..'~') {
+            if (c == '>') continue
+            val markdown = semanticEvents { "p" { +"a <${c}q "; "em" { +"x" } } }.renderMarkdown()
+            val reparsed = flowOf(markdown).parse().toList()
+            if (reparsed.none { it is SemanticEvent.Mark && it.name == "em" }) failures += "$c: em lost in $markdown"
+            if (flowOf(markdown).parse().renderMarkdown() != markdown) failures += "$c: no fixpoint: $markdown"
+            if (c !in escapedAnyway) {
+                val speculates = flowOf("a <${c}q *x*").parse().toList()
+                    .none { it is SemanticEvent.Mark && it.name == "em" }
+                val escaped = """\<""" in markdown
+                if (speculates != escaped) failures += "$c: speculates=$speculates escaped=$escaped"
+            }
+        }
+
+        // then
+        assert(failures.isEmpty())
     }
 
 }
