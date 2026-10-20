@@ -185,7 +185,7 @@ private val ATTRIBUTELESS_BLOCKS = setOf(
  * ref is still something to act on. A ref-bearing `tr` has no content of its
  * own and no span can sit between cells, so its ref goes on an empty span at
  * the start of its first cell, apart from anything the cell carries itself
- * (a row with no cell gets one to hold it).
+ * (a row with no cell hands it on to the next row's, or after the table).
  * Bounded by one top-level inline child of the innermost ref-bearing block at
  * a time — which can be a whole card `<a>` subtree, the same bound
  * [encodeActionableLinkRefs] pays per link.
@@ -206,9 +206,18 @@ private fun Flow<SemanticEvent>.moveRefsOffAttributelessBlocks(): Flow<SemanticE
     val holders = ArrayDeque<Holder>()
     // The span attributes a ref-bearing item hands to its first `p`.
     var handedToParagraph: Map<String, String>? = null
-    // The span attributes a ref-bearing row hands to its first cell, until the
-    // row's next event (a row with no cell keeps nowhere to put them).
-    var rowMoved: Map<String, String>? = null
+    // The span attributes of ref-bearing rows waiting for a cell to hold them:
+    // a row's first cell, or, for a row with no cell, the next row's — a cell
+    // made for it would set the column count of a table it comes first in.
+    val rowSpans = mutableListOf<Map<String, String>>()
+
+    suspend fun emitRowSpans() {
+        for (attributes in rowSpans) {
+            emit(Mark("span", isTagged = true, attributes = attributes))
+            emit(Unmark("span", isTagged = true))
+        }
+        rowSpans.clear()
+    }
 
     suspend fun openSpan(holder: Holder, firstText: String?) {
         val label = holder.moved["aria-label"]
@@ -296,18 +305,11 @@ private fun Flow<SemanticEvent>.moveRefsOffAttributelessBlocks(): Flow<SemanticE
         }
         val handed = handedToParagraph
         // A ref-bearing row's moved attributes go on an empty span of their
-        // own at the start of its first child (a cell), apart from the cell's
-        // own ref and ARIA state, which describe another control — or, for a
-        // row with no child, in a cell made to hold it.
-        val row = rowMoved
-        if (event !is SemanticEvent.Text) rowMoved = null
-        val rowSpan = row?.takeIf { event is Mark }
-        if (row != null && event is Unmark) {
-            emit(Mark("td"))
-            emit(Mark("span", isTagged = true, attributes = row))
-            emit(Unmark("span", isTagged = true))
-            emit(Unmark("td"))
-        }
+        // own at the start of the next cell, apart from the cell's own ref and
+        // ARIA state, which describe another control — or after the table,
+        // when no cell follows.
+        val atCell = rowSpans.isNotEmpty() && event is Mark && event.name in TABLE_CELLS
+        val afterTable = rowSpans.isNotEmpty() && event is Unmark && event.name == "table"
         when {
             handed != null && event is Mark -> {
                 handedToParagraph = null
@@ -317,7 +319,7 @@ private fun Flow<SemanticEvent>.moveRefsOffAttributelessBlocks(): Flow<SemanticE
             event is Mark && !event.isTagged && event.name == "tr" && event.carriesRef() -> {
                 val (moved, kept) = event.attributes.entries.partition { it.key.isMovedToRefSpan() }
                 emit(event.copy(attributes = kept.associate { it.toPair() }))
-                rowMoved = moved.associate { it.toPair() }
+                rowSpans += moved.associate { it.toPair() }
             }
             event is Mark && !event.isTagged && event.name in ATTRIBUTELESS_BLOCKS &&
                 event.carriesRef() -> {
@@ -331,13 +333,11 @@ private fun Flow<SemanticEvent>.moveRefsOffAttributelessBlocks(): Flow<SemanticE
             }
             else -> emit(event)
         }
-        if (rowSpan != null) {
-            emit(Mark("span", isTagged = true, attributes = rowSpan))
-            emit(Unmark("span", isTagged = true))
-        }
+        if (atCell || afterTable) emitRowSpans()
     }
 
     collect { process(it) }
+    emitRowSpans()
     // An unclosed block at end-of-stream (synthetic edge): flush what is held.
     holders.lastOrNull()?.let { holder ->
         if (holder.child.isNotEmpty()) {
@@ -347,6 +347,8 @@ private fun Flow<SemanticEvent>.moveRefsOffAttributelessBlocks(): Flow<SemanticE
         settle(holder)
     }
 }
+
+private val TABLE_CELLS = setOf("td", "th")
 
 private fun SemanticEvent.carriesRef(): Boolean =
     this is Mark && this[AccessibilityAnnotations.REF] != null

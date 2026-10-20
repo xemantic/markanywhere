@@ -727,10 +727,43 @@ class EncodeActionableRefsTest {
     }
 
     @Test
-    fun `should keep the ref of a table row with no cell`() = runTest {
+    fun `should carry the ref of a table row with no cell into the next row`() = runTest {
+        // given - a cell made for it would set the table's column count when
+        // the row is the first one
+        val input = semanticEvents {
+            "table" {
+                "tr"(AccessibilityAnnotations.REF to "1") { }
+                "tr" {
+                    "td" { +"A" }
+                    "td" { +"B" }
+                }
+            }
+        }
+
+        // when
+        val output = input.encodeActionableRefs()
+
+        // then
+        output sameAs semanticEvents {
+            "table" {
+                "tr" { }
+                "tr" {
+                    "td" {
+                        tag("span", "ref" to "1") { }
+                        +"A"
+                    }
+                    "td" { +"B" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep the ref of a last table row with no cell after the table`() = runTest {
         // given
         val input = semanticEvents {
             "table" {
+                "tr" { "td" { +"A" } }
                 "tr"(AccessibilityAnnotations.REF to "1") { }
             }
         }
@@ -738,11 +771,40 @@ class EncodeActionableRefsTest {
         // when
         val output = input.encodeActionableRefs()
 
-        // then - a cell is made to hold it
+        // then
+        output sameAs semanticEvents {
+            "table" {
+                "tr" { "td" { +"A" } }
+                "tr" { }
+            }
+            tag("span", "ref" to "1") { }
+        }
+    }
+
+    @Test
+    fun `should keep a table row's ref pending past an image directly in the row`() = runTest {
+        // given - malformed, but a void image cannot hold the span
+        val input = semanticEvents {
+            "table" {
+                "tr"(AccessibilityAnnotations.REF to "1") {
+                    "img"("alt" to "x") { }
+                    "td" { +"A" }
+                }
+            }
+        }
+
+        // when
+        val output = input.encodeActionableRefs()
+
+        // then
         output sameAs semanticEvents {
             "table" {
                 "tr" {
-                    "td" { tag("span", "ref" to "1") { } }
+                    "img"("alt" to "x") { }
+                    "td" {
+                        tag("span", "ref" to "1") { }
+                        +"A"
+                    }
                 }
             }
         }

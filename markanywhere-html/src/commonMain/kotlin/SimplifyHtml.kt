@@ -509,9 +509,15 @@ private fun Flow<SemanticEvent>.simplifyHtmlRules(
     // capture sees as laid out. Without the claim it is a labelled region. The
     // `role` survives wherever it tells more than the tag: an alert dialog, or
     // a dialog that is a `<section>`.
-    match({ isGenericContainer() && explicitRole() in DIALOG_ROLES && blockContext.promotes }) { event ->
+    //
+    // In running text, where no block can go, it is still kept — as an inline
+    // `span` carrying the role and `aria-modal`, since a blocking modal is the
+    // first thing an agent must act on.
+    match({ isGenericContainer() && explicitRole() in DIALOG_ROLES }) { event ->
         val role = event.explicitRole()!!
-        if (event["aria-modal"]?.lowercase() == "true") {
+        if (!blockContext.promotes) {
+            preserve("span", mapOf("role" to role) + preserveAttrs(event, "id")) { children() }
+        } else if (event["aria-modal"]?.lowercase() == "true") {
             val attrs = if (role == "alertdialog") {
                 mapOf("role" to role) + preserveAttrs(event, "id")
             } else preserveAttrs(event, "id")

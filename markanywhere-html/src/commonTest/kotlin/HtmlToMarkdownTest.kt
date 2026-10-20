@@ -855,6 +855,80 @@ class HtmlToMarkdownTest {
     }
 
     @Test
+    fun `should keep every column after an empty ref-bearing first row`() = runTest {
+        // given - issue #165: an empty first row carrying a ref, native and
+        // promoted from roles
+        val native = semanticEvents(tagged = true) {
+            "body" {
+                "table" {
+                    "tr"(AccessibilityAnnotations.REF to "1") { }
+                    "tr" {
+                        "td" { +"A" }
+                        "td" { +"B" }
+                    }
+                    "tr" {
+                        "td" { +"C" }
+                        "td" { +"D" }
+                    }
+                }
+            }
+        }
+        val promoted = semanticEvents(tagged = true) {
+            "body" {
+                "div"("role" to "table") {
+                    "div"("role" to "row", AccessibilityAnnotations.REF to "1") { }
+                    "div"("role" to "row") {
+                        "div"("role" to "cell") { +"A" }
+                        "div"("role" to "cell") { +"B" }
+                    }
+                    "div"("role" to "row") {
+                        "div"("role" to "cell") { +"C" }
+                        "div"("role" to "cell") { +"D" }
+                    }
+                }
+            }
+        }
+
+        for (page in listOf(native, promoted)) {
+            // when
+            val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+            val reRendered = flowOf(markdown).parse().renderMarkdown()
+
+            // then
+            markdown sameAsMarkdown """
+                |  |  |
+                | --- | --- |
+                | <span ref="1"></span>A | B |
+                | C | D |
+            """.trimIndent()
+            reRendered sameAs markdown
+        }
+    }
+
+    @Test
+    fun `should keep a modal dialog role inside running text`() = runTest {
+        // given - issue #165: a blocking modal is the first thing to act on,
+        // even where no block can go
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "p" {
+                    +"Hi "
+                    "div"("role" to "dialog", "aria-modal" to "true") { +"Agree" }
+                    +" end"
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+        val reRendered = flowOf(markdown).parse().renderMarkdown()
+
+        // then
+        markdown sameAs """Hi <span role="dialog" aria-modal="true">Agree</span> end"""
+        reRendered sameAs markdown
+    }
+
+    @Test
     fun `should keep the refs of a focusable separator an image and a row`() = runTest {
         // given — issue #165: role promotion used to drop each of these refs
         val page = semanticEvents(tagged = true) {
