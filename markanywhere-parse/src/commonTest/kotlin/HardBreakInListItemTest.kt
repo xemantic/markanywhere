@@ -269,6 +269,148 @@ class HardBreakInListItemTest {
     }
 
     @Test
+    fun `should keep a backslash followed by one trailing space as literal text`() = runTest {
+        // given — the backslash does not end the line, so it is no hard break
+        val textFlow = buildString {
+            +"- foo\\ \n"
+            +"  bar\n"
+        }.chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ul" {
+                "li" {
+                    "p" { +"foo\\\nbar" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep a backslash before a trailing space hard break as literal text`() = runTest {
+        // given
+        val textFlow = buildString {
+            +"- foo\\  \n"
+            +"  bar\n"
+        }.chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ul" {
+                "li" {
+                    "p" {
+                        +"foo\\"
+                        "br" {}
+                        +"\nbar"
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep a backslash followed by a trailing space as literal text in a paragraph continuation`() = runTest {
+        // given — the indent makes the continuation line-buffered, the path
+        // that shares the rule with list items
+        val textFlow = buildString {
+            +"a\n"
+            +" foo\\ \n"
+            +"bar\n"
+        }.chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" { +"a\nfoo\\\nbar" }
+        }
+    }
+
+    @Test
+    fun `should not carry a hard break across a blank line into a blockquote paragraph`() = runTest {
+        // given — a blank line ends the blockquote in the item
+        val textFlow = buildString {
+            +"- > a  \n"
+            +"\n"
+            +"  > b\n"
+        }.chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ul" {
+                "li" {
+                    "blockquote" {
+                        "p" { +"a" }
+                    }
+                    "blockquote" {
+                        "p" { +"b" }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should not carry a hard break across a blank line into a lazy line`() = runTest {
+        // given
+        val textFlow = buildString {
+            +"- > a  \n"
+            +"\n"
+            +"b\n"
+        }.chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ul" {
+                "li" {
+                    "blockquote" {
+                        "p" { +"a" }
+                    }
+                }
+            }
+            "p" { +"b" }
+        }
+    }
+
+    @Test
+    fun `should emit a hard break after a rejected table header opening a list item`() = runTest {
+        // given
+        val textFlow = buildString {
+            +"- | a |  \n"
+            +"  b\n"
+        }.chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "ul" {
+                "li" {
+                    "p" {
+                        +"| a |"
+                        "br" {}
+                        +"\nb"
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
     fun `should round-trip a hard break inside a list item`() = runTest {
         // given — the shape the renderer writes for a `<br>` in an `<li>`
         val markdown = "- a  \n  b"

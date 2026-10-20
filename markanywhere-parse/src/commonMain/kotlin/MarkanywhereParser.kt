@@ -158,6 +158,16 @@ private data class ListMarker(
     val markerChar: Char
 )
 
+/** The line break (GFM §6.7) a paragraph line asks for at its end. */
+private enum class LineEnd {
+    /** A soft break: no hard break requested. */
+    SOFT,
+    /** A hard break requested by ≥2 trailing spaces. */
+    SPACES,
+    /** A hard break requested by a trailing backslash. */
+    BACKSLASH
+}
+
 /**
  * One level in the streaming list stack. [markerStartCol] and [contentCol] are
  * absolute columns (after expanding outer container offsets). The boolean flags
@@ -187,18 +197,13 @@ private class ListContext(
     /** True while the inner `<p>` of an open blockquote is currently open. */
     var blockquoteParagraphOpen: Boolean = false,
     /**
-     * True when the last line of the open paragraph (the item's own or its
-     * inner blockquote's) asked for a hard line break (GFM §6.7) — ≥2
-     * trailing spaces or a trailing backslash. The list counterpart of the
-     * top-level `paragraphTrailingSpaces` tally: promoted to `<br>` when the
-     * paragraph continues on the next line, dropped when it closes.
+     * The line break (GFM §6.7) the last line of the open paragraph (the
+     * item's own or its inner blockquote's) asks for — the list counterpart
+     * of the top-level `paragraphTrailingSpaces` tally, decided by the same
+     * `settleLineEnd`: promoted to `<br>` when the paragraph continues on
+     * the next line, dropped (a backslash kept as literal text) when it closes.
      */
-    var hardBreakPending: Boolean = false,
-    /**
-     * True when [hardBreakPending] came from a trailing backslash, which is
-     * emitted as literal text if the paragraph closes instead (GFM example 669).
-     */
-    var hardBreakBackslash: Boolean = false,
+    var lineEnd: LineEnd = LineEnd.SOFT,
     /**
      * True once any content (paragraph, code, heading, blockquote, etc.) has
      * been emitted for the active item. Used to decide whether a blank line
@@ -2744,10 +2749,8 @@ private class ParserState(
         // permitted, and 4+ spaces would have been claimed by the indented-code-block
         // branch upstream of here).
         val leftTrimmed = line.trimStart(' ', '\t')
-        val content = leftTrimmed.trimEnd(' ')
-        paragraphTrailingSpaces = leftTrimmed.length - content.length
-        processInlineContent(content)
-        captureLineEndBackslash()
+        processInlineContent(leftTrimmed.trimEnd(' '))
+        captureLineEnd(leftTrimmed)
         flushInline()
         replaceMode(BlockMode.ParagraphContinuation)
     }
@@ -2763,19 +2766,36 @@ private class ParserState(
         char.isLetter() || char == '\\' || char == '{'
 
     /**
-     * GFM §6.7 hard line break via `\<newline>`: when [processInlineContent]
-     * finishes with [escaped] set, the line ended with a literal `\`. Promote
-     * it to the same hard-break tally as `≥2 trailing spaces` so the next
-     * line's [emitParagraphLineBreak] produces `<br/>`, and flag the
-     * backslash so a paragraph-close path emits it as literal text instead
-     * (GFM example 669 `<p>foo\</p>`).
+     * Record the hard break (GFM §6.7) the line-buffered paragraph [line]
+     * asks for, after its content went through [processInlineContent], in
+     * the top-level tally: a backslash break also flags the backslash, so a
+     * paragraph-close path emits it as literal text instead (GFM example 669
+     * `<p>foo\</p>`). The rule itself is [settleLineEnd], shared with list
+     * items.
      */
-    private fun captureLineEndBackslash() {
+    private suspend fun SemanticEventScope.captureLineEnd(line: String) {
+        val lineEnd = settleLineEnd(line)
+        paragraphTrailingSpaces = if (lineEnd == LineEnd.SOFT) 0 else 2
+        paragraphTrailingBackslash = lineEnd == LineEnd.BACKSLASH
+    }
+
+    /**
+     * Decide which line break (GFM §6.7) the line-buffered paragraph [line]
+     * asks for, once its trimmed content went through [processInlineContent].
+     * A pending [escaped] means the content ended with `\`: a hard break only
+     * when the raw line ends with it — before trailing whitespace (`foo\ `)
+     * it escapes nothing and is emitted here as literal text. Otherwise ≥2
+     * trailing ASCII spaces ask for a hard break. Must run before
+     * [flushInline], which would drop the pending backslash.
+     */
+    private suspend fun SemanticEventScope.settleLineEnd(line: String): LineEnd {
         if (escaped) {
             escaped = false
-            paragraphTrailingSpaces = 2
-            paragraphTrailingBackslash = true
+            if (line.endsWith('\\')) return LineEnd.BACKSLASH
+            +"\\"
         }
+        return if (line.length - line.trimEnd(' ').length >= 2) LineEnd.SPACES
+        else LineEnd.SOFT
     }
 
     /**
@@ -2830,7 +2850,6 @@ private class ParserState(
         // count carried forward for the *next* line's hard-break decision.
         val leftTrimmed = line.trimStart(' ', '\t')
         val stripped = leftTrimmed.trimEnd(' ')
-        val newTrailing = leftTrimmed.length - stripped.length
         emitParagraphLineBreak()
         // Special case: a line that is exactly one open HTML tag is rendered as a
         // self-closing-equivalent (mark + unmark) so the event tree stays balanced.
@@ -2841,16 +2860,11 @@ private class ParserState(
             val tag = singleTag.second
             mark(tag.name, isTagged = true, attributes = tag.attributes ?: emptyMap())
             unmark(tag.name, isTagged = true)
+            captureLineEnd(leftTrimmed)
         } else {
             processInlineContent(stripped)
-            captureLineEndBackslash()
+            captureLineEnd(leftTrimmed)
             flushInline()
-        }
-        if (paragraphTrailingBackslash) {
-            // captureLineEndBackslash overrode newTrailing — keep the hard-break
-            // tally it set instead of clobbering with the trimEnd count.
-        } else {
-            paragraphTrailingSpaces = newTrailing
         }
         replaceMode(BlockMode.ParagraphContinuation)
     }
@@ -2862,15 +2876,20 @@ private class ParserState(
      * `paragraphTrailingSpaces` to 0.
      */
     private suspend fun SemanticEventScope.emitParagraphLineBreak() {
-        if (paragraphTrailingSpaces >= 2) {
-            mark("br")
-            unmark("br")
-        }
+        emitLineBreak(hard = paragraphTrailingSpaces >= 2)
         paragraphTrailingSpaces = 0
         // Continuation absorbed the `\<newline>` as a hard break — clear the
         // pending-backslash flag without emitting the literal `\` (the `<br/>`
         // already replaces it).
         paragraphTrailingBackslash = false
+    }
+
+    /** Emit a paragraph line break: a soft `\n`, after a `<br>` when [hard]. */
+    private suspend fun SemanticEventScope.emitLineBreak(hard: Boolean) {
+        if (hard) {
+            mark("br")
+            unmark("br")
+        }
         +"\n"
     }
 
@@ -3091,7 +3110,9 @@ private class ParserState(
         // the just-drained paragraph instead of re-entering detection — see
         // `back-to-back pipe lines without separator merge into one paragraph`.
         if (trimmed.startsWith("|") && !suppressTableDetection) {
-            ctx.tableHeaderPending = trimmed
+            // Untrimmed, so a rejected header keeps its trailing spaces — the
+            // hard break they ask for (GFM §6.7), as at a later block boundary.
+            ctx.tableHeaderPending = firstContent
             return
         }
         // HTML block (CommonMark §4.6) as the first content of a list item.
@@ -3116,34 +3137,21 @@ private class ParserState(
         mark("p")
         ctx.paragraphOpen = true
         emitItemFirstContent(trimmed)
-        recordListHardBreak(ctx, firstContent)
+        ctx.lineEnd = settleLineEnd(firstContent)
         flushInline()
     }
 
     /**
      * Emit one [line] of an open list-item paragraph (the item's own or its
-     * inner blockquote's) and record whether it asks for a hard break.
+     * inner blockquote's) and record on [ctx] the line break it asks for.
      */
     private suspend fun SemanticEventScope.emitListParagraphLine(
         ctx: ListContext,
         line: String
     ) {
         processInlineContent(line.trim())
-        recordListHardBreak(ctx, line)
+        ctx.lineEnd = settleLineEnd(line)
         flushInline()
-    }
-
-    /**
-     * Record on [ctx] whether the just-processed paragraph [line] ends with a
-     * hard line break request (GFM §6.7): ≥2 trailing spaces, or a backslash
-     * left pending in [escaped] — the list counterpart of
-     * [captureLineEndBackslash]. Must run before [flushInline], which would
-     * drop the pending backslash.
-     */
-    private fun recordListHardBreak(ctx: ListContext, line: String) {
-        ctx.hardBreakBackslash = escaped
-        ctx.hardBreakPending = escaped || line.length - line.trimEnd(' ').length >= 2
-        escaped = false
     }
 
     /**
@@ -3151,24 +3159,18 @@ private class ParserState(
      * paragraph: a `<br>` first when the previous line asked for a hard break.
      */
     private suspend fun SemanticEventScope.emitListParagraphLineBreak(ctx: ListContext) {
-        if (ctx.hardBreakPending) {
-            mark("br")
-            unmark("br")
-        }
-        ctx.hardBreakPending = false
-        ctx.hardBreakBackslash = false
-        +"\n"
+        emitLineBreak(hard = ctx.lineEnd != LineEnd.SOFT)
+        ctx.lineEnd = LineEnd.SOFT
     }
 
     /**
-     * Settle a hard break request left by the last line of a list-item
+     * Settle the line break asked for by the last line of a list-item
      * paragraph that is closing: trailing spaces are dropped, a trailing
      * backslash is literal text (GFM example 669). Call before `unmark("p")`.
      */
     private suspend fun SemanticEventScope.endListParagraph(ctx: ListContext) {
-        if (ctx.hardBreakBackslash) +"\\"
-        ctx.hardBreakPending = false
-        ctx.hardBreakBackslash = false
+        if (ctx.lineEnd == LineEnd.BACKSLASH) +"\\"
+        ctx.lineEnd = LineEnd.SOFT
     }
 
     /**
@@ -3945,6 +3947,9 @@ private class ParserState(
                 closeListTableIfOpen(mode)
             }
             closeListParagraphIfOpen(mode)
+            // A blank line has no `>` prefix, so it ends a blockquote open in
+            // the item (GFM §5.1) — a later `>` line opens a new one.
+            closeListBlockquoteIfOpen(mode)
             val top = mode.stack.lastOrNull()
             // Defer blank-line emission for an open indented code block until more
             // code arrives (it may turn out to be the trailing blanks before the
