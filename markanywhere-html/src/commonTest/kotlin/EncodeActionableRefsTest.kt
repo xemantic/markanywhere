@@ -700,6 +700,55 @@ class EncodeActionableRefsTest {
     }
 
     @Test
+    fun `should keep a table row's ref when its first cell is a tagged one`() = runTest {
+        // given - a literal `<td>` tag, which no span is moved onto
+        val input = semanticEvents {
+            "table" {
+                "tr"(AccessibilityAnnotations.REF to "1") {
+                    tag("td") { +"a" }
+                }
+            }
+        }
+
+        // when
+        val output = input.encodeActionableRefs()
+
+        // then
+        output sameAs semanticEvents {
+            "table" {
+                "tr" {
+                    tag("td") {
+                        tag("span", "ref" to "1") { }
+                        +"a"
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep the ref of a table row with no cell`() = runTest {
+        // given
+        val input = semanticEvents {
+            "table" {
+                "tr"(AccessibilityAnnotations.REF to "1") { }
+            }
+        }
+
+        // when
+        val output = input.encodeActionableRefs()
+
+        // then - a cell is made to hold it
+        output sameAs semanticEvents {
+            "table" {
+                "tr" {
+                    "td" { tag("span", "ref" to "1") { } }
+                }
+            }
+        }
+    }
+
+    @Test
     fun `should keep a table row's ref beside its first cell's own ref`() = runTest {
         // given - the row and its first cell are both actionable
         val input = semanticEvents {

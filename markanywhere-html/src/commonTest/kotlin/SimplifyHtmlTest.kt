@@ -1129,6 +1129,86 @@ class SimplifyHtmlTest {
     }
 
     @Test
+    fun `should promote container roles on an inline box holding blocks`() = runTest {
+        // given — an unstyled custom element computes `display: inline`
+        // whatever it holds: block children make it block-in-inline layout,
+        // not a line of text
+        val input = semanticEvents(tagged = true) {
+            "app-nav"("role" to "navigation", AccessibilityAnnotations.DISPLAY to "inline") {
+                "div"("role" to "list", AccessibilityAnnotations.DISPLAY to "block") {
+                    "div"("role" to "listitem", AccessibilityAnnotations.DISPLAY to "block") { +"Home" }
+                }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            tag("nav") {
+                "ul" {
+                    "li" { +"Home" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should promote a list and its items all laid out as inline boxes`() = runTest {
+        // given — only a heading, a paragraph or a separator sits in a line of
+        // text; a list keeps its items whatever boxes they are
+        val input = semanticEvents(tagged = true) {
+            "span"("role" to "list", AccessibilityAnnotations.DISPLAY to "inline") {
+                "span"("role" to "listitem", AccessibilityAnnotations.DISPLAY to "inline") { +"A" }
+                "span"("role" to "listitem", AccessibilityAnnotations.DISPLAY to "inline") { +"B" }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "ul" {
+                "li" { +"A" }
+                "li" { +"B" }
+            }
+        }
+    }
+
+    @Test
+    fun `should promote block roles inside inline formatting as native blocks are`() = runTest {
+        // given — a `<b><ul>` keeps its list and a `<strong><h2>` its heading
+        // (the renderer opens the raw tag as a block), so roles do the same
+        val input = semanticEvents(tagged = true) {
+            "b" {
+                "div"("role" to "list") {
+                    "div"("role" to "listitem") { +"a" }
+                }
+            }
+            "strong" {
+                "div"("role" to "heading") { +"b" }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            tag("b") {
+                "ul" {
+                    "li" { +"a" }
+                }
+            }
+            tag("strong") {
+                "h2" { +"b" }
+            }
+        }
+    }
+
+    @Test
     fun `should not promote a block role inside a code role`() = runTest {
         // given — inline code holds running text
         val input = semanticEvents(tagged = true) {

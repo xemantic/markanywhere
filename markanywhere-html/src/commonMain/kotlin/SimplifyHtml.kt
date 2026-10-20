@@ -781,26 +781,20 @@ private val RUNNING_TEXT_ROLES = setOf(
     "heading", "paragraph", "code", "cell", "gridcell", "columnheader", "rowheader",
 )
 
-// Roles whose place is decided by the container owning them (a cell by its
-// row, an item by its list), not by the box they are laid out as: a grid of
-// `inline-block` cells is still a grid.
-private val OWNED_ROLES = setOf(
-    "listitem", "row", "rowgroup", "cell", "gridcell", "columnheader", "rowheader",
-)
-
-// Block roles holding running text rather than other blocks, which an
-// `inline-block` box keeps on its line: a heading or a separator there sits
-// inside a line of text, while a list laid out as one still holds its items.
+// Block roles holding running text rather than other blocks — the only ones
+// an inline-level box keeps on a line of text. A container role on an inline
+// box is block-in-inline layout (an unstyled custom element computes `inline`
+// whatever it holds), and one on `inline-flex` / `inline-grid` /
+// `inline-table` lays out its items as blocks, so it is promoted either way.
 private val LEAF_BLOCK_ROLES = setOf("heading", "paragraph", "separator")
 
-// Elements whose content is running text, so a block cannot appear inside
-// them in Markdown: a paragraph, a heading, a table cell (a GFM cell holds one
-// line) and the phrasing elements kept as inline formatting.
+// Elements whose content is running text that Markdown cannot break with a
+// block: a paragraph, a heading, preformatted or inline code, a table cell (a
+// GFM cell holds one line). Not inline formatting: a raw `<b>` wrapping a
+// block is opened as a block, so a block role inside one is promoted as a
+// native `<ul>` or `<h2>` there is kept.
 private val RUNNING_TEXT_TAGS = setOf(
-    "p", "h1", "h2", "h3", "h4", "h5", "h6", "pre", "td", "th", "caption",
-    "b", "i", "em", "strong", "s", "strike", "del", "ins", "u", "mark",
-    "small", "sub", "sup", "q", "cite", "abbr", "dfn", "code", "kbd", "samp",
-    "var", "time", "data", "bdi", "bdo",
+    "p", "h1", "h2", "h3", "h4", "h5", "h6", "pre", "code", "td", "th", "caption",
 )
 
 /**
@@ -811,13 +805,10 @@ private val RUNNING_TEXT_TAGS = setOf(
  * `Hello\n## World\n\nend`, which the next parse reads as three blocks (and
  * a cell there as a stray `|`). So a block role is promoted only outside
  * running text ([RUNNING_TEXT_TAGS], a role promoted to one —
- * [RUNNING_TEXT_ROLES] — or a block role left unpromoted), and not on an
- * element the capture laid out on a line of text: an `inline` box, or an
- * `inline-block` one for a role holding text ([LEAF_BLOCK_ROLES]) — an
- * `inline-flex` / `inline-grid` / `inline-table` container still lays out its
- * items as blocks. A role whose container decides its place ([OWNED_ROLES])
- * skips the box test. Not promoted, the element is the generic container it
- * otherwise is.
+ * [RUNNING_TEXT_ROLES] — or a leaf role left unpromoted), and a role holding
+ * text ([LEAF_BLOCK_ROLES]) not on an element the capture laid out on a line
+ * of text, an `inline` or `inline-block` box. Not promoted, the element is the
+ * generic container it otherwise is.
  *
  * [simplifyHtml] promotes by it, and `separateUnwrappedBlocks` asks it which
  * elements will come out as blocks, so the two cannot disagree.
@@ -840,8 +831,8 @@ internal class BlockRoleContext {
         val role = if (mark.isGenericContainer()) mark.explicitRole() else null
         val blockRole = role in BLOCK_ROLES
         val box = (display as? CapturedDisplay.Known)?.value
-        val onTextLine = box == "inline" || (box == "inline-block" && role in LEAF_BLOCK_ROLES)
-        promotes = !inRunningText && !(onTextLine && role !in OWNED_ROLES)
+        val onTextLine = box == "inline" || box == "inline-block"
+        promotes = !inRunningText && !(onTextLine && role in LEAF_BLOCK_ROLES)
         val promoted = role != null && (!blockRole || promotes)
         runningText.addLast(
             inRunningText || mark.name in RUNNING_TEXT_TAGS ||

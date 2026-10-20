@@ -814,6 +814,47 @@ class HtmlToMarkdownTest {
     }
 
     @Test
+    fun `should round-trip container roles on an inline box and in formatting`() = runTest {
+        // given — issue #165: a container role on an inline box, or inside
+        // inline formatting, still holds blocks
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "app-nav"("role" to "navigation", AccessibilityAnnotations.DISPLAY to "inline") {
+                    "div"("role" to "list", AccessibilityAnnotations.DISPLAY to "block") {
+                        "div"("role" to "listitem", AccessibilityAnnotations.DISPLAY to "block") { +"Home" }
+                        "div"("role" to "listitem", AccessibilityAnnotations.DISPLAY to "block") { +"News" }
+                    }
+                }
+                "b"(AccessibilityAnnotations.DISPLAY to "inline") {
+                    "div"("role" to "list", AccessibilityAnnotations.DISPLAY to "block") {
+                        "div"("role" to "listitem", AccessibilityAnnotations.DISPLAY to "block") { +"a" }
+                    }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+        val reRendered = flowOf(markdown).parse().renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            <nav>
+            
+            - Home
+            - News
+            
+            </nav>
+            <b>
+            
+            - a
+            
+            </b>
+        """.trimIndent()
+        reRendered sameAs markdown
+    }
+
+    @Test
     fun `should keep the refs of a focusable separator an image and a row`() = runTest {
         // given — issue #165: role promotion used to drop each of these refs
         val page = semanticEvents(tagged = true) {

@@ -184,7 +184,8 @@ private val ATTRIBUTELESS_BLOCKS = setOf(
  * Any other item with no leading inline content gets an empty span, since its
  * ref is still something to act on. A ref-bearing `tr` has no content of its
  * own and no span can sit between cells, so its ref goes on an empty span at
- * the start of its first cell, apart from anything the cell carries itself.
+ * the start of its first cell, apart from anything the cell carries itself
+ * (a row with no cell gets one to hold it).
  * Bounded by one top-level inline child of the innermost ref-bearing block at
  * a time — which can be a whole card `<a>` subtree, the same bound
  * [encodeActionableLinkRefs] pays per link.
@@ -295,12 +296,17 @@ private fun Flow<SemanticEvent>.moveRefsOffAttributelessBlocks(): Flow<SemanticE
         }
         val handed = handedToParagraph
         // A ref-bearing row's moved attributes go on an empty span of their
-        // own at the start of its first cell, apart from the cell's own ref
-        // and ARIA state, which describe another control.
+        // own at the start of its first child (a cell), apart from the cell's
+        // own ref and ARIA state, which describe another control — or, for a
+        // row with no child, in a cell made to hold it.
         val row = rowMoved
         if (event !is SemanticEvent.Text) rowMoved = null
-        val rowSpan = row?.takeIf {
-            event is Mark && !event.isTagged && event.name in TABLE_CELLS
+        val rowSpan = row?.takeIf { event is Mark }
+        if (row != null && event is Unmark) {
+            emit(Mark("td"))
+            emit(Mark("span", isTagged = true, attributes = row))
+            emit(Unmark("span", isTagged = true))
+            emit(Unmark("td"))
         }
         when {
             handed != null && event is Mark -> {
@@ -341,8 +347,6 @@ private fun Flow<SemanticEvent>.moveRefsOffAttributelessBlocks(): Flow<SemanticE
         settle(holder)
     }
 }
-
-private val TABLE_CELLS = setOf("td", "th")
 
 private fun SemanticEvent.carriesRef(): Boolean =
     this is Mark && this[AccessibilityAnnotations.REF] != null
