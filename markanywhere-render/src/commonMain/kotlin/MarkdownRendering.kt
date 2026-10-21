@@ -122,6 +122,10 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
     // very next event reopens the same span, the two merge instead of abutting
     // (`**a****b**` re-parses as neither two spans nor one).
     var pendingInlineClose: BlockFrame.Inline? = null
+    // Emphasis spans whose opening delimiters are held until the first event
+    // that is not an em looked through, outermost first, their frames already
+    // on the stack (see openInline and openPendingInline).
+    val pendingInlineOpens = mutableListOf<PendingInlineOpen>()
     // The last char written to any sink, and the delimiter char of a closer
     // that is the very last thing written (null once anything follows it) —
     // what decides whether the next opener or text would make the closer stop
@@ -279,6 +283,15 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         val block = name in BLOCK_TAGGED_ELEMENTS ||
             ((name in HTML_VOID_ELEMENTS || name == "a") && atLineStart)
         return block && !(name in HEADING_INLINE_TAGS && onHeadingLine())
+    }
+
+    // Whether [event] starts a block where it arrives — a Markdown block, or a
+    // raw tag rendered block-level — rather than staying inline (in a link
+    // label, a table cell, or a heading's line for HEADING_INLINE_TAGS).
+    fun startsBlockHere(event: SemanticEvent.Mark): Boolean {
+        if (inLabel() || blockStack.any { it is BlockFrame.TableCell }) return false
+        return if (!event.isTagged && event.name in BLOCK_LEVEL_MARK_NAMES) true
+        else rendersAsBlockTag(event.name)
     }
 
     // Starts capturing a label. The capture is written after something that
@@ -734,12 +747,93 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
             // A deferred space or hard break will be written between the two.
             closerChar == delimiter[0] && pendingSpaces == 0 && pendingWhitespace.isEmpty() && !pendingHardBreak -> {
                 writeRaw("<$name>")
-                blockStack.addLast(BlockFrame.TaggedInline())
+                blockStack.addLast(BlockFrame.TaggedInline(synthesized = name))
             }
             else -> {
-                writeRaw(delimiter)
-                blockStack.addLast(BlockFrame.Inline(delimiter))
+                val before = prevWrittenChar()
+                val frame = BlockFrame.Inline(delimiter)
+                // After a word char a `*` run opens only before a char that is
+                // not punctuation, and that char comes in a later event.
+                val heldOpen = delimiter[0] == '*' &&
+                    !before.isFlankWhitespace() && !before.isFlankPunctuation()
+                if (heldOpen) pendingInlineOpens += PendingInlineOpen(name, frame)
+                else writeRaw(delimiter)
+                blockStack.addLast(frame)
                 activeDelimiterMask = activeDelimiterMask or delimiterBit(delimiter[0])
+            }
+        }
+    }
+
+    // Writes the openers held back by openInline, given the event that follows
+    // them: a `*` run after a word char is not left-flanking before punctuation
+    // (`x` + `<strong>:y`), so the outermost span then opens as a raw tag — the
+    // ones inside it follow a `>` and keep their delimiters; otherwise all are
+    // written as one delimiter run (issue #164). Judged by the parser's flanking
+    // classes on the raw first char — an escaped one starts with `\` or `&`,
+    // punctuation too. An em directly inside a held strong is looked through to
+    // what follows it (`x***y***`), the one nesting a `***` run re-parses as,
+    // and so is a span of the held kind, which nests transparently (`x**y**`);
+    // any other inline mark counts as punctuation (a link, code, image, raw tag
+    // or a strong inside an em is written starting with `[`, `` ` ``, `!`, `<`
+    // or `*`). A line break or a block keeps the delimiter: a raw tag spanning
+    // one would leave its closer as visible text (see heldRawInline).
+    fun openPendingInline(next: SemanticEvent?) {
+        if (pendingInlineOpens.isEmpty()) return
+        if (next is Mark && !next.isTagged) {
+            // An em in a held strong joins its run; a span of the held kind
+            // nests transparently (openInline), writing nothing.
+            if (next.name == "em" && pendingInlineOpens.size == 1 && pendingInlineOpens[0].name == "strong") return
+            if (emphasisDelimiter(next.name) == pendingInlineOpens.last().frame.delimiter) return
+        }
+        val opensOnPunctuation = when (next) {
+            is Text -> next.text.firstOrNull()?.isFlankPunctuation() == true
+            is Mark -> next.name != "br" && !startsBlockHere(next)
+            else -> false
+        }
+        pendingInlineOpens.forEachIndexed { i, pending ->
+            val index = blockStack.indexOfLast { it === pending.frame }
+            if (i == 0 && opensOnPunctuation && index >= 0) {
+                writeRaw("<${pending.name}>")
+                blockStack[index] = BlockFrame.TaggedInline(synthesized = pending.name)
+            } else {
+                writeRaw(pending.frame.delimiter)
+            }
+        }
+        pendingInlineOpens.clear()
+        if (opensOnPunctuation) refreshActiveDelimiters()
+    }
+
+    // Whether the current content sits in an inline phrasing raw tag (`<em>`,
+    // `<b>`, … — TaggedInline.phrasing, which includes the emphasis the
+    // renderer itself wrote as a raw tag), looking past other inline spans.
+    // The parser closes inline HTML at a line end, so nothing inside one may
+    // end the line: its closing tag would be visible text.
+    fun inPhrasingRawTag(): Boolean {
+        for (i in blockStack.indices.reversed()) {
+            when (val frame = blockStack[i]) {
+                is TaggedInline -> if (frame.phrasing && !frame.block) return true
+                is Inline -> continue
+                else -> return false
+            }
+        }
+        return false
+    }
+
+    // A block arriving inside emphasis the renderer wrote as a raw tag: the
+    // parser closes inline HTML at the block boundary, so the closing tag
+    // written after the block would be visible text. Close those tags here —
+    // the ones on top of the stack, above any delimiter span (closing past one
+    // would cross it) — and leave transparent frames whose close writes nothing.
+    fun closeSynthesizedRawEmphasis() {
+        for (i in blockStack.indices.reversed()) {
+            val frame = blockStack[i]
+            when {
+                frame is TaggedInline && frame.synthesized != null -> {
+                    writeRaw("</${frame.synthesized}>")
+                    blockStack[i] = BlockFrame.Inline("")
+                }
+                frame is Inline && frame.delimiter.isEmpty() -> continue
+                else -> return
             }
         }
     }
@@ -1037,8 +1131,11 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         writeTag(event.renderOpenTag())
         // Block decision captured before writeTag cleared atLineStart. A void
         // element also ends its line outside a heading (a soft break there);
-        // on a heading's line only a block-level tag may end it.
-        if (blockLevelTag || (isVoid && !inLabel() && !headingLine)) {
+        // on a heading's line only a block-level tag may end it — nor inside an
+        // inline phrasing tag, whose closer the parser would otherwise find on
+        // the next line, after it closed the tag at the line end
+        // (`<em>a<br>b</em>`).
+        if (blockLevelTag || (isVoid && !inLabel() && !headingLine && !inPhrasingRawTag())) {
             ensureLineStart()
         }
         if (!inLabel()) lastBlock = if (blockLevelTag) BLOCK_TAG else BLOCK_MARKDOWN
@@ -1053,7 +1150,8 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                 openedAtLineBreak = lineBreaks,
                 type7 = type7,
                 inItem = inItem,
-                writtenAtOpen = written
+                writtenAtOpen = written,
+                phrasing = event.name.lowercase() in HELD_RAW_INLINE_TAGS
             ).also { it.rawUntilBlank = (opensHtmlBlock && type6) || type7 }
         )
     }
@@ -1111,6 +1209,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         // A span, code, image or tag after a `[` in a link label: the parser
         // pairs brackets across one no better than across the label's end.
         if (event !is Text) labelLink()?.let { escapeOpenBrackets(it) }
+        openPendingInline(event)
 
         // An emphasis span reopened right where the same span closed continues
         // it: drop the held closer and put the frame back, writing nothing.
@@ -1168,6 +1267,10 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         ) {
             spillActiveLinks()
         }
+
+        // Emphasis the renderer wrote as a raw tag closes before a block
+        // inside it (see closeSynthesizedRawEmphasis).
+        if (event is Mark && startsBlockHere(event)) closeSynthesizedRawEmphasis()
 
         // A Markdown block directly inside an inline raw tag (a `<b>` wrapping
         // a list, kept a tag because emphasis cannot span blocks) turns that
@@ -1462,7 +1565,11 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
                 }
 
                 "br" -> {
-                    pendingHardBreak = true
+                    // Inside emphasis written as a raw tag a Markdown hard break
+                    // would end the line, and the parser closes inline HTML at a
+                    // line end — the closing tag would be visible text.
+                    if (inPhrasingRawTag()) writeRaw("<br>")
+                    else pendingHardBreak = true
                     blockStack.addLast(SelfClosed)
                 }
 
@@ -1847,8 +1954,9 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         else processEvent(it, wrapsBlock = false, next = '\n')
     }
 
-    // A stream ending on an emphasis close (no enclosing block) still owes it,
-    // and the whitespace held inside it.
+    // A stream ending on an emphasis open or close (no enclosing block) still
+    // owes it, and the whitespace held inside it.
+    openPendingInline(next = null)
     closePendingInline(next = null)
     flushHeldWhitespaceAtLineEnd()
     flush()
@@ -1866,6 +1974,11 @@ public suspend fun Flow<SemanticEvent>.renderMarkdown(): String =
 private const val BLOCK_NONE = 0
 private const val BLOCK_TAG = 1
 private const val BLOCK_MARKDOWN = 2
+
+// An emphasis opener held until the first event that is not an em looked
+// through (see openPendingInline): the mark's
+// [name] for a raw tag, and its [frame], already on the block stack.
+private class PendingInlineOpen(val name: String, val frame: BlockFrame.Inline)
 
 private sealed interface BlockFrame {
     fun isInline(): Boolean = when (this) {
@@ -1929,7 +2042,13 @@ private sealed interface BlockFrame {
         val openedAtLineBreak: Int = 0,
         val type7: Boolean = false,
         val inItem: Boolean = false,
-        val writtenAtOpen: Int = 0
+        val writtenAtOpen: Int = 0,
+        // The name of an emphasis span the renderer itself wrote as a raw tag
+        // (see openInline / openPendingInline), null for a tag from the stream.
+        val synthesized: String? = null,
+        // A phrasing tag (HELD_RAW_INLINE_TAGS) or a synthesized one: a void
+        // tag inside it stays on its line (see inPhrasingRawTag).
+        val phrasing: Boolean = synthesized != null
     ) : BlockFrame {
         var type7Raw: Boolean? = null
         // Opened a type-6 HTML block whose text stays raw up to the first
@@ -2244,10 +2363,10 @@ private fun emphasisDelimiter(name: String): String? = when (name) {
 // one (issue #93). Whitespace is CommonMark's Unicode whitespace (`Zs` plus tab,
 // line feed, form feed, carriage return) — narrower than Kotlin's
 // `isWhitespace()`, which also counts VT, U+001C–U+001F and U+2028/U+2029.
-// Punctuation is ASCII only, a GFM divergence of the parser (CommonMark counts
-// Unicode categories P and S). The two modules share no home for them, so they
-// are pinned to each other by `EmphasisDelimiterRoundTripTest` in
-// `markanywhere-html`.
+// Punctuation is ASCII only, a deliberate GFM divergence of the parser (GFM
+// also counts Unicode `P*`, CommonMark 0.31 `P*` and `S*` — issue #164). The
+// two modules share no home for them, so they are pinned to each other by
+// `EmphasisDelimiterRoundTripTest` in `markanywhere-html`.
 private fun Char.isFlankWhitespace(): Boolean =
     this == '\t' || this == '\n' || this == '\u000C' || this == '\r' ||
         category == SPACE_SEPARATOR
