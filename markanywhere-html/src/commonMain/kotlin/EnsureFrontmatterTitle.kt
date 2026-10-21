@@ -67,7 +67,9 @@ import kotlinx.coroutines.flow.Flow
  *   as source is no title for [wrapInHtmlDocument], but it is
  *   content: no title is derived and no title entry respelled. Of the other title entries only the usable
  *   one [wrapInHtmlDocument] picks is kept, as spelled, so readers may
- *   disagree on the title as they did on the input; the empty ones (`null`,
+ *   disagree on the title as they did on the input — none is when one kept
+ *   as source supersedes it, as a later duplicate or the lowercase spelling
+ *   of a variant; the empty ones (`null`,
  *   blank, an empty collection) carry nothing, and another usable one would
  *   be a duplicate key, which makes js-yaml reject the whole front matter.
  *   A frontmatter whose root is a sequence (top-level `item` marks) has no
@@ -104,7 +106,8 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
     // the top-level title entries (in any letter case) within
     // `frontmatterEvents`, in source order, their spans indexing it
     val titleSlots = mutableListOf<FrontMatterEntry>()
-    // the one of them wrapInHtmlDocument reads the title from, if any
+    // the one of them a front matter reader reads, as wrapInHtmlDocument
+    // does, if any — kept as source, it leaves the title unknown
     var read: FrontMatterEntry? = null
     // whether the held frontmatter's body, as it came, opens with a verbatim
     // line — known once it closes
@@ -179,15 +182,17 @@ public fun Flow<SemanticEvent>.ensureFrontmatterTitle(): Flow<SemanticEvent> = s
         return false
     }
 
-    // `rewrite` keeping the first title slot: the one scalar title entry it
+    // `rewrite` keeping the first title slot: the earliest title entry it
     // keeps elsewhere moves there, or, keeping none, the slot stays as it
-    // came
+    // came. Only the earliest keeps the kept entries in order: readers read
+    // the last of duplicate keys, so moving a later one ahead of another
+    // would change the title they read
     fun keepingFirstSlot(
         rewrite: Map<FrontMatterEntry, List<SemanticEvent>>
     ): Map<FrontMatterEntry, List<SemanticEvent>> {
         val first = titleSlots.first()
         val kept = rewrite.entries.firstOrNull { (slot, events) ->
-            slot != first && !slot.isUnreadable && events.isNotEmpty()
+            slot != first && events.isNotEmpty()
         }
         return rewrite.mapValues { (slot, events) ->
             when (slot) {
