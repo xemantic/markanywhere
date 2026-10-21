@@ -16,6 +16,7 @@
 
 package com.xemantic.markanywhere.parse
 
+import com.xemantic.kotlin.test.assert
 import com.xemantic.kotlin.test.sameAs
 import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.flow.mergeAdjacentText
@@ -24,6 +25,7 @@ import com.xemantic.markanywhere.render.renderMarkdown
 import com.xemantic.markanywhere.test.sameAs
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 
@@ -122,16 +124,18 @@ class PlainTextEscapingRoundTripTest {
             "ul" { for (title in titles) "li" { "p" { +title } } }
         }
 
+        // when
+        val markdown = events.renderMarkdown()
+
         // then
-        assertRoundTrip(
-            events,
-            """
+        markdown sameAs """
             - Verordnung über \*Sterne*
             - Gesetz zu \[Artikel 1](Satz 2)
             - Abkommen ao1977_180abs2v
             - Gesetz über \`Code\` und \~Tilden~
-            """.trimIndent()
-        )
+        """.trimIndent()
+        flowOf(markdown).parse().mergeAdjacentText() sameAs events.mergeAdjacentText()
+        flowOf(markdown).parse().renderMarkdown() sameAs markdown
     }
 
     // --- literal brackets (#212 item 3) --------------------------------------
@@ -248,6 +252,26 @@ class PlainTextEscapingRoundTripTest {
             // then
             once sameAs markdown
             flowOf(once).parse().renderMarkdown() sameAs once
+        }
+    }
+
+    @Test
+    fun `should escape the text of a tag alone on its line the parser does not read as a tag`() = runTest {
+        // The parser accepts only CommonMark attribute names in a type-7 open
+        // tag: with any other the tag line is paragraph text, and so is the
+        // text after it — read back as literal text, escaped from the second
+        // render on.
+        for (attribute in listOf("@click", "(click)", "[attr]", "#ref")) {
+            // given
+            val events = semanticEvents { tag("x-btn", attribute to "f") { +"\na*b_c" } }
+
+            // when
+            val markdown = events.renderMarkdown()
+
+            // then
+            assert(flowOf(markdown).parse().toList().none { it is SemanticEvent.Mark && it.name == "em" })
+            val twice = flowOf(markdown).parse().renderMarkdown()
+            flowOf(twice).parse().renderMarkdown() sameAs twice
         }
     }
 

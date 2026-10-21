@@ -658,7 +658,6 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         return if (link == null) escaped else escapeLabelBrackets(escaped, link)
     }
 
-
     // Recompute the open inline emphasis delimiter mask from blockStack — called
     // only on Inline *close* (rare), so even the recompute is allocation-free. The
     // open path ORs in the new bit incrementally instead (see the mark dispatch):
@@ -1033,7 +1032,8 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         // ends its line alone (TaggedInline.type7) — never custom markup,
         // decided above, nor a block-level tag, followed by a blank line.
         val type7 = startsLine && blockStart && !type6 && !custom && !blockLevelTag &&
-            event.name !in VERBATIM_RAW_TAGS && opensBlock(type6 = false, blockStart = true)
+            event.name !in VERBATIM_RAW_TAGS && opensBlock(type6 = false, blockStart = true) &&
+            isHtmlBlockOpenTag(event.name, event.attributes)
         writeTag(event.renderOpenTag())
         // Block decision captured before writeTag cleared atLineStart. A void
         // element also ends its line outside a heading (a soft break there);
@@ -1712,7 +1712,7 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         // end, and a text of block marker chars by the char after it, when it
         // starts a line (see escapeLeadingBlockMarker).
         return last in LOOKAHEAD_CHARS || '<' in event.text || '&' in event.text ||
-            event.text.substringAfterLast('\n').let { line -> line.isNotEmpty() && line.all { it in "#-+" } } ||
+            endsInMarkerLine(event.text) ||
             (last.isFlankWhitespace() && enclosingSpanDelimiter() != null)
     }
 
@@ -2191,6 +2191,22 @@ private fun renderOpenTag(name: String, attributes: Map<String, String>): String
     +'>'
 }
 
+// Whether the open tag renderOpenTag writes for [name] and [attributes] is one
+// the parser reads as a complete tag on its line — the condition of a type-7
+// HTML block start (`isCompleteHtmlTagLine` / `tryParseOpenTag` in
+// `MarkanywhereParser.kt`): a letter, then letters, digits and `-`; attribute
+// names CommonMark allows (`[A-Za-z_:][A-Za-z0-9_.:-]*`, so not Vue's `@click`
+// or Angular's `(click)` / `[attr]` / `#ref`), and no line break in a value.
+private fun isHtmlBlockOpenTag(name: String, attributes: Map<String, String>): Boolean {
+    if (name.isEmpty() || !name[0].isLetter() || name.any { !it.isLetterOrDigit() && it != '-' }) return false
+    for ((key, value) in attributes) {
+        if (key.isEmpty() || !(key[0].isLetter() || key[0] == '_' || key[0] == ':')) return false
+        if (key.any { !it.isLetterOrDigit() && it !in "_.:-" }) return false
+        if ('\n' in value || '\r' in value) return false
+    }
+    return true
+}
+
 private fun String.escapeAttrTo(out: Appendable) {
     with(out) {
         for (c in this@escapeAttrTo) when (c) {
@@ -2328,11 +2344,13 @@ private fun escapeInlineSyntax(
             // Only an `==` run toggles a mark, and it too stays literal at the
             // end of a line.
             '=' -> joinsRun || (end - i == 2 && after != '\n')
-            '*', '_' -> joinsRun || (canOpenEmphasis(c, prev, after) && when (end - i) {
-                1 -> !emOpen
-                2 -> !strongOpen
-                else -> true
-            }) || (spanClosable && canCloseEmphasis(c, prev, after))
+            '*', '_' -> joinsRun || emphasisFlanking(c, prev, after).let { flanking ->
+                ((flanking and CAN_OPEN_EMPHASIS) != 0 && when (end - i) {
+                    1 -> !emOpen
+                    2 -> !strongOpen
+                    else -> true
+                }) || (spanClosable && (flanking and CAN_CLOSE_EMPHASIS) != 0)
+            }
             // `$\` opens math too, so a `$` before a char written escaped is.
             '$' -> after == null || after.isMathOpen() || after in INLINE_SYNTAX_CHARS ||
                 after == '[' || after == '!' || ((brackets || labelBrackets) && after == ']')
@@ -2465,31 +2483,37 @@ private fun escapeAltText(alt: String, entities: Boolean): String =
     if (alt.none { it in INLINE_SYNTAX_CHARS || it in BRACKET_SYNTAX_CHARS }) alt
     else escapeInlineSyntax(text = alt, before = '[', next = ']', mask = 0, brackets = true, entities = entities)
 
-// Whether a `*` / `_` run between [before] and [after] can open emphasis on
-// re-parse — the parser's flanking rules (`emphasisFlanking` in
-// `MarkanywhereParser.kt`), `_` with its stricter intraword rule.
-private fun canOpenEmphasis(c: Char, before: Char, after: Char?): Boolean {
-    if (after == null) return true
+// Whether a `*` / `_` run between [before] and [after] can open
+// (CAN_OPEN_EMPHASIS) and close (CAN_CLOSE_EMPHASIS) emphasis on re-parse —
+// the parser's flanking rules (`emphasisFlanking` in `MarkanywhereParser.kt`),
+// `_` with its stricter intraword rule. The parser closes an open em or strong
+// on either char. Both when [after] is unknown.
+private fun emphasisFlanking(c: Char, before: Char, after: Char?): Int {
+    if (after == null) return CAN_OPEN_EMPHASIS or CAN_CLOSE_EMPHASIS
     val nextIsWs = after.isFlankWhitespace()
     val nextIsPunct = after.isFlankPunctuation()
     val prevIsWs = before.isFlankWhitespace()
     val prevIsPunct = before.isFlankPunctuation()
     val leftFlank = !nextIsWs && (!nextIsPunct || prevIsWs || prevIsPunct)
     val rightFlank = !prevIsWs && (!prevIsPunct || nextIsWs || nextIsPunct)
-    return if (c == '_') leftFlank && (!rightFlank || prevIsPunct) else leftFlank
+    val canOpen = if (c == '_') leftFlank && (!rightFlank || prevIsPunct) else leftFlank
+    val canClose = if (c == '_') rightFlank && (!leftFlank || nextIsPunct) else rightFlank
+    return (if (canOpen) CAN_OPEN_EMPHASIS else 0) or (if (canClose) CAN_CLOSE_EMPHASIS else 0)
 }
 
-// Whether a `*` / `_` run between [before] and [after] can close emphasis on
-// re-parse — the parser closes an open em or strong on either char.
-private fun canCloseEmphasis(c: Char, before: Char, after: Char?): Boolean {
-    if (after == null) return true
-    val nextIsWs = after.isFlankWhitespace()
-    val nextIsPunct = after.isFlankPunctuation()
-    val prevIsWs = before.isFlankWhitespace()
-    val prevIsPunct = before.isFlankPunctuation()
-    val leftFlank = !nextIsWs && (!nextIsPunct || prevIsWs || prevIsPunct)
-    val rightFlank = !prevIsWs && (!prevIsPunct || nextIsWs || nextIsPunct)
-    return if (c == '_') rightFlank && (!leftFlank || nextIsPunct) else rightFlank
+private const val CAN_OPEN_EMPHASIS = 1
+private const val CAN_CLOSE_EMPHASIS = 2
+
+// Whether the last line of [text] is a non-empty run of `#`, `-` and `+` — a
+// block marker judged by the char after it (see holdsText). No allocation.
+private fun endsInMarkerLine(text: String): Boolean {
+    var i = text.length - 1
+    if (i < 0 || text[i] == '\n') return false
+    while (i >= 0 && text[i] != '\n') {
+        if (text[i] != '#' && text[i] != '-' && text[i] != '+') return false
+        i--
+    }
+    return true
 }
 
 // The parser's inline math opener rule (`isMathOpenChar`): `$` followed by a
