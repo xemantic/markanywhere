@@ -1200,11 +1200,20 @@ class EmphasisDelimiterRoundTripTest {
         val events = semanticEvents { "p" { +"x"; "strong" { "a"("href" to "u") { "h2" { +"t" } } } } }
         // when
         val markdown = events.renderMarkdown()
-        val once = flowOf(markdown).parse().renderMarkdown()
         // then
-        assert("</strong>" !in markdown.substringAfter("<a"))
-        once sameAs markdown
-        flowOf(once).parse().renderMarkdown() sameAs once
+        markdown sameAs "x<strong></strong>\n\n<a href=\"u\">\n\n## t\n\n</a>"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should write a soft break inside emphasis written as a raw tag in a type-7 html block as a space`() = runTest {
+        // given
+        val events = semanticEvents { tag("x-card") { +"\n"; "p" { +"x"; "em" { +":a\nb" } } } }
+        // when
+        val markdown = events.renderMarkdown()
+        // then
+        markdown sameAs "<x-card>\n\nx<em>:a b</em>\n\n</x-card>"
+        assertMarkdownFixpoint(markdown)
     }
 
     @Test
