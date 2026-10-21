@@ -22,26 +22,31 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 
 /**
- * A sweep over the real dumps for issue #88: no image may reach the Markdown
- * with a `data:` URI as its destination — the inline base64 icons of Bing and
+ * A sweep over the real dumps for issues #88 and #142: no `data:` payload may
+ * reach the Markdown — not as an image destination, not on a raw `<img>`, not
+ * in a `poster` or an `<object data>` — the inline base64 icons of Bing and
  * DuckDuckGo (kilobytes each) render as their alt text only.
  */
 class DataUriImagesTest {
 
     @Test
-    fun `should not inline a data uri image into any dump`() = runTest {
-        // given — the dumps whose captured pages carry `data:` images
-        val dumps = listOf(
-            DumpFixtures.serpBing, DumpFixtures.serpDuckduckgo, DumpFixtures.serpGoogle,
-        )
+    fun `should not inline a data uri payload into any dump`() = runTest {
+        // given — every dump; Bing, DuckDuckGo and Google carry `data:` images
+        val dumps = DumpFixtures.byFileName
 
-        for (dump in dumps) {
-            // when
+        // when
+        val leaks = dumps.mapValues { (_, dump) ->
             val markdown = dumpFlow(dump).transformHtmlToMarkdown().renderMarkdown()
+            DATA_URI_PAYLOAD.find(markdown)?.value
+        }.filterValues { it != null }
 
-            // then
-            assert("](data:" !in markdown)
-        }
+        // then — a media type (or its empty form, `data:,` / `data:;base64,`)
+        // marks a payload, not prose or a form pattern mentioning the scheme
+        // (`(?:data:.+)` on the W3C validator)
+        assert(dumps.size >= 8)
+        assert(leaks.isEmpty())
     }
 
 }
+
+private val DATA_URI_PAYLOAD = Regex("data:(?:[a-z]+/[a-z0-9.+-]+)?[;,]", RegexOption.IGNORE_CASE)

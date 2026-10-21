@@ -58,7 +58,8 @@ import kotlinx.coroutines.flow.onEach
  *   [DROPPED_TAGS]).
  * - **Keep the source, drop the fallbacks**: `iframe`, `video`, `audio`,
  *   `object`, `embed` survive as elements carrying what they embed (see
- *   [EMBEDDED_CONTENT_ATTRS]); their children are fallback content for a
+ *   [EMBEDDED_CONTENT_ATTRS], less a `data:` URI payload under
+ *   [SvgMode.RESOLVE]); their children are fallback content for a
  *   renderer we have no equivalent for and are discarded. The one exception
  *   is the **document a same-origin frame embeds**, which a capture nests
  *   inside its `iframe` / `object` as an `html` element: its body is content
@@ -197,6 +198,9 @@ import kotlinx.coroutines.flow.onEach
  *   its own attributes intact, for a consumer that renders graphics rather
  *   than reading them — minus a `script`, an `aria-hidden` part, and the
  *   capture's annotations, which obey the same rules as everywhere else.
+ *   It also decides a `data:` URI payload in the `src` / `poster` / `data`
+ *   of embedded content: dropped under [SvgMode.RESOLVE], kept under
+ *   [SvgMode.PRESERVE].
  */
 public fun Flow<SemanticEvent>.simplifyHtml(
     keepAttributes: Set<String> = emptySet(),
@@ -603,7 +607,14 @@ private fun Flow<SemanticEvent>.simplifyHtmlRules(
     // discarded as before.
     match({ name in EMBEDDED_CONTENT_ATTRS }) { event ->
         val allowed = EMBEDDED_CONTENT_ATTRS.getValue(event.name)
-        preserve(event.name, preserveAttrs(event, *allowed)) {
+        val attributes = preserveAttrs(event, *allowed).let { attributes ->
+            // A `data:` poster, object or frame source is kilobytes of base64
+            // a model cannot use — dropped as resolveLazyImages drops a
+            // `data:` image, and kept for a reader under SvgMode.PRESERVE.
+            if (svgMode == SvgMode.PRESERVE) attributes
+            else attributes.filter { (name, value) -> name !in EMBEDDED_URL_ATTRS || !value.isDataUrl() }
+        }
+        preserve(event.name, attributes) {
             if (event.name in FRAME_TAGS) children(mode = "frame")
         }
     }
@@ -869,6 +880,10 @@ private val EMBEDDED_CONTENT_ATTRS: Map<String, Array<String>> = mapOf(
     "object" to arrayOf("id", "data", "type", "name", "title"),
     "embed" to arrayOf("id", "src", "type", "title"),
 )
+
+// The attributes of [EMBEDDED_CONTENT_ATTRS] holding a URL (a `title` reading
+// "Data: …" is no `data:` URI).
+private val EMBEDDED_URL_ATTRS = setOf("src", "poster", "data")
 
 private val FORM_ELEMENT_ATTRS: Map<String, Array<String>> = mapOf(
     "form" to arrayOf("id", "action", "method", "enctype", "name", "target"),

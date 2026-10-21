@@ -3293,6 +3293,50 @@ class SimplifyHtmlTest {
     }
 
     @Test
+    fun `should drop the data uri payload of embedded content`() = runTest {
+        // given - a `data:` poster, object or frame source is kilobytes of
+        // base64 a model cannot use, like a `data:` image (issue #142)
+        val input = semanticEvents(tagged = true) {
+            "body" {
+                "video"("src" to "clip.mp4", "poster" to "data:image/jpeg;base64,/9j/4AAQ") { }
+                "object"("data" to " DATA:image/svg+xml,%3Csvg%3E", "type" to "image/svg+xml") { }
+                "iframe"("src" to "data:text/html,%3Cp%3Ehi", "title" to "Ad") { }
+                "embed"("src" to "a.swf") { }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            tag("video", "src" to "clip.mp4") { }
+            tag("object", "type" to "image/svg+xml") { }
+            tag("iframe", "title" to "Ad") { }
+            tag("embed", "src" to "a.swf") { }
+        }
+    }
+
+    @Test
+    fun `should keep the data uri payload of embedded content when preserving graphics`() = runTest {
+        // given - SvgMode.PRESERVE renders for a reader, who sees a poster
+        // whatever its format, as it keeps a `data:` image
+        val input = semanticEvents(tagged = true) {
+            "body" {
+                "video"("src" to "clip.mp4", "poster" to "data:image/jpeg;base64,/9j/4AAQ") { }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml(svgMode = SvgMode.PRESERVE)
+
+        // then
+        output sameAs semanticEvents {
+            tag("video", "src" to "clip.mp4", "poster" to "data:image/jpeg;base64,/9j/4AAQ") { }
+        }
+    }
+
+    @Test
     fun `should drop the srcdoc of an iframe whose document is already nested`() = runTest {
         // given - a `srcdoc` frame is same-origin by definition, so the capture
         // nests the document the attribute describes inside the `<iframe>`;
