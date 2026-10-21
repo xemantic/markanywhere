@@ -345,7 +345,7 @@ class Gfm_06_04_Test {
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
                 "em" {
-                    +"foo"
+                    +"foo*"
                 }
             }
         }
@@ -2320,7 +2320,7 @@ class Gfm_06_04_Test {
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
                 +"foo _"
-                "em" {}
+                "em" { +"_" }
             }
         }
         // GFM expected:

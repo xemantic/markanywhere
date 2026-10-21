@@ -1168,6 +1168,23 @@ class InlineSyntaxEscapingRoundTripTest {
         assertMarkdownFixpoint(markdown)
     }
 
+    // --- #130: an outer span closed inside brackets that are not a link ---
+
+    @Test
+    fun `should reach a fixpoint for an outer span closed inside brackets that are not a link`() = runTest {
+        for (markdown in listOf(
+            "**foo [bar*** baz]", "*foo [bar*** baz]", "*a [b***]", "**a [b***]",
+            "*foo [bar*]", "*foo [bar*\\* baz]", "*a ~~[b*]~~", "*a ==[b*]==", "*a ^[b*]^",
+            "*a <b>[b*]</b>", "**a ~~[b*** c]~~", "*a ~~[b* c]~~"
+        )) {
+            // when
+            val (once, twice) = roundTrip(markdown)
+
+            // then
+            twice sameAs once
+        }
+    }
+
 }
 
 // Written verbatim by the renderer, or dropped / kept literal by the parser
