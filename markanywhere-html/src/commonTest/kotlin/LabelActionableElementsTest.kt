@@ -380,6 +380,94 @@ class LabelActionableElementsTest {
     }
 
     @Test
+    fun `should name an empty heading from its own title`() = runTest {
+        // given - a heading's name comes from its content, failing that from
+        // its `title` (accname step 2I), which simplifyHtml strips
+        val input = semanticEvents(tagged = true) {
+            "h1"("title" to "Back to Bing search") { }
+        }
+
+        // when
+        val output = input.labelActionableElements()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "h1"("title" to "Back to Bing search") { +"Back to Bing search" }
+        }
+    }
+
+    @Test
+    fun `should leave a heading with content alone`() = runTest {
+        // given
+        val input = semanticEvents(tagged = true) {
+            "h2"("title" to "Tooltip") { +"Visible heading" }
+        }
+
+        // when
+        val output = input.labelActionableElements()
+
+        // then
+        output sameAs input
+    }
+
+    @Test
+    fun `should not mark a nameless graphic in an empty heading`() = runTest {
+        // given - the placeholder says "a picture to click"; a heading is
+        // not clicked, so a nameless graphic in it is left to vanish
+        val input = semanticEvents(tagged = true) {
+            "h1" { "svg" { "path"("d" to "M0 0") { } } }
+        }
+
+        // when
+        val output = input.labelActionableElements()
+
+        // then
+        output sameAs input
+    }
+
+    @Test
+    fun `should name an element with a heading role only where it becomes a heading`() = runTest {
+        // given - simplifyHtml promotes `role="heading"` only on a generic
+        // container; on an `li` it stays a list item, so its tooltip is no name
+        val input = semanticEvents(tagged = true) {
+            "div"("role" to "heading", "title" to "Section") { }
+            "ul" { "li"("role" to "heading", "title" to "Tooltip") { } }
+        }
+
+        // when
+        val output = input.labelActionableElements()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "div"("role" to "heading", "title" to "Section") { +"Section" }
+            "ul" { "li"("role" to "heading", "title" to "Tooltip") { } }
+        }
+    }
+
+    @Test
+    fun `should label a link through the heading it wraps only once`() = runTest {
+        // given - the Bing logo (issue #177): an empty link wrapping an empty
+        // heading named only by its `title`, the picture a CSS background
+        val input = semanticEvents(tagged = true) {
+            "a"("href" to "/?FORM=Z9FD1") {
+                "h1"("class" to "b_logo", "title" to "Back to Bing search") { }
+            }
+        }
+
+        // when
+        val output = input.labelActionableElements()
+
+        // then - the name lands in the heading, which labels the link too
+        output sameAs semanticEvents(tagged = true) {
+            "a"("href" to "/?FORM=Z9FD1") {
+                "h1"("class" to "b_logo", "title" to "Back to Bing search") {
+                    +"Back to Bing search"
+                }
+            }
+        }
+    }
+
+    @Test
     fun `should label an option named only by its own aria-label`() = runTest {
         // given - a combobox suggestion (issue #108) whose visible text sat in
         // an `aria-hidden` span that applyAccessibility has already dropped:
