@@ -450,6 +450,34 @@ class MarkanywhereParserTest {
     }
 
     @Test
+    fun `should keep an ampersand before a backslash escape in place`() = runTest {
+        // given — the escape used to be emitted before the held `&`
+        val textFlow = """a &\[b &x\*c &\\d""".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" { +"""a &[b &x*c &\d""" }
+        }
+    }
+
+    @Test
+    fun `should keep an ampersand before a closing label bracket in place`() = runTest {
+        // given
+        val textFlow = """[a [b&] c&[d]](u)""".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" { "a"("href" to "u") { +"a [b&] c&[d]" } }
+        }
+    }
+
+    @Test
     fun `should escape HTML in code blocks`() = runTest {
         // given
         

@@ -6015,6 +6015,9 @@ private class ParserState(
         // Inside a link URL / image URL the backslash is buffered raw and resolved
         // by `applyBackslashEscapes` when the URL/title is finalized at `)`.
         if (char == '\\' && !code && !(inLink && inLinkUrl) && !(inImage && inLinkUrl)) {
+            // A `\` ends a pending entity ref (`&\[`): its `&body` is literal and
+            // goes out first, or the escaped char would be emitted before it.
+            if (inEntityRef) abortEntityRef()
             // Inside an inline HTML tag accumulation, the backslash is literal too —
             // preserve it in the buffer so attribute values keep `\` characters.
             if (inlineBuffer.startsWith("<")) {
@@ -6232,6 +6235,8 @@ private class ParserState(
             char == ']' && !code && !math && !inlineBuffer.startsWith("<") &&
             !backticksPending
         ) {
+            // A pending entity ref ends here (`&]`), its `&body` first.
+            if (inEntityRef) abortEntityRef()
             if (linkLabelBracketDepth > 0) {
                 // Balanced `]` inside nested brackets — content.
                 linkLabelBracketDepth--
@@ -6258,6 +6263,7 @@ private class ParserState(
         if ((inLink || inImage) && !inLinkRef && !inLinkUrl &&
             char == '[' && !code && !math && !inlineBuffer.startsWith("<")
         ) {
+            if (inEntityRef) abortEntityRef()
             linkLabelBracketDepth++
             if (inImage) imageAlt.append('[') else linkText.append('[')
             if (inlineBuffer.isNotEmpty()) {
