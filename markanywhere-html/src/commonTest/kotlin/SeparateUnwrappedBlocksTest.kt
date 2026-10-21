@@ -628,6 +628,152 @@ class SeparateUnwrappedBlocksTest {
     }
 
     @Test
+    fun `should not separate adjacent inline controls each holding part of a word`() = runTest {
+        // given — issue #141: a language-learning page making each syllable
+        // its own tap target; nothing but inline text flow lies between them
+        val input = semanticEvents(tagged = true) {
+            "p" {
+                "span"("role" to "button", AccessibilityAnnotations.REF to "1", AccessibilityAnnotations.DISPLAY to "inline") { +"Hel" }
+                "span"("role" to "button", AccessibilityAnnotations.REF to "2", AccessibilityAnnotations.DISPLAY to "inline") { +"lo" }
+                +","
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs input
+    }
+
+    @Test
+    fun `should separate adjacent uncaptured controls whose display is not known`() = runTest {
+        // given — without a capture nothing says the controls sit flush in the
+        // text flow, so they stay apart (a web component tab strip)
+        val input = semanticEvents(tagged = true) {
+            "div" {
+                "sl-tab"("role" to "tab") { +"General" }
+                "sl-tab"("role" to "tab") { +"Advanced" }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "div" {
+                "sl-tab"("role" to "tab") { +"General" }
+                +" "
+                "sl-tab"("role" to "tab") { +"Advanced" }
+            }
+        }
+    }
+
+    @Test
+    fun `should separate adjacent controls of a dump that left their display out`() = runTest {
+        // given — an unmarked dump captured before every display was recorded:
+        // the paragraph's annotation shows a capture, the controls carry none
+        val input = semanticEvents(tagged = true) {
+            "body" {
+                "p"(AccessibilityAnnotations.DISPLAY to "block") { +"x" }
+                "div" {
+                    "div"("role" to "button", AccessibilityAnnotations.REF to "1") { +"Save" }
+                    "div"("role" to "button", AccessibilityAnnotations.REF to "2") { +"Cancel" }
+                }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "body" {
+                "p"(AccessibilityAnnotations.DISPLAY to "block") { +"x" }
+                "div" {
+                    "div"("role" to "button", AccessibilityAnnotations.REF to "1") { +"Save" }
+                    +" "
+                    "div"("role" to "button", AccessibilityAnnotations.REF to "2") { +"Cancel" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should separate adjacent inline elements with the link role`() = runTest {
+        // given — an ARIA link is a distinct thing to follow like an <a>
+        val input = semanticEvents(tagged = true) {
+            "p" {
+                "span"("role" to "link", AccessibilityAnnotations.REF to "1", AccessibilityAnnotations.DISPLAY to "inline") { +"Home" }
+                "span"("role" to "link", AccessibilityAnnotations.REF to "2", AccessibilityAnnotations.DISPLAY to "inline") { +"News" }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "p" {
+                "span"("role" to "link", AccessibilityAnnotations.REF to "1", AccessibilityAnnotations.DISPLAY to "inline") { +"Home" }
+                +" "
+                "span"("role" to "link", AccessibilityAnnotations.REF to "2", AccessibilityAnnotations.DISPLAY to "inline") { +"News" }
+            }
+        }
+    }
+
+    @Test
+    fun `should separate an inline control adjacent to a link`() = runTest {
+        // given — a link is a distinct thing to follow whatever its display
+        val input = semanticEvents(tagged = true) {
+            "p" {
+                "a"("href" to "u", AccessibilityAnnotations.DISPLAY to "inline") { +"x" }
+                "span"("role" to "button", AccessibilityAnnotations.DISPLAY to "inline") { +"y" }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "p" {
+                "a"("href" to "u", AccessibilityAnnotations.DISPLAY to "inline") { +"x" }
+                +" "
+                "span"("role" to "button", AccessibilityAnnotations.DISPLAY to "inline") { +"y" }
+            }
+        }
+    }
+
+    @Test
+    fun `should separate an element with the img role like an image`() = runTest {
+        // given — issue #169: simplifyHtml turns the generic element into an
+        // image, so it is a content token of its own, not an empty wrapper
+        val input = semanticEvents(tagged = true) {
+            "p" {
+                +"Pro"
+                "div"("role" to "img", "aria-label" to "logo", AccessibilityAnnotations.DISPLAY to "block") { }
+                +"teams"
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "p" {
+                +"Pro"
+                +" "
+                "div"("role" to "img", "aria-label" to "logo", AccessibilityAnnotations.DISPLAY to "block") { }
+                +" "
+                +"teams"
+            }
+        }
+    }
+
+    @Test
     fun `should not separate adjacent ref-bearing generic elements`() = runTest {
         // given - a ref alone does not make a control a reader tells apart:
         // a price split into two clickable spans is still one word
@@ -1040,6 +1186,308 @@ class SeparateUnwrappedBlocksTest {
                 +" "
                 "div"(AccessibilityAnnotations.DISPLAY to "block") {
                     "em"(AccessibilityAnnotations.DISPLAY to "inline") { +"b" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should end a paragraph at a stacked box inside a display contents wrapper`() = runTest {
+        // given — issue #154: the wrapper lays out no box, so its stacked
+        // children start lines of their own below the intro
+        val input = semanticEvents(tagged = true) {
+            "body" {
+                "div"(AccessibilityAnnotations.DISPLAY to "block") { +"X" }
+                "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                    +"Intro"
+                    "div"(AccessibilityAnnotations.DISPLAY to "contents") {
+                        "div"(AccessibilityAnnotations.DISPLAY to "block") { +"A" }
+                        "div"(AccessibilityAnnotations.DISPLAY to "block") { +"B" }
+                    }
+                }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "body" {
+                "div"(AccessibilityAnnotations.DISPLAY to "block") { +"X" }
+                "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                    "p" { +"Intro" }
+                    "div"(AccessibilityAnnotations.DISPLAY to "contents") {
+                        "div"(AccessibilityAnnotations.DISPLAY to "block") { "p" { +"A" } }
+                        "div"(AccessibilityAnnotations.DISPLAY to "block") { "p" { +"B" } }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should not end a paragraph at a stacked box inside a wrapper holding part of it`() = runTest {
+        // given — the inline wrapper opened inside the paragraph, which cannot
+        // end inside it, so the box stays in the run as before
+        val input = semanticEvents(tagged = true) {
+            "body" {
+                "div"(AccessibilityAnnotations.DISPLAY to "block") { +"X" }
+                "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                    +"Intro "
+                    "span"(AccessibilityAnnotations.DISPLAY to "inline") {
+                        +"more"
+                        "div"(AccessibilityAnnotations.DISPLAY to "block") { +"A" }
+                    }
+                }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "body" {
+                "div"(AccessibilityAnnotations.DISPLAY to "block") { +"X" }
+                "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                    "p" {
+                        +"Intro "
+                        "span"(AccessibilityAnnotations.DISPLAY to "inline") {
+                            +"more"
+                            +" "
+                            "div"(AccessibilityAnnotations.DISPLAY to "block") { +"A" }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should break the document a same-origin frame embeds into paragraphs`() = runTest {
+        // given — issue #154: the frame element is inline, but its document's
+        // root lays its content out like the page's own
+        val input = semanticEvents(tagged = true) {
+            "body" {
+                "p" { +"x" }
+                "iframe"("src" to "f") {
+                    "html" {
+                        "body" {
+                            "div" { +"A" }
+                            "div" { +"B" }
+                        }
+                    }
+                }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "body" {
+                "p" { +"x" }
+                "iframe"("src" to "f") {
+                    "html" {
+                        "body" {
+                            "div" { +"A" }
+                            "div" { "p" { +"B" } }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should end a paragraph opened around a stacked box at its close`() = runTest {
+        // given — issue #154: a kept formatting element displayed as a block
+        // cannot hold the paragraph, which opens around it; the loose text
+        // after it sits below it
+        val input = semanticEvents(tagged = true) {
+            "div" {
+                +"X"
+                "strong"(AccessibilityAnnotations.DISPLAY to "block") { +"A" }
+                +"tail"
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "div" {
+                +"X"
+                "p" { "strong"(AccessibilityAnnotations.DISPLAY to "block") { +"A" } }
+                "p" { +"tail" }
+            }
+        }
+    }
+
+    @Test
+    fun `should not break a frame document inside a table cell into paragraphs`() = runTest {
+        // given — review of #154: a cell's content is phrasing in Markdown, so
+        // a frame document embedded there cannot hold a paragraph either
+        val input = semanticEvents(tagged = true) {
+            "table" {
+                "tr" {
+                    "td" {
+                        +"c"
+                        "iframe"("src" to "f") {
+                            "html" {
+                                "body" {
+                                    "div" { +"A" }
+                                    "div" { +"B" }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then — the separator space, as before
+        output sameAs semanticEvents(tagged = true) {
+            "table" {
+                "tr" {
+                    "td" {
+                        +"c"
+                        "iframe"("src" to "f") {
+                            "html" {
+                                "body" {
+                                    "div" { +"A" }
+                                    +" "
+                                    "div" { +"B" }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should not take the children of an element with the img role for content`() = runTest {
+        // given — simplifyHtml drops them for the image's name, so the space
+        // they end with separates nothing
+        val input = semanticEvents(tagged = true) {
+            "p" {
+                +"Pro"
+                "div"("role" to "img", "aria-label" to "logo", AccessibilityAnnotations.DISPLAY to "block") {
+                    "span"(AccessibilityAnnotations.DISPLAY to "inline") { +"icon " }
+                }
+                +"teams"
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "p" {
+                +"Pro"
+                +" "
+                "div"("role" to "img", "aria-label" to "logo", AccessibilityAnnotations.DISPLAY to "block") {
+                    "span"(AccessibilityAnnotations.DISPLAY to "inline") { +"icon " }
+                }
+                +" "
+                +"teams"
+            }
+        }
+    }
+
+    @Test
+    fun `should end a paragraph at a stacked box inside a display contents wrapper indented by whitespace`() = runTest {
+        // given — review of #154: a captured DOM carries the source
+        // indentation between the tags, inside the wrapper too
+        val input = semanticEvents(tagged = true) {
+            "body" {
+                "div"(AccessibilityAnnotations.DISPLAY to "block") { +"X" }
+                +"\n  "
+                "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                    +"Intro"
+                    +"\n  "
+                    "div"(AccessibilityAnnotations.DISPLAY to "contents") {
+                        +"\n    "
+                        "div"(AccessibilityAnnotations.DISPLAY to "block") { +"A" }
+                        +"\n    "
+                        "div"(AccessibilityAnnotations.DISPLAY to "block") { +"B" }
+                        +"\n  "
+                    }
+                }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "body" {
+                "div"(AccessibilityAnnotations.DISPLAY to "block") { +"X" }
+                +"\n  "
+                "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                    "p" {
+                        +"Intro"
+                        +"\n  "
+                    }
+                    "div"(AccessibilityAnnotations.DISPLAY to "contents") {
+                        +"\n    "
+                        "div"(AccessibilityAnnotations.DISPLAY to "block") { "p" { +"A" } }
+                        +"\n    "
+                        "div"(AccessibilityAnnotations.DISPLAY to "block") { "p" { +"B" } }
+                        +"\n  "
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should not reset paragraphs for a document root outside a frame`() = runTest {
+        // given — only a frame element embeds a document whose root lays its
+        // content out on its own; an `html` mark anywhere else is an ordinary
+        // element of its inline parent, which holds no paragraph
+        val input = semanticEvents(tagged = true) {
+            "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                +"c"
+                "span"(AccessibilityAnnotations.DISPLAY to "inline") {
+                    "html"(AccessibilityAnnotations.DISPLAY to "block") {
+                        "body"(AccessibilityAnnotations.DISPLAY to "block") {
+                            "div"(AccessibilityAnnotations.DISPLAY to "block") { +"A" }
+                            "div"(AccessibilityAnnotations.DISPLAY to "block") { +"B" }
+                        }
+                    }
+                }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then — the paragraph opens around the span, as for any box inside
+        // an inline element, and B only gets a separator inside it
+        output sameAs semanticEvents(tagged = true) {
+            "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                +"c"
+                "p" {
+                    "span"(AccessibilityAnnotations.DISPLAY to "inline") {
+                        "html"(AccessibilityAnnotations.DISPLAY to "block") {
+                            "body"(AccessibilityAnnotations.DISPLAY to "block") {
+                                "div"(AccessibilityAnnotations.DISPLAY to "block") { +"A" }
+                                +" "
+                                "div"(AccessibilityAnnotations.DISPLAY to "block") { +"B" }
+                            }
+                        }
+                    }
                 }
             }
         }

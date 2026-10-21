@@ -19,6 +19,7 @@ package com.xemantic.markanywhere.html
 import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.dump.AccessibilityAnnotations
 import com.xemantic.markanywhere.flow.mergeAdjacentText
+import com.xemantic.markanywhere.html.spec.HTML_VOID_ELEMENTS
 import com.xemantic.markanywhere.html.spec.isHtmlBlank
 import com.xemantic.markanywhere.html.spec.isHtmlWhitespace
 import com.xemantic.markanywhere.html.spec.stripAndCollapseHtmlWhitespace
@@ -48,14 +49,17 @@ import kotlinx.coroutines.flow.flow
  *   `</a> <a>` → `</a>` `" "` `<a>` rather than the two links running together,
  *   and the interior runs of `A\n\t\tB` collapse to `A B`. A run right before
  *   an inline *closing* tag is carried past it (`<b>Note: </b>text` →
- *   `<b>Note:</b>` `" text"`), where a Markdown closing delimiter needs it.
+ *   `<b>Note:</b>` `" text"`), where a Markdown closing delimiter needs it;
+ *   symmetrically, a run right after inline *opening* tags that follow
+ *   content is moved before them (`Menu<a> Home</a>` → `"Menu "` `<a>`
+ *   `"Home"`), where a link label or an opening delimiter needs it.
  *
  * The asymmetry mirrors HTML: a closing inline tag or non-whitespace text can
  * be the *left* side of a kept space (content just ended), and an opening inline
  * tag or non-whitespace text can be its *right* side (content is about to
- * start). Whitespace that is merely the interior of an empty inline element
- * (`<code> </code>`) therefore drops, because its left neighbour is the *open*
- * tag, not content.
+ * start). Whitespace inside an empty inline element (`Hi<b> </b>there`) is a
+ * run between the content around the element, so it is written before the
+ * element when content follows and dropped at a block boundary.
  *
  * Only **ASCII whitespace** (space, tab, LF, CR, FF) is collapsed. Non-ASCII
  * spaces — NBSP (` `), narrow NBSP, en/em space, … — are content, never
@@ -84,6 +88,27 @@ public fun Flow<SemanticEvent>.dropHtmlStructuralWhitespace(): Flow<SemanticEven
     // back its open-tag verdict — Unmark carries no attributes).
     val inlineStack = ArrayDeque<Boolean>()
     val displays = CapturedDisplayReader()
+    // The inline tags since the last content, held until the next content or
+    // block boundary decides whether a whitespace run after them
+    // (`Menu<a> Home`, `Hi<b> </b>there`) separates the content before them
+    // from what follows: such a run is written *before* the tags, where a
+    // Markdown link label or an opening emphasis delimiter needs it (issue
+    // #144). Only opening tags and the closes of elements emptied so far are
+    // held, never content.
+    val heldOpens = mutableListOf<SemanticEvent>()
+    var heldOpenCount = 0 // the held opening tags not closed yet
+    var leftBeforeHeld = false // could the content before the held tags be a left side?
+    // Where in the held run a whitespace run follows the close of an emptied
+    // element, whose close is its left side (-1 = none).
+    var spaceAfterHeldClose = -1
+
+    // Buffers a whitespace run, remembering whether it follows a held close.
+    fun markPending() {
+        pending = true
+        if (spaceAfterHeldClose < 0 && heldOpens.lastOrNull() is Unmark) {
+            spaceAfterHeldClose = heldOpens.size
+        }
+    }
 
     // Resolve a buffered whitespace run now that its right neighbour is known:
     // keep a single collapsed space if inline content flanks both sides, else
@@ -93,6 +118,28 @@ public fun Flow<SemanticEvent>.dropHtmlStructuralWhitespace(): Flow<SemanticEven
             if (leftQualifies && rightQualifies) emit(SemanticEvent.Text(" "))
             pending = false
         }
+    }
+
+    // Writes the held tags with the whitespace run among them as one space
+    // when inline content flanks it on both sides: after the close of an
+    // emptied element it follows, else before the tags.
+    suspend fun releaseHeldOpens(rightQualifies: Boolean) {
+        if (heldOpens.isEmpty()) return
+        val spaceAt = when {
+            !pending || !rightQualifies -> -1
+            spaceAfterHeldClose >= 0 -> spaceAfterHeldClose
+            leftBeforeHeld -> 0
+            else -> -1
+        }
+        pending = false
+        heldOpens.forEachIndexed { index, held ->
+            if (index == spaceAt) emit(SemanticEvent.Text(" "))
+            emit(held)
+        }
+        if (spaceAt == heldOpens.size) emit(SemanticEvent.Text(" "))
+        heldOpens.clear()
+        heldOpenCount = 0
+        spaceAfterHeldClose = -1
     }
 
     collect { event ->
@@ -105,13 +152,14 @@ public fun Flow<SemanticEvent>.dropHtmlStructuralWhitespace(): Flow<SemanticEven
                     leftQualifies = true
                 }
                 event.text.isEmpty() -> { /* skip — empty text carries no information */ }
-                event.text.isHtmlBlank() -> { pending = true }
+                event.text.isHtmlBlank() -> markPending()
                 else -> {
                     // Collapse interior whitespace runs and split off the
                     // leading / trailing whitespace, which is gated like any
                     // other whitespace run (kept as a space only between inline
                     // content, dropped at a block boundary).
-                    if (event.text.first().isHtmlWhitespace()) pending = true
+                    if (event.text.first().isHtmlWhitespace()) markPending()
+                    releaseHeldOpens(rightQualifies = true)
                     resolvePending(rightQualifies = true)
                     emit(SemanticEvent.Text(event.text.stripAndCollapseHtmlWhitespace()))
                     leftQualifies = true
@@ -120,25 +168,64 @@ public fun Flow<SemanticEvent>.dropHtmlStructuralWhitespace(): Flow<SemanticEven
             }
 
             is Mark -> {
-                val inline = event.isInlineLevel(displays.open(event))
-                resolvePending(rightQualifies = inline)
+                val display = displays.open(event)
+                // A generic element [simplifyHtml] keeps only for its ref is
+                // written as a raw inline tag, whatever its display (#169).
+                val inline = event.isKeptForItsRef() || event.isInlineLevel(display)
+                val opensPreserve = preserveFrom < 0 && event.isPreserveRegion()
                 // Strip the display annotation we consumed (and the capture
                 // format saying how to read it) so it can't leak into the
                 // rendered output.
-                emit(
-                    if (CONSUMED_ANNOTATIONS.any { it in event.attributes })
-                        event.copy(attributes = event.attributes - CONSUMED_ANNOTATIONS)
-                    else event
-                )
+                val stripped = if (CONSUMED_ANNOTATIONS.any { it in event.attributes })
+                    event.copy(attributes = event.attributes - CONSUMED_ANNOTATIONS)
+                else event
+                // A void element (`<img>`) is content, not a tag to hold.
+                if (inline && !opensPreserve && preserveFrom < 0 && event.name !in HTML_VOID_ELEMENTS) {
+                    if (heldOpens.isEmpty()) {
+                        // A run before the first tag already separates: the
+                        // content before the tags ends in a space now.
+                        val separated = pending && leftQualifies
+                        resolvePending(rightQualifies = true)
+                        leftBeforeHeld = leftQualifies && !separated
+                    }
+                    heldOpens += stripped
+                    heldOpenCount++
+                } else {
+                    // A run after held tags and before an image or a preserve
+                    // region's opening tag (`Run<b> <code>`) still separates
+                    // content; one before a block's touches a block boundary.
+                    releaseHeldOpens(rightQualifies = inline)
+                    resolvePending(rightQualifies = inline)
+                    emit(stripped)
+                }
                 depth++
                 inlineStack.addLast(inline)
-                if (preserveFrom < 0 && event.isPreserveRegion()) {
+                if (opensPreserve) {
                     preserveFrom = depth
                 }
                 leftQualifies = false // an opening tag is not the end of content
             }
 
             is Unmark -> {
+                if (heldOpenCount > 0) {
+                    // A held element closing with no content in it: what
+                    // follows still decides the run after its opening tag.
+                    displays.close()
+                    depth--
+                    inlineStack.removeLastOrNull()
+                    heldOpens += event
+                    heldOpenCount--
+                    return@collect
+                }
+                if (heldOpens.isNotEmpty()) {
+                    // Only emptied elements are held, and an enclosing element
+                    // closes: the run after them is carried past this close
+                    // (or dropped at a block one) like any run before a close.
+                    heldOpens.forEach { emit(it) }
+                    heldOpens.clear()
+                    if (pending) leftQualifies = leftBeforeHeld || spaceAfterHeldClose >= 0
+                    spaceAfterHeldClose = -1
+                }
                 displays.close()
                 if (depth == preserveFrom) preserveFrom = -1
                 depth--
@@ -160,6 +247,7 @@ public fun Flow<SemanticEvent>.dropHtmlStructuralWhitespace(): Flow<SemanticEven
             }
         }
     }
+    heldOpens.forEach { emit(it) }
     // End-of-stream (a block boundary): any trailing whitespace run is dropped.
 }.mergeAdjacentText()
 
@@ -209,7 +297,14 @@ private fun SemanticEvent.Mark.isInlineLevel(display: CapturedDisplay): Boolean 
         UaDefault, Unrecorded -> isInlineLevel(name)
     }
 
-private val MARKDOWN_INLINE_SPANS = MARKDOWN_EMPHASIS + "code"
+// The Markdown inline syntax: emphasis, a code span, a link and an image
+// render inline whatever their CSS display (a link displayed as a block in a
+// flex row, issue #169). A block-wrapping link, which the renderer spills to a
+// raw block `<a>` tag, gets its block separation from the block inside it.
+private val MARKDOWN_INLINE_SPANS = MARKDOWN_EMPHASIS + setOf("code", "a", "img")
+
+private fun SemanticEvent.Mark.isKeptForItsRef(): Boolean =
+    AccessibilityAnnotations.REF in attributes && name != "body" && isGenericContainer()
 
 /**
  * The same verdict read from this element's own annotation alone, an absent
