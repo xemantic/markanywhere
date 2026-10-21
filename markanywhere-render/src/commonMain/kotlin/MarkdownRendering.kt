@@ -819,12 +819,17 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         return false
     }
 
-    // Whether a raw tag in the stack opens a type-7 HTML block, or still may:
-    // its line ends with nothing written after the tag (see
-    // TaggedInline.type7Raw, decided when that line ends).
+    // Whether the text here is the raw text of a type-7 HTML block, or the line
+    // break about to be written may make it one: a raw tag whose line ends
+    // with nothing written after the tag (TaggedInline.type7Raw, decided when
+    // that line ends). Past the block's first blank line, outside a list item,
+    // its content is Markdown again — as textContext reads it.
     fun inType7HtmlBlock(): Boolean = blockStack.any {
-        it is TaggedInline && it.type7 &&
-            (it.type7Raw == true || (it.type7Raw == null && written == it.writtenAtOpen))
+        it is TaggedInline && it.type7 && when (it.type7Raw) {
+            true -> it.inItem || it.rawUntilBlank
+            null -> written == it.writtenAtOpen
+            false -> false
+        }
     }
 
     // A block arriving inside emphasis the renderer wrote as a raw tag: the
@@ -857,9 +862,6 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
             pendingSpaces = 1
             return
         }
-        // A line break on a line with nothing written on it — the text event
-        // before ended its line, or this one has two in a row — writes a blank
-        // line, which ends an HTML block's raw text.
         // Inside an inline phrasing raw tag a line break is a space: the parser
         // closes inline HTML at the line end, leaving the closing tag written
         // on the next line as visible text (see inPhrasingRawTag). Not in one
@@ -868,6 +870,9 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
             pendingSpaces = 1
             return
         }
+        // A line break on a line with nothing written on it — the text event
+        // before ended its line, or this one has two in a row — writes a blank
+        // line, which ends an HTML block's raw text.
         if (atLineStart && lastChar == '\n') markBlankLine()
         flushHeldWhitespaceAtLineEnd()
         out("\n")
