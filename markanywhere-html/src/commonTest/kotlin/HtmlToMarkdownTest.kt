@@ -744,6 +744,62 @@ class HtmlToMarkdownTest {
     }
 
     @Test
+    fun `should drop named-anchor targets from the Markdown`() = runTest {
+        // given - issue #138: a raw `<a>` starting a line is a block-level tag
+        // to the Markdown renderer, so a kept anchor would split a list item,
+        // land as literal text inside a fence, or orphan its `</a>` around a
+        // block — the pipeline unwraps every one of these shapes instead
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "h2" {
+                    "a"("id" to "sec2") { }
+                    +"Section 2"
+                }
+                "pre" {
+                    "code" {
+                        "a"("id" to "L1") { }
+                        +"val x = 1\n"
+                        "a"("name" to "L2") { }
+                        +"val y = 2"
+                    }
+                }
+                "ul" {
+                    "li" {
+                        "a"("id" to "x") { }
+                        +"item"
+                    }
+                    "li" { +"two" }
+                }
+                "div" {
+                    +"Lead "
+                    "a"("id" to "card") { "h2" { +"Headline" } }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown(refMode = RefMode.STRIP).renderMarkdown()
+        val reRendered = flowOf(markdown).parse().renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            ## Section 2
+            
+            ```
+            val x = 1
+            val y = 2
+            ```
+            - item
+            - two
+            
+            Lead
+            
+            ## Headline
+        """.trimIndent()
+        reRendered sameAs markdown
+    }
+
+    @Test
     fun `should separate adjacent links when the second is wrapped in formatting`() = runTest {
         // given — issue #96: no whitespace between the links, the second in a <b>
         val page = semanticEvents(tagged = true) {
