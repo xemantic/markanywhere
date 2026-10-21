@@ -819,13 +819,22 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         return false
     }
 
+    // Whether a raw tag in the stack opens a type-7 HTML block, or still may:
+    // its line ends with nothing written after the tag (see
+    // TaggedInline.type7Raw, decided when that line ends).
+    fun inType7HtmlBlock(): Boolean = blockStack.any {
+        it is TaggedInline && it.type7 &&
+            (it.type7Raw == true || (it.type7Raw == null && written == it.writtenAtOpen))
+    }
+
     // A block arriving inside emphasis the renderer wrote as a raw tag: the
     // parser closes inline HTML at the block boundary, so the closing tag
     // written after the block would be visible text. Close those tags here —
-    // the ones on top of the stack, above any delimiter span (closing past one
-    // would cross it) — and leave transparent frames whose close writes nothing.
-    fun closeSynthesizedRawEmphasis() {
-        for (i in blockStack.indices.reversed()) {
+    // the ones on top of the stack (from [top] down), above any delimiter span
+    // (closing past one would cross it) — and leave transparent frames whose
+    // close writes nothing.
+    fun closeSynthesizedRawEmphasis(top: Int = blockStack.lastIndex) {
+        for (i in top downTo 0) {
             val frame = blockStack[i]
             when {
                 frame is TaggedInline && frame.synthesized != null -> {
@@ -851,6 +860,14 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
         // A line break on a line with nothing written on it — the text event
         // before ended its line, or this one has two in a row — writes a blank
         // line, which ends an HTML block's raw text.
+        // Inside an inline phrasing raw tag a line break is a space: the parser
+        // closes inline HTML at the line end, leaving the closing tag written
+        // on the next line as visible text (see inPhrasingRawTag). Not in one
+        // that opens a type-7 HTML block, whose line breaks are its raw text.
+        if (inPhrasingRawTag() && !inType7HtmlBlock() && textContext() != TEXT_VERBATIM) {
+            pendingSpaces = 1
+            return
+        }
         if (atLineStart && lastChar == '\n') markBlankLine()
         flushHeldWhitespaceAtLineEnd()
         out("\n")
@@ -1029,6 +1046,13 @@ public fun Flow<SemanticEvent>.asMarkdown(): Flow<String> = flow {
             if (frame !is Link || frame.rawMode) continue
             val labelText = takeLabel(frame)
             val openTag = renderOpenTag("a", frame.attributes)
+            // The raw `<a …>` goes on a line of its own (or into an outer
+            // label that will), so emphasis the renderer wrote as a raw tag
+            // around the link closes before it — once the link's block content
+            // follows, its closer would be visible text (see
+            // closeSynthesizedRawEmphasis, which stops at this frame).
+            val blockLevel = !(labelBuffers.isEmpty() && onHeadingLine())
+            if (blockLevel) closeSynthesizedRawEmphasis(top = i - 1)
             // Once this link's label buffer is popped, the *next* spill writes
             // into either an outer label buffer (nested link) or the actual
             // output (the outermost link).
