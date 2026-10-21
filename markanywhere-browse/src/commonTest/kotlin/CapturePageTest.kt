@@ -21,6 +21,7 @@ import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.dump.AccessibilityAnnotations.CAPTURE
 import com.xemantic.markanywhere.dump.AccessibilityAnnotations.DISPLAY
 import com.xemantic.markanywhere.dump.AccessibilityAnnotations.REDACTED
+import com.xemantic.markanywhere.dump.AccessibilityAnnotations.SCROLLABLE
 import com.xemantic.markanywhere.dump.AccessibilityAnnotations.VISIBILITY
 import com.xemantic.markanywhere.flow.SemanticEventScope
 import com.xemantic.markanywhere.flow.semanticEvents
@@ -339,6 +340,34 @@ class CapturePageTest {
                 }
                 "div"(DISPLAY to "none") { +"unrendered" }
             }
+        }
+    }
+
+    /**
+     * A scroll container a user can scroll is focusable in a browser, yet
+     * Blink's accessibility tree does not report it focusable, so it gets no
+     * ref — the capture records it by the rule the JS walker shares.
+     */
+    @Test
+    fun `should mark a scroll container a user can scroll`() = runTest {
+        // given
+        val page = NamedNodes(
+            Node(
+                "UL", parent = 1, attributes = mapOf("role" to "presentation"),
+                overflow = "auto", scrollSize = 100 to 90, clientSize = 100 to 30,
+            ),
+            Node("UL", parent = 1, overflow = "hidden", scrollSize = 100 to 90, clientSize = 100 to 30),
+            Node("UL", parent = 1, overflow = "scroll", scrollSize = 100 to 30, clientSize = 100 to 30),
+        )
+
+        // when
+        val events = page.capture(axNames = emptyMap())
+
+        // then
+        events sameAs page.expected {
+            "ul"("role" to "presentation", DISPLAY to "block", SCROLLABLE to "true") { }
+            "ul"(DISPLAY to "block") { }
+            "ul"(DISPLAY to "block") { }
         }
     }
 
@@ -1508,6 +1537,10 @@ class CapturePageTest {
         }
     }
 
+    // a DOM rect of the [size] (width to height) at the origin, as the snapshot reports one
+    private fun Pair<Int, Int>?.toRect(): List<Double> =
+        listOf(0.0, 0.0, (this?.first ?: 0).toDouble(), (this?.second ?: 0).toDouble())
+
     /**
      * One node of a [NamedNodes] page, below its implicit `<html><body>`
      * (indexes 0 and 1): [parent] is a node index.
@@ -1524,6 +1557,9 @@ class CapturePageTest {
         val masked: Boolean = false,
         val selected: Boolean = false,
         val textSecurityReported: Boolean = true,
+        val overflow: String? = null,
+        val scrollSize: Pair<Int, Int>? = null,
+        val clientSize: Pair<Int, Int>? = null,
     )
 
     /** A one-document snapshot of [nodes], every element laid out as a block unless told otherwise. */
@@ -1619,9 +1655,13 @@ class CapturePageTest {
                             listOfNotNull(
                                 node.display,
                                 node.visibility,
-                                if (!node.textSecurityReported) null else if (node.masked) "disc" else "none"
+                                if (!node.textSecurityReported) null else if (node.masked) "disc" else "none",
+                                node.overflow,
+                                node.overflow,
                             ).map(::string)
                         },
+                        layoutScrollRects = laidOut.map { nodes[it].scrollSize.toRect() },
+                        layoutClientRects = laidOut.map { nodes[it].clientSize.toRect() },
                     ),
                 ),
                 strings = strings,
@@ -1651,6 +1691,8 @@ class CapturePageTest {
         optionSelected: DOMSnapshot.RareBooleanData? = null,
         layoutNodeIndex: List<Int> = emptyList(),
         layoutStyles: List<List<Int>> = emptyList(),
+        layoutScrollRects: List<List<Double>>? = null,
+        layoutClientRects: List<List<Double>>? = null,
     ) = DOMSnapshot.DocumentSnapshot(
         documentURL = -1,
         title = -1,
@@ -1679,6 +1721,8 @@ class CapturePageTest {
             bounds = emptyList(),
             text = emptyList(),
             stackingContexts = DOMSnapshot.RareBooleanData(index = emptyList()),
+            scrollRects = layoutScrollRects,
+            clientRects = layoutClientRects,
         ),
         textBoxes = DOMSnapshot.TextBoxSnapshot(
             layoutIndex = emptyList(),

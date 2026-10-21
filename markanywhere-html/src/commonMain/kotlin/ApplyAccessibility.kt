@@ -948,7 +948,8 @@ private suspend fun MatcherScope.passThrough(
     val kept = event.attributes.filterKeys {
         it != AccessibilityAnnotations.ROLE &&
             it != AccessibilityAnnotations.VISIBILITY &&
-            it != AccessibilityAnnotations.IGNORED
+            it != AccessibilityAnnotations.IGNORED &&
+            it != AccessibilityAnnotations.SCROLLABLE
     }
     val attributes =
         if (insidePopup) {

@@ -991,12 +991,13 @@ class SimplifyHtmlTest {
     }
 
     @Test
-    fun `DIVERGENCE - should not promote by a known role after an unknown first token`() = runTest {
-        // given — a browser takes the first role token it recognises, so Chrome
-        // reads `role="foo heading"` as a heading; we read only the first
-        // token, so an unknown one leaves the element unpromoted
+    fun `should promote by the first recognised token of a role list`() = runTest {
+        // given — a browser takes the first role token it recognises (WAI-ARIA
+        // 1.2 §7.1), skipping an unknown one and an abstract role an author
+        // must not use, so Chrome reads both as their second token
         val input = semanticEvents(tagged = true) {
             "div"("role" to "foo heading", "aria-level" to "3") { +"Unknown first" }
+            "div"("role" to "landmark navigation") { +"Abstract first" }
         }
 
         // when
@@ -1004,7 +1005,42 @@ class SimplifyHtmlTest {
 
         // then
         output sameAs semanticEvents {
-            +"Unknown first"
+            "h3" { +"Unknown first" }
+            tag("nav") { +"Abstract first" }
+        }
+    }
+
+    @Test
+    fun `should read a role list of only unrecognised tokens as no role`() = runTest {
+        // given
+        val input = semanticEvents(tagged = true) {
+            "div"("role" to "foo section") { +"No role" }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then — a generic container, unwrapped
+        output sameAs semanticEvents {
+            +"No role"
+        }
+    }
+
+    @Test
+    fun `should unwrap by a presentation role after an unrecognised token`() = runTest {
+        // given
+        val input = semanticEvents(tagged = true) {
+            "nav"("role" to "foo presentation") {
+                "p" { +"laid out" }
+            }
+        }
+
+        // when
+        val output = input.simplifyHtml()
+
+        // then
+        output sameAs semanticEvents {
+            "p" { +"laid out" }
         }
     }
 

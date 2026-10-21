@@ -17,10 +17,12 @@
 package com.xemantic.markanywhere.js
 
 import com.xemantic.markanywhere.SemanticEvent
+import com.xemantic.markanywhere.dump.AccessibilityAnnotations
 import com.xemantic.markanywhere.dump.FormControlState
 import com.xemantic.markanywhere.dump.captureFormControl
 import com.xemantic.markanywhere.dump.hasLiveFormState
 import com.xemantic.markanywhere.dump.isMaskingTextSecurity
+import com.xemantic.markanywhere.dump.isUserScrollable
 import com.xemantic.markanywhere.dump.readsMaskedState
 import com.xemantic.markanywhere.dump.withoutCaptureAnnotations
 import com.xemantic.markanywhere.flow.SemanticEventScope
@@ -43,7 +45,9 @@ import org.w3c.dom.asList
  * stream reads as never captured — every element by the UA default of its
  * tag — since it carries no annotation only the CDP capture writes, the
  * page's own `data-markanywhere-*` attributes being dropped
- * ([withoutCaptureAnnotations]).
+ * ([withoutCaptureAnnotations]). The one verdict it does record is shared
+ * with the CDP capture: a scroll container a user can scroll
+ * ([AccessibilityAnnotations.SCROLLABLE]), which a browser makes focusable.
  */
 public fun Element.toSemanticEvents(): Flow<SemanticEvent> = semanticEvents(
     tagged = true
@@ -64,7 +68,10 @@ private suspend fun SemanticEventScope.flowElement(
     val control = if (hasLiveFormState(tagName)) {
         captureFormControl(tagName, markupAttributes, element.formControlState(markupAttributes))
     } else null
-    val attributes = control?.attributes ?: markupAttributes
+    val captured = control?.attributes ?: markupAttributes
+    val attributes =
+        if (element.isUserScrollable()) captured + (AccessibilityAnnotations.SCROLLABLE to "true")
+        else captured
     // a <textarea>'s children are only the default value from the markup
     val replacementText = control?.text
 
@@ -166,6 +173,26 @@ private fun Element.enclosingSelect(): Element? =
 /** The element's attributes, minus the `data-markanywhere-*` ones only a producer may write. */
 private fun Element.attributeMap(): Map<String, String> =
     attributes.asList().associate { it.name to it.value }.withoutCaptureAnnotations()
+
+/**
+ * Whether a user can scroll this element's content, which makes it focusable
+ * in a browser — judged by the rule the CDP capture applies too
+ * ([isUserScrollable]). The computed style is read only for an element whose
+ * content overflows it at all.
+ */
+private fun Element.isUserScrollable(): Boolean {
+    if (scrollWidth <= clientWidth && scrollHeight <= clientHeight) return false
+    val style = ownerDocument?.defaultView?.getComputedStyle(this) ?: return false
+    return isUserScrollable(
+        element = localName,
+        overflowX = style.getPropertyValue("overflow-x"),
+        overflowY = style.getPropertyValue("overflow-y"),
+        scrollWidth = scrollWidth,
+        scrollHeight = scrollHeight,
+        clientWidth = clientWidth,
+        clientHeight = clientHeight,
+    )
+}
 
 /**
  * Whether this element renders its text masked, judging its computed

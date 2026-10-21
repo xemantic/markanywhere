@@ -17,17 +17,20 @@
 package com.xemantic.markanywhere.html
 
 import com.xemantic.markanywhere.SemanticEvent.Mark
+import com.xemantic.markanywhere.dump.AccessibilityAnnotations
 import com.xemantic.markanywhere.html.spec.asciiLowercase
 import com.xemantic.markanywhere.html.spec.isHtmlWhitespace
 
 /**
  * The role an author gave this element with the `role` attribute, ASCII
- * lowercased, or `null` when it has none.
+ * lowercased, or `null` when it has none a browser recognises.
  *
  * `role` is a token list separated by HTML whitespace, whose first token a
- * browser recognises wins — the later ones are fallbacks for older readers.
- * The first token is what every page in practice relies on, so it is read
- * without a table of the roles a browser knows.
+ * browser recognises wins (WAI-ARIA 1.2 §7.1) — the later ones are fallbacks
+ * for older readers. A token naming no concrete role ([ARIA_ROLES]) is
+ * skipped, so `role="foo heading"` is a heading, and a list of nothing but
+ * such tokens is no role at all: an item whose `role="bogus"` is dropped
+ * inherits its list's presentational role like an item with none.
  *
  * Every operator deciding by role reads it here, so `simplifyHtml` promoting a
  * `<div>` and `labelActionableElements` judging it a control cannot read one
@@ -35,12 +38,58 @@ import com.xemantic.markanywhere.html.spec.isHtmlWhitespace
  */
 internal fun Mark.explicitRole(): String? {
     val role = this["role"] ?: return null
-    val start = role.indexOfFirst { !it.isHtmlWhitespace() }
-    if (start < 0) return null
-    var end = start
-    while (end < role.length && !role[end].isHtmlWhitespace()) end++
-    return role.substring(start, end).asciiLowercase()
+    var index = 0
+    while (index < role.length) {
+        while (index < role.length && role[index].isHtmlWhitespace()) index++
+        val start = index
+        while (index < role.length && !role[index].isHtmlWhitespace()) index++
+        if (index > start) {
+            val token = role.substring(start, index).asciiLowercase()
+            if (token in ARIA_ROLES) return token
+        }
+    }
+    return null
 }
+
+/**
+ * The concrete roles Chrome recognises in a `role` token list: WAI-ARIA 1.2
+ * with the ARIA 1.3 additions, the Digital Publishing (`doc-*`) and Graphics
+ * (`graphics-*`) modules. The abstract roles (`landmark`, `section`, `widget`,
+ * …) are deliberately absent — an author must not use them, and a browser
+ * skips them like an unknown token. Verified live against Chrome's computed
+ * role of `<table role="…">`.
+ */
+private val ARIA_ROLES = setOf(
+    // WAI-ARIA 1.2
+    "alert", "alertdialog", "application", "article", "banner", "blockquote",
+    "button", "caption", "cell", "checkbox", "code", "columnheader", "combobox",
+    "complementary", "contentinfo", "definition", "deletion", "dialog",
+    "directory", "document", "emphasis", "feed", "figure", "form", "generic",
+    "grid", "gridcell", "group", "heading", "img", "insertion", "link", "list",
+    "listbox", "listitem", "log", "main", "marquee", "math", "menu", "menubar",
+    "menuitem", "menuitemcheckbox", "menuitemradio", "meter", "navigation",
+    "none", "note", "option", "paragraph", "presentation", "progressbar",
+    "radio", "radiogroup", "region", "row", "rowgroup", "rowheader",
+    "scrollbar", "search", "searchbox", "separator", "slider", "spinbutton",
+    "status", "strong", "subscript", "superscript", "switch", "tab", "table",
+    "tablist", "tabpanel", "term", "textbox", "time", "timer", "toolbar",
+    "tooltip", "tree", "treegrid", "treeitem",
+    // WAI-ARIA 1.3
+    "comment", "image", "mark", "sectionfooter", "sectionheader", "suggestion",
+    // Graphics ARIA
+    "graphics-document", "graphics-object", "graphics-symbol",
+    // DPUB-ARIA 1.1
+    "doc-abstract", "doc-acknowledgments", "doc-afterword", "doc-appendix",
+    "doc-backlink", "doc-biblioentry", "doc-bibliography", "doc-biblioref",
+    "doc-chapter", "doc-colophon", "doc-conclusion", "doc-cover", "doc-credit",
+    "doc-credits", "doc-dedication", "doc-endnote", "doc-endnotes",
+    "doc-epigraph", "doc-epilogue", "doc-errata", "doc-example", "doc-footnote",
+    "doc-foreword", "doc-glossary", "doc-glossref", "doc-index",
+    "doc-introduction", "doc-noteref", "doc-notice", "doc-pagebreak",
+    "doc-pagefooter", "doc-pageheader", "doc-pagelist", "doc-part",
+    "doc-preface", "doc-prologue", "doc-pullquote", "doc-qna", "doc-subtitle",
+    "doc-tip", "doc-toc",
+)
 
 /**
  * Whether the author removed this element's semantics with an explicit
@@ -64,14 +113,18 @@ internal fun Mark.hasPresentationalRole(): Boolean =
  *
  * Focusable is read from the markup, as HTML defines it: a natively focusable
  * element (a link, a form control, `<summary>`, a frame, …), a valid
- * `tabindex` (`-1` included), or an editing host. The capture's actionable
- * verdict (`AccessibilityAnnotations.REF`) is not read here: `simplifyHtml`
- * keeps a ref-bearing element through rules of its own.
+ * `tabindex` (`-1` included), or an editing host — and from the capture's
+ * [AccessibilityAnnotations.SCROLLABLE], since a browser makes a scroll
+ * container focusable too (Chrome keeps a scrolling `<ul role="presentation">`
+ * a list), which no markup and no ref says. The capture's actionable verdict
+ * (`AccessibilityAnnotations.REF`) is not read here: `simplifyHtml` keeps a
+ * ref-bearing element through rules of its own.
  */
 internal fun Mark.undoesPresentationalRole(): Boolean =
     isNativelyFocusable()
         || this["tabindex"]?.isHtmlInteger() == true
         || isEditingHost()
+        || this[AccessibilityAnnotations.SCROLLABLE] == "true"
         || attributes.keys.any { it in GLOBAL_ARIA_ATTRIBUTES }
 
 internal val PRESENTATIONAL_ROLES = setOf("presentation", "none")

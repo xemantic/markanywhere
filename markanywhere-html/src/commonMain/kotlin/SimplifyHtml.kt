@@ -110,7 +110,7 @@ import kotlinx.coroutines.flow.onEach
  *   `role="dialog"`/`"alertdialog"` → `dialog` when `aria-modal="true"`, else a
  *   `section` keeping the `role`, and the landmark / list / table-grid roles
  *   (see [ROLE_TO_TAG]) → their semantic tag. The role is the first token of
- *   the `role` token list ([explicitRole]). Promotion is gated to generic
+ *   the `role` token list a browser recognises ([explicitRole]). Promotion is gated to generic
  *   containers ([isGenericContainer]: the [UNWRAPPED_TAGS] and custom
  *   elements) so a `role` only upgrades an element that would otherwise be
  *   unwrapped and never overrides a native semantic tag (a `<form

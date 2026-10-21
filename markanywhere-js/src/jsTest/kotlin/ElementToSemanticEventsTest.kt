@@ -17,6 +17,7 @@
 package com.xemantic.markanywhere.js
 
 import com.xemantic.markanywhere.dump.AccessibilityAnnotations.REDACTED
+import com.xemantic.markanywhere.dump.AccessibilityAnnotations.SCROLLABLE
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.test.sameAs
 import kotlinx.browser.document
@@ -1161,6 +1162,34 @@ class ElementToSemanticEventsTest {
         events sameAs semanticEvents(tagged = true) {
             "body" {
                 "p"("data-x" to "kept") { +"Hi" }
+            }
+        }
+    }
+
+    @Test
+    fun `should mark a scroll container a user can scroll`() = runTest {
+        // given - Chrome makes a scroll container focusable, which keeps the
+        // list role an author removed; nothing in the markup says so
+        document.body!!.innerHTML =
+            """<ul role="presentation" style="overflow:auto;height:30px;margin:0"><li>a</li><li>b</li><li>c</li><li>d</li></ul>""" +
+            """<ul role="presentation" style="overflow:hidden;height:30px;margin:0"><li>a</li><li>b</li><li>c</li><li>d</li></ul>""" +
+            """<ul role="presentation" style="overflow:auto;margin:0"><li>a</li></ul>"""
+
+        // when
+        val events = document.body!!.toSemanticEvents()
+
+        // then - only the one overflowing along an axis a user can scroll
+        events sameAs semanticEvents(tagged = true) {
+            "body" {
+                "ul"("role" to "presentation", "style" to "overflow:auto;height:30px;margin:0", SCROLLABLE to "true") {
+                    "li" { +"a" }; "li" { +"b" }; "li" { +"c" }; "li" { +"d" }
+                }
+                "ul"("role" to "presentation", "style" to "overflow:hidden;height:30px;margin:0") {
+                    "li" { +"a" }; "li" { +"b" }; "li" { +"c" }; "li" { +"d" }
+                }
+                "ul"("role" to "presentation", "style" to "overflow:auto;margin:0") {
+                    "li" { +"a" }
+                }
             }
         }
     }

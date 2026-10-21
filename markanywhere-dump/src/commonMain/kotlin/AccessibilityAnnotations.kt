@@ -92,6 +92,17 @@ public object AccessibilityAnnotations {
     public const val IGNORED: String = "data-markanywhere-ignored"
 
     /**
+     * Present with value `true` on a scroll container a user can scroll (see
+     * [isUserScrollable]): its content overflows it along an axis whose
+     * `overflow` is `auto` or `scroll`. A browser makes such an element
+     * focusable — Chrome keeps a `<ul role="presentation">` that scrolls a
+     * list — yet Blink's accessibility tree does not report it focusable, so
+     * neither the ref nor the markup says so. Both producers record it, by
+     * the same rule.
+     */
+    public const val SCROLLABLE: String = "data-markanywhere-scrollable"
+
+    /**
      * A short, dense ref stamped on every *actionable* element (a focusable
      * control / link, or one whose accessibility role is interactive) so a
      * downstream LLM that read the dump can name an element by its ref and have
@@ -117,6 +128,6 @@ public object AccessibilityAnnotations {
      * All reserved verdict annotation names — strip these before output.
      * Deliberately excludes [REF], which is renamed and kept (see its doc).
      */
-    public val ALL: Set<String> = setOf(ROLE, DISPLAY, VISIBILITY, IGNORED)
+    public val ALL: Set<String> = setOf(ROLE, DISPLAY, VISIBILITY, IGNORED, SCROLLABLE)
 
 }

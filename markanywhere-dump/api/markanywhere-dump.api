@@ -6,6 +6,7 @@ public final class com/xemantic/markanywhere/dump/AccessibilityAnnotations {
 	public static final field REDACTED Ljava/lang/String;
 	public static final field REF Ljava/lang/String;
 	public static final field ROLE Ljava/lang/String;
+	public static final field SCROLLABLE Ljava/lang/String;
 	public static final field VISIBILITY Ljava/lang/String;
 	public final fun getALL ()Ljava/util/Set;
 }
@@ -57,6 +58,10 @@ public final class com/xemantic/markanywhere/dump/FormControlsKt {
 	public static final fun isRedactedControl (Ljava/lang/String;Ljava/util/Map;Lcom/xemantic/markanywhere/dump/FormControlState;)Z
 	public static final fun readsMaskedState (Ljava/lang/String;Ljava/util/Map;)Z
 	public static final fun secretValueTexts (Ljava/lang/String;Ljava/util/Map;Lcom/xemantic/markanywhere/dump/FormControlState;)Ljava/util/List;
+}
+
+public final class com/xemantic/markanywhere/dump/ScrollingKt {
+	public static final fun isUserScrollable (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IIII)Z
 }
 
 public final class com/xemantic/markanywhere/dump/SemanticEventDump {
