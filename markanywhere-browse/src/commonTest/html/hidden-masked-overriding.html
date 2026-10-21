@@ -1,0 +1,52 @@
+<!--
+  ~ Copyright 2026 Kazimierz Pogoda / Xemantic
+  ~
+  ~ Licensed under the Apache License, Version 2.0 (the "License");
+  ~ you may not use this file except in compliance with the License.
+  ~ You may obtain a copy of the License at
+  ~
+  ~     https://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+  -->
+
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Hidden masked fields, style getters overridden</title>
+    <style>
+        .pin { -webkit-text-security: disc; }
+        .step { display: none; }
+    </style>
+    <script>
+        // every way page script can make a masked field read as unmasked to script
+        const unmasked = { getPropertyValue: () => 'none' };
+        window.getComputedStyle = () => unmasked;
+        CSSStyleDeclaration.prototype.getPropertyValue = () => 'none';
+    </script>
+</head>
+<body>
+<form>
+<div class="step">
+<input type="text" id="step-pin" class="pin" value="2222">
+<input type="text" id="step-name" value="Alice">
+<textarea id="step-note" class="pin">3333</textarea>
+</div>
+<div class="step">
+<input type="text" id="owner-pin" class="pin" value="4444">
+</div>
+</form>
+<script>
+    // a field whose owner document claims another window
+    Object.defineProperty(document.getElementById('owner-pin'), 'ownerDocument', {
+        get: () => ({ defaultView: { getComputedStyle: () => unmasked } })
+    });
+</script>
+<iframe id="frame" srcdoc="<script>getComputedStyle = () => ({ getPropertyValue: () => 'none' });</script><input type='text' id='frame-pin' style='display: none; -webkit-text-security: disc' value='8888'><input type='text' id='frame-name' style='display: none' value='Bob'>"></iframe>
+</body>
+</html>

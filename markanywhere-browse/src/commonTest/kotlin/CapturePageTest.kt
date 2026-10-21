@@ -26,13 +26,12 @@ import com.xemantic.markanywhere.flow.SemanticEventScope
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.test.sameAs
 import dev.kdriver.cdp.domain.Accessibility
+import dev.kdriver.cdp.domain.CSS
 import dev.kdriver.cdp.domain.DOMSnapshot
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
-import kotlinx.serialization.json.JsonNull
-import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlin.test.Test
 
@@ -1132,30 +1131,27 @@ class CapturePageTest {
     }
 
     /**
-     * The page answers the text-security lookup with a string; anything else —
-     * `undefined` from a page that overrides `getComputedStyle` or
-     * `getPropertyValue`, a number, an object — leaves the masking unknown,
-     * and the capture fails closed.
+     * Blink reports the computed style of a control that is not laid out as a
+     * property list; a list without `-webkit-text-security` leaves the masking
+     * unknown, and the capture fails closed.
      */
     @Test
-    fun `should judge any answer but a string to the masking lookup as masked`() = runTest {
+    fun `should judge a computed style without text security as masked`() = runTest {
         // given
-        val answers = listOf(
-            JsonPrimitive("disc"),
-            JsonPrimitive("none"),
-            JsonPrimitive(""),
-            JsonNull,
-            null,
-            JsonPrimitive(42),
-            JsonPrimitive(false),
-            JsonObject(emptyMap()),
+        fun style(vararg properties: Pair<String, String>) =
+            properties.map { (name, value) -> CSS.CSSComputedStyleProperty(name, value) }
+        val styles = listOf(
+            style("display" to "none", "-webkit-text-security" to "disc"),
+            style("display" to "none", "-webkit-text-security" to "none"),
+            style("display" to "none"),
+            style(),
         )
 
         // when
-        val verdicts = answers.map(::isMaskingAnswer)
+        val verdicts = styles.map(::isMaskingComputedStyle)
 
         // then
-        assert(verdicts == listOf(true, false, false, true, true, true, true, true))
+        assert(verdicts == listOf(true, false, true, true))
     }
 
     /**
