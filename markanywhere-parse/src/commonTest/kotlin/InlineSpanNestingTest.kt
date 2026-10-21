@@ -16,11 +16,14 @@
 
 package com.xemantic.markanywhere.parse
 
+import com.xemantic.kotlin.test.assert
 import com.xemantic.kotlin.test.text.chunkedRandomly
+import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.flow.mergeAdjacentText
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.test.sameAs
 import kotlinx.coroutines.flow.asFlow
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 
@@ -718,6 +721,102 @@ class InlineSpanNestingTest {
         }
     }
 
+    // Issue #135 asked for the GFM pairing below; the orphaned closer stays
+    // literal instead, so a run that only GFM pairs with a later one opens a
+    // span to the line end (or an empty one at it).
+
+    @Test
+    fun `DIVERGENCE - should keep the closer of a force-closed del literal before a letter`() = runTest {
+        // GFM pairs `~~d~~` (its `~~b` was never a del). Here the `~~` after `c`
+        // is the leftover closer of the del the em force-closed, and whether a
+        // later `~~` pairs with it is only known at the line end — holding the
+        // line would break streaming. Opening a del there instead would strike
+        // `d e` to the line end in the common `*a ~~b* c~~d e`.
+        // given
+        val textFlow = "*a ~~b* c~~d~~ e".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "em" {
+                    +"a "
+                    "del" { +"b" }
+                }
+                +" c~~d"
+                "del" { +" e" }
+            }
+        }
+    }
+
+    @Test
+    fun `DIVERGENCE - should keep the closer of a force-closed sup literal before a letter`() = runTest {
+        // As above: GFM pairs `^d^`, the caret after `c` stays the leftover
+        // closer, so the last caret opens a sup the line end closes empty.
+        // given
+        val textFlow = "*a ^b* c^d^".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "em" {
+                    +"a "
+                    "sup" { +"b" }
+                }
+                +" c^d"
+                "sup" { }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep the closer of a sup force-closed by an em literal at the line end`() = runTest {
+        // given
+        val textFlow = "*a ^b* c^\nd".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "em" {
+                    +"a "
+                    "sup" { +"b" }
+                }
+                +" c^\nd"
+            }
+        }
+    }
+
+    @Test
+    fun `DIVERGENCE - should open a sup at a caret with no closer after a deferred close`() = runTest {
+        // GFM keeps the last `^` literal, since no closer follows it — but a `^`
+        // opens eagerly, and seeing that no closer follows would mean holding
+        // the rest of the line. The `^` in the aborted label closed the outer
+        // sup, so nothing marks the last one as an orphaned closer: it opens a
+        // span the line end closes empty.
+        // given
+        val textFlow = "^a [b^ c] d^".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "sup" { +"a [b" }
+                +" c] d"
+                "sup" { }
+            }
+        }
+    }
+
     // The renderer escapes a delimiter right after an opener (`*\~*`), so a run
     // followed by a backslash must resolve like a run followed by any other char.
 
@@ -850,6 +949,346 @@ class InlineSpanNestingTest {
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
                 "a"("href" to "u") { +"a~]b" }
+            }
+        }
+    }
+
+    // A span opening on code or emphasis — the renderer writes `~~`a`~~` for a
+    // del wrapping code — must open like one opening on a letter (issue #133).
+
+    @Test
+    fun `should open a del whose run is followed by inline code`() = runTest {
+        // given
+        val textFlow = "~~`a~b`~~ c".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "del" { "code" { +"a~b" } }
+                +" c"
+            }
+        }
+    }
+
+    @Test
+    fun `should open a del whose run is followed by strong`() = runTest {
+        // given
+        val textFlow = "~~**a**~~".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "del" { "strong" { +"a" } }
+            }
+        }
+    }
+
+    @Test
+    fun `should open a mark whose run is followed by emphasis`() = runTest {
+        // given
+        val textFlow = "==*a*==".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "mark" { "em" { +"a" } }
+            }
+        }
+    }
+
+    @Test
+    fun `should open a mark whose run is followed by inline code`() = runTest {
+        // given
+        val textFlow = "==`a`==".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "mark" { "code" { +"a" } }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep a tilde pair before an asterisk opening nothing visible`() = runTest {
+        // given — opening the del there would leave it, and an em inside it,
+        // empty, and a renderer drops an empty span with its source chars
+        for (source in listOf("approx ~~*~~ y", "a ~~*~~ b *c*", "~~*~~")) {
+            val textFlow = source.chunkedRandomly().asFlow()
+
+            // when
+            val parsed = textFlow.parse().toList()
+
+            // then — the tilde pair stays text, and no span is empty
+            val text = parsed.filterIsInstance<SemanticEvent.Text>().joinToString("") { it.text }
+            assert(text.startsWith(source.substringBefore("~~") + "~~"))
+            val emptySpan = parsed.zipWithNext().any { (a, b) ->
+                a is SemanticEvent.Mark && b is SemanticEvent.Unmark && a.name == b.name
+            }
+            assert(!emptySpan)
+        }
+    }
+
+    @Test
+    fun `should open a del around emphasis starting with code or punctuation`() = runTest {
+        // given — what the renderer writes for a del or mark wrapping emphasis
+        // whose content starts with a code span, an escape or punctuation
+        val cases = listOf(
+            "~~*`x`*~~" to semanticEvents { "p" { "del" { "em" { "code" { +"x" } } } } },
+            "~~*\\*a*~~" to semanticEvents { "p" { "del" { "em" { +"*a" } } } },
+            "~~*\\\$x\\\$*~~" to semanticEvents { "p" { "del" { "em" { +"\$x\$" } } } },
+            "~~*_a*~~" to semanticEvents { "p" { "del" { "em" { +"_a" } } } },
+            "==**^a^**==" to semanticEvents { "p" { "mark" { "strong" { "sup" { +"a" } } } } },
+        )
+        for ((source, expected) in cases) {
+            val textFlow = source.chunkedRandomly().asFlow()
+
+            // when
+            val parsed = textFlow.parse()
+
+            // then
+            parsed.mergeAdjacentText() sameAs expected
+        }
+    }
+
+    @Test
+    fun `should open a del around strong after the closer of a force-closed del`() = runTest {
+        // given
+        val textFlow = "*a ~~b* c ~~**d**~~ e".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "em" {
+                    +"a "
+                    "del" { +"b" }
+                }
+                +" c "
+                "del" { "strong" { +"d" } }
+                +" e"
+            }
+        }
+    }
+
+    @Test
+    fun `should keep a single tilde before strong literal`() = runTest {
+        // given — `~` as "approximately", common in LLM output
+        val textFlow = "takes ~**2 hours** now".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                +"takes ~"
+                "strong" { +"2 hours" }
+                +" now"
+            }
+        }
+    }
+
+    @Test
+    fun `should keep a single tilde before inline code literal`() = runTest {
+        // given
+        val textFlow = "about ~`5` ms".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                +"about ~"
+                "code" { +"5" }
+                +" ms"
+            }
+        }
+    }
+
+    @Test
+    fun `DIVERGENCE - should open a mark at an unclosed equals pair before inline code`() = runTest {
+        // GFM keeps an unclosed `==` literal, but whether a closer follows is
+        // only known at the line end. A double run before code or emphasis
+        // opens like one before a letter — it is what the renderer writes for a
+        // mark or del wrapping code or strong (`==`a`==`) — so an unclosed one
+        // marks the rest of the line, as before a letter.
+        // given
+        val textFlow = "x ==`y` z".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                +"x "
+                "mark" {
+                    "code" { +"y" }
+                    +" z"
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep a less-than sign before a space literal and parse the rest of the line`() = runTest {
+        // given — speculating on an inline tag would hold the rest of the line
+        val textFlow = "when n < 10, use `x` and *y*".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                +"when n < 10, use "
+                "code" { +"x" }
+                +" and "
+                "em" { +"y" }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep a less-than sign before a digit or an equals sign literal`() = runTest {
+        // given
+        val textFlow = "<3 a <= b **c**".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                +"<3 a <= b "
+                "strong" { +"c" }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep a tilde pair before the closer of an em literal`() = runTest {
+        // given
+        val textFlow = "*a~~* and **x==**".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "em" { +"a~~" }
+                +" and "
+                "strong" { +"x==" }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep a less-than sign before an escape literal`() = runTest {
+        // given
+        val textFlow = """a <\* b *c*""".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                +"a <* b "
+                "em" { +"c" }
+            }
+        }
+    }
+
+    @Test
+    fun `should parse an email autolink starting with a digit or a dash or an equals sign`() = runTest {
+        // given
+        val textFlow = "<1u@x.com> <-u@x.com> <=u@x.com>".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "a"("href" to "mailto:1u@x.com") { +"1u@x.com" }
+                +" "
+                "a"("href" to "mailto:-u@x.com") { +"-u@x.com" }
+                +" "
+                "a"("href" to "mailto:=u@x.com") { +"=u@x.com" }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep an underscore after a less-than sign and a digit intraword`() = runTest {
+        // given — the `_` is re-delivered after the `<1` flushes; it must still
+        // see the digit before it
+        val textFlow = "if n <1_000_000 x or <2_000 and _y_".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                +"if n <1_000_000 x or <2_000 and "
+                "em" { +"y" }
+            }
+        }
+    }
+
+    @Test
+    fun `should parse an email autolink starting with a digit whose local part holds punctuation`() = runTest {
+        // given
+        val textFlow = "<1a+b@x.com> <1a_b@x.com>".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "a"("href" to "mailto:1a+b@x.com") { +"1a+b@x.com" }
+                +" "
+                "a"("href" to "mailto:1a_b@x.com") { +"1a_b@x.com" }
+            }
+        }
+    }
+
+    @Test
+    fun `should keep a less-than sign starting no email autolink literal`() = runTest {
+        // given
+        val textFlow = "I <3 you *a* <-b *c* x <== y".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                +"I <3 you "
+                "em" { +"a" }
+                +" <-b "
+                "em" { +"c" }
+                +" x <== y"
             }
         }
     }

@@ -3446,17 +3446,18 @@ class MarkdownRenderingTest {
     fun `should not escape link label content against emphasis opened outside the label`() = runTest {
         // An `<em>` wrapping a link: a literal `*` in the *link label* must NOT be
         // escaped against the outer em — only against emphasis opened *inside* the
-        // label (here there is none). escapeActiveInlineDelimiters scopes label
-        // escaping to the enclosing Inline run up to the Link frame, so the label
-        // `*` stays unescaped. Render-only; the parse/fixpoint side (the parser keeps
-        // the lone label `*` literal, issue #58) is pinned in markanywhere-html's
-        // EmphasisDelimiterRoundTripTest.
+        // label (here there is none). spanEscapeMask scopes label escaping to the
+        // enclosing Inline run up to the Link frame, so the label `*` stays
+        // unescaped — as long as it cannot open emphasis by itself, which would
+        // escape it anywhere. Render-only; the parse/fixpoint side (the parser
+        // keeps the lone label `*` literal, issue #58) is pinned in
+        // markanywhere-html's EmphasisDelimiterRoundTripTest.
         // when
         val markdown = semanticEvents {
-            "p" { "em" { +"x "; "a"("href" to "u") { +"a*b" }; +" y" } }
+            "p" { "em" { +"x "; "a"("href" to "u") { +"a * b" }; +" y" } }
         }.renderMarkdown()
         // then
-        markdown sameAs "*x [a*b](u) y*"
+        markdown sameAs "*x [a * b](u) y*"
     }
 
     @Test

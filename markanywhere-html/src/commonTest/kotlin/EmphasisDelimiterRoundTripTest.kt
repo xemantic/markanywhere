@@ -124,7 +124,7 @@ class EmphasisDelimiterRoundTripTest {
         // closeLabelLocalEmphasisRun breaks at the `_` frame (it never pairs a `_`
         // run with a `*`-em, CommonMark §6.2), so the trailing `*` flushes as literal
         // label content rather than closing the inner em. That literal `*` does NOT
-        // grow the run on round-trip — the renderer's escapeActiveInlineDelimiters
+        // grow the run on round-trip — the renderer's escapeInlineText
         // backslash-escapes it (it sits inside a label-local span), so re-parse keeps
         // it literal. This pins that two-sided defense (parser break + renderer
         // escape) against the PR #57 review's "grows by one every round-trip" concern.
@@ -551,7 +551,7 @@ class EmphasisDelimiterRoundTripTest {
     @Test
     fun `should keep inline code verbatim inside a del span`() = runTest {
         // Inline-code content is captured into a label buffer and reaches
-        // escapeActiveInlineDelimiters *before* its inLabel() guard, so a `~` in the
+        // escapeInlineText *before* its inLabel() guard, so a `~` in the
         // code content must NOT be escaped against the surrounding del — code is
         // verbatim (the `is Code` early-return). The em version above passes even
         // without the fix because `*` is excluded from the outer-delimiter bits;
@@ -1022,9 +1022,8 @@ class EmphasisDelimiterRoundTripTest {
     }
 
     private suspend fun assertContentEndAgreesWithParser(follower: String) {
-        // given — `**a<**` re-parses `<**` as the start of an inline tag, an
-        // inline-HTML question, not a flanking one
-        val chars = (Char.MIN_VALUE..Char.MAX_VALUE).filter { it.isFlankingCandidate() && it != '<' }
+        // given
+        val chars = (Char.MIN_VALUE..Char.MAX_VALUE).filter { it.isFlankingCandidate() }
         val failures = mutableListOf<String>()
 
         // when
@@ -1164,7 +1163,8 @@ class EmphasisDelimiterRoundTripTest {
     @Test
     fun `DIVERGENCE - should not round-trip a b element wrapping a list in a blockquote`() = runTest {
         // HTML block detection is suppressed inside a blockquote, so the `<b>`
-        // line re-parses as an empty inline tag and `</b>` as text.
+        // line re-parses as an empty inline tag and `</b>` as text — re-rendered
+        // escaped.
         // when
         val markdown = htmlToMarkdown {
             "blockquote" { "p" { "b" { +"Lead:"; "ul" { "li" { +"x" } } } } }
@@ -1172,7 +1172,7 @@ class EmphasisDelimiterRoundTripTest {
         val reparsed = flowOf(markdown).parse().renderMarkdown()
         // then
         markdown sameAs ">\n> <b>\n>\n> Lead:\n>\n> - x\n>\n> </b>"
-        reparsed sameAs "> <b></b>\n>\n> Lead:\n>\n> - x\n>\n> </b>"
+        reparsed sameAs "> <b></b>\n>\n> Lead:\n>\n> - x\n>\n> \\</b>"
         flowOf(reparsed).parse().renderMarkdown() sameAs reparsed
     }
 
@@ -1289,11 +1289,11 @@ class EmphasisDelimiterRoundTripTest {
 
 // A char that could decide the flanking of a delimiter it follows: Unicode
 // punctuation, symbols and separators, plus the whitespace controls that stay
-// inside a line. Line feed and carriage return end the paragraph instead, and
-// the ASCII chars that open inline syntax of their own (`$b` math, `~b` del,
-// `` `b `` code, …) are left out: whether they are escaped is not a flanking
-// question.
-private fun Char.isFlankingCandidate(): Boolean = this !in "$*\\^_`~" && when (category) {
+// inside a line. Line feed and carriage return end the paragraph instead. The
+// ASCII chars that open inline syntax of their own (`$b` math, `~b` del,
+// `` `b `` code, `<b` a tag, …) are included: the renderer escapes them where
+// they would (issue #162).
+private fun Char.isFlankingCandidate(): Boolean = when (category) {
     CharCategory.CONNECTOR_PUNCTUATION, CharCategory.DASH_PUNCTUATION,
     CharCategory.START_PUNCTUATION, CharCategory.END_PUNCTUATION,
     CharCategory.INITIAL_QUOTE_PUNCTUATION, CharCategory.FINAL_QUOTE_PUNCTUATION,
