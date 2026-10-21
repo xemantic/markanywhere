@@ -1148,7 +1148,7 @@ class EmphasisDelimiterRoundTripTest {
     fun `DIVERGENCE - should not round-trip a b element wrapping a list in a list item`() = runTest {
         // An HTML block inside a list item stays raw text across a blank line
         // (the parser never sub-parses it, see HtmlBlockInListItemTest), so the
-        // nested list comes back as escaped text — stable from the second render.
+        // nested list comes back as raw text — stable from the second render.
         // when
         val markdown = htmlToMarkdown {
             "ul" { "li" { "b" { +"Lead:"; "ul" { "li" { +"x" } } } } }
@@ -1156,7 +1156,7 @@ class EmphasisDelimiterRoundTripTest {
         val reparsed = flowOf(markdown).parse().renderMarkdown()
         // then
         markdown sameAs "\n- <b>\n\n  Lead:\n\n  - x\n\n  </b>"
-        reparsed sameAs "- <b>\n  Lead:\n  \\- x\n  </b>"
+        reparsed sameAs "- <b>\n  Lead:\n  - x\n  </b>"
         flowOf(reparsed).parse().renderMarkdown() sameAs reparsed
     }
 
