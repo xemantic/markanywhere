@@ -1173,6 +1173,41 @@ class EmphasisDelimiterRoundTripTest {
     }
 
     @Test
+    fun `should write a soft break inside a raw b tag as a space`() = runTest {
+        // given
+        val events = semanticEvents { "p" { tag("b") { +"a\nb" } } }
+        // when
+        val markdown = events.renderMarkdown()
+        // then
+        markdown sameAs "<b>a b</b>"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should write a soft break inside emphasis written as a raw tag as a space`() = runTest {
+        // given
+        val events = semanticEvents { "p" { +"x"; "em" { +":a\nb" } } }
+        // when
+        val markdown = events.renderMarkdown()
+        // then
+        markdown sameAs "x<em>:a b</em>"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should close emphasis written as a raw tag before a link spilled around a block`() = runTest {
+        // given
+        val events = semanticEvents { "p" { +"x"; "strong" { "a"("href" to "u") { "h2" { +"t" } } } } }
+        // when
+        val markdown = events.renderMarkdown()
+        val once = flowOf(markdown).parse().renderMarkdown()
+        // then
+        assert("</strong>" !in markdown.substringAfter("<a"))
+        once sameAs markdown
+        flowOf(once).parse().renderMarkdown() sameAs once
+    }
+
+    @Test
     fun `should keep a raw br tag inside a raw b tag on its line`() = runTest {
         // given
         val events = semanticEvents { "p" { tag("b") { +"a"; tag("br") {}; +"b" } } }
