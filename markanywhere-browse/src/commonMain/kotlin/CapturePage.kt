@@ -35,6 +35,7 @@ import com.xemantic.markanywhere.dump.secretValueTexts
 import com.xemantic.markanywhere.dump.unrecordedDisplayOfChildren
 import com.xemantic.markanywhere.dump.withCaptureFormat
 import com.xemantic.markanywhere.dump.withoutCaptureAnnotations
+import com.xemantic.markanywhere.html.spec.isHtmlWhitespace
 import com.xemantic.markanywhere.html.spec.stripAndCollapseHtmlWhitespace
 import dev.kdriver.cdp.domain.Accessibility
 import dev.kdriver.cdp.domain.DOMSnapshot
@@ -539,6 +540,8 @@ internal class SnapshotDom(
     // `null` when the snapshot did not report them: unread, not "none at all"
     private val checkedInputs: Set<Int>? = nodes.inputChecked?.index?.toSet()
     private val selectedOptions: Set<Int>? = nodes.optionSelected?.index?.toSet()
+    // each select's markupSelection, read once for all its options
+    private val markupSelections = mutableMapOf<Int, Set<Int>>()
 
     /**
      * The live state of a form control (see [FormControlState]), or `null` for
@@ -567,10 +570,17 @@ internal class SnapshotDom(
     /**
      * The state of an `<option>` belonging to a select with the attributes
      * [select], if any — with its [text][FormControlState.text] only when
-     * [withText], since only its [secretValueTexts] read that.
+     * [withText], since only its [secretValueTexts] read that. Its
+     * [selected][FormControlState.selected] is the snapshot's, `null` when
+     * unread so the markup is kept, unless the caller passes its own.
      */
-    private fun optionState(option: Int, select: Map<String, String>?, withText: Boolean = false) = FormControlState(
-        selected = selectedOptions?.let { option in it },
+    private fun optionState(
+        option: Int,
+        select: Map<String, String>?,
+        selected: Boolean? = selectedOptions?.let { option in it },
+        withText: Boolean = false,
+    ) = FormControlState(
+        selected = selected,
         select = select,
         text = if (withText) textContent(option) else null,
     )
@@ -590,11 +600,49 @@ internal class SnapshotDom(
         }
 
     /**
-     * Whether the `<option>` is selected: as the snapshot reports it, else as
-     * the markup declares it when the snapshot did not report selection.
+     * Whether the `<option>` of a `<select>` is selected: as the snapshot
+     * reports it, else as the markup selects it (see [markupSelection]) when
+     * the snapshot did not report selection.
      */
-    private fun isSelected(option: Int): Boolean =
-        selectedOptions?.let { option in it } ?: ("selected" in attributeMap(option))
+    private fun isSelected(option: Int, select: Int): Boolean =
+        selectedOptions?.let { option in it } ?: (option in markupSelection(select))
+
+    /**
+     * The options the `<select>` selects by its markup alone, as the browser
+     * selects them on load (HTML §4.10.7, the selectedness setting
+     * algorithm): a `multiple` select those marked `selected`, any other the
+     * last marked option alone — and a single-choice one (a display size of
+     * at most 1) with none marked its first option that is not disabled. A
+     * form submits that implicit choice, so a secret select left on it is
+     * `filled`.
+     *
+     * It stands in for the unread selection only in a `<select>`'s
+     * [selectedValue], computed for every select but recorded only as a
+     * secret select's `filled` / `empty` marker: the options of a capture
+     * keep their markup `selected`, and a secret select lends every option
+     * as a secret (see [secretTextsOf]), the markup bounding no live choice.
+     */
+    private fun markupSelection(select: Int): Set<Int> = markupSelections.getOrPut(select) {
+        val options = options(select).toList()
+        val marked = options.filter { "selected" in attributeMap(it) }
+        val attributes = attributeMap(select)
+        when {
+            "multiple" in attributes -> marked.toSet()
+            marked.isNotEmpty() -> setOf(marked.last())
+            (displaySize(attributes["size"]) ?: 1) <= 1 -> setOfNotNull(options.firstOrNull { !isDisabledOption(it) })
+            else -> emptySet()
+        }
+    }
+
+    /** The `<option>`s of a `<select>` in tree order — through an `<optgroup>`, not a nested `<datalist>`. */
+    private fun options(select: Int): Sequence<Int> =
+        descendants(select).filter { name(it) == "option" && enclosingSelect(it) == select }
+
+    /** Whether the `<option>` is disabled: by its own `disabled`, or by its parent `<optgroup>`'s. */
+    private fun isDisabledOption(option: Int): Boolean =
+        "disabled" in attributeMap(option) || ancestors(option).firstOrNull()
+            ?.takeIf { name(it) == "optgroup" }
+            ?.let { "disabled" in attributeMap(it) } == true
 
     /**
      * The value of the option a `<select>` has selected — its `value`
@@ -603,7 +651,7 @@ internal class SnapshotDom(
      * `trim()`: that strips an NBSP too, which the browser submits.
      */
     private fun selectedValue(select: Int): String? =
-        descendants(select).firstOrNull { name(it) == "option" && isSelected(it) }
+        options(select).firstOrNull { isSelected(it, select) }
             ?.let { option -> attributeMap(option)["value"] ?: textContent(option).stripAndCollapseHtmlWhitespace() }
 
     /**
@@ -815,14 +863,23 @@ internal class SnapshotDom(
 
     /**
      * The [secretValueTexts] of a redacted control — of a `<select>`, those of
-     * its options, which hold its secret: which one is chosen.
+     * its options, which hold its secret: which one is chosen. When the
+     * snapshot did not read the selection, every option is lent, any of them
+     * possibly the one chosen.
      */
     private fun secretTextsOf(index: Int): List<String> = when (val name = name(index)) {
         "select" -> {
             val select = attributeMap(index)
-            descendants(index)
-                .filter { name(it) == "option" }
-                .flatMap { option -> secretValueTexts("option", attributeMap(option), optionState(option, select, withText = true)) }
+            // With the selection unread, every option counts as chosen: the markup
+            // cannot bound what the user picked, so the capture fails closed.
+            options(index)
+                .flatMap { option ->
+                    secretValueTexts(
+                        "option",
+                        attributeMap(option),
+                        optionState(option, select, selected = selectedOptions?.let { option in it } ?: true, withText = true)
+                    )
+                }
                 .toList()
         }
 
@@ -1127,3 +1184,19 @@ private val Accessibility.AXNode.labelledByTargets: List<Accessibility.AXRelated
 
 private val Accessibility.AXNode.computedName: String?
     get() = (name?.value as? JsonPrimitive)?.contentOrNull
+
+/**
+ * The display size a `<select>` [size] attribute declares, parsed by the HTML
+ * rules for parsing non-negative integers (leading whitespace, an optional
+ * sign, then digits; anything after them ignored) — or `null` when it
+ * declares none or fails to parse — an overflowing number included, as in
+ * Blink — the select then sized by its `multiple`.
+ */
+private fun displaySize(size: String?): Int? {
+    if (size == null) return null
+    val number = size.dropWhile { it.isHtmlWhitespace() }
+    val negative = number.startsWith('-')
+    val digits = number.removePrefix(if (negative) "-" else "+").takeWhile { it in '0'..'9' }
+    val value = digits.toIntOrNull() ?: return null
+    return if (negative && value != 0) null else value
+}
