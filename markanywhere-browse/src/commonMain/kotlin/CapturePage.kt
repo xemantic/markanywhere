@@ -37,18 +37,18 @@ import com.xemantic.markanywhere.dump.withCaptureFormat
 import com.xemantic.markanywhere.dump.withoutCaptureAnnotations
 import com.xemantic.markanywhere.html.spec.stripAndCollapseHtmlWhitespace
 import dev.kdriver.cdp.domain.Accessibility
+import dev.kdriver.cdp.domain.CSS
 import dev.kdriver.cdp.domain.DOMSnapshot
 import dev.kdriver.cdp.domain.accessibility
+import dev.kdriver.cdp.domain.css
 import dev.kdriver.cdp.domain.dom
 import dev.kdriver.cdp.domain.dOMSnapshot
-import dev.kdriver.cdp.domain.runtime
 import dev.kdriver.core.tab.Tab
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlin.coroutines.cancellation.CancellationException
@@ -141,43 +141,55 @@ internal suspend fun Tab.capturePage(
 
 /**
  * Which of the controls with these [backendNodeIds] render their text masked
- * (see [isMaskingTextSecurity]), asked of the page for every control at once —
- * through `getComputedStyle`, which answers for an element without a layout
- * box too, as in the in-page walker. A control whose style cannot be read
- * (gone from the page since the snapshot, or in a document without a window)
- * counts as masked: the capture would rather hide a plain value than show a
- * secret one. The walker, reading a windowless element as unmasked, differs
- * there on purpose — it never meets one, walking the live page from its own
- * window.
+ * (see [isMaskingTextSecurity]), each read from Blink's own computed style
+ * through `CSS.getComputedStyleForNode`, which answers for an element without
+ * a layout box too. Not through `getComputedStyle` in the page (issue #134):
+ * page script can override it, `getPropertyValue` or an element's
+ * `ownerDocument`, and a masked field then reads as unmasked and its value is
+ * dumped. A control whose style cannot be read (gone from the page since the
+ * snapshot, say) counts as masked: the capture would rather hide a plain value
+ * than show a secret one.
+ *
+ * The style is read after the snapshot the value comes from, so a mask the
+ * page lifts in between leaves that value unredacted. Not closed on purpose:
+ * pausing page script across the snapshot and these reads (`Debugger.pause`)
+ * would not hold a mask lifted by CSS alone (`:focus`, a media query, an
+ * animation) either, and a page lifting the mask is about to show the value
+ * on screen anyway.
  */
 private suspend fun Tab.maskedControls(backendNodeIds: List<Int>): Set<Int> {
     if (backendNodeIds.isEmpty()) return emptySet()
     return try {
-        coroutineScope {
-            backendNodeIds
-                .map { id -> async { id.takeIf { isMaskingTextSecurityOrUnknown(it) } } }
-                .awaitAll()
-                .filterNotNullTo(mutableSetOf())
-        }
-    } finally {
-        withContext(NonCancellable) {
-            try {
-                runtime.releaseObjectGroup(MASKING_OBJECT_GROUP)
-            } catch (_: Exception) {
-                // a release that fails leaves the group to the page's lifetime; the capture stands
+        // a node id exists only below a document the DOM agent handed out
+        dom.getDocument(depth = 0)
+        css.enable()
+        try {
+            coroutineScope {
+                backendNodeIds
+                    .map { id -> async { id.takeIf { isMaskingTextSecurityOrUnknown(it) } } }
+                    .awaitAll()
+                    .filterNotNullTo(mutableSetOf())
+            }
+        } finally {
+            withContext(NonCancellable) {
+                try {
+                    css.disable()
+                } catch (_: Exception) {
+                    // an agent left enabled costs only its events; the capture stands
+                }
             }
         }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        backendNodeIds.toSet()
     }
 }
 
 private suspend fun Tab.isMaskingTextSecurityOrUnknown(backendNodeId: Int): Boolean = try {
-    val element = dom.resolveNode(backendNodeId = backendNodeId, objectGroup = MASKING_OBJECT_GROUP).`object`
-    val call = runtime.callFunctionOn(
-        functionDeclaration = TEXT_SECURITY_FUNCTION,
-        objectId = element.objectId,
-        returnByValue = true
-    )
-    call.exceptionDetails != null || isMaskingAnswer(call.result.value)
+    val nodeId = dom.pushNodesByBackendIdsToFrontend(listOf(backendNodeId)).nodeIds.single()
+    // 0: no such node any more
+    nodeId == 0 || isMaskingComputedStyle(css.getComputedStyleForNode(nodeId).computedStyle)
 } catch (e: CancellationException) {
     throw e
 } catch (_: Exception) {
@@ -185,21 +197,16 @@ private suspend fun Tab.isMaskingTextSecurityOrUnknown(backendNodeId: Int): Bool
 }
 
 /**
- * Whether the page's answer to the text-security lookup — the value
- * `getPropertyValue('-webkit-text-security')` returned — renders the control
- * masked (see [isMaskingTextSecurity]). Anything but a string (`undefined`
- * from a page overriding `getComputedStyle`, say) leaves the masking unknown,
- * so it counts as masked.
+ * Whether the [computedStyle] Blink reported for a control renders it masked
+ * (see [isMaskingTextSecurity]). A style without `-webkit-text-security`
+ * leaves the masking unknown, so it counts as masked.
  */
-internal fun isMaskingAnswer(value: JsonElement?): Boolean =
-    if (value is JsonPrimitive && value.isString) isMaskingTextSecurity(value.content) else true
+internal fun isMaskingComputedStyle(computedStyle: List<CSS.CSSComputedStyleProperty>): Boolean =
+    computedStyle.firstOrNull { it.name == TEXT_SECURITY_PROPERTY }
+        ?.let { isMaskingTextSecurity(it.value) }
+        ?: true
 
-private const val MASKING_OBJECT_GROUP = "markanywhere-masking"
-
-// the element's own window: a control in a frame has the frame's styles; an
-// element of a windowless (inert) document throws, which counts as masked
-private const val TEXT_SECURITY_FUNCTION =
-    "function() { return this.ownerDocument.defaultView.getComputedStyle(this).getPropertyValue('-webkit-text-security'); }"
+private val TEXT_SECURITY_PROPERTY = COMPUTED_STYLES[TEXT_SECURITY_STYLE]
 
 /**
  * Walks the main-frame document of [snapshot] (and, through their embedding
@@ -289,9 +296,9 @@ internal class SnapshotDom(
 
     /**
      * The backend node ids of the controls rendering their text masked though
-     * not laid out — those of [maskReadersOutsideLayout] the page reported
-     * masked when asked. Set before the walk: the snapshot reports no computed
-     * style for these, so they can only be judged once the page has answered.
+     * not laid out — those of [maskReadersOutsideLayout] Blink's computed style
+     * reported masked when asked. Set before the walk: the snapshot reports no
+     * computed style for these, so they can only be judged once it has answered.
      */
     var maskedOutsideLayout: Set<Int> = emptySet()
 
@@ -579,8 +586,8 @@ internal class SnapshotDom(
      * Whether the control renders its text masked (see [isMaskingTextSecurity]),
      * judged only for a control whose capture reads it ([readsMaskedState]):
      * by its computed style when it is laid out — masked when the snapshot
-     * left that style out, its masking unknown — else as the page answered for
-     * it ([maskedOutsideLayout]). Laid out means reported in the layout tree,
+     * left that style out, its masking unknown — else as Blink answered for
+     * it when asked ([maskedOutsideLayout]). Laid out means reported in the layout tree,
      * the criterion [maskReadersOutsideLayout] picks the controls to ask by.
      */
     private fun isMasked(index: Int, attributes: Map<String, String>): Boolean =
