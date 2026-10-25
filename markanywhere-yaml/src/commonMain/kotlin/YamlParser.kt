@@ -91,7 +91,14 @@ import kotlinx.coroutines.flow.FlowCollector
  * blank or a comment, which decides whether the value continues (and is
  * verbatim). A bare `key:` (or `-`) is held for one line to decide between a
  * nested block, a verbatim value and a null value. A block scalar is
- * buffered until it closes — never past the enclosing construct. A verbatim
+ * buffered until it closes — never past the enclosing construct; one a
+ * comment ends is held like a `key: value` line. The lines outside the
+ * subset ahead of the first entry or item of an indented root are held until
+ * it arrives (they are then written relative to the root) or cannot arrive
+ * any more (they keep their own indentation) — at most 8 of them: past that
+ * they keep their own indentation and stream (DIVERGENCE: an entry after
+ * them, written back at column 0, then sits less indented than they do —
+ * Psych and go-yaml v2 drop it, PyYAML refuses the document). A verbatim
  * value streams line by line. Never throws.
  */
 public class YamlParser(
@@ -147,6 +154,10 @@ public class YamlParser(
         val lines = mutableListOf<String>()
         // the same lines as source, should the value turn out verbatim
         val sourceLines = mutableListOf<String>()
+        // whether a comment less indented than the content ended it: it is
+        // then held, like a single-line value, until the next line that is
+        // not blank or a comment decides whether it is continued
+        var ended = false
     }
 
     private sealed interface Value {
@@ -168,10 +179,18 @@ public class YamlParser(
     // open, which continues on any line, whatever its indentation, until it
     // closes; null when none is open
     private var openValue: OpenValueScan? = null
-    // whether an entry / item was emitted at the root: the lines ahead of
-    // the first one keep their own indentation, which is what keeps an
-    // indented root indented once the writer writes them back
+    // whether an entry / item was emitted at the root
     private var rootHasNode = false
+    // the lines outside the subset ahead of the first root entry / item of
+    // an indented root, held until it is known how they are written back:
+    // relative to the root once an entry or item follows (the writer writes
+    // it at column 0, so must they be), with their own indentation if none
+    // does (which is then what keeps the root indented). At most
+    // [MAX_LEADING_LINES] are held: past that they are emitted with their own
+    // indentation, as is every later one ahead of the first entry or item
+    // ([leadingLinesEmitted]), so a document of such lines still streams
+    private val leadingLines = mutableListOf<String>()
+    private var leadingLinesEmitted = false
     // whether a line less indented than the root was read
     private var rootBroken = false
 
@@ -218,10 +237,12 @@ public class YamlParser(
         held = null
         pending?.let { resolvePendingAsNull(it) }
         pending = null
+        flushLeadingLines(indent = 0)
         while (frames.size > 1) closeTopFrame()
         frames.clear()
         rootHasNode = false
         rootBroken = false
+        leadingLinesEmitted = false
     }
 
     private suspend fun processContent(line: String, indent: Int, content: String) {
@@ -255,7 +276,10 @@ public class YamlParser(
         // line after it is text at the root, with its own indentation. The
         // writer writes the root at column 0, so such a document loses the
         // fixpoint, but no entry is read that the readers do not see.
-        if (frames.last().indent > indent) rootBroken = true
+        if (frames.last().indent > indent && !rootBroken) {
+            rootBroken = true
+            flushLeadingLines(indent = 0)
+        }
         if (rootBroken) return verbatim(line)
         // a sequence at its key's own indentation ends at the first non-`-` line
         while (frames.size > 1 && frames.last().isSequence && !seqLine
@@ -366,12 +390,30 @@ public class YamlParser(
     // A line outside the subset that is no entry or item: a text child of the
     // top container, its indentation up to the container's entries removed
     // (a line indented less keeps its own), so the writer can re-indent it
-    // along with the container. At the root, a line ahead of the first entry
-    // or item, or after the root was broken, keeps its own indentation.
+    // along with the container. At the root, a line after the root was
+    // broken keeps its own indentation, and one ahead of the first entry or
+    // item of an indented root is held until that entry or item, or its
+    // absence, decides ([leadingLines]).
     private suspend fun verbatim(line: String) {
+        val top = frames.last()
         val root = frames.size == 1
-        val indent = if (root && (rootBroken || !rootHasNode)) 0 else frames.last().indent
-        emitText(sourceLine(line, indent))
+        when {
+            root && (rootBroken || (leadingLinesEmitted && !rootHasNode)) -> emitText(sourceLine(line, 0))
+            root && !rootHasNode && top.indent > 0 -> {
+                leadingLines += line
+                if (leadingLines.size > MAX_LEADING_LINES) {
+                    flushLeadingLines(indent = 0)
+                    leadingLinesEmitted = true
+                }
+            }
+            else -> emitText(sourceLine(line, top.indent))
+        }
+    }
+
+    // Emits the held [leadingLines], their indentation up to [indent] removed.
+    private suspend fun flushLeadingLines(indent: Int) {
+        for (line in leadingLines) emitText(sourceLine(line, indent))
+        leadingLines.clear()
     }
 
     // Opens an entry / item at column [indent] whose value is outside the
@@ -417,6 +459,13 @@ public class YamlParser(
     private suspend fun feedBlock(b: BlockScalar, line: String): Boolean {
         val indent = leadingSpaces(line)
         val blank = indent == line.length
+        if (b.ended) {
+            if (blank || line[indent] == '#') {
+                b.sourceLines += sourceLine(line, b.parentIndent)
+                return true
+            }
+            return endBlock(b, line, indent)
+        }
         if (b.contentIndent < 0) {
             if (blank) {
                 b.lines += ""
@@ -444,10 +493,20 @@ public class YamlParser(
 
     // Ends the block scalar at a line indented less than its content; true
     // when that line is consumed. A line still more indented than the key or
-    // dash (not a comment, which the readers take as one) is one the readers
-    // refuse, so the value becomes verbatim, that line included.
+    // dash is one the readers refuse, so the value becomes verbatim, that
+    // line included. A comment ends the scalar for the readers, yet a line
+    // after it more indented than the key or dash is refused all the same:
+    // the scalar is held until the next line that is not blank or a comment
+    // (its lines kept as source meanwhile) — read as ended, it would leave
+    // that line to the root, which renders as a continuation of the scalar
+    // the readers accept.
     private suspend fun endBlock(b: BlockScalar, line: String, indent: Int): Boolean {
-        if (indent > b.parentIndent && line[indent] != '#') {
+        if (line[indent] == '#') {
+            b.ended = true
+            b.sourceLines += sourceLine(line, b.parentIndent)
+            return true
+        }
+        if (indent > b.parentIndent) {
             block = null
             openVerbatim(b.owner, b.key, b.parentIndent, b.source)
             for (s in b.sourceLines) emitText(s)
@@ -689,7 +748,10 @@ public class YamlParser(
     // --- emission ---------------------------------------------------------
 
     private suspend fun emitMark(name: String, key: String?, type: String?) {
-        if (frames.size == 1) rootHasNode = true
+        if (frames.size == 1 && !rootHasNode) {
+            rootHasNode = true
+            flushLeadingLines(indent = frames.last().indent)
+        }
         val attributes = LinkedHashMap<String, String>(2)
         if (key != null) attributes["key"] = key
         if (type != null) attributes["type"] = type
@@ -705,6 +767,10 @@ public class YamlParser(
     }
 
 }
+
+// How many lines outside the subset ahead of the first entry or item of an
+// indented root are held ([YamlParser]'s `leadingLines`).
+private const val MAX_LEADING_LINES = 8
 
 private const val ENTRY = "entry"
 private const val ITEM = "item"

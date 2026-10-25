@@ -1044,6 +1044,137 @@ class EnsureFrontmatterTitleTest {
     }
 
     @Test
+    fun `should drop a usable title entry a later one kept as source supersedes`() = runTest {
+        // given — `title: A` then `title: "B\n  C"`: a later-wins reader
+        // reads `B C`, so does wrapInHtmlDocument read no title; keeping `A`
+        // would be a duplicate key, which js-yaml rejects
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"A" }
+                "entry"("key" to "author") { +"Alice" }
+                "entry"("key" to "title", "type" to "verbatim") { +" \"B\n  C\"\n" }
+            }
+            "h1" { +"Heading" }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then — the value kept as source is content, so no title is derived
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "author") { +"Alice" }
+                "entry"("key" to "title", "type" to "verbatim") { +" \"B\n  C\"\n" }
+            }
+            "h1" { +"Heading" }
+        }
+    }
+
+    @Test
+    fun `should move a superseding title kept as source ahead of a verbatim line`() = runTest {
+        // given — `title: A\n? x\ntitle: "B\n  C"`: dropping `A` would put
+        // `? x` first, which front matter detection refuses, and keeping it
+        // beside the later title would be a duplicate key js-yaml rejects;
+        // the readers read `{title: "B C", x: null}` either way
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"A" }
+                +"? x\n"
+                "entry"("key" to "title", "type" to "verbatim") { +" \"B\n  C\"\n" }
+            }
+            "h1" { +"Heading" }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title", "type" to "verbatim") { +" \"B\n  C\"\n" }
+                +"? x\n"
+            }
+            "h1" { +"Heading" }
+        }
+    }
+
+    @Test
+    fun `should keep the order of the kept title entries moving one ahead of a verbatim line`() = runTest {
+        // given — readers keep the last of duplicate keys: `v2 b` here, and
+        // `B` in the second, so only the earliest kept title entry may move
+        // into the dropped first slot — moving the read one would put it
+        // ahead of the others
+        val keptAsSource = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"A" }
+                +"? x\n"
+                "entry"("key" to "title", "type" to "verbatim") { +" \"v1\n  a\"\n" }
+                "entry"("key" to "title", "type" to "verbatim") { +" \"v2\n  b\"\n" }
+            }
+            "h1" { +"Heading" }
+        }
+        val scalarLast = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") { +"A" }
+                +"? x\n"
+                "entry"("key" to "title") {
+                    "entry"("key" to "en") { +"N" }
+                }
+                "entry"("key" to "title") { +"B" }
+            }
+            "h1" { +"Heading" }
+        }
+
+        // when
+        val keptAsSourceOutput = keptAsSource.ensureFrontmatterTitle()
+        val scalarLastOutput = scalarLast.ensureFrontmatterTitle()
+
+        // then
+        keptAsSourceOutput sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title", "type" to "verbatim") { +" \"v1\n  a\"\n" }
+                +"? x\n"
+                "entry"("key" to "title", "type" to "verbatim") { +" \"v2\n  b\"\n" }
+            }
+            "h1" { +"Heading" }
+        }
+        scalarLastOutput sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title") {
+                    "entry"("key" to "en") { +"N" }
+                }
+                +"? x\n"
+                "entry"("key" to "title") { +"B" }
+            }
+            "h1" { +"Heading" }
+        }
+    }
+
+    @Test
+    fun `should drop a later title variant an entry kept as source beats`() = runTest {
+        // given — a case-sensitive reader (Jekyll) reads `title`, kept as
+        // source, whatever variant follows it
+        val input = semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title", "type" to "verbatim") { +" \"B\n  C\"\n" }
+                "entry"("key" to "Title") { +"Variant" }
+            }
+            "h1" { +"Heading" }
+        }
+
+        // when
+        val output = input.ensureFrontmatterTitle()
+
+        // then
+        output sameAs semanticEvents {
+            "frontmatter" {
+                "entry"("key" to "title", "type" to "verbatim") { +" \"B\n  C\"\n" }
+            }
+            "h1" { +"Heading" }
+        }
+    }
+
+    @Test
     fun `should drop an unreadable title entry following a usable one`() = runTest {
         // given — `title: Real` then `title: []`: a later-wins reader would
         // read the collection, and js-yaml rejects the duplicate key outright

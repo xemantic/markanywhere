@@ -17,6 +17,7 @@
 package com.xemantic.markanywhere.yaml
 
 import com.xemantic.kotlin.test.text.chunkedRandomly
+import com.xemantic.markanywhere.SemanticEvent
 import com.xemantic.markanywhere.flow.mergeAdjacentText
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.test.sameAs
@@ -1388,6 +1389,71 @@ class YamlParserTest {
     }
 
     @Test
+    fun `should mark a block scalar continued past a less indented comment as verbatim`() = runTest {
+        // given — a comment less indented than the content ends the block
+        // scalar, and a line after it more indented than the key is one the
+        // readers refuse: PyYAML, Psych and go-yaml v2 refuse each document,
+        // so the value stays source — read as the block scalar `x\n` with
+        // `y` at the root, it would render as `a: |\n  x\n    y\n`, which
+        // the readers accept as `x\n  y\n`
+        val sources = listOf(
+            "a: |\n    x\n  # c\n    y\nz: 1\n",
+            "a: |\n    x\n# c\n\n    y\nz: 1\n",
+            "a: |\n# c\n  x\nz: 1\n",
+        )
+
+        for (source in sources) {
+            // when
+            val parsed = source.chunkedRandomly().asFlow().parseYaml()
+
+            // then
+            parsed.mergeAdjacentText() sameAs semanticEvents {
+                "entry"("key" to "a", "type" to "verbatim") {
+                    +(" |\n" + source.removePrefix("a: |\n").removeSuffix("z: 1\n"))
+                }
+                "entry"("key" to "z", "type" to "int") { +"1" }
+            }
+        }
+    }
+
+    @Test
+    fun `should end a block scalar at a less indented comment`() = runTest {
+        // given — the readers read `{a: "x\n", b: 1}` and, keeping the empty
+        // line ahead of the comment, `{k: "x\n\n", b: 1}`
+        val textFlow = "a: |\n    x\n  # c\n\nb: 1\nk: |+\n  x\n\n# c\n\nb: 1\n"
+            .chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parseYaml()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "entry"("key" to "a") { +"x\n" }
+            "entry"("key" to "b", "type" to "int") { +"1" }
+            "entry"("key" to "k") { +"x\n\n" }
+            "entry"("key" to "b", "type" to "int") { +"1" }
+        }
+    }
+
+    @Test
+    fun `DIVERGENCE - should continue an open quote on a tab-led line`() = runTest {
+        // given — a tab is no indentation, yet an open quoted scalar
+        // continues on any line: the readers read `{p: {a: "x y", b: 1}}`
+        val textFlow = "p:\n  a: \"x\n\ty\"\n  b: 1\n".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parseYaml()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "entry"("key" to "p") {
+                "entry"("key" to "a", "type" to "verbatim") { +" \"x\n\ty\"\n" }
+                "entry"("key" to "b", "type" to "int") { +"1" }
+            }
+        }
+    }
+
+    @Test
     fun `DIVERGENCE - should mark a sequence item continued on indented lines as verbatim`() = runTest {
         // given — the readers read `a b`, and `v x` for the compact entry
         val textFlow = """
@@ -1472,6 +1538,61 @@ class YamlParserTest {
         parsedIndentedRoot.mergeAdjacentText() sameAs semanticEvents {
             "entry"("key" to "a", "type" to "int") { +"1" }
             +"? x\n"
+        }
+    }
+
+    @Test
+    fun `should keep a line ahead of the first entry of an indented root relative to the root`() = runTest {
+        // given — the writer writes the root at column 0, so a line outside
+        // the subset ahead of the first root entry must lose the root's
+        // indentation as well: kept as is, `  ? x` would sit above `a: 1`
+        // and turn it into a line less indented than the root. The readers
+        // read `{x y: null, a: 1}` either way
+        val textFlow = "  ? x\n    y\n  a: 1\n".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parseYaml()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            +"? x\n  y\n"
+            "entry"("key" to "a", "type" to "int") { +"1" }
+        }
+    }
+
+    @Test
+    fun `should hold only a few lines ahead of the first entry of an indented root`() = runTest {
+        // given — `  ? a\n  : 1` repeated, which the readers accept as
+        // `{a: 1, …}`: none of its lines is an entry the subset parses, so
+        // holding them all would buffer the whole document
+        val events = mutableListOf<SemanticEvent>()
+        val parser = YamlParser { events += it }
+        val lines = (1..5).flatMap { listOf("  ? k$it", "  : $it") }
+
+        // when
+        lines.take(8).forEach { parser.line(it) }
+        val heldEvents = events.toList()
+        lines.drop(8).forEach { parser.line(it) }
+
+        // then — the ninth line releases them with their own indentation,
+        // and every line after it streams
+        assert(heldEvents.isEmpty())
+        assert(events.joinToString("") { (it as SemanticEvent.Text).text } == lines.joinToString("") { "$it\n" })
+    }
+
+    @Test
+    fun `should keep the lines of an indented root holding no entry as written`() = runTest {
+        // given — no entry follows the lines outside the subset, so nothing
+        // is written at column 0 and their own indentation is what keeps the
+        // root indented
+        val textFlow = "  ? x\n    y\n".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parseYaml()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            +"  ? x\n    y\n"
         }
     }
 
