@@ -152,6 +152,9 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
     // leading wrappers out, so those still read as their tag's UA default —
     // a `<div>`'s `block`, wrong only for a leading `display: contents` one.
     val displays = CapturedDisplayReader()
+    // Which generic elements simplifyHtml will promote to a block — asked of
+    // the same reader it promotes by, so the two cannot disagree.
+    val blockRoles = BlockRoleContext()
 
     // The path since the last inline content token, by depth (a frame's
     // level is its depth in the stack, 1-based): the shallowest depth it
@@ -312,13 +315,14 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
                 val parent = stack.lastOrNull()
                 val parentIsFlexGrid = parent?.isFlexGridContainer == true
                 val display = displays.open(event)
+                val promotedBlockRole = blockRoles.open(event, display)
                 val boundary = event.blockBoundary(parentIsFlexGrid, display)
                 // The held paragraph ends at a block starting directly in its
                 // anchor, and cannot hold one starting deeper inside its run.
                 if (paragraphDepth >= 0) {
-                    val block = boundary == STACKED_BOX || event.rendersAsBlock()
+                    val block = boundary == STACKED_BOX || event.rendersAsBlock(promotedBlockRole)
                     if (block && stack.size == paragraphDepth) release(wrap = true)
-                    else if (event.rendersAsBlock()) release(wrap = false)
+                    else if (event.rendersAsBlock(promotedBlockRole)) release(wrap = false)
                 }
                 val control = event.isDeclaredControl()
                 if (preserveDepth == 0) {
@@ -339,7 +343,7 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
                         isFlexGridContainer = if (display == CapturedDisplay.Known("contents")) parentIsFlexGrid
                         else display.isFlexGridContainer(),
                         control = control,
-                        rendersAsBlock = event.rendersAsBlock(),
+                        rendersAsBlock = event.rendersAsBlock(promotedBlockRole),
                         allowsParagraph = (parent?.allowsParagraph ?: true) &&
                             event.mayHoldParagraph(display)
                     )
@@ -354,6 +358,7 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
             }
             is Unmark -> {
                 displays.close()
+                blockRoles.close()
                 releaseHeldMarks()
                 if (paragraphDepth >= 0 && stack.size == paragraphDepth) release(wrap = true)
                 val level = stack.size
@@ -498,8 +503,8 @@ private fun SemanticEvent.Mark.mayHoldParagraph(display: CapturedDisplay): Boole
  * Whether this element comes out of [simplifyHtml] as a Markdown block (or a
  * block-level tag), which a paragraph cannot hold.
  */
-private fun SemanticEvent.Mark.rendersAsBlock(): Boolean =
-    name in LINK_BLOCK_CONTENT_TAGS || name in DESCRIPTION_LIST_TAGS || explicitRole() in BLOCK_ROLES
+private fun SemanticEvent.Mark.rendersAsBlock(promotedBlockRole: Boolean): Boolean =
+    name in LINK_BLOCK_CONTENT_TAGS || name in DESCRIPTION_LIST_TAGS || promotedBlockRole
 
 // Kept by [simplifyHtml] as block-level tags, though not in
 // [LINK_BLOCK_CONTENT_TAGS], which mirrors the Markdown renderer's block sets.
@@ -526,14 +531,6 @@ private val PHRASING_ROLES = setOf(
     "list", "directory", "listbox", "menu", "menubar", "tablist", "tree", "radiogroup",
     "button", "link", "option", "menuitem", "menuitemcheckbox", "menuitemradio",
     "tab", "checkbox", "radio", "switch", "treeitem", "combobox", "searchbox", "slider", "spinbutton",
-)
-
-// The `role`s [simplifyHtml] promotes a generic element to a block for.
-private val BLOCK_ROLES = setOf(
-    "article", "banner", "complementary", "contentinfo", "main", "navigation", "region", "search",
-    "list", "directory", "listitem", "paragraph", "blockquote", "figure",
-    "table", "grid", "rowgroup", "row", "columnheader", "rowheader", "cell", "gridcell",
-    "heading", "separator", "dialog", "alertdialog",
 )
 
 // A flex / grid container blockifies its direct children, so an unannotated

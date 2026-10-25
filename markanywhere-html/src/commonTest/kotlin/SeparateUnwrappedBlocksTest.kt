@@ -740,6 +740,39 @@ class SeparateUnwrappedBlocksTest {
     }
 
     @Test
+    fun `should hold a heading role simplifyHtml keeps in the line in the paragraph run`() = runTest {
+        // given — issue #165: a heading role on an inline-block box stays in
+        // its line of text, so it does not end the run as a block would
+        val input = semanticEvents(tagged = true) {
+            "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                "div"(AccessibilityAnnotations.DISPLAY to "block") { +"A" }
+                "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                    +"Price "
+                    "span"("role" to "heading", AccessibilityAnnotations.DISPLAY to "inline-block") { +"US" }
+                    +" now"
+                }
+            }
+        }
+
+        // when
+        val output = input.separateUnwrappedBlocks()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                "div"(AccessibilityAnnotations.DISPLAY to "block") { +"A" }
+                "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                    "p" {
+                        +"Price "
+                        "span"("role" to "heading", AccessibilityAnnotations.DISPLAY to "inline-block") { +"US" }
+                        +" now"
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
     fun `should end a paragraph at the next stacked box`() = runTest {
         // given — loose text between stacked boxes in one container
         val input = semanticEvents(tagged = true) {
