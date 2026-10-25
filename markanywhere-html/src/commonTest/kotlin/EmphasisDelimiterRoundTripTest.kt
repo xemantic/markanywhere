@@ -24,6 +24,7 @@ import com.xemantic.markanywhere.flow.SemanticEventScope
 import com.xemantic.markanywhere.flow.semanticEvents
 import com.xemantic.markanywhere.parse.parse
 import com.xemantic.markanywhere.render.renderMarkdown
+import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
@@ -120,19 +121,19 @@ class EmphasisDelimiterRoundTripTest {
 
     @Test
     fun `should reach a stable fixpoint for mixed asterisk and underscore emphasis in a link label`() = runTest {
-        // A label-local `_`-em opened above a `*`-em is a delimiter-type mismatch:
-        // closeLabelLocalEmphasisRun breaks at the `_` frame (it never pairs a `_`
-        // run with a `*`-em, CommonMark §6.2), so the trailing `*` flushes as literal
-        // label content rather than closing the inner em. That literal `*` does NOT
-        // grow the run on round-trip — the renderer's escapeInlineText
-        // backslash-escapes it (it sits inside a label-local span), so re-parse keeps
-        // it literal. This pins that two-sided defense (parser break + renderer
-        // escape) against the PR #57 review's "grows by one every round-trip" concern.
+        // The `*b*` inside a label-local `_`-em neither opens a second em nor
+        // closes the `_` one — `*` and `_` never pair (CommonMark §6.2) — so both
+        // `*` stay literal label content and the trailing `_` closes the em. Those
+        // literal `*` do NOT grow on round-trip: the renderer's escapeInlineText
+        // backslash-escapes them (they sit inside a label-local span), so re-parse
+        // keeps them literal. This pins that two-sided defense (parser typing +
+        // renderer escape) against the PR #57 review's "grows by one every
+        // round-trip" concern.
         // when
         val once = flowOf("[_a *b* c_](u)").parse().renderMarkdown()
         val twice = flowOf(once).parse().renderMarkdown()
         // then
-        once sameAs "[*a \\*b* c_](u)"
+        once sameAs "[*a \\*b\\* c*](u)"
         twice sameAs once
     }
 
@@ -924,8 +925,10 @@ class EmphasisDelimiterRoundTripTest {
     }
 
     // --- non-ASCII punctuation around a delimiter (issue #93) ----------------
-    // The parser's flanking rule counts only ASCII punctuation, so the renderer
-    // must classify the chars around a delimiter the same way.
+    // The parser's flanking rule counts only ASCII punctuation (a deliberate
+    // GFM divergence, issue #164), so the renderer must classify the chars
+    // around a delimiter the same way: non-ASCII punctuation reads as a word
+    // char on both sides.
 
     @Test
     fun `should round-trip a b element ending in punctuation before a euro sign`() = runTest {
@@ -961,6 +964,317 @@ class EmphasisDelimiterRoundTripTest {
         // then
         markdown sameAs "x**“y”**"
         assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip a b element opening on ASCII punctuation after a word char`() = runTest {
+        // when
+        val markdown = htmlToMarkdown { "p" { +"x"; "b" { +":y" }; +"z" } }
+        // then
+        markdown sameAs "x<strong>:y</strong>z"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip strong opening on inline code after a word char`() = runTest {
+        // given
+        val events = semanticEvents { "p" { +"x"; "strong" { "code" { +"c" } }; +"z" } }
+        // when
+        val markdown = events.renderMarkdown()
+        // then
+        markdown sameAs "x<strong>`c`</strong>z"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip strong opening on a link after a word char`() = runTest {
+        // given
+        val events = semanticEvents { "p" { +"x"; "strong" { "a"("href" to "u") { +"l" } }; +"z" } }
+        // when
+        val markdown = events.renderMarkdown()
+        // then
+        markdown sameAs "x<strong>[l](u)</strong>z"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip strong opening on em whose text starts with punctuation after a word char`() = runTest {
+        // given
+        val events = semanticEvents { "p" { +"x"; "strong" { "em" { +":y" } }; +"z" } }
+        // when
+        val markdown = events.renderMarkdown()
+        // then
+        markdown sameAs "x<strong>*:y*</strong>z"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should keep a delimiter run for strong opening on em after a word char`() = runTest {
+        // given
+        val events = semanticEvents { "p" { +"x"; "strong" { "em" { +"y" } }; +" z" } }
+        // when
+        val markdown = events.renderMarkdown()
+        // then
+        markdown sameAs "x***y*** z"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    // The emphasis is lost on re-parse, as on base: the parser closes inline
+    // state at the line end (see CLAUDE.md "Inline state cannot span line
+    // breaks"), but the source stays stable and no closing tag shows up.
+    @Test
+    fun `DIVERGENCE - should keep the delimiter of em opening on a hard break after a word char`() = runTest {
+        // given
+        val events = semanticEvents { "p" { +"a"; "em" { "br" {}; +"b" } } }
+        // when
+        val once = events.renderMarkdown()
+        val twice = flowOf(once).parse().renderMarkdown()
+        // then
+        assert("<em>" !in once)
+        twice sameAs once
+    }
+
+    @Test
+    fun `DIVERGENCE - should keep the delimiter of strong opening on a block after a word char`() = runTest {
+        // given
+        val events = semanticEvents { "p" { +"a"; "strong" { "p" { +":b" } } } }
+        // when
+        val once = events.renderMarkdown()
+        val twice = flowOf(once).parse().renderMarkdown()
+        // then
+        assert("<strong>" !in once)
+        twice sameAs once
+    }
+
+    @Test
+    fun `should open an em holding strong after a word char as a raw tag`() = runTest {
+        // given
+        val events = semanticEvents { "p" { +"x"; "em" { "strong" { +"y" }; +"z" } } }
+        // when
+        val markdown = events.renderMarkdown()
+        // then
+        markdown sameAs "x<em>**y**z</em>"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should open an em holding only strong after a word char as a raw tag`() = runTest {
+        // given
+        val events = semanticEvents { "p" { +"x"; "em" { "strong" { +"y" } } } }
+        // when
+        val markdown = events.renderMarkdown()
+        // then
+        markdown sameAs "x<em>**y**</em>"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should write a hard break inside emphasis written as a raw tag as a tag`() = runTest {
+        // given
+        val events = semanticEvents { "p" { +"x"; "em" { +":a"; "br" {}; +"b" } } }
+        // when
+        val markdown = events.renderMarkdown()
+        // then
+        markdown sameAs "x<em>:a<br>b</em>"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should reach a fixpoint for a hard break inside emphasis opening on code or a link`() = runTest {
+        for (events in listOf(
+            semanticEvents { "p" { +"x"; "em" { "code" { +"c" }; "br" {}; +"b" } } },
+            semanticEvents { "p" { +"x"; "em" { "a"("href" to "u") { +"l" }; "br" {}; +"b" } } }
+        )) {
+            // when
+            val once = events.renderMarkdown()
+            val twice = flowOf(once).parse().renderMarkdown()
+            // then
+            assert("<br>" in once)
+            twice sameAs once
+        }
+    }
+
+    @Test
+    fun `should keep emphasis written as a raw tag open across an inline button on a heading line`() = runTest {
+        // given
+        val events = semanticEvents {
+            "h1" { +"x"; "em" { +":a"; tag("button") { +"b" }; +"c" } }
+        }
+        // when
+        val markdown = events.renderMarkdown()
+        // then
+        markdown sameAs "# x<em>:a<button>b</button>c</em>"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should keep emphasis written as a raw tag open across an inline button in a table cell`() = runTest {
+        // given
+        val events = semanticEvents {
+            "table" { "tr" { "td" { +"x"; "em" { +":a"; tag("button") { +"b" }; +"c" } } } }
+        }
+        // when
+        val once = events.renderMarkdown()
+        val twice = flowOf(once).parse().renderMarkdown()
+        // then
+        assert("x<em>:a<button>b</button>c</em>" in once)
+        twice sameAs once
+    }
+
+    // A block-level button spills the link to a raw `<a>` tag and renders as a
+    // block, so the emphasis closes before it, as before any block.
+    @Test
+    fun `should close emphasis written as a raw tag before a button spilling its link`() = runTest {
+        // given
+        val events = semanticEvents {
+            "p" { "a"("href" to "u") { +"x"; "em" { +":a"; tag("button") { +"b" }; +"c" } } }
+        }
+        // when
+        val once = events.renderMarkdown()
+        val twice = flowOf(once).parse().renderMarkdown()
+        // then
+        once sameAs "<a href=\"u\">\n\nx<em>:a</em>\n\n<button>\n\nb\n\n</button>\n\nc\n\n</a>"
+        twice sameAs once
+    }
+
+    @Test
+    fun `should keep emphasis written as a raw tag open across an inline tag in a link label`() = runTest {
+        // given
+        val events = semanticEvents {
+            "p" { "a"("href" to "u") { +"x"; "em" { +":a"; tag("kbd") { +"b" }; +"c" } } }
+        }
+        // when
+        val markdown = events.renderMarkdown()
+        // then
+        markdown sameAs "[x<em>:a<kbd>b</kbd>c</em>](u)"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should nest strong in strong opening after a word char transparently`() = runTest {
+        // given
+        val events = semanticEvents { "p" { +"x"; "strong" { "strong" { +"y" } }; +" z" } }
+        // when
+        val markdown = events.renderMarkdown()
+        // then
+        markdown sameAs "x**y** z"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should write a hard break inside a raw b tag as a tag`() = runTest {
+        // given
+        val events = semanticEvents { "p" { tag("b") { +"a"; "br" {}; +"b" } } }
+        // when
+        val markdown = events.renderMarkdown()
+        // then
+        markdown sameAs "<b>a<br>b</b>"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should write a soft break inside a raw b tag as a space`() = runTest {
+        // given
+        val events = semanticEvents { "p" { tag("b") { +"a\nb" } } }
+        // when
+        val markdown = events.renderMarkdown()
+        // then
+        markdown sameAs "<b>a b</b>"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should write a soft break inside emphasis written as a raw tag as a space`() = runTest {
+        // given
+        val events = semanticEvents { "p" { +"x"; "em" { +":a\nb" } } }
+        // when
+        val markdown = events.renderMarkdown()
+        // then
+        markdown sameAs "x<em>:a b</em>"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should close emphasis written as a raw tag before a link spilled around a block`() = runTest {
+        // given
+        val events = semanticEvents { "p" { +"x"; "strong" { "a"("href" to "u") { "h2" { +"t" } } } } }
+        // when
+        val markdown = events.renderMarkdown()
+        // then
+        markdown sameAs "x<strong></strong>\n\n<a href=\"u\">\n\n## t\n\n</a>"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should write a soft break inside emphasis written as a raw tag in a type-7 html block as a space`() = runTest {
+        // given
+        val events = semanticEvents { tag("x-card") { +"\n"; "p" { +"x"; "em" { +":a\nb" } } } }
+        // when
+        val markdown = events.renderMarkdown()
+        // then
+        markdown sameAs "<x-card>\n\nx<em>:a b</em>\n\n</x-card>"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should keep a raw br tag inside a raw b tag on its line`() = runTest {
+        // given
+        val events = semanticEvents { "p" { tag("b") { +"a"; tag("br") {}; +"b" } } }
+        // when
+        val markdown = events.renderMarkdown()
+        // then
+        markdown sameAs "<b>a<br>b</b>"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should keep a raw img tag inside a raw b tag on its line`() = runTest {
+        // given
+        val events = semanticEvents { "p" { tag("b") { +"a"; tag("img", "src" to "i.png") {}; +"b" } } }
+        // when
+        val markdown = events.renderMarkdown()
+        // then
+        markdown sameAs "<b>a<img src=\"i.png\">b</b>"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should close emphasis written as a raw tag before a block inside it`() = runTest {
+        // given
+        val events = semanticEvents { "div" { +"x"; "em" { +":a"; "p" { +"b" } } } }
+        // when
+        val once = events.renderMarkdown()
+        val twice = flowOf(once).parse().renderMarkdown()
+        // then
+        once sameAs "<div>x<em>:a</em>\n\nb\n</div>"
+        twice sameAs once
+    }
+
+    @Test
+    fun `should round-trip a b element opening on CJK punctuation after a CJK ideograph`() = runTest {
+        // when
+        val markdown = htmlToMarkdown { "p" { +"中文"; "b" { +"「引用」" }; +"中文" } }
+        // then
+        markdown sameAs "中文**「引用」**中文"
+        assertMarkdownFixpoint(markdown)
+    }
+
+    @Test
+    fun `should round-trip emphasis around Unicode punctuation on either side`() = runTest {
+        for (c in listOf('“', '”', '«', '»', '—', '¿', '。')) {
+            // when
+            val markdown = semanticEvents {
+                "p" {
+                    +"a$c"
+                    "strong" { +"${c}b$c" }
+                    +"${c}d"
+                    "em" { +"e$c" }
+                    +"f"
+                }
+            }.renderMarkdown()
+            // then
+            assertMarkdownFixpoint(markdown)
+        }
     }
 
     @Test
@@ -1014,6 +1328,32 @@ class EmphasisDelimiterRoundTripTest {
     @Test
     fun `should agree with the parser on every char ending the content of a span before non-ASCII punctuation`() = runTest {
         assertContentEndAgreesWithParser(follower = "€b")
+    }
+
+    @Test
+    fun `should agree with the parser on every char ending the content of a span before a curly quote`() = runTest {
+        assertContentEndAgreesWithParser(follower = "“b")
+    }
+
+    @Test
+    fun `should agree with the parser on every char opening the content of a span after a word char`() = runTest {
+        // given
+        val chars = (Char.MIN_VALUE..Char.MAX_VALUE).filter { it.isFlankingCandidate() }
+        val failures = mutableListOf<String>()
+
+        // when
+        // An opener that does not re-parse leaves literal text that may render
+        // back to the same string, so the span itself must survive too.
+        for (c in chars) {
+            val markdown = semanticEvents { "p" { +"a"; "strong" { +"${c}b" }; +" d" } }.renderMarkdown()
+            val reparsed = flowOf(markdown).parse().toList()
+            val spanKept = reparsed.any { it is SemanticEvent.Mark && it.name == "strong" }
+            val rendered = reparsed.asFlow().renderMarkdown()
+            if (!spanKept || rendered != markdown) failures += "U+${c.code.toString(16)}: $markdown -> $rendered"
+        }
+
+        // then
+        assert(failures.isEmpty())
     }
 
     @Test

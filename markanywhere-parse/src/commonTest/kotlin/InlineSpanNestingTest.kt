@@ -1351,4 +1351,325 @@ class InlineSpanNestingTest {
         }
     }
 
+    // --- #130: a run inside brackets that are not a link closes an outer span as GFM does ---
+
+    @Test
+    fun `should close an outer em with an asterisk right before the closing bracket of brackets that are not a link`() = runTest {
+        // given
+        val textFlow = "*foo [bar*]".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "em" { +"foo [bar" }
+                +"]"
+            }
+        }
+    }
+
+    @Test
+    fun `should close an outer em with an underscore right before the closing bracket of brackets that are not a link`() = runTest {
+        // given
+        val textFlow = "_foo [bar_]".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "em" { +"foo [bar" }
+                +"]"
+            }
+        }
+    }
+
+    @Test
+    fun `should keep an asterisk right before the closing bracket of a committed link label literal`() = runTest {
+        // given
+        val textFlow = "*foo [bar*](u) baz*".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "em" {
+                    +"foo "
+                    "a"("href" to "u") { +"bar*" }
+                    +" baz"
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should close an outer em with an asterisk ending the line inside an unclosed bracket`() = runTest {
+        // given
+        val textFlow = "*foo [bar*".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "em" { +"foo [bar" }
+            }
+        }
+    }
+
+    @Test
+    fun `should close an outer strong with two of a triple asterisk inside brackets that are not a link`() = runTest {
+        // given
+        val textFlow = "**foo [bar*** baz]".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "strong" { +"foo [bar" }
+                +"* baz]"
+            }
+        }
+    }
+
+    @Test
+    fun `should close an outer em with one of a triple asterisk inside brackets that are not a link`() = runTest {
+        // given
+        val textFlow = "*foo [bar*** baz]".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "em" { +"foo [bar" }
+                +"** baz]"
+            }
+        }
+    }
+
+    @Test
+    fun `should keep a triple asterisk in a committed link label literal while an outer strong is open`() = runTest {
+        // given
+        val textFlow = "**foo [bar***](u) baz**".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "strong" {
+                    +"foo "
+                    "a"("href" to "u") { +"bar***" }
+                    +" baz"
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should not close an outer asterisk em with an underscore inside brackets that are not a link`() = runTest {
+        // given
+        val textFlow = "*foo [bar_ baz]*".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "em" { +"foo [bar_ baz]" }
+            }
+        }
+    }
+
+    @Test
+    fun `should not close an asterisk em with an underscore`() = runTest {
+        // given
+        val textFlow = "*foo bar_ baz*".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "em" { +"foo bar_ baz" }
+            }
+        }
+    }
+
+    @Test
+    fun `should not close an underscore em with an asterisk`() = runTest {
+        // given
+        val textFlow = "_foo bar* baz_".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "em" { +"foo bar* baz" }
+            }
+        }
+    }
+
+    // GFM (`<em>foo [<em><em>a bar</em> b</em></em> baz]`) re-pairs the `**` the
+    // parser has already emitted as a `<strong>`, and a close of the outer em at
+    // the `*` would have to cut through that label-local span, whose later close
+    // is already captured — no bounded buffering of one label reaches either.
+    @Test
+    fun `DIVERGENCE - should keep a run that would close an outer em literal while a label-local strong is open`() = runTest {
+        // given
+        val textFlow = "*foo [**a bar* b** baz]".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "em" {
+                    +"foo ["
+                    "strong" { +"a bar* b" }
+                    +" baz]"
+                }
+            }
+        }
+    }
+
+    // --- #130 review: a deferred close never cuts through a del/mark/sup or raw tag ---
+
+    // GFM closes the em at the `*` and leaves the `~~`/`^`/`<b>` inside it
+    // unpaired (`<em>a ~~[b</em>]~~`); here the del/sup/tag sits between the
+    // label and the em, and closing through it would consume no closer of its
+    // own, so the next render writes delimiters the source never had.
+
+    @Test
+    fun `DIVERGENCE - should keep an asterisk before the closing bracket literal while a del sits between it and the outer em`() = runTest {
+        // given
+        val textFlow = "*a ~~[b*]~~".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "em" {
+                    +"a "
+                    "del" { +"[b*]" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `DIVERGENCE - should keep an asterisk inside brackets literal while a del sits between it and the outer em`() = runTest {
+        // given
+        val textFlow = "*a ~~[b* c]~~".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "em" {
+                    +"a "
+                    "del" { +"[b* c]" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `DIVERGENCE - should keep an asterisk before the closing bracket literal while a sup sits between it and the outer em`() = runTest {
+        // given
+        val textFlow = "*a ^[b*]^".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "em" {
+                    +"a "
+                    "sup" { +"[b*]" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `DIVERGENCE - should keep an asterisk before the closing bracket literal while an html element sits between it and the outer em`() = runTest {
+        // given
+        val textFlow = "*a <b>[b*]</b>".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "em" {
+                    +"a "
+                    tag("b") { +"[b*]" }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `should close an outer em with an asterisk before an escape inside brackets that are not a link`() = runTest {
+        // given
+        val textFlow = "*foo [bar*\\* baz]".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "em" { +"foo [bar" }
+                +"* baz]"
+            }
+        }
+    }
+
+    // GFM drops the `_` opener between the pair (`<strong>a _b [c</strong>] d_`),
+    // but its em is already emitted, so the deferred close takes it down too —
+    // the LIFO force-close every em/strong close does outside a label.
+    @Test
+    fun `DIVERGENCE - should close an em of the other delimiter char with a deferred outer strong close`() = runTest {
+        // given
+        val textFlow = "**a _b [c**] d_".chunkedRandomly().asFlow()
+
+        // when
+        val parsed = textFlow.parse()
+
+        // then
+        parsed.mergeAdjacentText() sameAs semanticEvents {
+            "p" {
+                "strong" {
+                    +"a "
+                    "em" { +"b [c" }
+                }
+                +"] d_"
+            }
+        }
+    }
+
 }

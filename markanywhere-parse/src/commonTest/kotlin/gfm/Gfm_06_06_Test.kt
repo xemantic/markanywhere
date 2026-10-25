@@ -1301,8 +1301,9 @@ class Gfm_06_06_Test {
         parsed.mergeAdjacentText() sameAs semanticEvents {
             "p" {
                 "em" {
-                    +"[foo*][ref]"
+                    +"[foo"
                 }
+                +"][ref]"
             }
         }
         // GFM expected:
