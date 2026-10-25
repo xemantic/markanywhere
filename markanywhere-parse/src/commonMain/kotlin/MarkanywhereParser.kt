@@ -529,6 +529,45 @@ private val TOGGLE_DELIMITERS = setOf('~', '=', '^')
  */
 private val ESCAPE_HELD_RUNS = setOf("*", "**", "***", "_", "__", "___", "~~", "==")
 
+// A `~~`/`==` run followed by an emphasis run of `*` (see the inline dispatch).
+private fun CharSequence.isToggleThenEmphasisRun(): Boolean =
+    length > 2 && subSequence(0, 2).toString() in SPAN_TOGGLE_RUNS && (2 until length).all { this[it] == '*' }
+
+// The double runs that toggle a `del` / `mark` span — the renderer's own
+// delimiters, opened even before a code span or an emphasis run. A single
+// `~` there stays literal: `~**2 hours**` is prose ("approximately").
+private val SPAN_TOGGLE_RUNS = setOf("~~", "==")
+
+/**
+ * Whether this char, right after a `<`, may start an inline tag, a closing
+ * tag, an autolink or an email autolink: an ASCII letter, `/`, a digit, or a
+ * punctuation char of an email local part. Whitespace (`a < b`) and anything
+ * else starts none of them. Mirrored by `continuesInlineHtmlOpen` in the
+ * Markdown renderer.
+ */
+private fun Char.canFollowInlineHtmlOpen(): Boolean =
+    this in 'a'..'z' || this in 'A'..'Z' || this in '0'..'9' || this == '/' ||
+        this in EMAIL_LOCAL_PART_PUNCT
+
+/**
+ * Whether the buffered `<…` starts with a digit, `-` or `=`, which only an
+ * email autolink does (`<1user@example.com>`): the speculation goes on only
+ * over the chars of an address (continuesEmailAutolinkCandidate), so
+ * `<3 you`, `a <- b`, `a <= b` turn literal at the first other char, its
+ * held chars as text — as any failed speculation emits them.
+ */
+private fun CharSequence.isEmailAutolinkCandidate(): Boolean =
+    length > 1 && this[1].let { it in '0'..'9' || it == '-' || it == '=' }
+
+/**
+ * Whether this char continues an email autolink candidate (see
+ * [isEmailAutolinkCandidate]) held so far as [candidate]: a char of the local
+ * part before the `@`, of the domain after it.
+ */
+private fun Char.continuesEmailAutolinkCandidate(candidate: CharSequence): Boolean =
+    this in 'a'..'z' || this in 'A'..'Z' || this in '0'..'9' || this == '.' || this == '-' ||
+        if ('@' in candidate) false else this == '@' || this in EMAIL_LOCAL_PART_PUNCT
+
 /**
  * GFM §6.8 URI-autolink validation: scheme `[A-Za-z][A-Za-z0-9+.-]{1,31}`,
  * a `:`, then any chars except space, ASCII control, `<`, `>`. Backslash
@@ -1628,7 +1667,9 @@ private class ParserState(
      * and otherwise — the span is open outside the current link label — emit the
      * run as [literal] text, deferring the close to a label abort when it can.
      * A run in closing position ([prev] not whitespace) after a span of [name]
-     * was force-closed on this line is that span's orphaned closer: literal.
+     * was force-closed on this line is that span's orphaned closer: literal —
+     * even where GFM would pair it with a later run (`*a ~~b* c~~d~~ e`), as
+     * knowing a later run follows means holding the rest of the line.
      */
     private suspend fun SemanticEventScope.toggleInlineSpan(
         name: String,
@@ -5882,7 +5923,11 @@ private class ParserState(
             // run's true prev would be the resolved run's last delimiter char, but
             // tracking that adds complexity for marginal correctness gain on
             // adjacent-delimiter cases. Most cases are well-served by char.
-            prevInlineChar = char
+            // A char handed back for re-delivery (pendingDeferredChar) is not yet
+            // processed: the char before it stays the previous one, or a `_`
+            // after a flushed `<1` would see itself as the char before it and
+            // open an intraword em (`<1_000`).
+            if (pendingDeferredChar == null) prevInlineChar = char
             // If the implementation set `pendingDeferredChar`, the same char will
             // be delivered again by the chunk-loop's re-process protocol. Mark
             // that so the next call can skip duplicate label-source accumulation.
@@ -5901,6 +5946,17 @@ private class ParserState(
                 val run = inlineBuffer.toString()
                 inlineBuffer.clear()
                 if (char !in ASCII_PUNCTUATION || !openHeldRun(run, char)) +run
+            } else if (inlineBuffer.isToggleThenEmphasisRun()) {
+                // A `~~*` run held by the `\`: before a real escape both spans
+                // open (`~~*\*a*~~`), before anything else both runs are literal.
+                val toggle = inlineBuffer.substring(0, 2)
+                val stars = inlineBuffer.substring(2)
+                inlineBuffer.clear()
+                if (char in ASCII_PUNCTUATION && stars.length <= 3) {
+                    toggleInlineSpan(if (toggle[0] == '~') "del" else "mark", toggle[0], toggle, runPrevChar)
+                    runPrevChar = toggle[1]
+                    if (!openHeldRun(stars, char)) +stars
+                } else +(toggle + stars)
             }
             // If we are inside an inline HTML tag accumulation, backslashes are literal.
             if (inlineBuffer.startsWith("<")) {
@@ -5959,9 +6015,21 @@ private class ParserState(
         // Inside a link URL / image URL the backslash is buffered raw and resolved
         // by `applyBackslashEscapes` when the URL/title is finalized at `)`.
         if (char == '\\' && !code && !(inLink && inLinkUrl) && !(inImage && inLinkUrl)) {
+            // A `\` ends a pending entity ref (`&\[`): its `&body` is literal and
+            // goes out first, or the escaped char would be emitted before it.
+            if (inEntityRef) abortEntityRef()
             // Inside an inline HTML tag accumulation, the backslash is literal too —
             // preserve it in the buffer so attribute values keep `\` characters.
             if (inlineBuffer.startsWith("<")) {
+                // `<\` starts no tag or autolink, and `\` ends an email autolink
+                // candidate: the buffer is literal and the `\` an escape like any
+                // other (see canFollowInlineHtmlOpen).
+                if (inlineBuffer.length == 1 || inlineBuffer.isEmailAutolinkCandidate()) {
+                    +inlineBuffer.toString()
+                    inlineBuffer.clear()
+                    pendingDeferredChar = char
+                    return
+                }
                 inlineBuffer.append('\\')
                 return
             }
@@ -5987,7 +6055,7 @@ private class ParserState(
                 pendingDeferredChar = char
                 return
             }
-            if (inlineBuffer.toString() in ESCAPE_HELD_RUNS) {
+            if (inlineBuffer.toString() in ESCAPE_HELD_RUNS || inlineBuffer.isToggleThenEmphasisRun()) {
                 escaped = true
                 return
             }
@@ -6167,6 +6235,8 @@ private class ParserState(
             char == ']' && !code && !math && !inlineBuffer.startsWith("<") &&
             !backticksPending
         ) {
+            // A pending entity ref ends here (`&]`), its `&body` first.
+            if (inEntityRef) abortEntityRef()
             if (linkLabelBracketDepth > 0) {
                 // Balanced `]` inside nested brackets — content.
                 linkLabelBracketDepth--
@@ -6193,6 +6263,7 @@ private class ParserState(
         if ((inLink || inImage) && !inLinkRef && !inLinkUrl &&
             char == '[' && !code && !math && !inlineBuffer.startsWith("<")
         ) {
+            if (inEntityRef) abortEntityRef()
             linkLabelBracketDepth++
             if (inImage) imageAlt.append('[') else linkText.append('[')
             if (inlineBuffer.isNotEmpty()) {
@@ -6297,6 +6368,23 @@ private class ParserState(
                     }
                 }
                 return
+            } else if (inlineBuffer.length == 1 && !char.canFollowInlineHtmlOpen()) {
+                // A `<` no tag, autolink or email autolink can start with (`a < b`)
+                // is literal at once: speculating would hold the rest of the line
+                // as raw text, emphasis and code included.
+                +"<"
+                inlineBuffer.clear()
+                pendingDeferredChar = char
+                return
+            } else if (inlineBuffer.isEmailAutolinkCandidate() &&
+                !char.continuesEmailAutolinkCandidate(inlineBuffer)
+            ) {
+                // Only an email autolink starts `<1`, `<-`, `<=`; this char ends
+                // that candidate (`<3 you`, `a <- b`), so it is literal text.
+                +inlineBuffer.toString()
+                inlineBuffer.clear()
+                pendingDeferredChar = char
+                return
             } else {
                 inlineBuffer.append(char)
                 return
@@ -6349,11 +6437,44 @@ private class ParserState(
             // new-char branch below: those flush a pending run as literal text, so
             // a closing `==` right before a `~` (`~~a ==b==~~`) or a closing `~~`
             // before a `*` would never close. An *opening* run keeps its original
-            // position below (literal before `` ` ``/`*`, etc.).
+            // position below (literal before `_`, `[`, etc.).
             isPendingSpanCloser() && char != inlineBuffer[0] -> {
                 val run = inlineBuffer.toString()
                 inlineBuffer.clear()
                 toggleInlineSpan(if (run[0] == '~') "del" else "mark", run[0], run, runPrevChar)
+                pendingDeferredChar = char
+            }
+            // A `~~`/`==` run (SPAN_TOGGLE_RUNS — a single `~` stays literal)
+            // before a code span toggles like one before a letter (`~~`a`~~`,
+            // issue #133) — the branches below would flush it as literal text first.
+            char == '`' && inlineBuffer.toString() in SPAN_TOGGLE_RUNS -> {
+                val run = inlineBuffer.toString()
+                inlineBuffer.clear()
+                toggleInlineSpan(if (run[0] == '~') "del" else "mark", run[0], run, runPrevChar)
+                pendingDeferredChar = char
+            }
+            // Before an emphasis run (`~~**a**~~`) it is held with that run until
+            // the char after it is known — not before a `*` that may close an
+            // enclosing em/strong (`*a~~*`): that run is the closer's content.
+            char == '*' && inlineBuffer.toString() in SPAN_TOGGLE_RUNS &&
+                !isInlineClosable("em") && !isInlineClosable("strong") -> {
+                inlineBuffer.append('*')
+            }
+            // A held `~~*` / `==**` resolves on the char after the emphasis run:
+            // the span opens unless whitespace or its own delimiter follows, so
+            // an emphasis run that opens nothing (`~~*~~`) never leaves an empty
+            // span that deletes the source chars; the toggle run is literal then,
+            // as before a space. (Before a `\` the run is held further, see the
+            // escape handling.)
+            char != '*' && inlineBuffer.isToggleThenEmphasisRun() -> {
+                val toggle = inlineBuffer.substring(0, 2)
+                val stars = inlineBuffer.length - 2
+                inlineBuffer.clear()
+                if (!char.isFlankWhitespace() && char != toggle[0]) {
+                    toggleInlineSpan(if (toggle[0] == '~') "del" else "mark", toggle[0], toggle, runPrevChar)
+                } else +toggle
+                runPrevChar = toggle[1]
+                if (stars <= 3) resolveEmphasisRun('*', stars, char) else +"*".repeat(stars)
                 pendingDeferredChar = char
             }
             // Backtick run accumulation: keep appending backticks until a non-backtick
