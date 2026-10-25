@@ -48,7 +48,9 @@ import kotlinx.coroutines.flow.flow
  * outermost stacked box entered on the way to it (or the common parent, for
  * loose content after a box), so a whole flex row below a headline becomes
  * one paragraph — which ends where that anchor closes or the next stacked box
- * or surviving block starts in it. The content *before* the first break of a
+ * or surviving block starts in it (directly, or behind `display: contents` or
+ * inline wrappers opened since the last content), and a paragraph opened
+ * around a stacked box ends where that box closes. The content *before* the first break of a
  * container stays loose: the renderer separates loose text from a following
  * paragraph by a blank line. Wrapping is the only way to say "paragraph" in
  * the event model: it needs no renderer convention, and an HTML rendering of
@@ -62,7 +64,9 @@ import kotlinx.coroutines.flow.flow
  * `<textarea>`). When the stacked box itself is such an element (a nav or
  * card link displayed as a block, a control), the paragraph opens *around*
  * it, in the nearest ancestor that can hold one; below that, inside it, the
- * separator space applies, as before. The cells of a CSS table
+ * separator space applies, as before. A document root (`html`) holds
+ * paragraphs again, so a same-origin frame's document nested in its inline
+ * frame element breaks like the page's own. The cells of a CSS table
  * (`table-cell`) count as side by side, its rows as stacked.
  *
  * The run after a break is held until the paragraph ends — where its anchor
@@ -115,7 +119,13 @@ import kotlinx.coroutines.flow.flow
  * outside its label. Controls are distinct things to act on (see
  * [isDeclaredControl] — only a declared one: a bare ref-bearing `<span>` may
  * be half a word, `US` + `$5`), and nothing renders two of them flush against
- * each other on purpose — they would read as one.
+ * each other on purpose — they would read as one. Unless the capture shows
+ * both in the inline text flow (a recorded `inline`/`contents` display) and
+ * neither is a link (`<a>` or `role=link`), though: such controls may be one
+ * word a page made a tap target per syllable
+ * (`<span role=button>Hel</span><span role=button>lo</span>`, #141). Links
+ * are always separated — a per-syllable `<a>` is split, the price of the
+ * masthead links whose gap is a CSS margin.
  *
  * A separator goes *before* the marks opened since the previous token (`<b>`,
  * `<em>`, an inline `<a>`, a blockified `<strong>`, the box itself …), never
@@ -142,11 +152,10 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
     var crossedSurvivingBlock = false
     var seenInlineToken = false // suppresses a leading separator at stream start
     var previousEndedWithSpace = false // last token already ended in whitespace
-    // The open controls, innermost last, each by a serial number, and the
-    // control (0 = none) holding the last inline content token.
-    val openControls = ArrayDeque<Int>()
-    var controlSerial = 0
-    var previousTokenControl = 0
+    // The open controls, innermost last, and the control (null = none)
+    // holding the last inline content token.
+    val openControls = ArrayDeque<OpenControl>()
+    var previousTokenControl: OpenControl? = null
     // What each element's display is, the same reading every operator makes.
     // An old unmarked dump left the `block` of its `<html>`, `<body>` and
     // leading wrappers out, so those still read as their tag's UA default —
@@ -170,6 +179,10 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
     // always the tail of the stream, behind the held run, so a separator (and
     // a paragraph) can still be placed before them.
     val heldMarks = mutableListOf<HeldEvent>()
+    // The open marks of an element with the `img` role, itself included.
+    var imageRoleDepth = 0
+    // The content tokens seen so far, to tell what opened since the last one.
+    var tokenCount = 0
 
     // A tie goes to the stacked box: a block after an inline-block at the same
     // level still starts a line of its own.
@@ -186,17 +199,20 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
         heldMarks.clear()
     }
 
-    suspend fun release(wrap: Boolean) {
+    // Writes the held run; a wrapped paragraph closes before the held event
+    // at [closeAt], or after the whole run.
+    suspend fun release(wrap: Boolean, closeAt: Int = Int.MAX_VALUE) {
         val buffer = held ?: return
         held = null
         for ((index, heldEvent) in buffer.withIndex()) {
             if (wrap && index == paragraphStart) emit(PARAGRAPH_MARK)
+            if (wrap && index == closeAt) emit(PARAGRAPH_UNMARK)
             if (!wrap && index == omittedSeparator) emit(SemanticEvent.Text(" "))
             emit(heldEvent.event)
         }
         // Left out right before the token, which is not held yet.
         if (!wrap && omittedSeparator == buffer.size) emit(SemanticEvent.Text(" "))
-        if (wrap) emit(PARAGRAPH_UNMARK)
+        if (wrap && closeAt >= buffer.size) emit(PARAGRAPH_UNMARK)
         paragraphDepth = -1
         omittedSeparator = -1
     }
@@ -237,6 +253,23 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
     }
 
     fun allowsParagraph(depth: Int) = depth == 0 || stack[depth - 1].allowsParagraph
+
+    // Whether a box opening now starts directly in the held paragraph's
+    // anchor: right inside it, or behind wrappers laying out no box of their
+    // own (`display: contents`, inline) opened since the last token, before
+    // which the paragraph can still end (issue #154). A wrapper already
+    // holding part of the paragraph cannot be crossed by its end.
+    fun opensDirectlyInParagraph(): Boolean =
+        stack.size == paragraphDepth || (paragraphDepth + 1..stack.size).all {
+            stack[it - 1].boundary == INLINE && stack[it - 1].openedAtToken == tokenCount
+        }
+
+    // Where the held paragraph closes when a box opens directly in it: before
+    // the outermost wrapper opened since the last token — its mark is the
+    // last one at that depth, unless it is still among the held marks.
+    fun paragraphCloseIndex(buffer: List<HeldEvent>): Int =
+        if (heldMarks.size >= stack.size - paragraphDepth) buffer.size
+        else buffer.indexOfLast { it.event is Mark && it.depthAfter == paragraphDepth + 1 }
 
     fun cross(boundary: BlockBoundary) {
         when (boundary) {
@@ -289,15 +322,18 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
         crossedSurvivingBlock = false
         seenInlineToken = true
         previousEndedWithSpace = text?.lastOrNull()?.isWhitespace() == true
-        previousTokenControl = openControls.lastOrNull() ?: 0
+        previousTokenControl = openControls.lastOrNull()
         turnDepth = stack.size
+        tokenCount++
         stackedLevel = Int.MAX_VALUE
         sideBySideLevel = Int.MAX_VALUE
     }
 
-    // Separates a control opening right after the content of another, closed one.
-    suspend fun separateAdjacentControl() {
-        if (previousTokenControl != 0 && previousTokenControl !in openControls &&
+    // Separates a control opening right after the content of another, closed
+    // one, unless both are inline text flow (per-token tap targets, #141).
+    suspend fun separateAdjacentControl(control: OpenControl) {
+        val previous = previousTokenControl ?: return
+        if (previous !in openControls && (previous.distinct || control.distinct) &&
             !crossedSurvivingBlock && !previousEndedWithSpace
         ) {
             out(SemanticEvent.Text(" "), stack.size - heldMarks.size)
@@ -307,6 +343,26 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
     }
 
     collect { event ->
+        // The children of an element with the `img` role describe the image
+        // simplifyHtml makes of it and are dropped there for its name, so
+        // they pass through as no content of their own (#169).
+        if (imageRoleDepth > 0 && !(event is Unmark && imageRoleDepth == 1)) {
+            when (event) {
+                is Mark -> {
+                    displays.open(event)
+                    stack.addLast(IMAGE_DESCRIPTION_FRAME)
+                    imageRoleDepth++
+                }
+                is Unmark -> {
+                    displays.close()
+                    stack.removeLastOrNull()
+                    imageRoleDepth--
+                }
+                else -> {}
+            }
+            out(event)
+            return@collect
+        }
         when (event) {
             is Mark -> {
                 val parent = stack.lastOrNull()
@@ -317,17 +373,26 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
                 // anchor, and cannot hold one starting deeper inside its run.
                 if (paragraphDepth >= 0) {
                     val block = boundary == STACKED_BOX || event.rendersAsBlock()
-                    if (block && stack.size == paragraphDepth) release(wrap = true)
+                    if (block && opensDirectlyInParagraph()) {
+                        release(wrap = true, closeAt = paragraphCloseIndex(held.orEmpty()))
+                    }
                     else if (event.rendersAsBlock()) release(wrap = false)
                 }
-                val control = event.isDeclaredControl()
+                val control = if (event.isDeclaredControl()) OpenControl(
+                    // A link is a distinct thing to follow wherever it sits; any
+                    // other control unless the capture shows it in the inline
+                    // text flow — an unrecorded or UA-default display says
+                    // nothing about that, so it keeps the separator.
+                    distinct = event.name == "a" || event.explicitRole() == "link" ||
+                        !display.isCapturedInlineFlow()
+                ) else null
                 if (preserveDepth == 0) {
                     cross(boundary)
                     crossBox(boundary, stack.size + 1)
                     // Held from before this mark, so a paragraph can open
                     // around the box when the box itself cannot hold one.
                     holdIfLineBreaks()
-                    if (control) separateAdjacentControl()
+                    if (control != null) separateAdjacentControl(control)
                 }
                 val opensPreserve = event.isPreserveRegion()
                 stack.addLast(
@@ -338,21 +403,37 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
                         // are laid out by its parent's display.
                         isFlexGridContainer = if (display == CapturedDisplay.Known("contents")) parentIsFlexGrid
                         else display.isFlexGridContainer(),
-                        control = control,
+                        control = control != null,
                         rendersAsBlock = event.rendersAsBlock(),
-                        allowsParagraph = (parent?.allowsParagraph ?: true) &&
-                            event.mayHoldParagraph(display)
+                        // A document root (a same-origin frame's, nested in
+                        // its inline frame element) lays its content out on
+                        // its own, like the page's (issue #154) — unless the
+                        // frame sits in an element holding only phrasing.
+                        allowsParagraph = (
+                            if (event.name == "html" && parent?.isFrame == true) !parent.insidePhrasingHost
+                            else parent?.allowsParagraph ?: true
+                            ) && event.mayHoldParagraph(display),
+                        // The frame element itself is no such element: it
+                        // renders as a block-level tag around its document.
+                        insidePhrasingHost = parent?.insidePhrasingHost == true ||
+                            (event.name !in FRAME_TAGS && event.holdsOnlyPhrasing()),
+                        isFrame = event.name in FRAME_TAGS,
+                        openedAtToken = tokenCount
                     )
                 )
-                if (preserveDepth == 0 && event.name == "img") {
+                // An image is a content token; so is a generic element with the
+                // `img` role, which simplifyHtml turns into one (#169).
+                if (preserveDepth == 0 && (event.name == "img" || event.isImageRole())) {
                     emitInlineToken(event, stack.size)
+                    if (event.isImageRole()) imageRoleDepth = 1
                 } else {
                     heldMarks += HeldEvent(event, stack.size)
                 }
-                if (control) openControls.addLast(++controlSerial)
+                if (control != null) openControls.addLast(control)
                 if (opensPreserve) preserveDepth++
             }
             is Unmark -> {
+                imageRoleDepth = 0
                 displays.close()
                 releaseHeldMarks()
                 if (paragraphDepth >= 0 && stack.size == paragraphDepth) release(wrap = true)
@@ -366,6 +447,12 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
                     turnDepth = minOf(turnDepth, stack.size)
                 }
                 out(event)
+                // A stacked box directly in the anchor is one the paragraph
+                // opened around (a box starting there inside the paragraph
+                // ends it), and what follows it is below it (issue #154).
+                if (paragraphDepth >= 0 && frame?.boundary == STACKED_BOX && stack.size == paragraphDepth) {
+                    release(wrap = true)
+                }
                 if (preserveDepth == 0) holdIfLineBreaks()
             }
             is Text -> when {
@@ -392,7 +479,29 @@ public fun Flow<SemanticEvent>.separateUnwrappedBlocks(): Flow<SemanticEvent> = 
 private val PARAGRAPH_MARK = SemanticEvent.Mark("p", isTagged = true)
 private val PARAGRAPH_UNMARK = SemanticEvent.Unmark("p", isTagged = true)
 
+// The frame of an element inside an `img` role's description: no box edge,
+// no paragraph.
+private val IMAGE_DESCRIPTION_FRAME = BlockBoundaryFrame(
+    boundary = BlockBoundary.INLINE,
+    opensPreserve = false,
+    isFlexGridContainer = false,
+    control = false,
+    rendersAsBlock = false,
+    allowsParagraph = false,
+    insidePhrasingHost = true,
+    isFrame = false,
+    openedAtToken = -1,
+)
+
 private class HeldEvent(val event: SemanticEvent, val depthAfter: Int)
+
+/**
+ * An open declared control, compared by identity. A [distinct] one is
+ * separated from an adjacent control: a link, or a control that is a box of
+ * its own — two controls in the inline text flow may be the halves of one
+ * word (`<span role=button>Hel</span><span role=button>lo</span>`, #141).
+ */
+private class OpenControl(val distinct: Boolean)
 
 /** How crossing an element's boundary bears on separating adjacent inline content. */
 private enum class BlockBoundary {
@@ -415,6 +524,10 @@ private class BlockBoundaryFrame(
     val control: Boolean,
     val rendersAsBlock: Boolean,
     val allowsParagraph: Boolean,
+    val insidePhrasingHost: Boolean,
+    val isFrame: Boolean,
+    // The [tokenCount] when it opened: no content since, while it is unchanged.
+    val openedAtToken: Int,
 )
 
 private fun SemanticEvent.Mark.blockBoundary(
@@ -472,16 +585,7 @@ private fun SemanticEvent.Mark.blockBoundary(
  * element itself is concerned (its ancestors must allow one too).
  */
 private fun SemanticEvent.Mark.mayHoldParagraph(display: CapturedDisplay): Boolean = when {
-    name in PHRASING_HOSTS -> false
-    // A control's content is its label, and a ref-bearing element is kept
-    // as a tag whose content the agent reads as one thing.
-    this[AccessibilityAnnotations.REF] != null || isDeclaredControl() -> false
-    explicitRole() in PHRASING_ROLES -> false
-    // An inline element [simplifyHtml] keeps (`strong`, `abbr`, `time`, …)
-    // stays a raw tag around a block, which does not re-parse, whatever
-    // display the page gave it (Bootstrap's `.d-block`). Only the generic
-    // wrappers and custom elements are unwrapped.
-    isInlineByUaDefault() && name !in UNWRAPPED_INLINE_WRAPPERS && '-' !in name -> false
+    holdsOnlyPhrasing() -> false
     else -> when (display) {
         // A block or a `contents` wrapper, which defers to its parent.
         Unrecorded -> true
@@ -492,6 +596,25 @@ private fun SemanticEvent.Mark.mayHoldParagraph(display: CapturedDisplay): Boole
             else -> !display.value.startsWith("inline")
         }
     }
+}
+
+/**
+ * Whether this element's content is phrasing once rendered, whatever its
+ * display — a heading, a table cell, a control's label, … — so no paragraph
+ * is expressible anywhere inside it.
+ */
+private fun SemanticEvent.Mark.holdsOnlyPhrasing(): Boolean = when {
+    name in PHRASING_HOSTS -> true
+    // A control's content is its label, and a ref-bearing element is kept
+    // as a tag whose content the agent reads as one thing.
+    this[AccessibilityAnnotations.REF] != null || isDeclaredControl() -> true
+    explicitRole() in PHRASING_ROLES -> true
+    // An inline element [simplifyHtml] keeps (`strong`, `abbr`, `time`, …)
+    // stays a raw tag around a block, which does not re-parse, whatever
+    // display the page gave it (Bootstrap's `.d-block`). Only the generic
+    // wrappers and custom elements are unwrapped.
+    isInlineByUaDefault() && name !in UNWRAPPED_INLINE_WRAPPERS && '-' !in name -> true
+    else -> false
 }
 
 /**
@@ -540,6 +663,11 @@ private val BLOCK_ROLES = setOf(
 // child of one is a separated box. An absent display is never a flex container.
 private fun CapturedDisplay.isFlexGridContainer(): Boolean =
     this is Known && ("flex" in value || "grid" in value)
+
+// A captured `inline` (or box-less `contents`) display: the element sits in
+// the text flow of its parent, flush against its neighbours.
+private fun CapturedDisplay.isCapturedInlineFlow(): Boolean =
+    this is Known && (value == "inline" || value == "contents")
 
 private fun SemanticEvent.Mark.isPreserveRegion(): Boolean =
     isTagged && name in WHITESPACE_PRESERVE_TAGS

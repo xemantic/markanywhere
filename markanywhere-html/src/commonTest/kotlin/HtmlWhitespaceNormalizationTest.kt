@@ -69,6 +69,86 @@ class HtmlWhitespaceNormalizationTest {
     }
 
     @Test
+    fun `should move a leading space out of an inline open`() = runTest {
+        // given — issue #144: `Menu<a> Home</a>` reads "Menu Home" in a browser
+        val input = semanticEvents(tagged = true) {
+            "p" { +"Menu"; "a"("href" to "/x") { +" Home" } }
+        }
+
+        // when
+        val output = input.dropHtmlStructuralWhitespace()
+
+        // then — the space lands before the open, where a Markdown link label
+        // and an opening emphasis delimiter need it
+        output sameAs semanticEvents(tagged = true) {
+            "p" { +"Menu "; "a"("href" to "/x") { +"Home" } }
+        }
+    }
+
+    @Test
+    fun `should move a leading space out of nested inline opens`() = runTest {
+        // given — the space after two opening tags, as its own text event
+        val input = semanticEvents(tagged = true) {
+            "p" { +"Menu"; "b" { "a"("href" to "/x") { +" "; +"Home" } } }
+        }
+
+        // when
+        val output = input.dropHtmlStructuralWhitespace()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "p" { +"Menu "; "b" { "a"("href" to "/x") { +"Home" } } }
+        }
+    }
+
+    @Test
+    fun `should keep the space after an image at the leading edge of an inline element`() = runTest {
+        // given — an image is content, not an opening tag to hold: the space
+        // after it separates it from the text that follows
+        val input = semanticEvents(tagged = true) {
+            "p" { +"Logo"; "b" { +" "; "img"("alt" to "x") { }; +" text" } }
+        }
+
+        // when
+        val output = input.dropHtmlStructuralWhitespace()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "p" { +"Logo "; "b" { "img"("alt" to "x") { }; +" text" } }
+        }
+    }
+
+    @Test
+    fun `should drop a leading space inside an inline open at a block boundary`() = runTest {
+        // given — nothing before the link to separate it from
+        val input = semanticEvents(tagged = true) {
+            "p" { "a"("href" to "/x") { +" Home" } }
+        }
+
+        // when
+        val output = input.dropHtmlStructuralWhitespace()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "p" { "a"("href" to "/x") { +"Home" } }
+        }
+    }
+
+    @Test
+    fun `should keep a leading space inside an inline code region`() = runTest {
+        // given — whitespace in a tagged <code> is significant
+        val input = semanticEvents(tagged = true) {
+            "p" { +"Run"; "code" { +" x" } }
+        }
+
+        // when
+        val output = input.dropHtmlStructuralWhitespace()
+
+        // then
+        output sameAs input
+    }
+
+    @Test
     fun `should drop a space carried past an inline close at a block boundary`() = runTest {
         // given
         val input = semanticEvents(tagged = true) {
@@ -397,6 +477,60 @@ class HtmlWhitespaceNormalizationTest {
     }
 
     @Test
+    fun `should keep space around Markdown links and images displayed as blocks`() = runTest {
+        // given — issue #169: a Markdown link or image renders inline whatever
+        // CSS displayed it as, so the separator next to it is significant
+        val input = semanticEvents {
+            "p" {
+                "a"("href" to "u", AccessibilityAnnotations.DISPLAY to "block") { +"Home" }
+                +" "
+                "a"("href" to "v", AccessibilityAnnotations.DISPLAY to "block") { +"About" }
+                +" "
+                "img"("alt" to "logo", AccessibilityAnnotations.DISPLAY to "block") { }
+                +" x"
+            }
+        }
+
+        // when
+        val output = input.dropHtmlStructuralWhitespace()
+
+        // then
+        output sameAs semanticEvents {
+            "p" {
+                "a"("href" to "u") { +"Home" }
+                +" "
+                "a"("href" to "v") { +"About" }
+                +" "
+                "img"("alt" to "logo") { }
+                +" x"
+            }
+        }
+    }
+
+    @Test
+    fun `should keep space around a kept ref-bearing element displayed as a block`() = runTest {
+        // given — issue #169: a generic element simplifyHtml keeps for its ref
+        // is written as a raw inline tag, so the separator before it shows
+        val input = semanticEvents {
+            "p" {
+                +"Pro "
+                tag("div", AccessibilityAnnotations.REF to "5", AccessibilityAnnotations.DISPLAY to "block") { +"teams" }
+            }
+        }
+
+        // when
+        val output = input.dropHtmlStructuralWhitespace()
+
+        // then
+        output sameAs semanticEvents {
+            "p" {
+                +"Pro "
+                tag("div", AccessibilityAnnotations.REF to "5") { +"teams" }
+            }
+        }
+    }
+
+    @Test
     fun `should keep space around a display contents wrapper`() = runTest {
         // given — a `display: contents` `<div>` lays out no box of its own, so
         // the whitespace touching it separates the inline content on either
@@ -419,6 +553,91 @@ class HtmlWhitespaceNormalizationTest {
             "div" {
                 "span" { +"B" }
             }
+        }
+    }
+
+    @Test
+    fun `should move the space out of an inline element holding only a space`() = runTest {
+        // given — review of #144: `Hi<b> </b>there` reads "Hi there"
+        val input = semanticEvents(tagged = true) {
+            "p" { +"Hi"; "b" { +" " }; +"there" }
+        }
+
+        // when
+        val output = input.dropHtmlStructuralWhitespace()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "p" { +"Hi "; "b" { }; +"there" }
+        }
+    }
+
+    @Test
+    fun `should move a leading space out of inline opens before an empty element`() = runTest {
+        // given — review of #144: `x<b> <i></i>y</b>` reads "x y"
+        val input = semanticEvents(tagged = true) {
+            "p" { +"x"; "b" { +" "; "i" { }; +"y" } }
+        }
+
+        // when
+        val output = input.dropHtmlStructuralWhitespace()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "p" { +"x "; "b" { "i" { }; +"y" } }
+        }
+    }
+
+    @Test
+    fun `should drop the space of an empty inline element at a block end`() = runTest {
+        // given — second review of #144: nothing follows the empty link in its
+        // paragraph, so its space separates nothing
+        val input = semanticEvents(tagged = true) {
+            "p" { +"Hi"; "a"("href" to "/x") { +" " } }
+            "p" { +"Next" }
+        }
+
+        // when
+        val output = input.dropHtmlStructuralWhitespace()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "p" { +"Hi"; "a"("href" to "/x") { } }
+            "p" { +"Next" }
+        }
+    }
+
+    @Test
+    fun `should keep the space of an empty inline element closing inside another`() = runTest {
+        // given — `Hi<span><b> </b></span>there`: what follows the outer close
+        // decides, as for a run before any inline close
+        val input = semanticEvents(tagged = true) {
+            "p" { +"Hi"; "span" { "b" { +" " } }; +"there" }
+        }
+
+        // when
+        val output = input.dropHtmlStructuralWhitespace()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "p" { +"Hi "; "span" { "b" { } }; +"there" }
+        }
+    }
+
+    @Test
+    fun `should keep the space after an empty inline element`() = runTest {
+        // given — DuckDuckGo's empty switch control between two labels: the
+        // close of the element is the left side of the space after it
+        val input = semanticEvents(tagged = true) {
+            "p" { +"Protected "; "a"("href" to "/x") { }; +" "; +"Germany" }
+        }
+
+        // when
+        val output = input.dropHtmlStructuralWhitespace()
+
+        // then
+        output sameAs semanticEvents(tagged = true) {
+            "p" { +"Protected "; "a"("href" to "/x") { }; +" Germany" }
         }
     }
 }

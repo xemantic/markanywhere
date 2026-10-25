@@ -34,7 +34,10 @@ import kotlinx.coroutines.flow.flow
  * [SemanticEvent.Unmark], there is no [non-HTML-blank][isHtmlBlank] text and no
  * surviving child element. Blankness is evaluated bottom-up, so a wrapper whose
  * only children are themselves blank formatting elements (`<sup><em></em></sup>`)
- * collapses too. Only ASCII whitespace counts as blank — an NBSP-only element
+ * collapses too. The blank text of a dropped element is kept in its place,
+ * as the separator it is between the content around it (`Hi<b> </b>there`),
+ * for [dropHtmlStructuralWhitespace] to decide on; an element that turns out
+ * non-empty keeps it as content. Only ASCII whitespace counts as blank — an NBSP-only element
  * (`<em>&nbsp;</em>`) carries content and survives, consistent with
  * [dropHtmlStructuralWhitespace].
  *
@@ -54,37 +57,48 @@ import kotlinx.coroutines.flow.flow
  */
 public fun Flow<SemanticEvent>.dropBlankInlineFormatting(): Flow<SemanticEvent> = flow {
 
-    val suppressedMarks = ArrayDeque<SemanticEvent.Mark>()
+    // The pending formatting marks, each possibly still blank, and the blank
+    // text inside them, in stream order.
+    val pending = ArrayDeque<SemanticEvent>()
+    var pendingMarks = 0
 
     collect { event ->
 
         when (event) {
 
             is Mark -> if (event.name in INLINE_FORMATTING_TAGS) {
-                suppressedMarks += event
+                pending += event
+                pendingMarks++
             } else {
-                if (suppressedMarks.isNotEmpty()) suppressedMarks.flush()
+                pending.flush()
+                pendingMarks = 0
                 emit(event)
             }
 
             is Text -> if (!event.text.isHtmlBlank()) {
-                suppressedMarks.flush()
+                pending.flush()
+                pendingMarks = 0
                 emit(event)
-            } else if (suppressedMarks.isEmpty()) {
+            } else if (pendingMarks == 0) {
                 // A standalone blank text node is an inter-element separator,
                 // not the empty content of a formatting element — keep it so
                 // the downstream whitespace normalizer can gate it (drop at a
-                // block boundary, keep one space between inline content). Blank
-                // text *inside* a pending formatting element is still absorbed
-                // (the element may turn out empty).
+                // block boundary, keep one space between inline content).
                 emit(event)
+            } else {
+                // Inside a pending element: its content if the element turns
+                // out non-empty (`<b> <img></b>`), else a separator between
+                // the content around it (`Hi<b> </b>there`, issue #144).
+                pending += event
             }
 
-            is Unmark -> if (suppressedMarks.isNotEmpty()) {
-                // LIFO: this unmark closes the most recently suppressed mark.
-                // removeFirst() would desync a still-open outer mark from its
-                // unmark when a nested empty element closes inside content.
-                suppressedMarks.removeLast()
+            is Unmark -> if (pendingMarks > 0) {
+                // LIFO: this unmark closes the most recently suppressed mark;
+                // the blank text inside it stays where the element was.
+                pending.removeAt(pending.indexOfLast { it is Mark })
+                pendingMarks--
+                // No element left pending: what remains is separators.
+                if (pendingMarks == 0) pending.flush()
             } else {
                 emit(event)
             }
@@ -95,8 +109,8 @@ public fun Flow<SemanticEvent>.dropBlankInlineFormatting(): Flow<SemanticEvent> 
 
 }
 
-context(collector: FlowCollector<SemanticEvent.Mark>)
-private suspend fun ArrayDeque<SemanticEvent.Mark>.flush() {
+context(collector: FlowCollector<SemanticEvent>)
+private suspend fun ArrayDeque<SemanticEvent>.flush() {
     forEach { collector.emit(it) }
     clear()
 }

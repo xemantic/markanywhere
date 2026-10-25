@@ -624,6 +624,133 @@ class HtmlToMarkdownTest {
     }
 
     @Test
+    fun `should break the stacked boxes inside a display contents wrapper into paragraphs`() = runTest {
+        // given — issue #154
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "div"(AccessibilityAnnotations.DISPLAY to "block") { +"X" }
+                "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                    +"Intro"
+                    "div"(AccessibilityAnnotations.DISPLAY to "contents") {
+                        "div"(AccessibilityAnnotations.DISPLAY to "block") { +"A" }
+                        "div"(AccessibilityAnnotations.DISPLAY to "block") { +"B" }
+                    }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            X
+
+            Intro
+
+            A
+
+            B
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should break the stacked boxes inside an indented display contents wrapper into paragraphs`() = runTest {
+        // given — review of #154: the inter-tag whitespace a captured DOM carries
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "div"(AccessibilityAnnotations.DISPLAY to "block") { +"X" }
+                +"\n  "
+                "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                    +"Intro"
+                    +"\n  "
+                    "div"(AccessibilityAnnotations.DISPLAY to "contents") {
+                        +"\n    "
+                        "div"(AccessibilityAnnotations.DISPLAY to "block") { +"A" }
+                        +"\n    "
+                        "div"(AccessibilityAnnotations.DISPLAY to "block") { +"B" }
+                        +"\n  "
+                    }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            X
+
+            Intro
+
+            A
+
+            B
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should break the loose text after a formatting element displayed as a block`() = runTest {
+        // given — issue #154
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "div" {
+                    +"X"
+                    "strong"(AccessibilityAnnotations.DISPLAY to "block") { +"A" }
+                    +"tail"
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            X
+
+            **A**
+
+            tail
+        """.trimIndent()
+    }
+
+    @Test
+    fun `should break the document a same-origin frame embeds into paragraphs`() = runTest {
+        // given — issue #154
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "p" { +"x" }
+                "iframe"("src" to "f") {
+                    "html" {
+                        "body" {
+                            "div" { +"A" }
+                            "div" { +"B" }
+                        }
+                    }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then
+        markdown sameAsMarkdown """
+            x
+
+            <iframe src="f">
+
+            A
+
+            B
+
+            </iframe>
+        """.trimIndent()
+    }
+
+    @Test
     fun `should keep the cells of a CSS table row on one line`() = runTest {
         // given — a table laid out by CSS on divs, not a data table
         val page = semanticEvents(tagged = true) {
@@ -1397,6 +1524,166 @@ class HtmlToMarkdownTest {
             - <span ref="24">Berlin Südkreuz.</span>
         """.trimIndent()
         flowOf(markdown).parse().renderMarkdown() sameAs markdown
+    }
+
+    @Test
+    fun `should not split a word made of per-syllable controls`() = runTest {
+        // given — issue #141
+        val page = semanticEvents(tagged = true) {
+            "p" {
+                "span"("role" to "button", AccessibilityAnnotations.REF to "1", AccessibilityAnnotations.DISPLAY to "inline") { +"Hel" }
+                "span"("role" to "button", AccessibilityAnnotations.REF to "2", AccessibilityAnnotations.DISPLAY to "inline") { +"lo" }
+                +","
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown(refMode = RefMode.STRIP).renderMarkdown()
+
+        // then
+        markdown sameAs "Hello,"
+    }
+
+    @Test
+    fun `should keep the space of an empty bold element`() = runTest {
+        // given — issue #144
+        val page = semanticEvents(tagged = true) {
+            "p" { +"Hi"; "b" { +" " }; +"there" }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then
+        markdown sameAs "Hi there"
+    }
+
+    @Test
+    fun `should keep the space at the leading edge of bold wrapping an image`() = runTest {
+        // given — issue #144
+        val page = semanticEvents(tagged = true) {
+            "p" { +"Run"; "b" { +" "; "img"("src" to "x.png", "alt" to "x") { } } }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then
+        markdown sameAs "Run **![x](x.png)**"
+    }
+
+    @Test
+    fun `should keep the space at the leading edge of a link`() = runTest {
+        // given — issue #144
+        val page = semanticEvents(tagged = true) {
+            "p" { +"Menu"; "a"("href" to "/x") { +" Home" } }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then
+        markdown sameAs "Menu [Home](/x)"
+    }
+
+    @Test
+    fun `should keep the gap of an invisible element at the leading edge of a link`() = runTest {
+        // given — issue #144: the gap applyAccessibility writes for the hidden
+        // icon (#111) lands inside the link, at its leading edge
+        val page = semanticEvents(tagged = true) {
+            "p"(AccessibilityAnnotations.DISPLAY to "block") {
+                +"Menu"
+                "a"("href" to "/x", AccessibilityAnnotations.DISPLAY to "inline") {
+                    "span"(
+                        AccessibilityAnnotations.DISPLAY to "inline",
+                        AccessibilityAnnotations.VISIBILITY to "hidden"
+                    ) { +"icon" }
+                    +"Home"
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown(refMode = RefMode.STRIP).renderMarkdown()
+
+        // then
+        markdown sameAs "Menu [Home](/x)"
+    }
+
+    @Test
+    fun `should separate links displayed as blocks in a flex row`() = runTest {
+        // given — issue #169: a Markdown link renders inline whatever its CSS
+        // display, so the separator between the two must survive
+        val page = semanticEvents(tagged = true) {
+            "div"(AccessibilityAnnotations.DISPLAY to "flex") {
+                "a"("href" to "u", AccessibilityAnnotations.DISPLAY to "block") { +"Home" }
+                "a"("href" to "v", AccessibilityAnnotations.DISPLAY to "block") { +"About" }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then
+        markdown sameAs "[Home](u) [About](v)"
+    }
+
+    @Test
+    fun `should separate a kept ref-bearing div displayed as a block from the text before it`() = runTest {
+        // given — issue #169: the div survives as a raw inline tag for its ref
+        val page = semanticEvents(tagged = true) {
+            "p"(AccessibilityAnnotations.DISPLAY to "block") {
+                +"Pro"
+                "div"(AccessibilityAnnotations.REF to "5", AccessibilityAnnotations.DISPLAY to "block") { +"teams" }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then
+        markdown sameAs $$"""Pro <div ref="5">teams</div>"""
+    }
+
+    @Test
+    fun `should separate an element with the img role from the text before it`() = runTest {
+        // given — issue #169: the generic element becomes a Markdown image
+        val page = semanticEvents(tagged = true) {
+            "p"(AccessibilityAnnotations.DISPLAY to "block") {
+                +"Pro"
+                "div"(
+                    "role" to "img",
+                    "aria-label" to "logo",
+                    AccessibilityAnnotations.DISPLAY to "block"
+                ) { }
+                +"teams"
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then
+        markdown sameAs "Pro ![logo]() teams"
+    }
+
+    @Test
+    fun `should keep the space at the start of kept emphasis in a flex item`() = runTest {
+        // given — issue #169: the space is inside the <b>, after its opening tag
+        val page = semanticEvents(tagged = true) {
+            "div"(AccessibilityAnnotations.DISPLAY to "flex") {
+                "div"(AccessibilityAnnotations.DISPLAY to "block") { +"Pro" }
+                "div"(AccessibilityAnnotations.DISPLAY to "block") {
+                    "b"(AccessibilityAnnotations.DISPLAY to "inline") { +" teams" }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown().renderMarkdown()
+
+        // then
+        markdown sameAs "Pro **teams**"
     }
 
     @Test
