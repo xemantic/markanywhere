@@ -1178,6 +1178,31 @@ class HtmlToMarkdownTest {
     }
 
     @Test
+    fun `should render an empty heading named by its title inside a link`() = runTest {
+        // given - the Bing logo (issue #177): `<a><h1 title>` with the picture
+        // a CSS background, so the title is the only name of both
+        val page = semanticEvents(tagged = true) {
+            "body" {
+                "a"("href" to "/home") {
+                    "h1"("title" to "Back to Bing search") { }
+                }
+            }
+        }
+
+        // when
+        val markdown = page.transformHtmlToMarkdown(refMode = RefMode.STRIP).renderMarkdown()
+
+        // then
+        markdown sameAs """
+            <a href="/home">
+            
+            # Back to Bing search
+            
+            </a>
+        """.trimIndent()
+    }
+
+    @Test
     fun `should render the document a same-origin frame embeds`() = runTest {
         // given - a capture nests a same-origin frame's document inside its
         // <iframe> (there is no fallback markup in a captured stream); the
