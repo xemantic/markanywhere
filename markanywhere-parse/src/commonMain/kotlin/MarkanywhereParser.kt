@@ -158,6 +158,16 @@ private data class ListMarker(
     val markerChar: Char
 )
 
+/** The line break (GFM §6.7) a paragraph line asks for at its end. */
+private enum class LineEnd {
+    /** A soft break: no hard break requested. */
+    SOFT,
+    /** A hard break requested by ≥2 trailing spaces. */
+    SPACES,
+    /** A hard break requested by a trailing backslash. */
+    BACKSLASH
+}
+
 /**
  * One level in the streaming list stack. [markerStartCol] and [contentCol] are
  * absolute columns (after expanding outer container offsets). The boolean flags
@@ -186,6 +196,14 @@ private class ListContext(
     var blockquoteOpen: Boolean = false,
     /** True while the inner `<p>` of an open blockquote is currently open. */
     var blockquoteParagraphOpen: Boolean = false,
+    /**
+     * The line break (GFM §6.7) the last line of the open paragraph (the
+     * item's own or its inner blockquote's) asks for — the list counterpart
+     * of the top-level `paragraphTrailingSpaces` tally, decided by the same
+     * `settleLineEnd`: promoted to `<br>` when the paragraph continues on
+     * the next line, dropped (a backslash kept as literal text) when it closes.
+     */
+    var lineEnd: LineEnd = LineEnd.SOFT,
     /**
      * True once any content (paragraph, code, heading, blockquote, etc.) has
      * been emitted for the active item. Used to decide whether a blank line
@@ -2506,6 +2524,7 @@ private class ParserState(
             // frame, emitting unmarks for its open tags.
             if (tryCloseEnclosingHtmlBlock(line)) return
 
+            val atxHeading = Patterns.ATX_HEADING_LINE.matchEntire(line)
             when {
                 // Indented code block: ≥4 cols of leading whitespace (tabs count to tab stop 4).
                 leadingIndentCols(line) >= 4 -> {
@@ -2516,15 +2535,7 @@ private class ParserState(
                     replaceMode(BlockMode.IndentedCodeBlock)
                 }
                 // ATX heading allowing tab/space after #s
-                line matches Patterns.ATX_HEADING_LINE -> {
-                    val match = Patterns.ATX_HEADING_LINE.matchEntire(line)!!
-                    val level = match.groupValues[1].length
-                    val content = match.groupValues[2].trimEnd().removeSuffix("#").trimEnd()
-                    "h$level" {
-                        if (content.isNotEmpty()) processInlineContent(content)
-                        flushInline()
-                    }
-                }
+                atxHeading != null -> emitAtxHeading(atxHeading)
                 // GFM thematic break: 3+ matching `-`/`*`/`_` separated by spaces/tabs
                 line matches Patterns.THEMATIC_BREAK -> {
                     "hr" {}
@@ -2825,6 +2836,29 @@ private class ParserState(
         }
     }
 
+    /** Emit the line matched by [Patterns.ATX_HEADING_LINE] as an `h1`…`h6`. */
+    private suspend fun SemanticEventScope.emitAtxHeading(match: MatchResult) {
+        val level = match.groupValues[1].length
+        // The regex leaves no trailing spaces/tabs on the content. A closing
+        // sequence (GFM §4.2) is a run of `#` that is the whole content or is
+        // preceded by a space or tab — `# foo#` and `# foo \#` keep theirs.
+        val raw = match.groupValues[2]
+        val withoutClosing = raw.trimEnd('#')
+        val content = when {
+            withoutClosing.isEmpty() -> ""
+            withoutClosing.last() == ' ' || withoutClosing.last() == '\t' ->
+                withoutClosing.trimEnd(' ', '\t')
+            else -> raw
+        }
+        "h$level" {
+            if (content.isNotEmpty()) processInlineContent(content)
+            // A heading has no hard break, so a trailing `\` is literal text
+            // (GFM §6.7) — [flushInline] alone would drop it.
+            if (escaped) emitPendingEscapeAsLiteral()
+            flushInline()
+        }
+    }
+
     /** Open a paragraph for the given first line and leave it open for continuation lines. */
     private suspend fun SemanticEventScope.beginParagraph(line: String) {
         mark("p")
@@ -2833,10 +2867,8 @@ private class ParserState(
         // permitted, and 4+ spaces would have been claimed by the indented-code-block
         // branch upstream of here).
         val leftTrimmed = line.trimStart(' ', '\t')
-        val content = leftTrimmed.trimEnd(' ')
-        paragraphTrailingSpaces = leftTrimmed.length - content.length
-        processInlineContent(content)
-        captureLineEndBackslash()
+        processInlineContent(leftTrimmed.trimEnd(' '))
+        captureLineEnd(leftTrimmed)
         flushInline()
         replaceMode(BlockMode.ParagraphContinuation)
     }
@@ -2852,19 +2884,57 @@ private class ParserState(
         char.isLetter() || char == '\\' || char == '{'
 
     /**
-     * GFM §6.7 hard line break via `\<newline>`: when [processInlineContent]
-     * finishes with [escaped] set, the line ended with a literal `\`. Promote
-     * it to the same hard-break tally as `≥2 trailing spaces` so the next
-     * line's [emitParagraphLineBreak] produces `<br/>`, and flag the
-     * backslash so a paragraph-close path emits it as literal text instead
-     * (GFM example 669 `<p>foo\</p>`).
+     * Record the hard break (GFM §6.7) the line-buffered paragraph [line]
+     * asks for, after its content went through [processInlineContent], in
+     * the top-level tally: a backslash break also flags the backslash, so a
+     * paragraph-close path emits it as literal text instead (GFM example 669
+     * `<p>foo\</p>`). The rule itself is [settleLineEnd], shared with list
+     * items.
      */
-    private fun captureLineEndBackslash() {
+    private suspend fun SemanticEventScope.captureLineEnd(line: String) {
+        val lineEnd = settleLineEnd(line)
+        paragraphTrailingSpaces = if (lineEnd == LineEnd.SOFT) 0 else 2
+        paragraphTrailingBackslash = lineEnd == LineEnd.BACKSLASH
+    }
+
+    /**
+     * Decide which line break (GFM §6.7) the line-buffered paragraph [line]
+     * asks for, once its trimmed content went through [processInlineContent].
+     * A pending [escaped] means the content ended with `\`: a hard break only
+     * when the raw line ends with it — before trailing whitespace (`foo\ `)
+     * it escapes nothing and is emitted here as literal text. Otherwise ≥2
+     * trailing ASCII spaces ask for a hard break. Must run before
+     * [flushInline], which would drop the pending backslash.
+     */
+    private suspend fun SemanticEventScope.settleLineEnd(line: String): LineEnd {
         if (escaped) {
-            escaped = false
-            paragraphTrailingSpaces = 2
-            paragraphTrailingBackslash = true
+            if (line.endsWith('\\')) {
+                escaped = false
+                return LineEnd.BACKSLASH
+            }
+            emitPendingEscapeAsLiteral()
         }
+        return if (line.length - line.trimEnd(' ').length >= 2) LineEnd.SPACES
+        else LineEnd.SOFT
+    }
+
+    /**
+     * Resolve a `\` left pending in [escaped] at the end of a line's content
+     * as escaping nothing: like the `escaped` branch of [processInlineCharImpl]
+     * before a non-punctuation char, it first writes what the `\` held — an
+     * in-flight entity ref, a delimiter run ([ESCAPE_HELD_RUNS]) — as literal
+     * text, then the `\` itself, so the text keeps its source order. Open
+     * spans stay open around it, for [flushInline] to close.
+     */
+    private suspend fun SemanticEventScope.emitPendingEscapeAsLiteral() {
+        escaped = false
+        if (inEntityRef) abortEntityRef()
+        val run = inlineBuffer.toString()
+        if (run in ESCAPE_HELD_RUNS) {
+            inlineBuffer.clear()
+            +run
+        }
+        +"\\"
     }
 
     /**
@@ -2919,7 +2989,6 @@ private class ParserState(
         // count carried forward for the *next* line's hard-break decision.
         val leftTrimmed = line.trimStart(' ', '\t')
         val stripped = leftTrimmed.trimEnd(' ')
-        val newTrailing = leftTrimmed.length - stripped.length
         emitParagraphLineBreak()
         // Special case: a line that is exactly one open HTML tag is rendered as a
         // self-closing-equivalent (mark + unmark) so the event tree stays balanced.
@@ -2930,16 +2999,11 @@ private class ParserState(
             val tag = singleTag.second
             mark(tag.name, isTagged = true, attributes = tag.attributes ?: emptyMap())
             unmark(tag.name, isTagged = true)
+            captureLineEnd(leftTrimmed)
         } else {
             processInlineContent(stripped)
-            captureLineEndBackslash()
+            captureLineEnd(leftTrimmed)
             flushInline()
-        }
-        if (paragraphTrailingBackslash) {
-            // captureLineEndBackslash overrode newTrailing — keep the hard-break
-            // tally it set instead of clobbering with the trimEnd count.
-        } else {
-            paragraphTrailingSpaces = newTrailing
         }
         replaceMode(BlockMode.ParagraphContinuation)
     }
@@ -2951,15 +3015,20 @@ private class ParserState(
      * `paragraphTrailingSpaces` to 0.
      */
     private suspend fun SemanticEventScope.emitParagraphLineBreak() {
-        if (paragraphTrailingSpaces >= 2) {
-            mark("br")
-            unmark("br")
-        }
+        emitLineBreak(hard = paragraphTrailingSpaces >= 2)
         paragraphTrailingSpaces = 0
         // Continuation absorbed the `\<newline>` as a hard break — clear the
         // pending-backslash flag without emitting the literal `\` (the `<br/>`
         // already replaces it).
         paragraphTrailingBackslash = false
+    }
+
+    /** Emit a paragraph line break: a soft `\n`, after a `<br>` when [hard]. */
+    private suspend fun SemanticEventScope.emitLineBreak(hard: Boolean) {
+        if (hard) {
+            mark("br")
+            unmark("br")
+        }
         +"\n"
     }
 
@@ -3134,14 +3203,9 @@ private class ParserState(
             return
         }
         // ATX heading as first content of a list item (example 278).
-        if (trimmed matches Patterns.ATX_HEADING_LINE) {
-            val match = Patterns.ATX_HEADING_LINE.matchEntire(trimmed)!!
-            val level = match.groupValues[1].length
-            val content = match.groupValues[2].trimEnd().removeSuffix("#").trimEnd()
-            "h$level" {
-                if (content.isNotEmpty()) processInlineContent(content)
-                flushInline()
-            }
+        val atxHeading = Patterns.ATX_HEADING_LINE.matchEntire(trimmed)
+        if (atxHeading != null) {
+            emitAtxHeading(atxHeading)
             return
         }
         // Fenced code as first content of a list item (GFM §5.4 example 304).
@@ -3165,19 +3229,13 @@ private class ParserState(
             return
         }
         // Blockquote as first content of a list item (e.g. `1. > X`). Open the
-        // inner `<blockquote>` and its `<p>`; subsequent `>`-prefixed lines (or
-        // lazy-continuation lines) extend the same paragraph via the
+        // inner `<blockquote>` and emit the line's content into it; subsequent
+        // `>`-prefixed lines (or lazy-continuation lines) continue it via the
         // blockquote-handling branches in `processListBlock`.
         if (isBlockquoteOpener(trimmed)) {
             mark("blockquote")
             ctx.blockquoteOpen = true
-            mark("p")
-            ctx.blockquoteParagraphOpen = true
-            val bqContent = stripBlockquotePrefix(trimmed)
-            if (bqContent.isNotBlank()) {
-                processInlineContent(bqContent.trimEnd())
-            }
-            flushInline()
+            emitListBlockquoteLine(ctx, stripBlockquotePrefix(firstContent))
             return
         }
         // Table header as the first content of a list item (`- | a | b |`).
@@ -3192,7 +3250,9 @@ private class ParserState(
         // the just-drained paragraph instead of re-entering detection — see
         // `back-to-back pipe lines without separator merge into one paragraph`.
         if (trimmed.startsWith("|") && !suppressTableDetection) {
-            ctx.tableHeaderPending = trimmed
+            // Untrimmed, so a rejected header keeps its trailing spaces — the
+            // hard break they ask for (GFM §6.7), as at a later block boundary.
+            ctx.tableHeaderPending = firstContent
             return
         }
         // HTML block (CommonMark §4.6) as the first content of a list item.
@@ -3217,7 +3277,40 @@ private class ParserState(
         mark("p")
         ctx.paragraphOpen = true
         emitItemFirstContent(trimmed)
+        ctx.lineEnd = settleLineEnd(firstContent)
         flushInline()
+    }
+
+    /**
+     * Emit one [line] of an open list-item paragraph (the item's own or its
+     * inner blockquote's) and record on [ctx] the line break it asks for.
+     */
+    private suspend fun SemanticEventScope.emitListParagraphLine(
+        ctx: ListContext,
+        line: String
+    ) {
+        processInlineContent(line.trim())
+        ctx.lineEnd = settleLineEnd(line)
+        flushInline()
+    }
+
+    /**
+     * Emit the line break joining the next line to the open list-item
+     * paragraph: a `<br>` first when the previous line asked for a hard break.
+     */
+    private suspend fun SemanticEventScope.emitListParagraphLineBreak(ctx: ListContext) {
+        emitLineBreak(hard = ctx.lineEnd != LineEnd.SOFT)
+        ctx.lineEnd = LineEnd.SOFT
+    }
+
+    /**
+     * Settle the line break asked for by the last line of a list-item
+     * paragraph that is closing: trailing spaces are dropped, a trailing
+     * backslash is literal text (GFM example 669). Call before `unmark("p")`.
+     */
+    private suspend fun SemanticEventScope.endListParagraph(ctx: ListContext) {
+        if (ctx.lineEnd == LineEnd.BACKSLASH) +"\\"
+        ctx.lineEnd = LineEnd.SOFT
     }
 
     /**
@@ -3250,6 +3343,7 @@ private class ParserState(
         val top = mode.stack.lastOrNull() ?: return
         if (top.paragraphOpen) {
             flushInline()
+            endListParagraph(top)
             unmark("p")
             top.paragraphOpen = false
         }
@@ -3289,14 +3383,52 @@ private class ParserState(
     private suspend fun SemanticEventScope.closeListBlockquoteIfOpen(mode: BlockMode.ListBlock) {
         val top = mode.stack.lastOrNull() ?: return
         if (top.blockquoteOpen) {
-            if (top.blockquoteParagraphOpen) {
-                flushInline()
-                unmark("p")
-                top.blockquoteParagraphOpen = false
-            }
+            closeListBlockquoteParagraphIfOpen(top)
             unmark("blockquote")
             top.blockquoteOpen = false
         }
+    }
+
+    /** Close the `<p>` of the blockquote open in [ctx], if any. */
+    private suspend fun SemanticEventScope.closeListBlockquoteParagraphIfOpen(ctx: ListContext) {
+        if (ctx.blockquoteParagraphOpen) {
+            flushInline()
+            endListParagraph(ctx)
+            unmark("p")
+            ctx.blockquoteParagraphOpen = false
+        }
+    }
+
+    /**
+     * Emit [content] — one line of the blockquote open in [ctx], its `>`
+     * prefix stripped. The blockquote lives on [ListContext] rather than as a
+     * sub-parse frame (see [ListContext.blockquoteOpen]), so the blocks it can
+     * hold are recognised here: an empty line ends its paragraph (GFM §5.4
+     * example 300), an ATX heading is emitted as such (issue #149), anything
+     * else is paragraph text.
+     */
+    private suspend fun SemanticEventScope.emitListBlockquoteLine(
+        ctx: ListContext,
+        content: String
+    ) {
+        ctx.hasContent = true
+        if (content.isBlank()) {
+            closeListBlockquoteParagraphIfOpen(ctx)
+            return
+        }
+        val atxHeading = Patterns.ATX_HEADING_LINE.matchEntire(content)
+        if (atxHeading != null) {
+            closeListBlockquoteParagraphIfOpen(ctx)
+            emitAtxHeading(atxHeading)
+            return
+        }
+        if (!ctx.blockquoteParagraphOpen) {
+            mark("p")
+            ctx.blockquoteParagraphOpen = true
+        } else {
+            emitListParagraphLineBreak(ctx)
+        }
+        emitListParagraphLine(ctx, content)
     }
 
     /**
@@ -3340,10 +3472,9 @@ private class ParserState(
             mark("p")
             top.paragraphOpen = true
         } else {
-            +"\n"
+            emitListParagraphLineBreak(top)
         }
-        processInlineContent(text)
-        flushInline()
+        emitListParagraphLine(top, pending)
         top.hasContent = true
     }
 
@@ -3957,6 +4088,9 @@ private class ParserState(
                 closeListTableIfOpen(mode)
             }
             closeListParagraphIfOpen(mode)
+            // A blank line has no `>` prefix, so it ends a blockquote open in
+            // the item (GFM §5.1) — a later `>` line opens a new one.
+            closeListBlockquoteIfOpen(mode)
             val top = mode.stack.lastOrNull()
             // Defer blank-line emission for an open indented code block until more
             // code arrives (it may turn out to be the trailing blanks before the
@@ -4110,9 +4244,8 @@ private class ParserState(
             // — `    - e` lazy-continues the open paragraph instead of opening
             // a new sibling item).
             if (top != null && top.paragraphOpen && !lineInterruptsParagraph(line)) {
-                +"\n"
-                processInlineContent(line.trimStart().trimEnd())
-                flushInline()
+                emitListParagraphLineBreak(top)
+                emitListParagraphLine(top, line)
                 mode.blankSeen = false
                 return
             }
@@ -4122,9 +4255,8 @@ private class ParserState(
             // inner-blockquote case used by GFM §5.2 examples 270, 271).
             if (top != null && top.blockquoteOpen && top.blockquoteParagraphOpen
                 && !lineInterruptsParagraph(line)) {
-                +"\n"
-                processInlineContent(line.trimStart().trimEnd())
-                flushInline()
+                emitListParagraphLineBreak(top)
+                emitListParagraphLine(top, line)
                 mode.blankSeen = false
                 return
             }
@@ -4211,7 +4343,8 @@ private class ParserState(
             closeListTableIfOpen(mode)
         }
 
-        if (innerIndent >= 4 && (mode.blankSeen || !ctx.paragraphOpen)) {
+        if (innerIndent >= 4
+            && (mode.blankSeen || (!ctx.paragraphOpen && !ctx.blockquoteParagraphOpen))) {
             // Open a new indented code block within the current item.
             closeListParagraphIfOpen(mode)
             closeListBlockquoteIfOpen(mode)
@@ -4231,7 +4364,7 @@ private class ParserState(
         // ATX, etc. — GFM §5.4 examples 300, 301): such lines must close any
         // open paragraph or inner blockquote and let the new block take over.
         val atBlockBoundary = mode.blankSeen
-            || (!ctx.paragraphOpen && !ctx.blockquoteOpen)
+            || (!ctx.paragraphOpen && !ctx.blockquoteParagraphOpen)
             || ((ctx.paragraphOpen || ctx.blockquoteParagraphOpen)
                 && lineInterruptsParagraph(stripped.trimStart()))
         if (atBlockBoundary) {
@@ -4249,16 +4382,11 @@ private class ParserState(
                 mode.blankSeen = false
                 return
             }
-            if (stripped matches Patterns.ATX_HEADING_LINE) {
+            val atxHeading = Patterns.ATX_HEADING_LINE.matchEntire(stripped)
+            if (atxHeading != null) {
                 closeListParagraphIfOpen(mode)
                 closeListBlockquoteIfOpen(mode)
-                val match = Patterns.ATX_HEADING_LINE.matchEntire(stripped)!!
-                val level = match.groupValues[1].length
-                val content = match.groupValues[2].trimEnd().removeSuffix("#").trimEnd()
-                "h$level" {
-                    if (content.isNotEmpty()) processInlineContent(content)
-                    flushInline()
-                }
+                emitAtxHeading(atxHeading)
                 ctx.hasContent = true
                 mode.blankSeen = false
                 return
@@ -4332,6 +4460,9 @@ private class ParserState(
             // streaming divergences as the top-level path — multi-line shapes
             // and forward references are not supported.
             if (tryParseLinkDefinition(stripped)) {
+                // The definition line has no `>` prefix, so it ends a
+                // blockquote open in the item, like every block above.
+                closeListBlockquoteIfOpen(mode)
                 mode.blankSeen = false
                 return
             }
@@ -4348,33 +4479,22 @@ private class ParserState(
                     mark("blockquote")
                     ctx.blockquoteOpen = true
                 }
-                val bqContent = stripBlockquotePrefix(stripped)
-                // Empty `>` line: end the blockquote's open paragraph (GFM §5.4
-                // example 300) — the next blockquote line starts a fresh `<p>`.
-                if (bqContent.isBlank() && ctx.blockquoteParagraphOpen) {
-                    flushInline()
-                    unmark("p")
-                    ctx.blockquoteParagraphOpen = false
+                emitListBlockquoteLine(ctx, stripBlockquotePrefix(stripped))
+                mode.blankSeen = false
+                return
+            }
+            // A non-`>` line lazily continues the blockquote's open paragraph
+            // (GFM §5.1) unless it interrupts it; anything else — including any
+            // line after a blockquote whose last block is not a paragraph —
+            // closes the blockquote.
+            if (ctx.blockquoteOpen) {
+                if (!atBlockBoundary) {
+                    emitListParagraphLineBreak(ctx)
+                    emitListParagraphLine(ctx, stripped)
                     ctx.hasContent = true
                     mode.blankSeen = false
                     return
                 }
-                if (!ctx.blockquoteParagraphOpen) {
-                    mark("p")
-                    ctx.blockquoteParagraphOpen = true
-                } else {
-                    +"\n"
-                }
-                if (bqContent.isNotBlank()) {
-                    processInlineContent(bqContent.trimEnd())
-                }
-                flushInline()
-                ctx.hasContent = true
-                mode.blankSeen = false
-                return
-            }
-            // Non-`>` line at a block boundary closes the blockquote.
-            if (ctx.blockquoteOpen && atBlockBoundary) {
                 closeListBlockquoteIfOpen(mode)
             }
         }
@@ -4388,11 +4508,11 @@ private class ParserState(
             mark("p")
             ctx.paragraphOpen = true
         } else {
-            // Soft-break between joined lines of the same paragraph.
-            +"\n"
+            // Soft (or hard, GFM §6.7) break between joined lines of the same
+            // paragraph.
+            emitListParagraphLineBreak(ctx)
         }
-        processInlineContent(stripped.trimStart().trimEnd())
-        flushInline()
+        emitListParagraphLine(ctx, stripped)
         ctx.hasContent = true
         mode.blankSeen = false
     }

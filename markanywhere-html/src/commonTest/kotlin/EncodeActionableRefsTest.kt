@@ -571,13 +571,16 @@ class EncodeActionableRefsTest {
         }
 
         // when
-        val reparsed = flowOf(input.encodeActionableRefs().renderMarkdown()).parse().toList()
+        val markdown = input.encodeActionableRefs().renderMarkdown()
+        val reparsed = flowOf(markdown).parse().toList()
 
-        // then - the span closes on its own line; a hard break in a list item
-        // does not survive the re-parse either way (a separate parser gap)
+        // then - the span closes on its own line, and the hard break survives
+        // the re-parse (#145), so the Markdown is a fixpoint
         val text = reparsed.filterIsInstance<SemanticEvent.Text>().joinToString("") { it.text }
         assert("</span>" !in text)
         assert(reparsed.count { it is SemanticEvent.Mark && it.name == "span" } == 1)
+        assert(reparsed.count { it is SemanticEvent.Mark && it.name == "br" } == 1)
+        flowOf(markdown).parse().renderMarkdown() sameAs markdown
     }
 
     @Test
